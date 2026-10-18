@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
 import { actualizarConVersion } from '#shared/version'
 import type { CatalogoEventos } from '#shared/eventos'
@@ -24,6 +24,7 @@ import {
 } from '#core/excepciones_servicio'
 import { registrarTramo } from '#network/historial'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
+import { planTemporalActivo } from '#core/planes_temporales'
 
 export interface EntradaEditarServicio {
     id: number
@@ -69,6 +70,9 @@ type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
  * `core.servicios_excepciones` con diff por campo (`excepcion_<campo>`). Si cambia una que afecta
  * el corte (`facturas_para_limitar`, `facturas_para_cortar`, `reglas_promesa`), se llama
  * `EvaluarEstadoServicio` anidada: A3 decide si el estado cambia, A1 no.
+ *
+ * Con un plan temporal activo (lealtad) el `plan_id` del servicio es el temporal: cambiarlo responde
+ * 409 `plan_temporal_activo` (primero se cancela con `servicios.cancelar_plan_temporal`).
  */
 export default class EditarServicio extends DomainAction<EntradaEditarServicio, ServicioVista> {
     readonly nombre = 'servicios.editar'
@@ -109,6 +113,17 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             if (!router.activo) throw new ReglaNegocio('El router está desactivado', 'router_inactivo')
         }
         if (datos.plan_id !== undefined) await exigirReferencia(t, 'network.planes', planId, 'plan_id')
+        if (planId !== antes.plan_id) {
+            const temporal = await planTemporalActivo(id, t.trx)
+            if (temporal) {
+                throw new Conflicto(
+                    `El servicio tiene el plan temporal ${temporal.id} activo hasta ${temporal.fin}: ` +
+                        'cancélalo antes de cambiar el plan',
+                    'plan_temporal_activo',
+                    'Plan temporal activo',
+                )
+            }
+        }
         if (datos.plantilla_facturacion_id) {
             await exigirReferencia(
                 t,

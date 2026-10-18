@@ -17,7 +17,7 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 - Después del `XADD` marca `publicado_en`. Si el proceso cae entre ambos pasos, el evento se publica dos veces: **entrega al menos una vez**.
 - El stream se recorta con `XADD … MAXLEN ~ 100000`. No es un mecanismo de consistencia (regla 5): los grupos leen mucho antes de que una entrada se recorte.
 - Un solo relay activo a la vez (lock en Redis `<COLAS_PREFIJO>:lock:eventos-relay` con dueño y renovación, regla 6).
-- Implementación (A1, tarea 10): `apps/api/app/shared/relay_outbox.ts`, comando `node ace eventos:relay` (que además consume el grupo `aaa-cache`; `--sin-aaa-cache` lo apaga). El orden es el de `id` dentro de cada lote; una transacción que confirma tarde puede publicar un `id` menor después de uno mayor.
+- Implementación (A1, tarea 10): `apps/api/app/shared/relay_outbox.ts`, comando `node ace eventos:relay` (que además consume el grupo `aaa-cache`, `--sin-aaa-cache` lo apaga, y atiende los crons del núcleo de la cola `core-cron`, `--sin-crons` los apaga). El orden es el de `id` dentro de cada lote; una transacción que confirma tarde puede publicar un `id` menor después de uno mayor.
 
 ## Campos agregados a payloads del catálogo
 
@@ -26,6 +26,7 @@ Define cómo viajan los eventos del catálogo (`.claude/CLAUDE.md`, sección "Ca
 | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada` | `empresa_id` (entero) | 2026-10-17 (A1, multiempresa) | Empresa (NIT) del servicio en el momento del evento (`core.servicios.empresa_id`; `contratos/multiempresa.md`). Siempre presente desde esa fecha; los eventos anteriores no lo traen (era la empresa 1). Un consumidor que no lo lea no cambia |
 | `factura.emitida`, `factura.vencida`, `factura.anulada`, `pago.registrado`, `pago.anulado`, `nota_credito.emitida`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `caja.cerrada` | `empresa_id` (entero) | 2026-10-17 (A3, multiempresa) | Empresa (NIT) del documento: la factura, el pago, la promesa (la del servicio), el comprobante (la de su cuenta bancaria) o la caja. Siempre presente desde esa fecha; los eventos anteriores no lo traen (era la empresa 1). `{{empresa.*}}` de notify sale de aquí |
 | `pago.registrado`, `pago.anulado` | `cobro_id` (entero o null) | 2026-10-17 (A3, multiempresa) | Cobro de caja que cubrió facturas de varias empresas y se dividió en un pago por empresa (`billing.cobros`, `GET /cobros/:id`). Un evento por pago, cada uno con su `empresa_id`; null si el pago no vino de `POST /pagos` (pasarela, comprobante aprobado, histórico) |
+| `servicio.config_cambiada` | `motivo` (`'plan_temporal'`, opcional) y `plan_temporal_id` (entero, opcional) | 2026-10-18 (A1, lealtad) | Solo cuando el cambio de `plan` lo hizo un plan temporal (`core.servicios_planes_temporales`, `contratos/lealtad.md` §5): al iniciar, al terminar y al cancelar uno activo. Llega con `campos: ['plan']` y se aplica como cualquier cambio de plan (CoA de velocidad sin cortar la sesión; `aaa:user:*` ya tiene el plan nuevo). Sin estos campos, el cambio de plan es una edición. Un consumidor que no los lea no cambia |
 | `sesion.terminada` | `motivo` (texto o null) | semana 3 (A2) | `causa_fin` de la sesión: `Acct-Terminate-Cause` del NAS (`User-Request`, `Lost-Carrier`…), `NAS-Reboot` (Accounting-On/Off), `Sesion-Reemplazada` (otro Start del mismo usuario) o `sin_interim` (cron de sesiones colgadas: sin Stop ni Interim-Update en N intervalos). Un consumidor que no lo lea no cambia. Si después llega un Interim de una sesión cerrada por `sin_interim`, se reabre y se emite otro `sesion.iniciada`; si llega su Stop, se corrige `fin`/causa sin repetir `sesion.terminada` |
 
 ## Eventos fuera de la tabla de `CLAUDE.md`
@@ -95,11 +96,11 @@ interface ConsumidorEventos { readonly nombre: string; acepta(evento: string): b
 
 ## Payloads del núcleo (A1)
 
-`servicio.config_cambiada`: `{ servicio_id, empresa_id, campos[], empresa_anterior_id? }`. Valores de `campos`:
+`servicio.config_cambiada`: `{ servicio_id, empresa_id, campos[], empresa_anterior_id?, motivo?, plan_temporal_id? }`. Valores de `campos`:
 
 | Campo | Cuándo |
 | --- | --- |
-| `plan`, `router`, `ips`, `prefijo_v6` | Cambió el plan, el router, la IPv4 o los prefijos/modo IPv6 (desde el día 2) |
+| `plan`, `router`, `ips`, `prefijo_v6` | Cambió el plan, el router, la IPv4 o los prefijos/modo IPv6 (desde el día 2). `plan` también al iniciar, terminar o cancelar un plan temporal (lealtad, 2026-10-18), con `motivo: 'plan_temporal'` y `plan_temporal_id`; nunca mueve IPs ni prefijos |
 | `tipo_conexion` | Semana 2 (WISP, `contratos/routeros.md`): el servicio pasó entre `pppoe`, `ip_estatica` y `dhcp_fija`. El dispatcher limpia en el router lo del tipo anterior. Al dejar `pppoe`, `aaa:user:<user_ppp viejo>` queda con lápida |
 | `mac`, `amarre_ip_mac` | Semana 2: cambió la MAC (lease de `dhcp_fija`, ARP) o el amarre IP-MAC |
 | `empresa` | Multiempresa (2026-10-17): `servicios.cambiar_empresa` pasó el servicio a otra empresa; `empresa_id` es la nueva y `empresa_anterior_id` la de antes (solo en este caso). No cambia nada en la red; las facturas siguientes salen con el NIT nuevo |

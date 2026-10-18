@@ -1770,6 +1770,14 @@
                     ],
                     "maxLength": 50,
                     "description": "Código del cliente en el sistema anterior (importador); no reemplaza a `codigo`"
+                  },
+                  "codigo_referido": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20,
+                    "description": "Código de referido de otro cliente (programa de lealtad, 8 caracteres). 422 `referido_invalido` si no existe o el referidor tiene el mismo NIT o CUI"
                   }
                 },
                 "required": [
@@ -24121,6 +24129,12 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "lealtad.ajustar",
+                        "lealtad.canjear",
+                        "lealtad.configurar",
+                        "lealtad.entregar",
+                        "lealtad.revertir_canje",
+                        "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
                         "libro.cerrar_ejercicio",
@@ -24167,10 +24181,12 @@
                         "routers.marcar_migrado",
                         "routers.ver",
                         "servicios.cambiar_empresa",
+                        "servicios.cancelar_plan_temporal",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
                         "servicios.limitar",
+                        "servicios.programar_plan_temporal",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
@@ -24179,6 +24195,13 @@
                         "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sorteos.ejecutar",
+                        "sorteos.entregar",
+                        "sorteos.exportar",
+                        "sorteos.gestionar",
+                        "sorteos.marcar_requisito",
+                        "sorteos.publicar",
+                        "sorteos.ver",
                         "sso.emitir",
                         "tokens.crear",
                         "tokens.revocar",
@@ -24365,6 +24388,12 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "lealtad.ajustar",
+                        "lealtad.canjear",
+                        "lealtad.configurar",
+                        "lealtad.entregar",
+                        "lealtad.revertir_canje",
+                        "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
                         "libro.cerrar_ejercicio",
@@ -24411,10 +24440,12 @@
                         "routers.marcar_migrado",
                         "routers.ver",
                         "servicios.cambiar_empresa",
+                        "servicios.cancelar_plan_temporal",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
                         "servicios.limitar",
+                        "servicios.programar_plan_temporal",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
@@ -24423,6 +24454,13 @@
                         "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
+                        "sorteos.ejecutar",
+                        "sorteos.entregar",
+                        "sorteos.exportar",
+                        "sorteos.gestionar",
+                        "sorteos.marcar_requisito",
+                        "sorteos.publicar",
+                        "sorteos.ver",
                         "sso.emitir",
                         "tokens.crear",
                         "tokens.revocar",
@@ -27910,6 +27948,414 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/planes-temporales": {
+      "get": {
+        "operationId": "serviciosPlanesTemporales",
+        "summary": "Planes temporales del servicio (mejoras de plan de lealtad o manuales)",
+        "description": "Del más reciente al más viejo. El vigente (programado o activo) viene también en `plan_temporal`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de planes temporales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PlanTemporal"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "serviciosProgramarPlanTemporal",
+        "summary": "Programar un plan temporal (mejora de plan con fecha de fin)",
+        "description": "Con `inicio` ya llegado (o sin él) se inicia en la misma petición: `plan_id` del servicio pasa al temporal y se emite `servicio.config_cambiada` (`motivo: plan_temporal`); al `fin` el cron lo devuelve a su plan base. 409 `plan_temporal_existente` si ya hay uno programado o activo; 422 `plan_temporal_incompatible` si cambia IPv4/IPv6 o el tamaño del prefijo delegado, `plan_temporal_igual`, `plan_no_disponible`, `plan_inactivo` o `servicio_retirado`.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Plan temporal (mejora): activo, disponible en el router y compatible"
+                  },
+                  "inicio": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Por defecto, ahora (se inicia en la misma petición)"
+                  },
+                  "fin": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Fin de la vigencia; o `dias` (uno de los dos)"
+                  },
+                  "dias": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 366
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "plan_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Plan temporal programado (o ya activo)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemporal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.programar_plan_temporal; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.programar_plan_temporal",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/planes-temporales/{planTemporalId}/cancelar": {
+      "post": {
+        "operationId": "serviciosCancelarPlanTemporal",
+        "summary": "Cancelar un plan temporal (si está activo, el servicio vuelve a su plan base)",
+        "description": "409 `plan_temporal_cerrado` si ya terminó o se canceló; 409 si `version` cambió.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "planTemporalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plan temporal cancelado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemporal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.cancelar_plan_temporal; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.cancelar_plan_temporal",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/quitar-limite": {
       "post": {
         "operationId": "serviciosQuitarLimite",
@@ -29078,6 +29524,12 @@
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
+                            "lealtad.ajustar",
+                            "lealtad.canjear",
+                            "lealtad.configurar",
+                            "lealtad.entregar",
+                            "lealtad.revertir_canje",
+                            "lealtad.ver",
                             "libro.bloquear",
                             "libro.bloquear_duro",
                             "libro.cerrar_ejercicio",
@@ -29124,10 +29576,12 @@
                             "routers.marcar_migrado",
                             "routers.ver",
                             "servicios.cambiar_empresa",
+                            "servicios.cancelar_plan_temporal",
                             "servicios.crear",
                             "servicios.desconectar",
                             "servicios.editar",
                             "servicios.limitar",
+                            "servicios.programar_plan_temporal",
                             "servicios.quitar_limite",
                             "servicios.reactivar",
                             "servicios.retirar",
@@ -29136,6 +29590,13 @@
                             "servicios.ver_credenciales",
                             "sesiones.desconectar",
                             "sesiones.ver",
+                            "sorteos.ejecutar",
+                            "sorteos.entregar",
+                            "sorteos.exportar",
+                            "sorteos.gestionar",
+                            "sorteos.marcar_requisito",
+                            "sorteos.publicar",
+                            "sorteos.ver",
                             "sso.emitir",
                             "tokens.crear",
                             "tokens.revocar",
@@ -31914,6 +32375,43 @@
               "null"
             ],
             "description": "Nombre del responsable de pago (solo lectura)"
+          },
+          "referido_por_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cliente que lo refirió (programa de lealtad): el dueño del `codigo_referido` del alta"
+          },
+          "referido_empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Empresa (NIT) en la que cuenta el referido: la del código usado"
+          },
+          "codigos_referido": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "codigo"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "codigo": {
+                  "type": "string",
+                  "pattern": "^[2-9A-HJKMNP-Z]{8}$"
+                }
+              }
+            },
+            "description": "Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos con el primer servicio en cada empresa)"
           },
           "version": {
             "type": "integer",
@@ -38809,6 +39307,132 @@
           }
         }
       },
+      "PlanTemporal": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "servicio_id",
+          "plan_id",
+          "plan_nombre",
+          "plan_original_id",
+          "plan_original_nombre",
+          "inicio",
+          "fin",
+          "origen",
+          "origen_id",
+          "estado",
+          "motivo",
+          "iniciado_en",
+          "terminado_en",
+          "creado_por",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "plan_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Plan temporal (la mejora)"
+          },
+          "plan_nombre": {
+            "type": "string"
+          },
+          "plan_original_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Plan base: el del servicio al programar, actualizado al iniciar; vuelve a él al terminar"
+          },
+          "plan_original_nombre": {
+            "type": "string"
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fin": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "lealtad",
+              "manual"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Canje de lealtad que lo programó (con `origen: lealtad`)"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "programado",
+              "activo",
+              "terminado",
+              "cancelado"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "iniciado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "terminado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PlantillaDocumento": {
         "type": "object",
         "required": [
@@ -44367,6 +44991,73 @@
           },
           "excepciones": {
             "$ref": "#/components/schemas/ExcepcionesServicio"
+          },
+          "plan_temporal": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "plan_id",
+              "plan_original_id",
+              "inicio",
+              "fin",
+              "estado",
+              "origen",
+              "origen_id",
+              "version"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "plan_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Plan temporal"
+              },
+              "plan_original_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Plan base al que vuelve al terminar"
+              },
+              "inicio": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "fin": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "programado",
+                  "activo"
+                ]
+              },
+              "origen": {
+                "type": "string",
+                "enum": [
+                  "lealtad",
+                  "manual"
+                ]
+              },
+              "origen_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "description": "Plan temporal programado o activo (lealtad), o null. Activo: `plan_id` del servicio ya es el temporal (RADIUS, RouterOS y facturación lo usan) y vuelve a `plan_original_id` al terminar"
           },
           "version": {
             "type": "integer",
