@@ -75,7 +75,8 @@ export default class extends BaseSchema {
             DROP FUNCTION IF EXISTS ledger.una_llegada_vigente();
             DROP INDEX IF EXISTS ledger.transitos_acreditados_documento;
             DROP TABLE IF EXISTS ledger.transitos_reatribuciones;
-            ALTER TABLE ledger.transitos_acreditados ADD CONSTRAINT transitos_acreditados_unico UNIQUE (tipo, documento_id);
+            -- sin volver al UNIQUE: con reatribuciones hay dos llegadas de un documento (la tabla la borra la
+            -- migración que la creó)
             ALTER TABLE ledger.liquidaciones_cobro DROP CONSTRAINT IF EXISTS liquidaciones_cobro_no_vacia;
             ALTER TABLE ledger.liquidaciones_cobro ADD CONSTRAINT liquidaciones_cobro_bruto_check CHECK (bruto > 0) NOT VALID;
             ALTER TABLE ledger.liquidaciones_cobro ADD CONSTRAINT liquidaciones_cobro_neto_check CHECK (neto >= 0) NOT VALID;

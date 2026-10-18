@@ -355,9 +355,7 @@ test.group('Fase 4 · extractos y conciliación bancaria', (group) => {
     test('reatribuir una llegada: el auditor completo en verde', async ({ assert }) => {
         const e = await reatribuirEscenario(assert)
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'Esperando al auditor: 4.saldo_de_caja_o_banco y 13.fondos_en_transito cuentan como acreditado un depósito cuya llegada se reatribuyó (ledger.transitos_reatribuciones)',
-    )
+    })
 })
 
 async function reatribuirEscenario(assert: Assert) {

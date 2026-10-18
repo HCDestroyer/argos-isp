@@ -64,7 +64,6 @@ export const HALLAZGOS_ABIERTOS: Record<string, string> = {
     '5.factura_pagado_sin_castigo': 'decisión (g)',
     '5.factura_castigada_inconsistente': 'decisión (g)',
     '13.recuperacion_de_castigada': 'decisión (g)',
-    '13.llegada_reatribuida': 'decisión (c)',
 }
 
 type Fila = Record<string, unknown>
