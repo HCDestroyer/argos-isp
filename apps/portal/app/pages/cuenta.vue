@@ -420,21 +420,38 @@ watch(() => route.hash, async (hash) => {
                     </section>
                 </div>
 
-                <section
+                <div
                     v-else-if="seccion === 'facturas'"
                     key="facturas"
-                    class="flex flex-col gap-3"
-                    aria-labelledby="titulo-facturas"
+                    class="flex flex-col gap-6"
                     data-testid="seccion-facturas"
                 >
-                    <h2
-                        id="titulo-facturas"
-                        class="text-lg font-semibold text-highlighted"
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-labelledby="titulo-facturas"
                     >
-                        Facturas
-                    </h2>
-                    <CuentaFacturas :key="`facturas-${recargas}`" />
-                </section>
+                        <h2
+                            id="titulo-facturas"
+                            class="text-lg font-semibold text-highlighted"
+                        >
+                            Facturas
+                        </h2>
+                        <CuentaFacturas :key="`facturas-${recargas}`" />
+                    </section>
+                    <section
+                        class="flex flex-col gap-3"
+                        aria-labelledby="titulo-notas-credito"
+                        data-testid="seccion-notas-credito"
+                    >
+                        <h2
+                            id="titulo-notas-credito"
+                            class="text-sm font-semibold text-highlighted"
+                        >
+                            Notas de crédito
+                        </h2>
+                        <CuentaNotasCredito :key="`notas-${recargas}`" />
+                    </section>
+                </div>
 
                 <div
                     v-else
