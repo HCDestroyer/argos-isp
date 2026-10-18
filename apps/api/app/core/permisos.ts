@@ -138,6 +138,10 @@ export const PERMISOS = {
     'declaraciones.revisar': 'Marcar como revisado un borrador de declaración',
     'declaraciones.presentar': 'Marcar una declaración como presentada en la SAT (el sistema no la envía)',
     'declaraciones.pagar': 'Registrar el pago de una declaración',
+    // Programa de lealtad (`contratos/lealtad.md` §14, fase 1); los endpoints son de A3
+    'lealtad.ver': 'Ver el programa de lealtad, sus reglas, los puntos de los clientes y los referidos',
+    'lealtad.configurar': 'Crear, editar, activar y desactivar el programa de lealtad y sus reglas',
+    'lealtad.ajustar': 'Ajustar puntos a mano (con motivo) y rechazar referidos',
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
@@ -222,6 +226,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.aprobar',
             'comprobantes.rechazar',
             'fel.ver',
+            'lealtad.ver',
         ],
     },
     soporte: {
@@ -260,6 +265,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'ip.resolver',
             'bitacora.ver',
             'notificaciones.ver',
+            'lealtad.ver',
         ],
     },
     tecnico: {
@@ -328,6 +334,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.anular',
             'reportes.ver',
             'bitacora.ver',
+            'lealtad.ver',
+            'lealtad.configurar',
+            'lealtad.ajustar',
             ...PERMISOS_FISCALES_CONTABILIDAD,
         ],
     },

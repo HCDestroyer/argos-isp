@@ -58,6 +58,11 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.activos_cuotas': 'cuota de depreciación (§10.10)',
     'ledger.diferimientos': 'diferimiento (§10.10)',
     'ledger.diferimientos_cuotas': 'cuota de diferimiento (§10.10)',
+    // programa de lealtad, fase 1 (`contratos/lealtad.md` §3): el auxiliar de puntos
+    'lealtad.movimientos': 'auxiliar de puntos: lotes y salidas; corregir = reverso (lealtad §3)',
+    'lealtad.consumos': 'qué lote paga cada salida de puntos (lealtad §3)',
+    'lealtad.avisos_vencimiento': 'aviso de puntos por vencer, uno por lote (lealtad §6.1)',
+    'lealtad.codigos_referido': 'código de referido del cliente, para siempre (lealtad §3)',
 }
 
 /** Solo cambian una vez: al cerrarse. Un trigger rechaza UPDATE/DELETE de la fila ya cerrada. */
@@ -76,6 +81,10 @@ export const MUTABLES: Record<string, string> = {
     'ledger.secuencias': 'contador del correlativo (`ultimo`) tomado con FOR UPDATE (§10.7)',
     'ledger.proveedores': 'catálogo de proveedores con version (§3.4)',
     'ledger.reglas_conciliacion': 'configuración con version y audit.cambios (§10.3)',
+    'lealtad.programas': 'configuración del programa con version y audit.cambios (lealtad §3)',
+    'lealtad.reglas':
+        'reglas para ganar con version y audit.cambios; se desactivan, no se borran (lealtad §3)',
+    'lealtad.referidos': 'estado del referido por acción, con version y audit.cambios (lealtad §3)',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */

@@ -57,6 +57,9 @@
       "name": "ipam"
     },
     {
+      "name": "lealtad"
+    },
+    {
       "name": "libro"
     },
     {
@@ -2472,6 +2475,110 @@
           }
         },
         "x-permiso": "clientes.estado_cuenta",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/clientes/{id}/puntos": {
+      "get": {
+        "operationId": "lealtadPuntosCliente",
+        "summary": "Puntos del cliente: saldo y lotes por empresa, y movimientos",
+        "description": "Un saldo por empresa (los puntos son por NIT) con sus lotes vivos (el que vence antes primero) y lo que vence dentro del aviso del programa. Con empresa activa, solo esa. Movimientos con cursor, del más reciente al más antiguo.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Puntos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosCliente"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
         "x-implementado": true
       }
     },
@@ -12796,6 +12903,1957 @@
         "x-implementado": true
       }
     },
+    "/api/v1/lealtad/ajustes": {
+      "post": {
+        "operationId": "lealtadAjustar",
+        "summary": "Ajuste manual de puntos (con motivo)",
+        "description": "En la empresa activa. Positivo: un lote nuevo (con diferimiento, asiento 4.1.05 / 2.1.10). Negativo: consume lotes (el que vence antes primero) y revierte su diferimiento; 422 `saldo_insuficiente` si dejaría el saldo negativo. 422 `programa_inactivo` sin programa activo; 422 `servicio_no_valido` si el cliente no tiene servicio en la empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "puntos": {
+                    "type": "integer",
+                    "minimum": -1000000,
+                    "maximum": 1000000,
+                    "description": "Con signo, distinto de 0: positivo agrega un lote, negativo descuenta (sin dejar saldo negativo)"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "cliente_id",
+                  "puntos",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ajuste registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustePuntos"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ajustar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ajustar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/programa": {
+      "get": {
+        "operationId": "lealtadPrograma",
+        "summary": "Programa de lealtad de la empresa activa",
+        "description": "El activo o, sin él, el más reciente. `programa: null` = la empresa no tiene programa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Programa de la empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramaLealtadEmpresa"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/programas": {
+      "get": {
+        "operationId": "lealtadProgramas",
+        "summary": "Programas de lealtad (de la empresa activa o el consolidado)",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Programas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProgramaLealtad"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "lealtadCrearPrograma",
+        "summary": "Crear el programa de lealtad de la empresa (inactivo)",
+        "description": "Nace inactivo. Por defecto: diferimiento = false (indicador, sin asientos), canje_esperado_pct = 100, vencimiento_meses = 12 (null = no vencen), aviso 30 días. Con diferimiento, 422 `cuentas_lealtad_faltantes` si faltan 2.1.10, 4.1.05 o 4.1.06. Emite lealtad.programa_cambiado.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa del programa; por defecto la activa"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "valor_punto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Q por punto con hasta 2 decimales, como string",
+                    "examples": [
+                      "0.10"
+                    ]
+                  },
+                  "diferimiento": {
+                    "description": "NIIF 15: true = los puntos son un pasivo (2.1.10) y llevan asientos; false (por defecto) = solo un indicador",
+                    "type": "boolean"
+                  },
+                  "canje_esperado_pct": {
+                    "type": "string",
+                    "pattern": "^\\d{1,3}(\\.\\d{1,6})?$",
+                    "description": "Porcentaje de 0 a 100 con hasta 6 decimales, como string",
+                    "examples": [
+                      "100",
+                      "80.5"
+                    ]
+                  },
+                  "vencimiento_meses": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 120,
+                    "description": "Meses desde la acumulación (por defecto 12); null = los puntos no vencen"
+                  },
+                  "aviso_vencimiento_dias": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
+                  "minimo_canje": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "terminos": {
+                    "type": "string",
+                    "maxLength": 20000,
+                    "description": "Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24)"
+                  },
+                  "vigente_desde": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "vigente_hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "valor_punto"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Programa creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramaLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/programas/{id}": {
+      "put": {
+        "operationId": "lealtadEditarPrograma",
+        "summary": "Editar el programa de lealtad",
+        "description": "valor_punto, canje_esperado_pct y vencimiento_meses aplican a los lotes nuevos (cada lote conserva su valor y su vencimiento). Cambiar terminos recalcula terminos_hash. Emite lealtad.programa_cambiado con los campos.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "valor_punto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "diferimiento": {
+                    "description": "NIIF 15: true = los puntos son un pasivo (2.1.10) y llevan asientos; false (por defecto) = solo un indicador",
+                    "type": "boolean"
+                  },
+                  "canje_esperado_pct": {
+                    "type": "string",
+                    "pattern": "^\\d{1,3}(\\.\\d{1,6})?$",
+                    "description": "Porcentaje de 0 a 100 con hasta 6 decimales, como string",
+                    "examples": [
+                      "100",
+                      "80.5"
+                    ]
+                  },
+                  "vencimiento_meses": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 120,
+                    "description": "Meses desde la acumulación (por defecto 12); null = los puntos no vencen"
+                  },
+                  "aviso_vencimiento_dias": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
+                  "minimo_canje": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "terminos": {
+                    "type": "string",
+                    "maxLength": 20000,
+                    "description": "Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24)"
+                  },
+                  "vigente_desde": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "vigente_hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Programa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramaLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/programas/{id}/activar": {
+      "post": {
+        "operationId": "lealtadActivarPrograma",
+        "summary": "Activar el programa de lealtad",
+        "description": "Uno activo por empresa: 409 `programa_activo_existente`; 409 `programa_ya_activo`. Desde aquí los pagos y aniversarios nuevos otorgan puntos (nada retroactivo).",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Programa activo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramaLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/programas/{id}/desactivar": {
+      "post": {
+        "operationId": "lealtadDesactivarPrograma",
+        "summary": "Desactivar el programa de lealtad",
+        "description": "Deja de otorgar; los lotes conservan su vencimiento y su valor, y los reversos se siguen aplicando. 409 `programa_inactivo_ya`.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Programa inactivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramaLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/referidos": {
+      "get": {
+        "operationId": "lealtadReferidos",
+        "summary": "Referidos y su estado",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "calificado",
+                "rechazado"
+              ]
+            }
+          },
+          {
+            "name": "referidor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "referido_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Referidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaReferidosLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/referidos/{id}/rechazar": {
+      "post": {
+        "operationId": "lealtadRechazarReferido",
+        "summary": "Rechazar un referido (falso o duplicado)",
+        "description": "Si ya estaba calificado revierte los puntos del referidor y el bono del referido. 409 `referido_rechazado`.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Referido rechazado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferidoLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ajustar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ajustar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/reglas": {
+      "get": {
+        "operationId": "lealtadReglas",
+        "summary": "Reglas para ganar puntos",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "programa_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pago_a_tiempo",
+                "antiguedad",
+                "referido",
+                "pago_adelantado"
+              ]
+            }
+          },
+          {
+            "name": "activa",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reglas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaReglasLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "lealtadCrearRegla",
+        "summary": "Crear una regla para ganar puntos",
+        "description": "Unión por tipo (pago_a_tiempo, antiguedad, referido, pago_adelantado), cada uno con su esquema de condiciones (§4); lo que falte toma el valor por defecto. Fase 1: recompensa = puntos (422 `recompensa_no_disponible`). vigente_desde por defecto = la del programa. Emite lealtad.programa_cambiado (reglas).",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "programa_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "pago_a_tiempo"
+                        ]
+                      },
+                      "condiciones": {
+                        "type": "object",
+                        "properties": {
+                          "dias_antes_vencimiento": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 365
+                          },
+                          "solo_servicio": {
+                            "type": "boolean"
+                          },
+                          "sin_promesa": {
+                            "type": "boolean"
+                          },
+                          "racha": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "periodos": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 120
+                              },
+                              "puntos_extra": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "required": [
+                              "periodos",
+                              "puntos_extra"
+                            ],
+                            "additionalProperties": false,
+                            "description": "Bono cada vez que se completan `periodos` facturas seguidas a tiempo"
+                          },
+                          "monto_minimo": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                            "description": "Monto con hasta 2 decimales, como string",
+                            "examples": [
+                              "150.00"
+                            ]
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "recompensa": {
+                        "type": "string",
+                        "enum": [
+                          "puntos"
+                        ],
+                        "description": "Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)"
+                      },
+                      "puntos": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "tope_por_cliente": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope"
+                      },
+                      "periodo_tope": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "mes",
+                              "anio"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "activa": {
+                        "type": "boolean"
+                      },
+                      "vigente_desde": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      },
+                      "vigente_hasta": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      }
+                    },
+                    "required": [
+                      "programa_id",
+                      "tipo",
+                      "puntos"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "programa_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "antiguedad"
+                        ]
+                      },
+                      "condiciones": {
+                        "type": "object",
+                        "properties": {
+                          "cada_meses": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 240
+                          },
+                          "sin_vencidas_mas_de_dias": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 0
+                          },
+                          "estados_validos": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "activo",
+                                "limitado",
+                                "suspendido"
+                              ]
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "recompensa": {
+                        "type": "string",
+                        "enum": [
+                          "puntos"
+                        ],
+                        "description": "Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)"
+                      },
+                      "puntos": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "tope_por_cliente": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope"
+                      },
+                      "periodo_tope": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "mes",
+                              "anio"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "activa": {
+                        "type": "boolean"
+                      },
+                      "vigente_desde": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      },
+                      "vigente_hasta": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      }
+                    },
+                    "required": [
+                      "programa_id",
+                      "tipo",
+                      "puntos"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "programa_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "referido"
+                        ]
+                      },
+                      "condiciones": {
+                        "type": "object",
+                        "properties": {
+                          "facturas_pagadas_minimas": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 60
+                          },
+                          "dias_maximos": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1
+                          },
+                          "tope_por_referidor": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1
+                          },
+                          "puntos_referido": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "recompensa": {
+                        "type": "string",
+                        "enum": [
+                          "puntos"
+                        ],
+                        "description": "Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)"
+                      },
+                      "puntos": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "tope_por_cliente": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope"
+                      },
+                      "periodo_tope": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "mes",
+                              "anio"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "activa": {
+                        "type": "boolean"
+                      },
+                      "vigente_desde": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      },
+                      "vigente_hasta": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      }
+                    },
+                    "required": [
+                      "programa_id",
+                      "tipo",
+                      "puntos"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "programa_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "pago_adelantado"
+                        ]
+                      },
+                      "condiciones": {
+                        "type": "object",
+                        "properties": {
+                          "periodos_minimos": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 60
+                          },
+                          "puntos_por_periodo": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "recompensa": {
+                        "type": "string",
+                        "enum": [
+                          "puntos"
+                        ],
+                        "description": "Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)"
+                      },
+                      "puntos": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "tope_por_cliente": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope"
+                      },
+                      "periodo_tope": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "mes",
+                              "anio"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "activa": {
+                        "type": "boolean"
+                      },
+                      "vigente_desde": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      },
+                      "vigente_hasta": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                        "format": "date"
+                      }
+                    },
+                    "required": [
+                      "programa_id",
+                      "tipo",
+                      "puntos"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Regla creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/reglas/{id}": {
+      "get": {
+        "operationId": "lealtadVerRegla",
+        "summary": "Ver una regla",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Regla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "lealtadEditarRegla",
+        "summary": "Editar o desactivar una regla",
+        "description": "El tipo no cambia; condiciones se valida con el esquema del tipo de la regla (422 en condiciones.<campo>). Una regla no se borra: activa = false. Aplica a los otorgamientos nuevos.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "condiciones": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": true,
+                    "description": "Condiciones del tipo de la regla (mismo esquema que en el alta, §4)"
+                  },
+                  "recompensa": {
+                    "type": "string",
+                    "enum": [
+                      "puntos"
+                    ],
+                    "description": "Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)"
+                  },
+                  "puntos": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "tope_por_cliente": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope"
+                  },
+                  "periodo_tope": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "mes",
+                          "anio"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  },
+                  "vigente_desde": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "vigente_hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Regla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/asientos/{id}": {
       "get": {
         "operationId": "libroVerAsiento",
@@ -13327,7 +15385,8 @@
                 "egreso",
                 "cierre_caja",
                 "ajuste",
-                "reclasificacion"
+                "reclasificacion",
+                "lealtad"
               ]
             }
           },
@@ -23804,6 +25863,102 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/lealtad": {
+      "get": {
+        "operationId": "reportesLealtad",
+        "summary": "Puntos emitidos, canjeados y vencidos, y el pasivo contra 2.1.10",
+        "description": "Por empresa: flujos del periodo (desde/hasta por fecha de Guatemala) y, al día de hoy, Σ valor vivo de los lotes contra el saldo de 2.1.10; `cuadra` debe ser true (§6).",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/promesas": {
       "get": {
         "operationId": "reportesPromesas",
@@ -24121,6 +26276,9 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "lealtad.ajustar",
+                        "lealtad.configurar",
+                        "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
                         "libro.cerrar_ejercicio",
@@ -24365,6 +26523,9 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "lealtad.ajustar",
+                        "lealtad.configurar",
+                        "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
                         "libro.cerrar_ejercicio",
@@ -29078,6 +31239,9 @@
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
+                            "lealtad.ajustar",
+                            "lealtad.configurar",
+                            "lealtad.ver",
                             "libro.bloquear",
                             "libro.bloquear_duro",
                             "libro.cerrar_ejercicio",
@@ -30621,6 +32785,21 @@
           }
         }
       },
+      "AjustePuntos": {
+        "type": "object",
+        "required": [
+          "movimiento",
+          "saldo"
+        ],
+        "properties": {
+          "movimiento": {
+            "$ref": "#/components/schemas/MovimientoPuntos"
+          },
+          "saldo": {
+            "type": "integer"
+          }
+        }
+      },
       "AplicacionPago": {
         "type": "object",
         "required": [
@@ -30713,7 +32892,8 @@
               "egreso",
               "cierre_caja",
               "ajuste",
-              "reclasificacion"
+              "reclasificacion",
+              "lealtad"
             ]
           },
           "origen_id": {
@@ -37465,6 +39645,79 @@
           }
         }
       },
+      "LotePuntos": {
+        "type": "object",
+        "required": [
+          "id",
+          "programa_id",
+          "servicio_id",
+          "regla_id",
+          "tipo",
+          "puntos",
+          "restante",
+          "valor",
+          "valor_restante",
+          "vence_en",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "regla_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "acumulacion",
+              "canje",
+              "vencimiento",
+              "reverso",
+              "ajuste"
+            ]
+          },
+          "puntos": {
+            "type": "integer"
+          },
+          "restante": {
+            "type": "integer"
+          },
+          "valor": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "valor_restante": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "vence_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Mayor": {
         "type": "object",
         "required": [
@@ -37731,6 +39984,142 @@
           }
         }
       },
+      "MovimientoPuntos": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "programa_id",
+          "cliente_id",
+          "servicio_id",
+          "tipo",
+          "puntos",
+          "regla_id",
+          "origen_tipo",
+          "origen_id",
+          "clave_unica",
+          "vence_en",
+          "valor",
+          "asiento_id",
+          "reversa_de",
+          "motivo",
+          "creado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "acumulacion",
+              "canje",
+              "vencimiento",
+              "reverso",
+              "ajuste"
+            ]
+          },
+          "puntos": {
+            "type": "integer",
+            "description": "Con signo: positivo = lote, negativo = salida"
+          },
+          "regla_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "origen_tipo": {
+            "type": "string",
+            "enum": [
+              "factura",
+              "pago",
+              "servicio",
+              "referido",
+              "canje",
+              "sorteo",
+              "ajuste",
+              "nota_credito",
+              "lote"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "clave_unica": {
+            "type": "string"
+          },
+          "vence_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Solo lotes; null = no vence"
+          },
+          "valor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Q diferidos (lote) o liberados (salida); 0.00 sin diferimiento"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "reversa_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "NotaCredito": {
         "type": "object",
         "required": [
@@ -37921,6 +40310,48 @@
           },
           "resumen": {
             "$ref": "#/components/schemas/ResumenComprobantes"
+          }
+        }
+      },
+      "PaginaReferidosLealtad": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReferidoLealtad"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginaReglasLealtad": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReglaLealtad"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -40405,6 +42836,134 @@
           }
         }
       },
+      "ProgramaLealtad": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "activo",
+          "valor_punto",
+          "diferimiento",
+          "canje_esperado_pct",
+          "valor_pasivo_punto",
+          "vencimiento_meses",
+          "aviso_vencimiento_dias",
+          "minimo_canje",
+          "terminos",
+          "terminos_hash",
+          "vigente_desde",
+          "vigente_hasta",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "valor_punto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Q por punto"
+          },
+          "diferimiento": {
+            "type": "boolean",
+            "description": "NIIF 15: los puntos son un pasivo (2.1.10) con asientos; false = solo un indicador"
+          },
+          "canje_esperado_pct": {
+            "type": "string",
+            "pattern": "^\\d{1,3}\\.\\d{6}$",
+            "description": "Porcentaje con 6 decimales, como string",
+            "examples": [
+              "100.000000"
+            ]
+          },
+          "valor_pasivo_punto": {
+            "type": "string",
+            "pattern": "^\\d{1,12}\\.\\d{6}$",
+            "description": "valor_punto × canje_esperado_pct / 100: lo que difiere cada punto (6 decimales)"
+          },
+          "vencimiento_meses": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = los puntos no vencen"
+          },
+          "aviso_vencimiento_dias": {
+            "type": "integer"
+          },
+          "minimo_canje": {
+            "type": "integer"
+          },
+          "terminos": {
+            "type": "string"
+          },
+          "terminos_hash": {
+            "type": "string",
+            "description": "SHA-256 de los términos publicados"
+          },
+          "vigente_desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "vigente_hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProgramaLealtadEmpresa": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "programa"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgramaLealtad"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El activo o, sin él, el más reciente; null = la empresa no tiene programa"
+          }
+        }
+      },
       "Promesa": {
         "type": "object",
         "required": [
@@ -40573,6 +43132,85 @@
               },
               "pdf": {
                 "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "PuntosCliente": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "saldos",
+          "movimientos"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "saldos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "saldo",
+                "por_vencer",
+                "proximo_vencimiento",
+                "valor_pasivo",
+                "lotes"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "saldo": {
+                  "type": "integer",
+                  "description": "Σ movimientos; puede ser negativo tras un reverso (§4)"
+                },
+                "por_vencer": {
+                  "type": "integer",
+                  "description": "Puntos que vencen dentro del aviso del programa"
+                },
+                "proximo_vencimiento": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "valor_pasivo": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "lotes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LotePuntos"
+                  }
+                }
+              }
+            }
+          },
+          "movimientos": {
+            "type": "object",
+            "required": [
+              "data",
+              "nextCursor"
+            ],
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MovimientoPuntos"
+                }
+              },
+              "nextCursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             }
           }
@@ -40758,6 +43396,85 @@
           }
         }
       },
+      "ReferidoLealtad": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "referidor_id",
+          "referidor_nombre",
+          "referido_id",
+          "referido_nombre",
+          "codigo",
+          "estado",
+          "calificado_en",
+          "motivo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "referidor_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "referidor_nombre": {
+            "type": "string"
+          },
+          "referido_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "referido_nombre": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "calificado",
+              "rechazado"
+            ]
+          },
+          "calificado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "RegimenCambiado": {
         "type": "object",
         "required": [
@@ -40890,6 +43607,247 @@
           "aplica": {
             "type": "boolean",
             "description": "Solo en la simulación: false si la configuración no la exige"
+          }
+        }
+      },
+      "ReglaLealtad": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "programa_id",
+          "tipo",
+          "condiciones",
+          "recompensa",
+          "puntos",
+          "premio_id",
+          "sorteo_id",
+          "tope_por_cliente",
+          "periodo_tope",
+          "activa",
+          "vigente_desde",
+          "vigente_hasta",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "pago_a_tiempo",
+              "antiguedad",
+              "referido",
+              "pago_adelantado"
+            ]
+          },
+          "condiciones": {
+            "description": "Condiciones completas del tipo (§4), con sus valores por defecto",
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "dias_antes_vencimiento",
+                  "solo_servicio",
+                  "sin_promesa",
+                  "racha",
+                  "monto_minimo"
+                ],
+                "properties": {
+                  "dias_antes_vencimiento": {
+                    "type": "integer"
+                  },
+                  "solo_servicio": {
+                    "type": "boolean"
+                  },
+                  "sin_promesa": {
+                    "type": "boolean"
+                  },
+                  "racha": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "required": [
+                      "periodos",
+                      "puntos_extra"
+                    ],
+                    "properties": {
+                      "periodos": {
+                        "type": "integer"
+                      },
+                      "puntos_extra": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "monto_minimo": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "cada_meses",
+                  "sin_vencidas_mas_de_dias",
+                  "estados_validos"
+                ],
+                "properties": {
+                  "cada_meses": {
+                    "type": "integer"
+                  },
+                  "sin_vencidas_mas_de_dias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "estados_validos": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "activo",
+                        "limitado",
+                        "suspendido"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "facturas_pagadas_minimas",
+                  "dias_maximos",
+                  "tope_por_referidor",
+                  "puntos_referido"
+                ],
+                "properties": {
+                  "facturas_pagadas_minimas": {
+                    "type": "integer"
+                  },
+                  "dias_maximos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tope_por_referidor": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "puntos_referido": {
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "periodos_minimos",
+                  "puntos_por_periodo"
+                ],
+                "properties": {
+                  "periodos_minimos": {
+                    "type": "integer"
+                  },
+                  "puntos_por_periodo": {
+                    "type": "integer"
+                  }
+                }
+              }
+            ]
+          },
+          "recompensa": {
+            "type": "string",
+            "enum": [
+              "puntos",
+              "premio",
+              "boletos"
+            ]
+          },
+          "puntos": {
+            "type": "integer"
+          },
+          "premio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "sorteo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "tope_por_cliente": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "periodo_tope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "mes",
+              "anio"
+            ]
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "vigente_desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "vigente_hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -42711,6 +45669,96 @@
           "generado_en": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReporteLealtad": {
+        "type": "object",
+        "required": [
+          "desde",
+          "hasta",
+          "empresas"
+        ],
+        "properties": {
+          "desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "emitidos",
+                "valor_emitido",
+                "canjeados",
+                "vencidos",
+                "revertidos",
+                "ajustes_negativos",
+                "valor_liberado",
+                "saldo_puntos",
+                "puntos_vivos",
+                "pasivo_lotes",
+                "pasivo_libro",
+                "cuadra"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "emitidos": {
+                  "type": "integer"
+                },
+                "valor_emitido": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "canjeados": {
+                  "type": "integer"
+                },
+                "vencidos": {
+                  "type": "integer"
+                },
+                "revertidos": {
+                  "type": "integer"
+                },
+                "ajustes_negativos": {
+                  "type": "integer"
+                },
+                "valor_liberado": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "saldo_puntos": {
+                  "type": "integer"
+                },
+                "puntos_vivos": {
+                  "type": "integer"
+                },
+                "pasivo_lotes": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Σ valor vivo de los lotes"
+                },
+                "pasivo_libro": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Saldo acreedor de 2.1.10 en el libro"
+                },
+                "cuadra": {
+                  "type": "boolean",
+                  "description": "pasivo_lotes = pasivo_libro (invariante del contrato §6)"
+                }
+              }
+            }
           }
         }
       },
