@@ -402,6 +402,33 @@ export interface CatalogoEventos {
         facturas: number[]
         monto: Dinero
     }
+    /**
+     * Compras, activos y diferidos (contrato de localización fiscal §3.4 y §10.10, fase 5).
+     * `periodo_iva` es el mes del libro de compras (YYYY-MM).
+     */
+    'compra.registrada': {
+        compra_id: number
+        empresa_id: number
+        proveedor_id: number
+        total: Dinero
+        iva: Dinero
+        periodo_iva: string
+    }
+    'compra.anulada': {
+        compra_id: number
+        empresa_id: number
+        proveedor_id: number
+        total: Dinero
+        iva: Dinero
+        periodo_iva: string
+    }
+    /** Baja (venta, retiro o anulación de su compra) de un activo fijo; `valor_libros` al darlo de baja. */
+    'activo.dado_de_baja': {
+        activo_id: number
+        empresa_id: number
+        motivo: string
+        valor_libros: Dinero
+    }
     // integraciones · Horus Flow (A6, `contratos/horus.md`). Horus no decide cortes: ningún
     // consumidor cambia el estado de un servicio por estos eventos (ADR-0030).
     /** Cambió la configuración del conector Horus: los procesos la releen (regla 5). Nunca valores. */
@@ -514,6 +541,9 @@ export const EVENTOS = [
     'banco.extracto_importado',
     'banco.conciliado',
     'cartera.castigada',
+    'compra.registrada',
+    'compra.anulada',
+    'activo.dado_de_baja',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',

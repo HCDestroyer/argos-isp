@@ -104,6 +104,12 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'pagos.cerrar_diferencia': 'Diferencia de cobro cerrada',
     'cartera.provisionar': 'Estimación de incobrables registrada',
     'cartera.castigar': 'Cartera castigada',
+    // Localización fiscal, fase 5 (A3): proveedores, compras, retenciones, activos y diferidos
+    'proveedores.crear': 'Proveedor creado',
+    'proveedores.editar': 'Proveedor editado',
+    'compras.registrar': 'Compra registrada',
+    'compras.registrar_desde_egreso': 'Compra registrada desde un egreso',
+    'compras.anular': 'Compra anulada',
     'empresa.editar': 'Datos de la empresa editados',
     'empresas.crear': 'Empresa creada',
     'empresas.editar': 'Empresa editada',

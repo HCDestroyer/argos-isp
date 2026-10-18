@@ -838,6 +838,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compras (documentos de proveedores) con sus líneas y retenciones */
+        get: operations["comprasListar"];
+        put?: never;
+        /**
+         * Registrar una compra al contado o al crédito (Gasto/Activo + IVA crédito / Caja|Banco|Proveedores)
+         * @description Solo inserción. Al contado crea el egreso que la paga (un solo asiento, el de la compra). Al crédito queda en 2.1.03 con el auxiliar del proveedor. FPEQ, FCAP y RECIBO sin crédito fiscal; crédito fuera de la ventana: 422 credito_fiscal_extemporaneo. 409 compra_duplicada. Retenciones sugeridas si no se indican. Emite compra.registrada.
+         */
+        post: operations["comprasRegistrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver compra */
+        get: operations["comprasVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/{id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular una compra (asiento de reverso)
+         * @description Reverso con fecha de hoy y las etiquetas de impuesto en signo contrario (el libro de compras resta la anulación en su mes). Al contado anula también su egreso. 409 compra_anulada, compra_con_notas, compra_con_pagos, compra_con_constancia, activo_con_cuotas, diferido_con_cuotas. Emite compra.anulada.
+         */
+        post: operations["comprasAnular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/desde-egreso/{egresoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar como compra un egreso que tenía factura (reclasificación, sin duplicar el asiento)
+         * @description El asiento del egreso no se toca: la compra lleva una reclasificación (IVA crédito / gasto del egreso). El neto (total − retenciones) debe ser el monto del egreso (422 compra_distinta_del_egreso). Fuera de la ventana del crédito entra sin crédito. 409 egreso_con_compra, egreso_de_compra, egreso_anulado. Emite compra.registrada.
+         */
+        post: operations["comprasDesdeEgreso"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/comprobantes": {
         parameters: {
             query?: never;
@@ -2610,6 +2688,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libros/compras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Libro de compras y servicios recibidos (vista previa, sin folio)
+         * @description Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio llega con los bloqueos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.
+         */
+        get: operations["librosCompras"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/compras/cuadre": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cuadre del libro de compras con 1.1.04 IVA crédito fiscal, por mes */
+        get: operations["librosComprasCuadre"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -3830,6 +3945,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proveedores de la empresa con el saldo de su auxiliar (2.1.03) */
+        get: operations["proveedoresListar"];
+        put?: never;
+        /**
+         * Dar de alta un proveedor (NIT validado como en el núcleo)
+         * @description NIT con dígito verificador, CUI o id_extranjero (no residentes). 409 proveedor_duplicado si la empresa ya tiene uno activo con ese documento.
+         */
+        post: operations["proveedoresCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proveedores/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver proveedor */
+        get: operations["proveedoresVer"];
+        /**
+         * Editar un proveedor (con version)
+         * @description Con version (409 si cambió) y audit.cambios. El documento y el país no se editan (422 campo_solo_lectura).
+         */
+        put: operations["proveedoresEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/red/eventos": {
         parameters: {
             query?: never;
@@ -4851,7 +5008,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -5253,6 +5410,66 @@ export interface components {
             /** @description Solo viene (en true) si la celda puede ser null (p. ej. "Sin zona"); ausente = nunca null */
             nulable?: boolean;
         };
+        Compra: {
+            id: number;
+            empresa_id: number;
+            proveedor_id: number;
+            proveedor_nombre: string;
+            proveedor_nit: string;
+            /** @enum {string} */
+            tipo_documento: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+            serie: string;
+            numero: string;
+            autorizacion: string | null;
+            /** Format: date */
+            fecha_documento: string;
+            /**
+             * Format: date
+             * @description Primer día del mes del libro de compras (crédito fiscal)
+             */
+            periodo_iva: string;
+            /**
+             * Format: date
+             * @description Fecha contable del asiento: max(fecha_documento, periodo_iva)
+             */
+            fecha: string;
+            /** @enum {string} */
+            condicion: "contado" | "credito";
+            /** Format: date */
+            vence_en: string | null;
+            base_bienes: components["schemas"]["Dinero"];
+            base_servicios: components["schemas"]["Dinero"];
+            base_importaciones: components["schemas"]["Dinero"];
+            exento: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            total: components["schemas"]["Dinero"];
+            credito_fiscal: boolean;
+            retencion_iva: components["schemas"]["Dinero"];
+            retencion_isr: components["schemas"]["Dinero"];
+            /** @description total − retenciones: lo que se paga al proveedor */
+            neto: components["schemas"]["Dinero"];
+            /** @description Pendiente de pago (crédito vigente); 0 en contado, NCRE y anuladas */
+            saldo: components["schemas"]["Dinero"];
+            compra_referencia_id: number | null;
+            /** @description Egreso existente desde el que se registró */
+            egreso_id: number | null;
+            /** @description Egreso que la pagó al contado */
+            egreso_pago_id: number | null;
+            descripcion: string | null;
+            asiento_id: number | null;
+            /** @enum {string} */
+            estado: "vigente" | "anulada";
+            /** Format: date-time */
+            anulado_en: string | null;
+            anulado_por: number | null;
+            motivo_anulacion: string | null;
+            asiento_reverso_id: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            lineas: components["schemas"]["LineaCompra"][];
+            retenciones: components["schemas"]["RetencionCompra"][];
+        };
         Comprobante: {
             id: number;
             /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
@@ -5633,6 +5850,17 @@ export interface components {
             /** @description En claro; cada consulta queda auditada */
             pass_ppp: string;
         };
+        CuadreCompras: {
+            empresa_id: number;
+            /** @description YYYY-MM */
+            periodo: string;
+            /** @description Crédito fiscal del libro de compras del mes */
+            libro: components["schemas"]["Dinero"];
+            /** @description Movimiento de 1.1.04 de los asientos de compras del mes */
+            cuenta: components["schemas"]["Dinero"];
+            diferencia: components["schemas"]["Dinero"];
+            cuadra: boolean;
+        };
         Cuenta: {
             /** @description Empresa de la subcuenta (caja o cuenta bancaria); null = cuenta común */
             empresa_id?: number | null;
@@ -5904,6 +6132,8 @@ export interface components {
             cuenta_bancaria_id: number | null;
             cuenta_bancaria_nombre: string | null;
             asiento_id: number | null;
+            /** @description Compra al contado que paga este egreso (fase 5): su asiento es el de la compra y se anula con la compra */
+            compra_id?: number | null;
             /** @enum {string} */
             estado: "registrado" | "anulado";
             registrado_por: number | null;
@@ -6652,6 +6882,19 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        LineaCompra: {
+            id: number;
+            descripcion: string;
+            /** @enum {string} */
+            tipo: "bien" | "servicio" | "activo_fijo" | "combustible" | "importacion";
+            cuenta_id: number;
+            cuenta_codigo: string;
+            exento: boolean;
+            base: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            clase_activo: string | null;
+            diferir_meses: number | null;
+        };
         LineaExtracto: {
             id: number;
             extracto_id: number;
@@ -6830,6 +7073,9 @@ export interface components {
             cliente_id: number | null;
             /** @description Cliente del auxiliar (CxC, anticipos) */
             cliente_nombre?: string | null;
+            /** @description Proveedor del auxiliar (2.1.03 Proveedores) */
+            proveedor_id?: number | null;
+            proveedor_nombre?: string | null;
             /** @description Impuesto de la partida (fiscal.impuestos) */
             impuesto_codigo?: string | null;
             /** @description Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro */
@@ -7565,6 +7811,34 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        Proveedor: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            tipo_documento: "nit" | "cui" | "id_extranjero";
+            /** @description Documento normalizado (sin guion, mayúsculas) */
+            nit: string;
+            nombre: string;
+            /** @enum {string} */
+            tipo: "general" | "pequeno_contribuyente" | "no_residente" | "sin_documento";
+            /** @enum {string|null} */
+            regimen_isr: "utilidades" | "opcional_simplificado" | "pequeno_contribuyente" | null;
+            agente_retencion_iva: boolean;
+            pais: string;
+            direccion: string | null;
+            correo: string | null;
+            telefono: string | null;
+            dias_credito: number;
+            activo: boolean;
+            /** @description Saldo de su auxiliar en 2.1.03 (lo que la empresa le debe) */
+            saldo: components["schemas"]["Dinero"];
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         ProveedorCobro: {
             id: number;
             empresa_id: number;
@@ -8110,6 +8384,64 @@ export interface components {
             /** Format: date-time */
             generado_en: string;
         };
+        ReporteLibroCompras: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                compra_id: number;
+                movimiento: string;
+                /** Format: date */
+                fecha: string;
+                tipo: string;
+                serie: string;
+                numero: string;
+                nit: string;
+                proveedor: string;
+                bienes: components["schemas"]["Dinero"];
+                servicios: components["schemas"]["Dinero"];
+                importaciones: components["schemas"]["Dinero"];
+                exento: components["schemas"]["Dinero"];
+                iva: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+                retencion_iva: components["schemas"]["Dinero"];
+                retencion_isr: components["schemas"]["Dinero"];
+                credito: string;
+                iva_credito: components["schemas"]["Dinero"];
+                periodo_iva: string;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                compra_id: number | null;
+                movimiento: number | null;
+                fecha: number | null;
+                tipo: number | null;
+                serie: number | null;
+                numero: number | null;
+                nit: number | null;
+                proveedor: number | null;
+                bienes: components["schemas"]["Dinero"] | null;
+                servicios: components["schemas"]["Dinero"] | null;
+                importaciones: components["schemas"]["Dinero"] | null;
+                exento: components["schemas"]["Dinero"] | null;
+                iva: components["schemas"]["Dinero"] | null;
+                total: components["schemas"]["Dinero"] | null;
+                retencion_iva: components["schemas"]["Dinero"] | null;
+                retencion_isr: components["schemas"]["Dinero"] | null;
+                credito: number | null;
+                iva_credito: components["schemas"]["Dinero"] | null;
+                periodo_iva: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ReportePromesas: {
             reporte: string;
             titulo: string;
@@ -8454,6 +8786,15 @@ export interface components {
             /** @description De esos servicios, los que tuvieron sesión viva en o después de `desde` */
             con_sesion_desde: number;
             sin_sesion_desde: components["schemas"]["ServicioSinSesion"][];
+        };
+        RetencionCompra: {
+            impuesto_codigo: string;
+            /** @enum {string} */
+            impuesto: "iva" | "isr";
+            base: components["schemas"]["Dinero"];
+            /** @description Por ciento (texto exacto de fiscal.impuestos) */
+            tasa: string;
+            monto: components["schemas"]["Dinero"];
         };
         RevocacionVinculaciones: {
             revocadas: number;
@@ -12437,6 +12778,488 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso cobros.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                proveedor_id?: number;
+                /** @description Mes del libro de compras (cualquier día) */
+                periodo_iva?: string;
+                /** @description Fecha del documento desde */
+                desde?: string;
+                hasta?: string;
+                tipo_documento?: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+                estado?: "vigente" | "anulada";
+                condicion?: "contado" | "credito";
+                /** @description Solo compras al crédito con saldo */
+                pendientes?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de compras */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Compra"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasRegistrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    proveedor_id: number;
+                    /** @enum {string} */
+                    tipo_documento: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+                    serie?: string | null;
+                    numero: string;
+                    /** @description UUID de autorización del DTE del proveedor */
+                    autorizacion?: string | null;
+                    /** Format: date */
+                    fecha_documento: string;
+                    /**
+                     * Format: date
+                     * @description Mes en que se toma el crédito (cualquier día del mes). Por defecto el del documento; hasta credito_fiscal_ventana_meses después
+                     */
+                    periodo_iva?: string | null;
+                    /** @description Por defecto, si el documento desglosa IVA. false = gasto sin crédito (IVA al costo) */
+                    credito_fiscal?: boolean | null;
+                    /** @description NCRE (obligatoria) o NDEB: la compra que corrige */
+                    compra_referencia_id?: number | null;
+                    descripcion?: string | null;
+                    lineas: {
+                        descripcion: string;
+                        /** @description Por defecto servicio */
+                        tipo?: ("bien" | "servicio" | "activo_fijo" | "combustible" | "importacion") | null;
+                        /** @description Código de la cuenta de gasto o de activo (5.2.01) */
+                        cuenta?: string | null;
+                        /** @description O la categoría de egreso (su cuenta de gasto) */
+                        categoria?: ("energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros") | null;
+                        /** @description Obligatoria en activo_fijo: la línea va a 1.2.01.NN y da de alta el activo */
+                        clase_activo?: ("equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros") | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        total: string;
+                        /**
+                         * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
+                         * @example 150.00
+                         */
+                        iva?: string | null;
+                        exento?: boolean | null;
+                        /** @description Gasto pagado por anticipado: va a 1.1.13 y se amortiza en N meses (§10.10) */
+                        diferir_meses?: number | null;
+                        /**
+                         * Format: date
+                         * @description Mes en que empieza la amortización (por defecto el mes de la compra)
+                         */
+                        diferir_desde?: string | null;
+                        activo_descripcion?: string | null;
+                        activo_serie?: string | null;
+                        activo_ubicacion?: string | null;
+                        /** @description Tasa anual de depreciación; por defecto el máximo legal de la clase (parámetro depreciacion) */
+                        activo_tasa_anual?: string | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        activo_valor_residual?: string | null;
+                    }[];
+                    /** @description Retenciones emitidas. Sin el campo, las sugeridas (agente de retención, pequeño contribuyente, régimen opcional); [] = ninguna */
+                    retenciones?: {
+                        /** @description Impuesto de retención emitida (RET_IVA_ESP_C, RET_IVA_PEQ_C, RET_ISR_OPC_C, RET_ISR_NR_*…) */
+                        codigo: string;
+                        /**
+                         * @description Sin él se calcula con la tasa vigente
+                         * @example 150.00
+                         */
+                        monto?: string | null;
+                    }[] | null;
+                    /** @enum {string} */
+                    condicion: "contado" | "credito";
+                    /**
+                     * Format: date
+                     * @description Crédito: por defecto la fecha del documento + días de crédito del proveedor
+                     */
+                    vence_en?: string | null;
+                    /** @description Contado: de dónde sale el pago (crea el egreso que la paga) */
+                    metodo?: ("caja" | "banco" | "cuenta_bancaria") | null;
+                    caja_id?: number | null;
+                    banco_id?: number | null;
+                    cuenta_bancaria_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Compra registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compra */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasAnular: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Compra anulada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasDesdeEgreso: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                egresoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    proveedor_id: number;
+                    /** @enum {string} */
+                    tipo_documento: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+                    serie?: string | null;
+                    numero: string;
+                    /** @description UUID de autorización del DTE del proveedor */
+                    autorizacion?: string | null;
+                    /** Format: date */
+                    fecha_documento: string;
+                    /**
+                     * Format: date
+                     * @description Mes en que se toma el crédito (cualquier día del mes). Por defecto el del documento; hasta credito_fiscal_ventana_meses después
+                     */
+                    periodo_iva?: string | null;
+                    /** @description Por defecto, si el documento desglosa IVA. false = gasto sin crédito (IVA al costo) */
+                    credito_fiscal?: boolean | null;
+                    /** @description NCRE (obligatoria) o NDEB: la compra que corrige */
+                    compra_referencia_id?: number | null;
+                    descripcion?: string | null;
+                    lineas: {
+                        descripcion: string;
+                        /** @description Por defecto servicio */
+                        tipo?: ("bien" | "servicio" | "activo_fijo" | "combustible" | "importacion") | null;
+                        /** @description Código de la cuenta de gasto o de activo (5.2.01) */
+                        cuenta?: string | null;
+                        /** @description O la categoría de egreso (su cuenta de gasto) */
+                        categoria?: ("energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros") | null;
+                        /** @description Obligatoria en activo_fijo: la línea va a 1.2.01.NN y da de alta el activo */
+                        clase_activo?: ("equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros") | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        total: string;
+                        /**
+                         * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
+                         * @example 150.00
+                         */
+                        iva?: string | null;
+                        exento?: boolean | null;
+                        /** @description Gasto pagado por anticipado: va a 1.1.13 y se amortiza en N meses (§10.10) */
+                        diferir_meses?: number | null;
+                        /**
+                         * Format: date
+                         * @description Mes en que empieza la amortización (por defecto el mes de la compra)
+                         */
+                        diferir_desde?: string | null;
+                        activo_descripcion?: string | null;
+                        activo_serie?: string | null;
+                        activo_ubicacion?: string | null;
+                        /** @description Tasa anual de depreciación; por defecto el máximo legal de la clase (parámetro depreciacion) */
+                        activo_tasa_anual?: string | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        activo_valor_residual?: string | null;
+                    }[];
+                    /** @description Retenciones emitidas. Sin el campo, las sugeridas (agente de retención, pequeño contribuyente, régimen opcional); [] = ninguna */
+                    retenciones?: {
+                        /** @description Impuesto de retención emitida (RET_IVA_ESP_C, RET_IVA_PEQ_C, RET_ISR_OPC_C, RET_ISR_NR_*…) */
+                        codigo: string;
+                        /**
+                         * @description Sin él se calcula con la tasa vigente
+                         * @example 150.00
+                         */
+                        monto?: string | null;
+                    }[] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Compra registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -18311,7 +19134,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };
@@ -18811,6 +19634,112 @@ export interface operations {
             };
             /** @description Petición idempotente en curso */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosCompras: {
+        parameters: {
+            query?: {
+                /** @description Por defecto la empresa activa */
+                empresa_id?: number;
+                /** @description Mes inicial (cualquier día); por defecto el actual */
+                desde?: string;
+                /** @description Mes final; por defecto el de desde */
+                hasta?: string;
+                formato?: "json" | "csv" | "xlsx";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Libro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteLibroCompras"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosComprasCuadre: {
+        parameters: {
+            query?: {
+                empresa_id?: number;
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuadre por mes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CuadreCompras"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23229,6 +24158,294 @@ export interface operations {
             };
             /** @description Sin el permiso promesas.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                /** @description Nombre (contiene) o documento exacto */
+                buscar?: string;
+                tipo?: "general" | "pequeno_contribuyente" | "no_residente" | "sin_documento";
+                activo?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de proveedores */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Proveedor"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresCrear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number | null;
+                    /** @description nit (por defecto; dígito verificador), cui o id_extranjero (no residentes) */
+                    tipo_documento?: ("nit" | "cui" | "id_extranjero") | null;
+                    /** @description Documento del proveedor */
+                    nit: string;
+                    /** @description Por defecto GT */
+                    pais?: string | null;
+                    nombre: string;
+                    /** @description general (por defecto), pequeno_contribuyente (FPEQ/FCAP), no_residente (id_extranjero) o sin_documento (factura especial) */
+                    tipo?: ("general" | "pequeno_contribuyente" | "no_residente" | "sin_documento") | null;
+                    /** @description opcional_simplificado: la empresa le retiene ISR (RET_ISR_OPC_C) */
+                    regimen_isr?: ("utilidades" | "opcional_simplificado" | "pequeno_contribuyente") | null;
+                    /** @description El proveedor también es agente de retención de IVA (no se le retiene) */
+                    agente_retencion_iva?: boolean | null;
+                    direccion?: string | null;
+                    correo?: string | null;
+                    telefono?: string | null;
+                    /** @description Plazo de pago por defecto de sus compras al crédito */
+                    dias_credito?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Proveedor creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proveedor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresEditar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string | null;
+                    /** @description general (por defecto), pequeno_contribuyente (FPEQ/FCAP), no_residente (id_extranjero) o sin_documento (factura especial) */
+                    tipo?: ("general" | "pequeno_contribuyente" | "no_residente" | "sin_documento") | null;
+                    /** @description opcional_simplificado: la empresa le retiene ISR (RET_ISR_OPC_C) */
+                    regimen_isr?: ("utilidades" | "opcional_simplificado" | "pequeno_contribuyente") | null;
+                    /** @description El proveedor también es agente de retención de IVA (no se le retiene) */
+                    agente_retencion_iva?: boolean | null;
+                    direccion?: string | null;
+                    correo?: string | null;
+                    telefono?: string | null;
+                    /** @description Plazo de pago por defecto de sus compras al crédito */
+                    dias_credito?: number | null;
+                    activo?: boolean | null;
+                    /** @description No se edita (422 campo_solo_lectura) */
+                    nit?: string | null;
+                    tipo_documento?: ("nit" | "cui" | "id_extranjero") | null;
+                    pais?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Proveedor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -41,6 +41,12 @@ export const ORIGENES_ASIENTO = [
     'banco',
     'provision',
     'castigo',
+    // fase 5 (§3.4, §10.10): compras, pagos a proveedores, activos fijos y diferidos
+    'compra',
+    'pago_proveedor',
+    'depreciacion',
+    'baja_activo',
+    'diferido',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 
@@ -51,6 +57,8 @@ export interface LineaAsiento {
     haber?: Monto | null
     /** obligatorio en cuentas con auxiliar por cliente (CxC, anticipos) */
     cliente_id?: number | null
+    /** obligatorio en cuentas con auxiliar por proveedor (`2.1.03 Proveedores`, fase 5) */
+    proveedor_id?: number | null
     /**
      * Etiqueta de impuesto de la partida (`fiscal.impuestos`): el código y la cuadrícula de la base o
      * de la cuota. Van juntos. Las acciones la irán poniendo en las fases de FEL y declaraciones.
@@ -86,6 +94,7 @@ export interface MovimientoRegistrado {
     debe: string
     haber: string
     cliente_id: number | null
+    proveedor_id: number | null
     impuesto_codigo: string | null
     cuadricula: string | null
 }
@@ -113,6 +122,7 @@ interface FilaCuenta {
     activa: boolean
     imputable: boolean
     auxiliar_cliente: boolean
+    auxiliar_proveedor: boolean
     /** subcuenta de una empresa (caja, cuenta bancaria); null = común */
     empresa_id: number | null
 }
@@ -122,6 +132,7 @@ interface LineaNormalizada {
     debe: Dec
     haber: Dec
     cliente_id: number | null
+    proveedor_id: number | null
     impuesto_codigo: string | null
     cuadricula: string | null
 }
@@ -180,6 +191,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     debe: linea.debe.toFixed(2),
                     haber: linea.haber.toFixed(2),
                     cliente_id: linea.cliente_id,
+                    proveedor_id: linea.proveedor_id,
                     impuesto_codigo: linea.impuesto_codigo,
                     cuadricula: linea.cuadricula,
                 })),
@@ -190,6 +202,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                 'debe',
                 'haber',
                 'cliente_id',
+                'proveedor_id',
                 'impuesto_codigo',
                 'cuadricula',
             ])) as Array<{
@@ -198,6 +211,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
             debe: string
             haber: string
             cliente_id: number | null
+            proveedor_id: number | null
             impuesto_codigo: string | null
             cuadricula: string | null
         }>
@@ -240,6 +254,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     debe: fila.debe,
                     haber: fila.haber,
                     cliente_id: fila.cliente_id,
+                    proveedor_id: fila.proveedor_id === null ? null : Number(fila.proveedor_id),
                     impuesto_codigo: fila.impuesto_codigo,
                     cuadricula: fila.cuadricula,
                 })),
@@ -292,6 +307,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                 'activa',
                 'imputable',
                 'auxiliar_cliente',
+                'auxiliar_proveedor',
                 'empresa_id',
             )) as FilaCuenta[]
         const porCodigo = new Map(cuentas.map((c) => [c.codigo, c]))
@@ -339,6 +355,15 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                 })
             }
 
+            const proveedorId = movimiento.proveedor_id ?? null
+            if (cuenta.auxiliar_proveedor && proveedorId === null) {
+                errores.push({
+                    field: `${campo}.proveedor_id`,
+                    message: `La cuenta ${cuenta.codigo} lleva auxiliar por proveedor: falta proveedor_id`,
+                    rule: 'movimiento_proveedor',
+                })
+            }
+
             let debe: Dec
             let haber: Dec
             try {
@@ -371,12 +396,54 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     rule: 'cuadricula',
                 })
             }
-            lineas.push({ cuenta, debe, haber, cliente_id: clienteId, impuesto_codigo: impuesto, cuadricula })
+            lineas.push({
+                cuenta,
+                debe,
+                haber,
+                cliente_id: clienteId,
+                proveedor_id: proveedorId,
+                impuesto_codigo: impuesto,
+                cuadricula,
+            })
         })
 
+        await this.validarProveedores(trx, lineas, empresaId, errores)
         await this.validarCuadriculas(trx, lineas, errores)
         if (errores.length > 0) throw new ValidacionFallida(errores, 'Movimientos inválidos')
         return lineas
+    }
+
+    /** El proveedor del auxiliar es de la empresa del asiento (también por trigger). */
+    private async validarProveedores(
+        trx: TransactionClientContract,
+        lineas: LineaNormalizada[],
+        empresaId: number,
+        errores: ErrorCampo[],
+    ) {
+        const ids = [...new Set(lineas.map((l) => l.proveedor_id).filter((p): p is number => p !== null))]
+        if (ids.length === 0) return
+        const filas = (await trx
+            .from('ledger.proveedores')
+            .whereIn('id', ids)
+            .select('id', 'empresa_id')) as Array<{ id: number; empresa_id: number }>
+        const empresaDe = new Map(filas.map((f) => [Number(f.id), Number(f.empresa_id)]))
+        lineas.forEach((linea, i) => {
+            if (linea.proveedor_id === null) return
+            const empresa = empresaDe.get(linea.proveedor_id)
+            if (empresa === undefined) {
+                errores.push({
+                    field: `movimientos.${i}.proveedor_id`,
+                    message: `El proveedor ${linea.proveedor_id} no existe`,
+                    rule: 'exists',
+                })
+            } else if (empresa !== empresaId) {
+                errores.push({
+                    field: `movimientos.${i}.proveedor_id`,
+                    message: `El proveedor ${linea.proveedor_id} es de la empresa ${empresa}: un asiento no mezcla empresas`,
+                    rule: 'proveedor_de_otra_empresa',
+                })
+            }
+        })
     }
 
     /** El impuesto existe en `fiscal.impuestos` y la cuadrícula es una del paquete, con signo (`+V_IVA`). */

@@ -47,6 +47,21 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
     },
     provision: { accion: 'cartera.provisionar', documento: 'la estimación con un asiento de ajuste' },
     castigo: { accion: 'cartera.castigar', documento: 'el castigo con un asiento de ajuste' },
+    // fase 5 (§3.4, §10.10): compras, pagos a proveedores, activos y diferidos
+    compra: { accion: 'compras.anular', documento: 'la compra (POST /compras/:id/anular)' },
+    pago_proveedor: {
+        accion: 'compras.pagar',
+        documento: 'el pago al proveedor (POST /pagos-proveedores/:id/anular)',
+    },
+    depreciacion: {
+        accion: 'activos.dar_de_baja',
+        documento: 'la cuota con un asiento de ajuste (las cuotas de depreciación no se anulan)',
+    },
+    baja_activo: { accion: 'activos.dar_de_baja', documento: 'la baja con un asiento de ajuste' },
+    diferido: {
+        accion: 'libro.registrar_asiento',
+        documento: 'el diferimiento con un asiento de ajuste (las cuotas no se anulan)',
+    },
 }
 
 /** null si el asiento se puede revertir directo; si no, qué acción usar. */

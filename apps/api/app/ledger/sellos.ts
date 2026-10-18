@@ -15,8 +15,8 @@ import type { Transaccion } from '#shared/domain_action'
  * El sello es correlativo por empresa y sigue el orden de sellado (`SellarAsientos`, cron cada
  * minuto con lock), no el de los ids: un asiento que confirma tarde recibe el siguiente sello.
  *
- * `proveedor_id` aún no existe en `ledger.movimientos` (fase 4, compras): v1 lo lleva en null.
- * Cuando llegue la columna, las filas existentes siguen en null y su hash no cambia.
+ * `proveedor_id` es la columna de `ledger.movimientos` desde la fase 5 (compras): las filas
+ * anteriores siguen en null y su hash no cambia.
  */
 
 export const VERSION_SELLO = 'v1'
@@ -97,7 +97,7 @@ export async function asientosCanonicos(
     }
     const { rows: movimientos } = (await cliente.rawQuery(
         `SELECT m.asiento_id, c.codigo AS cuenta_codigo, m.debe::text AS debe, m.haber::text AS haber,
-                m.cliente_id, NULL::bigint AS proveedor_id, m.impuesto_codigo, m.cuadricula
+                m.cliente_id, m.proveedor_id, m.impuesto_codigo, m.cuadricula
            FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
           WHERE m.asiento_id = ANY(?::bigint[])
           ORDER BY m.asiento_id, m.id`,

@@ -83,13 +83,15 @@ export const Movimiento = definirEsquema(
             haber: Dinero,
             cliente_id: nulable(id),
             cliente_nombre: { ...nulable(texto), description: 'Cliente del auxiliar (CxC, anticipos)' },
+            proveedor_id: { ...nulable(id), description: 'Proveedor del auxiliar (2.1.03 Proveedores)' },
+            proveedor_nombre: nulable(texto),
             impuesto_codigo: { ...nulable(texto), description: 'Impuesto de la partida (fiscal.impuestos)' },
             cuadricula: {
                 ...nulable(texto),
                 description: 'Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro',
             },
         },
-        ['cliente_nombre', 'impuesto_codigo', 'cuadricula'],
+        ['cliente_nombre', 'proveedor_id', 'proveedor_nombre', 'impuesto_codigo', 'cuadricula'],
     ),
 )
 
@@ -120,6 +122,11 @@ export const Asiento = definirEsquema(
                 'banco',
                 'provision',
                 'castigo',
+                'compra',
+                'pago_proveedor',
+                'depreciacion',
+                'baja_activo',
+                'diferido',
             ]),
             origen_id: nulable(id),
             reversa_de: {
@@ -324,6 +331,11 @@ export const Egreso = definirEsquema(
             cuenta_bancaria_id: nulable(id),
             cuenta_bancaria_nombre: nulable(texto),
             asiento_id: nulable(id),
+            compra_id: {
+                ...nulable(id),
+                description:
+                    'Compra al contado que paga este egreso (fase 5): su asiento es el de la compra y se anula con la compra',
+            },
             estado: enumerado(['registrado', 'anulado']),
             registrado_por: nulable(id),
             registrado_por_nombre: nulable(texto),
@@ -333,7 +345,7 @@ export const Egreso = definirEsquema(
             asiento_reverso_id: nulable(id),
             ...auditable,
         },
-        ['empresa_id'],
+        ['empresa_id', 'compra_id'],
     ),
 )
 
