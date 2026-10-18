@@ -10,8 +10,10 @@ import { comprobantes } from './comprobantes/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
-import { empresa, plantillaAvisoCobro } from './documentos/datos'
+import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
 import { empresas } from './empresas/datos'
+import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
+import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
 import { horusInicial } from './horus/datos'
 import type { HorusFixtures } from './horus/datos'
 import { configuracionGlobal } from './notificaciones/datos'
@@ -84,6 +86,8 @@ interface BaseFixtures {
     /** Cobros de `POST /pagos` (`billing.cobros`): un pago por empresa con el mismo `cobro_id`. */
     cobros: CobroFixture[]
     plantillaAvisoCobro: Schema<'PlantillaDocumento'>
+    /** Plantilla del PDF de la nota de crédito (A5, fase 3). */
+    plantillaNotaCredito: Schema<'PlantillaDocumento'>
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
     /** Respuestas guardadas por `Idempotency-Key`. */
@@ -111,6 +115,10 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /** Localización fiscal por empresa (A3, fase 2). */
+    fiscal: FiscalFixtures
+    /** FEL por empresa: configuración, credenciales sin secretos, DTE y sustituciones (A3, fase 3). */
+    fel: FelFixtures
     /** Integración con Horus: conector, tokens `atk_`, vinculaciones y tickets usados. */
     horus: HorusFixtures
 }
@@ -148,6 +156,7 @@ function inicial(): BaseFixtures {
         enviosPrueba: 0,
         cobros: [],
         plantillaAvisoCobro,
+        plantillaNotaCredito,
         clavesPpp: {},
         idempotencia: {},
         fallas: {},
@@ -158,9 +167,12 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        fiscal: fiscalInicial(),
+        fel: felInicial(),
         horus: horusInicial(),
     })
     sembrarNotasCredito(datos)
+    sembrarFel(datos)
     return datos
 }
 

@@ -49,7 +49,7 @@ describe('notas de crédito', () => {
         expect(porCliente.ok && porCliente.data.data.every(n => n.cliente_id === una.cliente_id)).toBe(true)
         const porFactura = await useNotasCredito().listar({ factura_id: una.factura_id })
         expect(porFactura.ok && porFactura.data.data.map(n => n.id)).toEqual([una.id])
-        const fuera = await useNotasCredito().listar({ desde: '2026-10-01' })
+        const fuera = await useNotasCredito().listar({ desde: '2026-11-01' })
         expect(fuera.ok && fuera.data.data).toEqual([])
         const pagina = await useNotasCredito().listar({ limit: 1 })
         expect(pagina.ok && pagina.data.nextCursor).not.toBeNull()

@@ -21,6 +21,7 @@ import { rutasComprobantes } from './comprobantes/rutas'
 import { rutasDocumentos } from './documentos/rutas'
 import { rutasEgresos } from './egresos/rutas'
 import { rutasEmpresas } from './empresas/rutas'
+import { rutasFiscal } from './fiscal/rutas'
 import { rutasNotificaciones } from './notificaciones/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasEstadosFinancieros } from './libro/estados'
@@ -267,6 +268,21 @@ export const CLAVE_FALLAS = 'argos_fixtures_fallas'
  * Hace que una ruta responda `status` con el mismo Problem que la API real (`NoImplementado`
  * para 501). Sirve para probar que la pantalla muestra el error y no datos inventados.
  */
+export { CLAVE_CADENA_ROTA, DEMORA_WORKER_MS } from './fel/rutas'
+
+/**
+ * Para pruebas: rompe la cadena de hash del libro de una empresa (`GET /libro/integridad` la
+ * reporta y el cierre del mes responde 409 `integridad_rota`), o la repara con `null`.
+ */
+export function romperCadenaFixture(empresaId: number, ruptura: Schema<'IntegridadLibro'>['ruptura']): void {
+    if (ruptura) {
+        bd.fel.rupturas[empresaId] = ruptura
+    }
+    else {
+        bd.fel.rupturas = Object.fromEntries(Object.entries(bd.fel.rupturas).filter(([id]) => Number(id) !== empresaId))
+    }
+}
+
 export function simularFalla(ruta: string, status = 501): void {
     bd.fallas[ruta] = status
 }
@@ -422,6 +438,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     },
 
     ...rutasEmpresas,
+    ...rutasFiscal,
     ...rutasNotificaciones,
     ...rutasZonas,
     ...rutasClientes,

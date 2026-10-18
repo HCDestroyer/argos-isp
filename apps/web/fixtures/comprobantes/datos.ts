@@ -15,7 +15,7 @@ export const archivosComprobante: Record<number, Uint8Array> = {}
 function deudaDe(clienteId: number): { servicioId: number | null, monto: string } {
     const servicio = servicios.find(s => s.cliente_id === clienteId)
     const pendiente = facturas
-        .filter(f => f.servicio_id === servicio?.id && f.estado !== 'pagada' && f.estado !== 'anulada')
+        .filter(f => f.servicio_id === servicio?.id && f.estado !== 'pagada' && f.estado !== 'anulada' && f.estado !== 'por_certificar')
         .reduce((suma, f) => suma.plus(f.total).minus(f.pagado), new Decimal(0))
     return { servicioId: servicio?.id ?? null, monto: dinero(pendiente.gt(0) ? pendiente : new Decimal('150')) }
 }

@@ -120,6 +120,12 @@ function rutasDePaginas(): Map<string, string> {
  * debe comprobar el permiso antes. Para cada uno, el permiso y quién lo abre.
  */
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = {
+    'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
+    'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },
+    'DteFicha.vue': { permisos: ['fel.ver'], desde: ['components/DteDocumento.vue', 'pages/dte/[id].vue'] },
+    'FelCertificarAl.vue': { permisos: ['plantillas.ver'], desde: ['pages/configuracion/fel.vue'] },
+    'FelCredencialesModal.vue': { permisos: ['fel.configurar'], desde: ['pages/configuracion/fel.vue'] },
+    'SustituirFacturaModal.vue': { permisos: ['facturas.sustituir'], desde: ['pages/facturas/[id].vue'] },
     'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
     'CajaCierreModal.vue': { permisos: ['cajas.cerrar'], desde: ['pages/caja/index.vue'] },
     'CajaCrearModal.vue': { permisos: ['cajas.crear'], desde: ['pages/caja/index.vue'] },
@@ -132,6 +138,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'EmpresaLogoModal.vue': { permisos: ['empresas.cambiar_logo'], desde: ['pages/configuracion/empresas.vue'] },
     'LibroCierres.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LibroEstadoFinanciero.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'LibroDiarios.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'LibroIntegridad.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id].vue'] },
     'NotaCreditoModal.vue': { permisos: ['facturas.nota_credito'], desde: ['pages/facturas/[id].vue'] },
     'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue'] },

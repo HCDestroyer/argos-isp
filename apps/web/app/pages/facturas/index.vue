@@ -88,6 +88,7 @@ const columnas: TableColumn<Factura>[] = [
     { accessorKey: 'total', header: 'Total', meta: { class: { th: 'text-right', td: 'text-right' } } },
     { id: 'pendiente', header: 'Pendiente', meta: { class: { th: 'hidden text-right sm:table-cell', td: 'hidden text-right sm:table-cell' } } },
     { accessorKey: 'estado', header: 'Estado' },
+    { id: 'fel', header: 'FEL', meta: SOLO_ESCRITORIO },
 ]
 
 const hayFiltros = computed(() => estado.value !== TODOS || clienteId.value !== 0 || servicioId.value !== TODOS || periodo.value !== TODOS)
@@ -236,6 +237,15 @@ onMounted(async () => {
                             </span>
                             <span class="truncate text-xs text-muted sm:hidden">{{ nombres.nombre(row.original.cliente_id) }}</span>
                             <UBadge
+                                v-if="row.original.sustituida_por"
+                                :label="`Sustituida por #${row.original.sustituida_por}`"
+                                icon="i-lucide-replace"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                class="mt-1 self-start"
+                            />
+                            <UBadge
                                 v-if="row.original.tipo === 'mora'"
                                 label="Recargo por mora"
                                 icon="i-lucide-calendar-x"
@@ -265,7 +275,15 @@ onMounted(async () => {
                     </template>
 
                     <template #pendiente-cell="{ row }">
-                        <span class="tabular-nums font-medium text-highlighted">{{ row.original.estado === 'anulada' ? '—' : formatearQuetzales(saldoFactura(row.original)) }}</span>
+                        <span
+                            v-if="row.original.estado === 'por_certificar'"
+                            class="text-xs text-muted"
+                            title="Por certificar: todavía no es deuda"
+                        >No es deuda aún</span>
+                        <span
+                            v-else
+                            class="tabular-nums font-medium text-highlighted"
+                        >{{ row.original.estado === 'anulada' ? '—' : formatearQuetzales(saldoFactura(row.original)) }}</span>
                     </template>
 
                     <template #estado-cell="{ row }">
@@ -273,6 +291,18 @@ onMounted(async () => {
                             :estado="row.original.estado"
                             size="sm"
                         />
+                    </template>
+
+                    <template #fel-cell="{ row }">
+                        <EstadoDteBadge
+                            v-if="estadoDteDe(row.original.fel_estado)"
+                            :estado="estadoDteDe(row.original.fel_estado) ?? 'pendiente'"
+                            size="sm"
+                        />
+                        <span
+                            v-else
+                            class="text-xs text-muted"
+                        >{{ row.original.aviso_cobro ? 'Aviso sin DTE' : 'Sin DTE' }}</span>
                     </template>
 
                     <template #empty>

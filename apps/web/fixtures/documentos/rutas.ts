@@ -2,7 +2,17 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { conPermiso, cuerpoObjeto, datosInvalidos, noEncontrado, registrarAccion, versionCambiada } from '../comun'
-import { pdfFixture } from './datos'
+import { pdfFixture, plantillasFabrica } from './datos'
+
+type TipoPlantilla = Schema<'PlantillaDocumento'>['tipo']
+
+function esTipo(valor: string | undefined): valor is TipoPlantilla {
+    return valor === 'aviso_cobro' || valor === 'nota_credito'
+}
+
+function plantillaDe(tipo: TipoPlantilla): Schema<'PlantillaDocumento'> {
+    return tipo === 'aviso_cobro' ? bd.plantillaAvisoCobro : bd.plantillaNotaCredito
+}
 
 type Errores = NonNullable<Problem['errors']>
 type Empresa = Schema<'Empresa'>
@@ -107,14 +117,29 @@ export const rutasDocumentos: RutasFixture = {
         return { status: 200, cuerpo: bd.empresa }
     }),
 
-    'GET /api/v1/documentos/plantillas/:tipo': conPermiso('documentos.ver', solicitud => (solicitud.params.tipo === 'aviso_cobro'
-        ? { status: 200, cuerpo: bd.plantillaAvisoCobro }
-        : noEncontrado('la plantilla'))),
+    'GET /api/v1/documentos/plantillas/:tipo': conPermiso('documentos.ver', (solicitud) => {
+        const tipo = solicitud.params.tipo
+        return esTipo(tipo) ? { status: 200, cuerpo: plantillaDe(tipo) } : noEncontrado('la plantilla')
+    }),
+
+    /** La plantilla de esta versión (con el bloque FEL), aunque la empresa haya guardado otra. No guarda nada. */
+    'GET /api/v1/documentos/plantillas/:tipo/fabrica': conPermiso('documentos.ver', (solicitud) => {
+        const tipo = solicitud.params.tipo
+        return esTipo(tipo) ? { status: 200, cuerpo: structuredClone(plantillasFabrica[tipo]) } : noEncontrado('la plantilla')
+    }),
+
+    /** PDF de la nota de crédito (el mismo del portal), respetando el alcance sobre su factura. */
+    'GET /api/v1/documentos/nota-credito/:notaId': conPermiso('facturas.ver', (solicitud) => {
+        const nota = bd.notasCredito.find(n => n.id === Number(solicitud.params.notaId))
+        return nota ? { status: 200, cuerpo: pdfFixture(`Nota de credito ${nota.id}`), contentType: 'application/pdf' } : noEncontrado('la nota de crédito')
+    }),
 
     'PUT /api/v1/documentos/plantillas/:tipo': conPermiso('documentos.editar', (solicitud) => {
-        if (solicitud.params.tipo !== 'aviso_cobro') {
+        const tipo = solicitud.params.tipo
+        if (!esTipo(tipo)) {
             return noEncontrado('la plantilla')
         }
+        const actual = plantillaDe(tipo)
         const cuerpo = cuerpoObjeto(solicitud)
         const errores = validarPlantilla(cuerpo.html)
         if (typeof cuerpo.version !== 'number') {
@@ -123,16 +148,22 @@ export const rutasDocumentos: RutasFixture = {
         if (errores.length) {
             return datosInvalidos(errores)
         }
-        if (cuerpo.version !== bd.plantillaAvisoCobro.version) {
+        if (cuerpo.version !== actual.version) {
             return versionCambiada()
         }
-        bd.plantillaAvisoCobro = { ...bd.plantillaAvisoCobro, html: String(cuerpo.html), version: bd.plantillaAvisoCobro.version + 1 }
-        registrarAccion(solicitud, 'documentos.editar', { tipo: 'plantilla_documento', id: 1 }, { tipo: 'aviso_cobro' })
-        return { status: 200, cuerpo: bd.plantillaAvisoCobro }
+        const guardada = { ...actual, html: String(cuerpo.html), version: actual.version + 1 }
+        if (tipo === 'aviso_cobro') {
+            bd.plantillaAvisoCobro = guardada
+        }
+        else {
+            bd.plantillaNotaCredito = guardada
+        }
+        registrarAccion(solicitud, 'documentos.editar', { tipo: 'plantilla_documento', id: tipo === 'aviso_cobro' ? 1 : 2 }, { tipo })
+        return { status: 200, cuerpo: guardada }
     }),
 
     'POST /api/v1/documentos/plantillas/:tipo/vista-previa': conPermiso('documentos.editar', (solicitud) => {
-        if (solicitud.params.tipo !== 'aviso_cobro') {
+        if (!esTipo(solicitud.params.tipo)) {
             return noEncontrado('la plantilla')
         }
         const errores = validarPlantilla(cuerpoObjeto(solicitud).html)

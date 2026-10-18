@@ -8,7 +8,7 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
  * `libro.reabrir_periodo` y motivo.
  */
 const toast = useToast()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 
 const lista = usePaginacionCursor(cursor => useLibro().periodos(cursor))
 const hoy = hoyGuatemala()
@@ -28,6 +28,14 @@ const mesACerrar = ref<string | undefined>(undefined)
 const enviandoCierre = ref(false)
 const problemaCierre = ref<Problem | null>(null)
 let claveCierre = nuevaClaveIdempotencia()
+
+/**
+ * 409 `ncre_sin_certificar`: una fila de `errors[]` por nota (`field: 'nota_id'`, `message` = estado
+ * de su NCRE, `rule` = `dte_id`, y además `nota_id`); se enlazan a su ficha (o a su DTE).
+ * 409 `integridad_rota`: se lleva a la pestaña de integridad.
+ */
+const codigoCierre = computed(() => (problemaCierre.value ? codigoProblema(problemaCierre.value) : null))
+const notasSinCertificar = computed(() => (codigoCierre.value === 'ncre_sin_certificar' ? ncreDeProblema(problemaCierre.value) : []))
 
 const itemsMes = computed<SelectItem[]>(() => cerrables.value.map(p => ({ label: etiquetaPeriodo(p), value: p })))
 
@@ -53,7 +61,7 @@ async function confirmarCierre() {
     const resultado = await useLibro().cerrarPeriodo(mesACerrar.value, claveCierre)
     enviandoCierre.value = false
     if (!resultado.ok) {
-        problemaCierre.value = resultado.problema
+        problemaCierre.value = problemaFelLegible(resultado.problema)
         return
     }
     cerrando.value = false
@@ -241,6 +249,61 @@ onMounted(() => void lista.recargar())
                         :problema="problemaCierre"
                         data-prueba="cierre-error"
                     />
+                    <ul
+                        v-if="notasSinCertificar.length"
+                        class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                        data-prueba="cierre-ncre"
+                    >
+                        <li
+                            v-for="nota in notasSinCertificar"
+                            :key="nota.dteId"
+                            class="flex items-center justify-between gap-2 px-3 py-2"
+                        >
+                            <ULink
+                                v-if="nota.notaId !== null"
+                                :to="enlace(`/notas-credito/${nota.notaId}`)"
+                                class="text-sm font-medium text-highlighted hover:text-primary"
+                            >
+                                Nota de crédito #{{ nota.notaId }}
+                            </ULink>
+                            <ULink
+                                v-else
+                                :to="enlace(`/dte/${nota.dteId}`)"
+                                class="text-sm font-medium text-highlighted hover:text-primary"
+                            >
+                                NCRE · DTE #{{ nota.dteId }}
+                            </ULink>
+                            <EstadoDteBadge
+                                v-if="nota.estado"
+                                :estado="nota.estado"
+                                size="sm"
+                            />
+                        </li>
+                    </ul>
+                    <div
+                        v-if="codigoCierre === 'ncre_sin_certificar' || codigoCierre === 'integridad_rota'"
+                        class="flex flex-wrap gap-2"
+                    >
+                        <UButton
+                            v-if="codigoCierre === 'ncre_sin_certificar' && puede('fel.ver')"
+                            label="NCRE en la cola de DTE"
+                            icon="i-lucide-badge-check"
+                            color="neutral"
+                            variant="outline"
+                            size="sm"
+                            :to="enlace('/dte?documento=nota_credito')"
+                        />
+                        <UButton
+                            v-else-if="codigoCierre === 'integridad_rota'"
+                            label="Ver integridad del libro"
+                            icon="i-lucide-shield-alert"
+                            color="neutral"
+                            variant="outline"
+                            size="sm"
+                            :to="enlace('/libro?tab=integridad')"
+                            data-prueba="cierre-a-integridad"
+                        />
+                    </div>
                 </div>
             </template>
             <template #footer>

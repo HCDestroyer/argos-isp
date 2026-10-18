@@ -58,6 +58,7 @@ const columnas: TableColumn<NotaCredito>[] = [
     { accessorKey: 'motivo', header: 'Motivo', meta: SOLO_ESCRITORIO },
     { accessorKey: 'iva', header: 'IVA', meta: { class: { th: 'text-right hidden lg:table-cell', td: 'text-right hidden lg:table-cell' } } },
     { accessorKey: 'monto', header: 'Monto', meta: DERECHA },
+    { id: 'fel', header: 'NCRE', meta: SOLO_ANCHO },
 ]
 
 const hayFiltros = computed(() => clienteId.value !== 0 || facturaTexto.value !== '' || desde.value !== '' || hasta.value !== '')
@@ -229,6 +230,28 @@ onMounted(async () => {
 
                     <template #monto-cell="{ row }">
                         <span class="tabular-nums font-medium text-highlighted">{{ formatearQuetzales(row.original.monto) }}</span>
+                    </template>
+
+                    <template #fel-cell="{ row }">
+                        <div class="flex flex-col items-start gap-1">
+                            <EstadoDteBadge
+                                v-if="estadoDteDe(row.original.fel_estado)"
+                                :estado="estadoDteDe(row.original.fel_estado) ?? 'pendiente'"
+                                size="sm"
+                            />
+                            <span
+                                v-else
+                                class="text-xs text-muted"
+                            >Interna</span>
+                            <UBadge
+                                v-if="row.original.anulada_en"
+                                label="Anulada"
+                                icon="i-lucide-ban"
+                                color="neutral"
+                                variant="subtle"
+                                size="sm"
+                            />
+                        </div>
                     </template>
 
                     <template #empty>

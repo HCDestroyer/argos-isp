@@ -250,6 +250,10 @@ describe('horus · pantallas', () => {
         expect(window.location.hash).toBe('')
         expect(useCsrf().value).toMatch(/^csrf-/)
         await vi.waitFor(() => expect(navegar.mock.calls.some(([destino]) => JSON.stringify(destino).includes('/servicios/1'))).toBe(true))
+        // La navegación es real: se espera a que termine (carga en diferido de la ficha del servicio)
+        // para que no siga viva cuando se desmonta el entorno de la prueba.
+        await Promise.allSettled(navegar.mock.results.map(r => r.value))
+        await flushPromises()
     })
 
     it('/sso/entrar sin vinculación: login normal que vincula; un ticket usado responde "venció"', async () => {
