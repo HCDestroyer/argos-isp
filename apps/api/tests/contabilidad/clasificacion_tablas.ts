@@ -57,6 +57,11 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.depositos': 'depósito de caja a banco (§10.3)',
     'ledger.traslados': 'traslado entre cuentas propias (§10.3)',
     'ledger.transitos_acreditados': 'llegada al banco de un depósito o traslado, al conciliar (§10.3)',
+    // fase 4 (A3): cartera y diferencias de cobro (§10.9)
+    'ledger.provisiones_cartera': 'estimación para cuentas incobrables (§10.9)',
+    'ledger.castigos': 'castigo de cartera (§10.9)',
+    'ledger.castigos_facturas': 'factura castigada (§10.9)',
+    'billing.diferencias_cobro': 'diferencia de cobro cerrada con su nota (§10.9)',
     // §10.10 integridad, activos y diferidos
     'ledger.asientos_sellos': 'cadena de hash de asientos (§10.10)',
     'ledger.activos': 'activo fijo; la baja es activos_bajas (§10.10)',

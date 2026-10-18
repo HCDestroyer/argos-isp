@@ -14,8 +14,11 @@ import { EmpresaRequerida, empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
 import * as v from '#ledger/validators_bancos'
 import {
+    CastigoCartera,
     Conciliacion,
     Deposito,
+    DiferenciaCerrada,
+    ProvisionCartera,
     Extracto,
     LineaExtracto,
     LiquidacionCobro,
@@ -47,6 +50,11 @@ import CrearReglaConciliacion from '#ledger/actions/crear_regla_conciliacion'
 import EditarReglaConciliacion from '#ledger/actions/editar_regla_conciliacion'
 import AplicarReglasConciliacion from '#ledger/actions/aplicar_reglas_conciliacion'
 import DepositarCaja from '#ledger/actions/depositar_caja'
+import { listarCastigos, listarProvisiones } from '#ledger/cartera'
+import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
+import CastigarCartera from '#ledger/actions/castigar_cartera'
+import CerrarDiferenciaPago from '#billing/actions/cerrar_diferencia_pago'
+import { dimensionesDePago } from '#billing/pagos'
 import TrasladarFondos from '#ledger/actions/trasladar_fondos'
 import {
     empresaDeProveedorCobro,
@@ -444,4 +452,87 @@ async function empresaDeCuenta(cuentaId: number): Promise<number> {
     return Number(empresaId)
 }
 
-export default [...cobros, ...transitos, ...conciliacion]
+const cartera: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/pagos/:id/cerrar-diferencia',
+        operacion: 'pagosCerrarDiferencia',
+        resumen: 'Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)',
+        etiqueta: 'pagos',
+        permiso: 'pagos.cerrar_diferencia',
+        cuerpo: v.cerrarDiferenciaValidator,
+        idempotente: true,
+        descripcion:
+            'Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.',
+        respuesta: { status: 201, descripcion: 'Diferencia cerrada', esquema: DiferenciaCerrada },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDePago(id))
+            return new CerrarDiferenciaPago().execute(
+                { pago_id: id, motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/cartera/provisionar',
+        operacion: 'carteraProvisionar',
+        resumen: 'Estimación para cuentas incobrables hasta el tope legal (5.3.02 / 1.1.12)',
+        etiqueta: 'cartera',
+        permiso: 'cartera.provisionar',
+        cuerpo: v.provisionarCarteraValidator,
+        idempotente: true,
+        descripcion:
+            'Tope = Σ saldos deudores al corte × reserva_incobrables_max (3 %); se registra solo lo que falta para llegar al tope (monto 0 sin asiento si ya está).',
+        respuesta: { status: 201, descripcion: 'Estimación', esquema: ProvisionCartera },
+        handler: (ctx, { cuerpo }) => new ProvisionarCartera().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cartera/provisiones',
+        operacion: 'carteraProvisiones',
+        resumen: 'Estimaciones para cuentas incobrables registradas',
+        etiqueta: 'cartera',
+        permiso: 'reportes.ver',
+        query: v.listarCarteraValidator,
+        respuesta: { status: 200, descripcion: 'Página', esquema: pagina(ProvisionCartera) },
+        handler: (ctx, { query }) => listarProvisiones(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/cartera/castigos',
+        operacion: 'carteraCastigar',
+        resumen: 'Castigar facturas incobrables de un cliente (2.1.11 + 1.1.12 o 5.3.02 / CxC)',
+        etiqueta: 'cartera',
+        permiso: 'cartera.castigar',
+        cuerpo: v.castigarCarteraValidator,
+        idempotente: true,
+        descripcion:
+            'Motivo y evidencia de la gestión de cobro obligatorios (422 castigo_sin_evidencia). El IVA de los avisos sin DTE sale de 2.1.11; el resto contra la estimación disponible y luego 5.3.02. La factura queda cubierta y no se certifica. Emite cartera.castigada.',
+        respuesta: { status: 201, descripcion: 'Castigo', esquema: CastigoCartera },
+        handler: async (ctx, { cuerpo }) => {
+            for (const id of cuerpo.facturas) exigirAcceso(ctx, { empresa_id: await empresaDeFactura(id) })
+            return new CastigarCartera().execute(cuerpo, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/cartera/castigos',
+        operacion: 'carteraCastigos',
+        resumen: 'Castigos de cartera',
+        etiqueta: 'cartera',
+        permiso: 'reportes.ver',
+        query: v.listarCarteraValidator,
+        respuesta: { status: 200, descripcion: 'Página', esquema: pagina(CastigoCartera) },
+        handler: (ctx, { query }) => listarCastigos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+]
+
+async function empresaDeFactura(id: number): Promise<number> {
+    const fila = await db.from('billing.facturas').where('id', id).select('empresa_id').first()
+    if (!fila) throw new NoEncontrado(`La factura ${id} no existe`)
+    return Number(fila.empresa_id)
+}
+
+export default [...cobros, ...transitos, ...conciliacion, ...cartera]

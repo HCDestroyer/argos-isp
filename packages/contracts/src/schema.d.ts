@@ -508,6 +508,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cartera/castigos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Castigos de cartera */
+        get: operations["carteraCastigos"];
+        put?: never;
+        /**
+         * Castigar facturas incobrables de un cliente (2.1.11 + 1.1.12 o 5.3.02 / CxC)
+         * @description Motivo y evidencia de la gestión de cobro obligatorios (422 castigo_sin_evidencia). El IVA de los avisos sin DTE sale de 2.1.11; el resto contra la estimación disponible y luego 5.3.02. La factura queda cubierta y no se certifica. Emite cartera.castigada.
+         */
+        post: operations["carteraCastigar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cartera/provisionar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimación para cuentas incobrables hasta el tope legal (5.3.02 / 1.1.12)
+         * @description Tope = Σ saldos deudores al corte × reserva_incobrables_max (3 %); se registra solo lo que falta para llegar al tope (monto 0 sin asiento si ya está).
+         */
+        post: operations["carteraProvisionar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cartera/provisiones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estimaciones para cuentas incobrables registradas */
+        get: operations["carteraProvisiones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes": {
         parameters: {
             query?: never;
@@ -2908,6 +2966,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pagos/{id}/cerrar-diferencia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)
+         * @description Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.
+         */
+        post: operations["pagosCerrarDiferencia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pasarela/cobros": {
         parameters: {
             query?: never;
@@ -4989,6 +5067,33 @@ export interface components {
                 };
             } | null;
         };
+        CastigoCartera: {
+            id: number;
+            empresa_id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            /** Format: date */
+            fecha: string;
+            motivo: string;
+            /** @description Gestión de cobro documentada */
+            evidencia: string;
+            monto: components["schemas"]["Dinero"];
+            /** @description IVA de avisos sin DTE que sale de 2.1.11 */
+            iva: components["schemas"]["Dinero"];
+            /** @description Contra 1.1.12 Estimación para cuentas incobrables */
+            estimacion: components["schemas"]["Dinero"];
+            /** @description Contra 5.3.02 Cuentas incobrables (lo que no cubrió la estimación) */
+            gasto: components["schemas"]["Dinero"];
+            asiento_id: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            facturas: {
+                factura_id: number;
+                monto: components["schemas"]["Dinero"];
+                iva: components["schemas"]["Dinero"];
+            }[];
+        };
         CategoriaEgreso: {
             id: number;
             /** @enum {string} */
@@ -5671,6 +5776,20 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        DiferenciaCerrada: {
+            pago_id: number;
+            empresa_id: number;
+            monto: components["schemas"]["Dinero"];
+            /** @description diferencia_cobro_tope de la empresa */
+            tope: components["schemas"]["Dinero"];
+            notas: {
+                factura_id: number;
+                nota_credito_id: number;
+                monto: components["schemas"]["Dinero"];
+                /** @description true = NCRE (la factura tenía DTE); false = nota interna */
+                ncre: boolean;
+            }[];
         };
         /**
          * @description Monto en quetzales con 2 decimales, como string
@@ -7491,6 +7610,30 @@ export interface components {
                 consulta_nit: boolean;
                 pdf: boolean;
             };
+        };
+        ProvisionCartera: {
+            id: number;
+            empresa_id: number;
+            anio: number;
+            /**
+             * Format: date
+             * @description Corte de los saldos deudores
+             */
+            fecha: string;
+            /** @description Σ saldos deudores de clientes en 1.1.03 al corte */
+            base: components["schemas"]["Dinero"];
+            /** @description reserva_incobrables_max vigente (%) */
+            porcentaje: string;
+            /** @description base × porcentaje: la reserva en 1.1.12 nunca lo supera */
+            tope: components["schemas"]["Dinero"];
+            /** @description Saldo de 1.1.12 antes de esta estimación */
+            saldo_anterior: components["schemas"]["Dinero"];
+            /** @description Registrado (5.3.02 / 1.1.12); 0 si ya estaba en el tope */
+            monto: components["schemas"]["Dinero"];
+            asiento_id: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
         };
         QuienSoy: {
             /** @description false si la IP de origen no pertenece a ningún servicio */
@@ -10776,6 +10919,259 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraCastigos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CastigoCartera"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraCastigar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    facturas: number[];
+                    motivo: string;
+                    /** @description Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT */
+                    evidencia: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Castigo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CastigoCartera"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cartera.castigar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraProvisionar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    anio: number;
+                    /**
+                     * Format: date
+                     * @description Corte de los saldos deudores; por defecto el 31-dic del año (o hoy si es el año en curso)
+                     */
+                    fecha?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Estimación */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisionCartera"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cartera.provisionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraProvisiones: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisionCartera"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19739,6 +20135,82 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso pagos.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pagosCerrarDiferencia: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Diferencia cerrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiferenciaCerrada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.cerrar_diferencia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;

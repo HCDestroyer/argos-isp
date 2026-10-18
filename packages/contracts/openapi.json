@@ -27,6 +27,9 @@
       "name": "cajas"
     },
     {
+      "name": "cartera"
+    },
+    {
       "name": "clientes"
     },
     {
@@ -3646,6 +3649,475 @@
           }
         },
         "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cartera/castigos": {
+      "get": {
+        "operationId": "carteraCastigos",
+        "summary": "Castigos de cartera",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CastigoCartera"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "carteraCastigar",
+        "summary": "Castigar facturas incobrables de un cliente (2.1.11 + 1.1.12 o 5.3.02 / CxC)",
+        "description": "Motivo y evidencia de la gestión de cobro obligatorios (422 castigo_sin_evidencia). El IVA de los avisos sin DTE sale de 2.1.11; el resto contra la estimación disponible y luego 5.3.02. La factura queda cubierta y no se certifica. Emite cartera.castigada.",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "facturas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "evidencia": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT"
+                  }
+                },
+                "required": [
+                  "facturas",
+                  "motivo",
+                  "evidencia"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Castigo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CastigoCartera"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cartera.castigar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cartera.castigar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cartera/provisionar": {
+      "post": {
+        "operationId": "carteraProvisionar",
+        "summary": "Estimación para cuentas incobrables hasta el tope legal (5.3.02 / 1.1.12)",
+        "description": "Tope = Σ saldos deudores al corte × reserva_incobrables_max (3 %); se registra solo lo que falta para llegar al tope (monto 0 sin asiento si ya está).",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "anio": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Corte de los saldos deudores; por defecto el 31-dic del año (o hoy si es el año en curso)"
+                  }
+                },
+                "required": [
+                  "anio"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Estimación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionCartera"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cartera.provisionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cartera.provisionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cartera/provisiones": {
+      "get": {
+        "operationId": "carteraProvisiones",
+        "summary": "Estimaciones para cuentas incobrables registradas",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProvisionCartera"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
         "x-implementado": true
       }
     },
@@ -19812,6 +20284,132 @@
         "x-implementado": true
       }
     },
+    "/api/v1/pagos/{id}/cerrar-diferencia": {
+      "post": {
+        "operationId": "pagosCerrarDiferencia",
+        "summary": "Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)",
+        "description": "Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Diferencia cerrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiferenciaCerrada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.cerrar_diferencia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.cerrar_diferencia",
+        "x-implementado": true
+      }
+    },
     "/api/v1/pasarela/cobros": {
       "get": {
         "operationId": "pasarelaListarCobros",
@@ -34401,6 +34999,110 @@
           }
         }
       },
+      "CastigoCartera": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cliente_id",
+          "cliente_nombre",
+          "fecha",
+          "motivo",
+          "evidencia",
+          "monto",
+          "iva",
+          "estimacion",
+          "gasto",
+          "asiento_id",
+          "registrado_por",
+          "created_at",
+          "facturas"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "evidencia": {
+            "type": "string",
+            "description": "Gestión de cobro documentada"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "iva": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "IVA de avisos sin DTE que sale de 2.1.11"
+          },
+          "estimacion": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Contra 1.1.12 Estimación para cuentas incobrables"
+          },
+          "gasto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Contra 5.3.02 Cuentas incobrables (lo que no cubrió la estimación)"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "factura_id",
+                "monto",
+                "iva"
+              ],
+              "properties": {
+                "factura_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          }
+        }
+      },
       "CategoriaEgreso": {
         "type": "object",
         "required": [
@@ -36985,6 +37687,62 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DiferenciaCerrada": {
+        "type": "object",
+        "required": [
+          "pago_id",
+          "empresa_id",
+          "monto",
+          "tope",
+          "notas"
+        ],
+        "properties": {
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "tope": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "diferencia_cobro_tope de la empresa"
+          },
+          "notas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "factura_id",
+                "nota_credito_id",
+                "monto",
+                "ncre"
+              ],
+              "properties": {
+                "factura_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nota_credito_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "ncre": {
+                  "type": "boolean",
+                  "description": "true = NCRE (la factura tenía DTE); false = nota interna"
+                }
+              }
+            }
           }
         }
       },
@@ -43927,6 +44685,79 @@
                 "type": "boolean"
               }
             }
+          }
+        }
+      },
+      "ProvisionCartera": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "anio",
+          "fecha",
+          "base",
+          "porcentaje",
+          "tope",
+          "saldo_anterior",
+          "monto",
+          "asiento_id",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "anio": {
+            "type": "integer"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Corte de los saldos deudores"
+          },
+          "base": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Σ saldos deudores de clientes en 1.1.03 al corte"
+          },
+          "porcentaje": {
+            "type": "string",
+            "description": "reserva_incobrables_max vigente (%)"
+          },
+          "tope": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "base × porcentaje: la reserva en 1.1.12 nunca lo supera"
+          },
+          "saldo_anterior": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 1.1.12 antes de esta estimación"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Registrado (5.3.02 / 1.1.12); 0 si ya estaba en el tope"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

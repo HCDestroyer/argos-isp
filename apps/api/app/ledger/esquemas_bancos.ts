@@ -332,3 +332,66 @@ export const ResumenConciliacionBancaria = definirEsquema(
         cuadra: booleano,
     }),
 )
+
+export const ProvisionCartera = definirEsquema(
+    'ProvisionCartera',
+    objeto({
+        id,
+        empresa_id: id,
+        anio: entero,
+        fecha: { ...fecha, description: 'Corte de los saldos deudores' },
+        base: { ...Dinero, description: 'Σ saldos deudores de clientes en 1.1.03 al corte' },
+        porcentaje: { ...texto, description: 'reserva_incobrables_max vigente (%)' },
+        tope: { ...Dinero, description: 'base × porcentaje: la reserva en 1.1.12 nunca lo supera' },
+        saldo_anterior: { ...Dinero, description: 'Saldo de 1.1.12 antes de esta estimación' },
+        monto: { ...Dinero, description: 'Registrado (5.3.02 / 1.1.12); 0 si ya estaba en el tope' },
+        asiento_id: nulable(id),
+        registrado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+export const CastigoCartera = definirEsquema(
+    'CastigoCartera',
+    objeto({
+        id,
+        empresa_id: id,
+        cliente_id: id,
+        cliente_nombre: texto,
+        fecha,
+        motivo: texto,
+        evidencia: { ...texto, description: 'Gestión de cobro documentada' },
+        monto: Dinero,
+        iva: { ...Dinero, description: 'IVA de avisos sin DTE que sale de 2.1.11' },
+        estimacion: { ...Dinero, description: 'Contra 1.1.12 Estimación para cuentas incobrables' },
+        gasto: {
+            ...Dinero,
+            description: 'Contra 5.3.02 Cuentas incobrables (lo que no cubrió la estimación)',
+        },
+        asiento_id: nulable(id),
+        registrado_por: nulable(id),
+        created_at: instante,
+        facturas: lista(objeto({ factura_id: id, monto: Dinero, iva: Dinero })),
+    }),
+)
+
+export const DiferenciaCerrada = definirEsquema(
+    'DiferenciaCerrada',
+    objeto({
+        pago_id: id,
+        empresa_id: id,
+        monto: Dinero,
+        tope: { ...Dinero, description: 'diferencia_cobro_tope de la empresa' },
+        notas: lista(
+            objeto({
+                factura_id: id,
+                nota_credito_id: id,
+                monto: Dinero,
+                ncre: {
+                    ...booleano,
+                    description: 'true = NCRE (la factura tenía DTE); false = nota interna',
+                },
+            }),
+        ),
+    }),
+)

@@ -381,7 +381,20 @@ export async function invariantesFase4(empresas: number[]): Promise<Violacion[]>
 /** Auditor completo con los reemplazos de la fase 4 (ver `SUPERADOS_POR_FASE4`). */
 export async function verificarLibroFase4(empresas: number[]): Promise<Violacion[]> {
     const todas = await verificarLibro(empresas)
-    const superados = Object.keys(SUPERADOS_POR_FASE4)
+    // los invariantes de documentos y de 2.1.11 solo se reemplazan donde hay castigos: sin ellos rige
+    // el original del auditor tal cual
+    const [conCastigos] = await filas(
+        `SELECT EXISTS (SELECT 1 FROM ledger.castigos WHERE ${en('empresa_id', empresas)}) AS hay`,
+    )
+    const soloConCastigos = new Set([
+        '5.factura_pagado_inconsistente',
+        '12.iva_por_certificar_distinto',
+        '12.iva_por_certificar_del_documento',
+        '12.movimiento_en_2.1.11_de_origen_inesperado',
+    ])
+    const superados = Object.keys(SUPERADOS_POR_FASE4).filter(
+        (clave) => conCastigos?.hay || !soloConCastigos.has(clave),
+    )
     const vigentes = todas.filter((v) => !superados.some((clave) => v.invariante.startsWith(clave)))
     return [...vigentes, ...(await invariantesFase4(empresas))]
 }

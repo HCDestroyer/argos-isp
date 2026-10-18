@@ -58,6 +58,12 @@ export interface EntradaNotaCredito {
     motivo: string
     /** nota por línea (contrato §10.9): acredita conceptos concretos con su IVA */
     lineas?: Array<{ linea_id: number; monto: string }> | null
+    /**
+     * interno (`pagos.cerrar_diferencia`, §10.9): en una nota interna (aviso sin DTE) la base sin IVA
+     * va a esta cuenta (`5.3.05 Diferencias de cobro`) en lugar de reducir el ingreso. Con DTE no
+     * aplica: la NCRE reduce la venta.
+     */
+    cuenta_base?: string | null
 }
 
 export type ServicioEvaluadoNota = Pick<
@@ -172,6 +178,19 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             lineasNota = r.lineas
         } else {
             debitos = repartirProporcional(await this.lineasAcreditadas(t, factura, certificada), monto)
+            if (input.cuenta_base && !certificada) {
+                const esIva = (codigo: string) =>
+                    codigo === CUENTAS.IVA_DEBITO || codigo === IVA_POR_CERTIFICAR
+                const base = debitos
+                    .filter((d) => !esIva(d.cuenta_codigo))
+                    .reduce((s, d) => s.plus(d.debe), CERO)
+                debitos = [
+                    ...(base.gt(0)
+                        ? [{ cuenta_id: input.cuenta_base, cuenta_codigo: input.cuenta_base, debe: base }]
+                        : []),
+                    ...debitos.filter((d) => esIva(d.cuenta_codigo)),
+                ]
+            }
         }
         const iva = debitos
             .filter((d) => d.cuenta_codigo === CUENTAS.IVA_DEBITO || d.cuenta_codigo === IVA_POR_CERTIFICAR)
