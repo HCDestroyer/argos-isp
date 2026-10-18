@@ -24,6 +24,9 @@ export interface CierreVista {
     reabierto_por: number | null
     reabierto_por_nombre: string | null
     motivo_reapertura: string | null
+    /** último sello y hash de la cadena de la empresa al cerrar (§10.10); null en cierres anteriores */
+    ultimo_sello: number | null
+    ultimo_hash: string | null
 }
 
 /** Primer día del mes `anio-mes` (422 si no es un mes válido). */
@@ -67,6 +70,8 @@ function consultaCierres(cliente: QueryClientContract) {
             'r.reabierto_por',
             'ur.nombre as reabierto_por_nombre',
             'r.motivo as motivo_reapertura',
+            'c.ultimo_sello',
+            'c.ultimo_hash',
         )
 }
 

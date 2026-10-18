@@ -249,6 +249,18 @@ export interface CatalogoEventos {
         contado: Dinero
         diferencia: Dinero
     }
+    /**
+     * La cadena de hash del libro de la empresa no verifica (contrato de localización fiscal
+     * §10.10): el sello `sello` guarda `esperado` y el recálculo dio `obtenido`. Lo emite el
+     * sellador o la verificación diaria, una vez por (empresa, sello).
+     */
+    'libro.integridad_rota': {
+        empresa_id: number
+        sello: number
+        asiento_id: number | null
+        esperado: string
+        obtenido: string
+    }
 
     // notify (A6)
     'notificacion.enviada': {
@@ -267,6 +279,27 @@ export interface CatalogoEventos {
         campos: string[]
     }
 
+    // fiscal (A3, `contratos/localizacion-fiscal.md` §10.3)
+    'fiscal.localizacion_instalada': {
+        empresa_id: number
+        pais: string
+        /** versión instalada, p. ej. `gt-2026.1` */
+        codigo: string
+        /** versión anterior; null en la primera instalación */
+        de_codigo: string | null
+    }
+    /** invalida la caché de parámetros (regla 5); null = valor global de la instalación */
+    'fiscal.parametros_cambiados': {
+        empresa_id: number | null
+        claves: string[]
+        /** YYYY-MM-DD: la vigencia más antigua de lo insertado */
+        vigente_desde: string
+    }
+    /** nunca lleva valores secretos */
+    'fiscal.config_cambiada': {
+        empresa_id: number
+        campos: Array<'regimen' | 'fel_modo' | 'proveedor' | 'credenciales' | 'establecimientos' | 'frases'>
+    }
     // integraciones · Horus Flow (A6, `contratos/horus.md`). Horus no decide cortes: ningún
     // consumidor cambia el estado de un servicio por estos eventos (ADR-0030).
     /** Cambió la configuración del conector Horus: los procesos la releen (regla 5). Nunca valores. */
@@ -362,8 +395,12 @@ export const EVENTOS = [
     'comprobante.aprobado',
     'comprobante.rechazado',
     'caja.cerrada',
+    'libro.integridad_rota',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
+    'fiscal.localizacion_instalada',
+    'fiscal.parametros_cambiados',
+    'fiscal.config_cambiada',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',

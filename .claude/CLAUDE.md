@@ -166,6 +166,10 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
+| `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
+| `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
+| `fiscal.config_cambiada` | fiscal | empresa_id, campos[] (regimen, fel_modo, proveedor, credenciales, establecimientos, frases); nunca valores secretos |
+| `libro.integridad_rota` | ledger (sellador) | empresa_id, sello, asiento_id, esperado, obtenido |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

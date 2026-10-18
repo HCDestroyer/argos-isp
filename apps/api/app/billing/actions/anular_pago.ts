@@ -29,8 +29,10 @@ import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
  *   reverso es espejo del asiento) y re-evalúa sus servicios.
  * - Multiempresa: anula solo ESTE pago (de una empresa); los demás pagos de su cobro siguen
  *   vigentes. 403 `empresa_no_permitida` si el pago es de una empresa fuera del alcance.
- * - Evento `pago.anulado` (con `clientes`); luego aplica otros anticipos del cliente si los hay y re-evalúa cada
- *   servicio afectado (puede volver a limitar o cortar, respetando la hora de corte).
+ * - Evento `pago.anulado` (con `clientes`); luego aplica los anticipos que tengan el pagador y
+ *   cada dueño de las facturas cubiertas (sus facturas vuelven a deber: no puede quedar saldo a
+ *   favor con deuda) y re-evalúa cada servicio afectado (puede volver a limitar o cortar,
+ *   respetando la hora de corte).
  */
 
 export interface EntradaAnularPago {
@@ -154,7 +156,13 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
             clientes: clientesDelPago(pago.cliente_id, facturas),
         })
 
-        const otras = await aplicarAnticipos(t, pago.cliente_id, empresaId)
+        // anticipos que vuelven a tener deuda contra la cual aplicarse: los del pagador y los de
+        // cada dueño de las facturas que el pago cubría (pago de terceros). Cada aplicación deja
+        // su asiento `Anticipos / CxC` (RegistrarAsiento, auditado) y su fila en pagos_aplicaciones.
+        const otras: Awaited<ReturnType<typeof aplicarAnticipos>> = []
+        for (const clienteId of clientesDelPago(pago.cliente_id, facturas)) {
+            otras.push(...(await aplicarAnticipos(t, clienteId, empresaId)))
+        }
         const servicios: ResultadoAnularPago['servicios'] = []
         for (const servicioId of serviciosDe([...facturas, ...otras])) {
             const r = await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, {

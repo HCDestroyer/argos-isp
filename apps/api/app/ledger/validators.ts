@@ -52,6 +52,28 @@ export const estadoResultadosValidator = vine.compile(
     }),
 )
 
+export const integridadValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        desde: fechaIso().optional().meta({
+            description: 'Recalcula el hash de los asientos con fecha desde este día (sin rango, todos)',
+        }),
+        hasta: fechaIso().optional().meta({ description: 'Hasta este día (inclusive)' }),
+        desde_sello: vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .optional()
+            .meta({ description: 'Recalcula el hash de los sellos desde este número (inclusive)' }),
+        hasta_sello: vine
+            .number()
+            .withoutDecimals()
+            .min(1)
+            .optional()
+            .meta({ description: 'Hasta este sello' }),
+    }),
+)
+
 export const diarioValidator = vine.compile(
     vine.object({
         empresas: empresasConsulta(),

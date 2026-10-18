@@ -7,6 +7,9 @@ import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { periodoCerrado } from '#ledger/cierres'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { PAIS_PLAN } from '#ledger/plan_cuentas'
+import { CUADRICULAS_GT } from '#fiscal/l10n/gt/impuestos'
+import { diarioDeAsiento, numerarAsiento } from '#ledger/diarios'
 
 /**
  * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
@@ -16,6 +19,10 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
  * verificar: triggers de periodo cerrado, cuenta imputable/activa, auxiliar por cliente y el
  * constraint trigger de cuadre. El cuadre se fuerza **dentro** de la acción con
  * `SET CONSTRAINTS ... IMMEDIATE`, así un descuadre nunca se pierde en un COMMIT silencioso.
+ *
+ * Numeración (§10.7 de localización fiscal): en la misma transacción el asiento recibe su diario
+ * (derivado del origen y de las cuentas que toca, o el de `diario`) y el siguiente número de ese
+ * diario en el año de su fecha (`ledger.asientos_numeros`, sin huecos: ver `#ledger/diarios`).
  */
 
 export const ORIGENES_ASIENTO = [
@@ -36,6 +43,12 @@ export interface LineaAsiento {
     haber?: Monto | null
     /** obligatorio en cuentas con auxiliar por cliente (CxC, anticipos) */
     cliente_id?: number | null
+    /**
+     * Etiqueta de impuesto de la partida (`fiscal.impuestos`): el código y la cuadrícula de la base o
+     * de la cuota. Van juntos. Las acciones la irán poniendo en las fases de FEL y declaraciones.
+     */
+    impuesto_codigo?: string | null
+    cuadricula?: string | null
 }
 
 export interface EntradaAsiento {
@@ -52,6 +65,8 @@ export interface EntradaAsiento {
     origen_id?: number | null
     /** id del asiento que este revierte (lo usa `RevertirAsiento`) */
     reversa_de?: number | null
+    /** código del diario (`VEN`, `CAJ-3`…); por defecto se deriva del origen y las cuentas */
+    diario?: string | null
     movimientos: LineaAsiento[]
 }
 
@@ -63,6 +78,8 @@ export interface MovimientoRegistrado {
     debe: string
     haber: string
     cliente_id: number | null
+    impuesto_codigo: string | null
+    cuadricula: string | null
 }
 
 export interface AsientoRegistrado {
@@ -73,6 +90,9 @@ export interface AsientoRegistrado {
     origen_tipo: OrigenAsiento
     origen_id: number | null
     reversa_de: number | null
+    /** diario y número guardados al registrar (`ledger.asientos_numeros`) */
+    diario: string
+    numero: number
     created_by: number | null
     total: string
     movimientos: MovimientoRegistrado[]
@@ -94,6 +114,8 @@ interface LineaNormalizada {
     debe: Dec
     haber: Dec
     cliente_id: number | null
+    impuesto_codigo: string | null
+    cuadricula: string | null
 }
 
 export default class RegistrarAsiento extends DomainAction<EntradaAsiento, AsientoRegistrado> {
@@ -150,14 +172,26 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     debe: linea.debe.toFixed(2),
                     haber: linea.haber.toFixed(2),
                     cliente_id: linea.cliente_id,
+                    impuesto_codigo: linea.impuesto_codigo,
+                    cuadricula: linea.cuadricula,
                 })),
             )
-            .returning(['id', 'cuenta_id', 'debe', 'haber', 'cliente_id'])) as Array<{
+            .returning([
+                'id',
+                'cuenta_id',
+                'debe',
+                'haber',
+                'cliente_id',
+                'impuesto_codigo',
+                'cuadricula',
+            ])) as Array<{
             id: number
             cuenta_id: number
             debe: string
             haber: string
             cliente_id: number | null
+            impuesto_codigo: string | null
+            cuadricula: string | null
         }>
 
         // … e inmediato al terminar: el cuadre se verifica aquí y el error sale de esta acción.
@@ -165,6 +199,15 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_cuadre, ledger.movimientos_cuadre DEFERRED')
 
         t.fijarEntidad('asiento', asiento!.id)
+
+        const diario = await diarioDeAsiento(
+            t.trx,
+            empresaId,
+            input.origen_tipo,
+            lineas.map((l) => l.cuenta.id),
+            input.diario,
+        )
+        const numero = await numerarAsiento(t.trx, asiento!.id, empresaId, fecha, diario)
 
         const porId = new Map(lineas.map((l) => [l.cuenta.id, l.cuenta]))
         return {
@@ -175,6 +218,8 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
             origen_tipo: input.origen_tipo,
             origen_id: origenId,
             reversa_de: input.reversa_de ?? null,
+            diario: diario.codigo,
+            numero,
             created_by: asiento!.created_by,
             total: aTexto(total),
             movimientos: filas
@@ -187,6 +232,8 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     debe: fila.debe,
                     haber: fila.haber,
                     cliente_id: fila.cliente_id,
+                    impuesto_codigo: fila.impuesto_codigo,
+                    cuadricula: fila.cuadricula,
                 })),
         }
     }
@@ -225,7 +272,9 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         const cuentas = (await trx
             .from('ledger.cuentas')
             .where((q) => {
-                q.whereIn('codigo', codigos.length > 0 ? codigos : [''])
+                q.where((c) =>
+                    c.where('pais', PAIS_PLAN).whereIn('codigo', codigos.length > 0 ? codigos : ['']),
+                )
                 q.orWhereIn('id', ids.length > 0 ? ids : [0])
             })
             .select(
@@ -305,11 +354,59 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                     message: 'Los montos se redondean a 2 decimales antes del asiento',
                 })
             }
-            lineas.push({ cuenta, debe, haber, cliente_id: clienteId })
+            const impuesto = movimiento.impuesto_codigo?.trim() || null
+            const cuadricula = movimiento.cuadricula?.trim() || null
+            if ((impuesto === null) !== (cuadricula === null)) {
+                errores.push({
+                    field: `${campo}.${impuesto === null ? 'impuesto_codigo' : 'cuadricula'}`,
+                    message: 'impuesto_codigo y cuadricula van juntos',
+                    rule: 'cuadricula',
+                })
+            }
+            lineas.push({ cuenta, debe, haber, cliente_id: clienteId, impuesto_codigo: impuesto, cuadricula })
         })
 
+        await this.validarCuadriculas(trx, lineas, errores)
         if (errores.length > 0) throw new ValidacionFallida(errores, 'Movimientos inválidos')
         return lineas
+    }
+
+    /** El impuesto existe en `fiscal.impuestos` y la cuadrícula es una del paquete, con signo (`+V_IVA`). */
+    private async validarCuadriculas(
+        trx: TransactionClientContract,
+        lineas: LineaNormalizada[],
+        errores: ErrorCampo[],
+    ) {
+        const codigos = [
+            ...new Set(lineas.map((l) => l.impuesto_codigo).filter((c): c is string => c !== null)),
+        ]
+        if (codigos.length === 0) return
+        const filas = (await trx
+            .from('fiscal.impuestos')
+            .where('pais', PAIS_PLAN)
+            .whereIn('codigo', codigos)
+            .select('codigo')) as Array<{ codigo: string }>
+        const existentes = new Set(filas.map((f) => f.codigo))
+        const cuadriculas = new Set<string>(CUADRICULAS_GT)
+        lineas.forEach((linea, i) => {
+            if (linea.impuesto_codigo === null || linea.cuadricula === null) return
+            if (!existentes.has(linea.impuesto_codigo)) {
+                errores.push({
+                    field: `movimientos.${i}.impuesto_codigo`,
+                    message: `El impuesto ${linea.impuesto_codigo} no existe`,
+                    rule: 'exists',
+                })
+            }
+            // con signo: +V_IVA suma a la casilla y -V_IVA resta (contrato §10.2)
+            const signo = linea.cuadricula[0]
+            if ((signo !== '+' && signo !== '-') || !cuadriculas.has(linea.cuadricula.slice(1))) {
+                errores.push({
+                    field: `movimientos.${i}.cuadricula`,
+                    message: `Cuadrícula inválida: ${linea.cuadricula} (signo + o - y una de ${[...cuadriculas].join(', ')})`,
+                    rule: 'cuadricula',
+                })
+            }
+        })
     }
 
     private async verificarPeriodoAbierto(trx: TransactionClientContract, fecha: string, empresaId: number) {

@@ -9,6 +9,9 @@ import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import IncumplirPromesas from '#billing/actions/incumplir_promesas'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
 import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
+import SellarAsientos from '#ledger/actions/sellar_asientos'
+import VerificarIntegridad from '#ledger/actions/verificar_integridad'
+import { pendientesDeSellar } from '#ledger/sellos'
 
 /**
  * Crons de facturación con BullMQ (`node ace billing:worker`).
@@ -22,6 +25,8 @@ import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
  * | `corte` | 1 min | `EjecutarCorte` (las horas de corte que ya llegaron y no se procesaron) |
  * | `promesas` | 1 min | `IncumplirPromesas` (`incumplirPromesas`: las vencidas sin pagar → incumplida) |
  * | `conciliar` | 06:30 Guatemala | `ConciliarPasarela` (cobros en línea de ayer contra el proveedor) |
+ * | `sellar` | 1 min | `SellarAsientos` (`ledger:sellar`: cadena de hash del libro, §10.10); sin asientos pendientes no llama la acción |
+ * | `integridad` | 02:15 Guatemala | `VerificarIntegridad` (recalcula la cadena; `libro.integridad_rota` si no verifica) |
  *
  * Lock: el worker tiene concurrencia 1 y además cada job toma un advisory lock de Postgres
  * (`pg_try_advisory_xact_lock`) mientras corre; si otra instancia ya lo tiene, el disparo se
@@ -36,10 +41,12 @@ export const CRONS = {
     vencer: 60 * 60_000,
     corte: 60_000,
     promesas: 60_000,
+    sellar: 60_000,
 } as const
 /** Crons a hora fija (patrón cron y zona horaria). */
 export const CRONS_DIARIOS = {
     conciliar: { pattern: '30 6 * * *', tz: 'America/Guatemala' },
+    integridad: { pattern: '15 2 * * *', tz: 'America/Guatemala' },
 } as const
 export type NombreCron = keyof typeof CRONS | keyof typeof CRONS_DIARIOS
 
@@ -127,6 +134,20 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
             // sin pasarela configurada (producción sin credenciales) no hay nada que conciliar
             if (!proveedorConfigurado()) return { omitido: true }
             return conLock(nombre, () => new ConciliarPasarela().execute({}, ctx))
+        case 'sellar':
+            return conLock(nombre, async () => {
+                let sellados = 0
+                // todo lo pendiente hasta ahora, por lotes de 500 por empresa
+                while ((await pendientesDeSellar().then((r) => r.length)) > 0) {
+                    const salida = await new SellarAsientos().execute({ limite: 500 }, ctx)
+                    const lote = salida.empresas.reduce((n, e) => n + e.sellados, 0)
+                    sellados += lote
+                    if (lote === 0) break
+                }
+                return { sellados }
+            })
+        case 'integridad':
+            return conLock(nombre, () => new VerificarIntegridad().execute({}, ctx))
         default:
             throw new Error(`Cron de billing desconocido: ${nombre}`)
     }
