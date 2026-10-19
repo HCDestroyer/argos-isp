@@ -152,6 +152,9 @@ jobs:
           docker compose -f infra/docker-compose.yml --env-file infra/.env.example config --quiet
           docker compose -f infra/docker-compose.yml -f infra/docker-compose.portal-https.yml --env-file infra/.env.example config --quiet
           docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
+          COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal \
+            docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
+          docker compose -f infra/produccion/docker-compose.nodo-portal.yml --env-file infra/produccion/nodo-portal.env.example config --quiet
 
       - name: radiusd -XC
         run: infra/ci/freeradius-check.sh
@@ -193,19 +196,40 @@ jobs:
       - name: infra/backups/ensayo.sh --demo
         run: infra/backups/ensayo.sh --demo --construir
 
-  # Distribución (A6; PLAN, "Distribución e instalación"): las seis imágenes de producción construidas
-  # aquí (amd64, sin publicar) → instalar.sh → actualizar → actualización rota que revierte sola con
-  # el respaldo → argosisp revertir. Detalle en infra/ci/probar-distribucion.sh.
+  # Distribución (A6; PLAN, "Distribución e instalación"): las siete imágenes de producción
+  # construidas aquí (sin publicar) → instalar.sh → actualizar → actualización rota que revierte sola
+  # con el respaldo → argosisp revertir → api-portal → nodo portal. Detalle en
+  # infra/ci/probar-distribucion.sh. Dos arquitecturas en paralelo, cada una en su runner nativo (sin
+  # QEMU): amd64 y arm64 (Raspberry Pi; ubuntu-24.04-arm). El nombre de amd64 no cambia (checks
+  # requeridos).
   distribucion:
-    name: Instalar, actualizar y revertir (imágenes de producción)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    name: ${{ matrix.arch == 'amd64' && 'Instalar, actualizar y revertir (imágenes de producción)' || format('Instalar, actualizar y revertir (imágenes de producción, {0})', matrix.arch) }}
+    runs-on: ${{ matrix.runner }}
+    # Sin caché, la primera corrida compila FreeRADIUS además de las seis de Node
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     env:
       REGISTRO: ghcr.io/hcdestroyer
     steps:
       - uses: actions/checkout@v5
 
+      - name: Arquitectura del runner
+        run: |
+          echo "uname -m: $(uname -m) · docker: $(docker version --format '{{.Server.Arch}}')"
+          case "${{ matrix.arch }}:$(docker version --format '{{.Server.Arch}}')" in
+            amd64:amd64 | arm64:arm64) ;;
+            *) echo "::error::el runner no es ${{ matrix.arch }}"; exit 1 ;;
+          esac
+
       - name: Scripts (bash -n y shellcheck)
+        if: matrix.arch == 'amd64'
         run: |
           for s in infra/produccion/argosisp infra/produccion/instalar.sh infra/produccion/empaquetar.sh infra/ci/probar-distribucion.sh; do
             bash -n "$s"
@@ -214,7 +238,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Mismos Dockerfiles y build-args que imagenes.yml; `load` las deja en el Docker del runner.
+      # Mismos Dockerfiles y build-args que imagenes.yml; `load` las deja en el Docker del runner,
+      # en su arquitectura nativa. Caché por arquitectura.
       - name: Imagen api
         uses: docker/build-push-action@v6
         with:
@@ -225,8 +250,8 @@ jobs:
           build-args: |
             ARGOSISP_VERSION=0.0.1
             ARGOSISP_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=ci-api
-          cache-to: type=gha,mode=max,scope=ci-api
+          cache-from: type=gha,scope=ci-api-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-api-${{ matrix.arch }}
       - name: Imagen web
         uses: docker/build-push-action@v6
         with:
@@ -237,8 +262,8 @@ jobs:
           build-args: |
             ARGOSISP_VERSION=0.0.1
             ARGOSISP_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=ci-web
-          cache-to: type=gha,mode=max,scope=ci-web
+          cache-from: type=gha,scope=ci-web-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-web-${{ matrix.arch }}
       - name: Imagen portal
         uses: docker/build-push-action@v6
         with:
@@ -249,8 +274,8 @@ jobs:
           build-args: |
             ARGOSISP_VERSION=0.0.1
             ARGOSISP_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=ci-portal
-          cache-to: type=gha,mode=max,scope=ci-portal
+          cache-from: type=gha,scope=ci-portal-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-portal-${{ matrix.arch }}
       - name: Imagen aaa
         uses: docker/build-push-action@v6
         with:
@@ -261,8 +286,8 @@ jobs:
           build-args: |
             ARGOSISP_VERSION=0.0.1
             ARGOSISP_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=ci-aaa
-          cache-to: type=gha,mode=max,scope=ci-aaa
+          cache-from: type=gha,scope=ci-aaa-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-aaa-${{ matrix.arch }}
       - name: Imagen coa
         uses: docker/build-push-action@v6
         with:
@@ -273,8 +298,8 @@ jobs:
           build-args: |
             ARGOSISP_VERSION=0.0.1
             ARGOSISP_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=ci-coa
-          cache-to: type=gha,mode=max,scope=ci-coa
+          cache-from: type=gha,scope=ci-coa-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-coa-${{ matrix.arch }}
       - name: Imagen backup
         uses: docker/build-push-action@v6
         with:
@@ -285,10 +310,22 @@ jobs:
           build-args: |
             ARGOSISP_VERSION=0.0.1
             ARGOSISP_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=ci-backup
-          cache-to: type=gha,mode=max,scope=ci-backup
+          cache-from: type=gha,scope=ci-backup-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-backup-${{ matrix.arch }}
+      - name: Imagen freeradius
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/freeradius
+          file: infra/freeradius/Dockerfile
+          load: true
+          tags: ${{ env.REGISTRO }}/argosisp-freeradius:0.0.1
+          build-args: |
+            ARGOSISP_VERSION=0.0.1
+            ARGOSISP_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=ci-freeradius-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-freeradius-${{ matrix.arch }}
 
-      - name: instalar → actualizar → reversión automática → revertir
+      - name: instalar → actualizar → reversión automática → revertir → nodo portal
         env:
           ARGOSISP_REGISTRO: ${{ env.REGISTRO }}
         run: infra/ci/probar-distribucion.sh

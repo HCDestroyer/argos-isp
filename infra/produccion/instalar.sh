@@ -15,9 +15,17 @@
 #   --dir RUTA        carpeta de la instalación (/opt/argosisp)
 #   --si              no preguntar nada (requiere --dominio y --correo)
 #
+# Nodo portal remoto (solo el portal y su proxy; habla únicamente con la API central por HTTPS):
+#   --rol portal --central https://api.<dominio> --token <token de `argosisp nodo-portal crear`>
+#   El portal del nodo queda en portal.D (o ARGOSISP_DOMINIO_PORTAL). Sin --version instala la del
+#   central. Sin Postgres, Redis, migraciones ni workers.
+#
 # Variables para pruebas o servidores sin internet: ARGOSISP_FUENTE (carpeta con `estable` y los
 # paquetes de empaquetar.sh), ARGOSISP_SIN_DESCARGA=1 (imágenes ya cargadas), ARGOSISP_TLS=interno
-# (certificados de la CA interna de Caddy en lugar de Let's Encrypt), ARGOSISP_REPO, ARGOSISP_REGISTRO.
+# (certificados de la CA interna de Caddy en lugar de Let's Encrypt), ARGOSISP_REPO, ARGOSISP_REGISTRO,
+# ARGOSISP_API_PORTAL=si|no (API del portal; por defecto si, no con menos de 3 GB de RAM),
+# ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), y para un nodo portal de prueba
+# ARGOSISP_NODO_CENTRAL_DIRECCION (host:puerto al que se conecta) y ARGOSISP_NODO_CENTRAL_TLS=inseguro.
 set -Eeuo pipefail
 
 REPO="${ARGOSISP_REPO:-HCDestroyer/argos-isp}"
@@ -28,7 +36,12 @@ DOMINIO=""
 CORREO=""
 VERSION=""
 SI=false
+ROL=completo
+CENTRAL=""
+TOKEN=""
 RAM_MINIMA_MB=1900
+HTTP_PORT="${ARGOSISP_HTTP_PORT:-80}"
+HTTPS_PORT="${ARGOSISP_HTTPS_PORT:-443}"
 DISCO_MINIMO_GB=10
 DOCKER_MINIMO=25
 COMPOSE_MINIMO=2.24
@@ -44,10 +57,28 @@ while [ $# -gt 0 ]; do
         --version) VERSION="${2#v}"; shift 2 ;;
         --dir) DIR="${2:-}"; shift 2 ;;
         --si) SI=true; shift ;;
-        -h | --help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --rol) ROL="${2:-}"; shift 2 ;;
+        --central) CENTRAL="${2:-}"; shift 2 ;;
+        --token) TOKEN="${2:-}"; shift 2 ;;
+        -h | --help) sed -n '2,/^set -E/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) morir "opción desconocida: $1 (--help)" ;;
     esac
 done
+
+case "$ROL" in
+    completo) [ -z "$CENTRAL$TOKEN" ] || morir "--central y --token son solo para --rol portal" ;;
+    portal)
+        [ -n "$CENTRAL" ] || morir "--rol portal requiere --central https://api.<dominio>"
+        [ -n "$TOKEN" ] || morir "--rol portal requiere --token (argosisp nodo-portal crear <nombre> en el servidor principal)"
+        [[ "$CENTRAL" =~ ^https://([a-z0-9.-]+)(:([0-9]+))?/?$ ]] || morir "--central debe ser https://<host>[:puerto] (es '$CENTRAL')"
+        CENTRAL_HOST="${BASH_REMATCH[1]}"
+        CENTRAL_PUERTO="${BASH_REMATCH[3]:-443}"
+        CENTRAL="https://$CENTRAL_HOST$([ "$CENTRAL_PUERTO" = 443 ] || echo ":$CENTRAL_PUERTO")"
+        [[ "$TOKEN" =~ ^[A-Za-z0-9._~-]{16,512}$ ]] || morir "token inválido"
+        RAM_MINIMA_MB=900
+        ;;
+    *) morir "--rol debe ser completo o portal (es '$ROL')" ;;
+esac
 
 preguntar() {
     local texto="$1" valor=""
@@ -89,8 +120,20 @@ case "$(uname -m)" in
     *) morir "arquitectura $(uname -m) sin imágenes (solo amd64 y arm64)" ;;
 esac
 ram_mb=$(($(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024))
-[ "$ram_mb" -ge "$RAM_MINIMA_MB" ] || morir "hacen falta 2 GB de RAM (hay ${ram_mb} MB)"
-[ "$ram_mb" -ge 3800 ] || aviso "con ${ram_mb} MB de RAM funciona, pero se recomiendan 4 GB"
+[ "$ram_mb" -ge "$RAM_MINIMA_MB" ] || morir "hacen falta $([ "$ROL" = portal ] && echo '1 GB' || echo '2 GB') de RAM (hay ${ram_mb} MB)"
+[ "$ROL" = portal ] || [ "$ram_mb" -ge 3800 ] || aviso "con ${ram_mb} MB de RAM funciona, pero se recomiendan 4 GB"
+# API del portal (servicio api-portal): si por defecto; no con menos de 3 GB (MemTotal < 2900 MB:
+# el kernel reserva parte). ARGOSISP_API_PORTAL=si|no en el entorno lo fuerza.
+API_PORTAL="${ARGOSISP_API_PORTAL:-}"
+[ "$ROL" = completo ] || API_PORTAL=no
+if [ -z "$API_PORTAL" ]; then
+    API_PORTAL=si
+    if [ "$ram_mb" -lt 2900 ]; then
+        API_PORTAL=no
+        aviso "con ${ram_mb} MB de RAM (menos de 3 GB) la API del portal (api-portal) queda apagada: ARGOSISP_API_PORTAL=no"
+    fi
+fi
+case "$API_PORTAL" in si | no) ;; *) morir "ARGOSISP_API_PORTAL debe ser si o no (es '$API_PORTAL')" ;; esac
 mkdir -p "$DIR"
 disco_gb=$(($(df -Pk "$DIR" | awk 'NR==2 {print $4}') / 1024 / 1024))
 [ "$disco_gb" -ge "$DISCO_MINIMO_GB" ] || morir "hacen falta ${DISCO_MINIMO_GB} GB libres en $DIR (hay ${disco_gb} GB)"
@@ -108,12 +151,12 @@ if [ -n "$faltan" ]; then
     apt-get install -y -qq $faltan > /dev/null
 fi
 
-for puerto in 80 443; do
+for puerto in "$HTTP_PORT" "$HTTPS_PORT"; do
     if ss -Hltn "sport = :$puerto" | grep -q .; then
         morir "el puerto TCP $puerto ya está en uso (ArgosIsp lo necesita para el panel, la API y el portal)"
     fi
 done
-for puerto in 1812 1813; do
+[ "$ROL" = portal ] || for puerto in 1812 1813; do
     if ss -Hlun "sport = :$puerto" | grep -q .; then
         morir "el puerto UDP $puerto ya está en uso (RADIUS)"
     fi
@@ -145,6 +188,27 @@ compose_version="$(docker compose version --short 2> /dev/null || true)"
 [ -n "$compose_version" ] || morir "falta el plugin docker compose (apt-get install docker-compose-plugin)"
 version_mayor_igual "${compose_version#v}" "$COMPOSE_MINIMO" || morir "hace falta docker compose $COMPOSE_MINIMO o más nuevo (hay $compose_version)"
 
+# Raspberry Pi: ¿la base quedaría en una tarjeta SD (mmcblk)? Los volúmenes (Postgres, Redis) viven
+# en el directorio de datos de Docker y los respaldos en $DIR. Solo avisa: no bloquea.
+en_tarjeta_sd() {
+    local ruta="$1" majmin fuente
+    majmin="$(findmnt -no MAJ:MIN -T "$ruta" 2> /dev/null | head -n1 | tr -d '[:space:]')"
+    if [ -n "$majmin" ] && [ -e "/sys/dev/block/$majmin" ]; then
+        case "$(readlink -f "/sys/dev/block/$majmin")" in */mmcblk*) return 0 ;; esac
+    fi
+    fuente="$(findmnt -no SOURCE -T "$ruta" 2> /dev/null | head -n1)"
+    case "$fuente" in /dev/mmcblk*) return 0 ;; esac
+    return 1
+}
+docker_root="$(docker info --format '{{.DockerRootDir}}' 2> /dev/null || echo /var/lib/docker)"
+for ruta in "$docker_root" "$DIR"; do
+    if en_tarjeta_sd "$ruta"; then
+        aviso "$ruta está en una tarjeta SD (mmcblk): la base de datos y los respaldos la desgastan y se corrompen con un corte de luz. Usa un SSD (NVMe en el Pi 5, USB 3 en el Pi 4), de preferencia arrancando desde él (docs/runbooks/instalacion.md, \"Raspberry Pi\")"
+    fi
+done
+[ "$(uname -m)" != aarch64 ] || [ "$ROL" = portal ] || [ "$ram_mb" -ge 7000 ] ||
+    aviso "Raspberry Pi o arm64 con ${ram_mb} MB: se recomiendan 8 GB$([ "$API_PORTAL" = no ] && echo '; api-portal queda apagado por la regla de RAM')"
+
 # ---------------------------------------------------------------------------
 # 3. Datos mínimos
 # ---------------------------------------------------------------------------
@@ -160,6 +224,27 @@ DOMINIO_PORTAL="${ARGOSISP_DOMINIO_PORTAL:-portal.$DOMINIO}"
 # ---------------------------------------------------------------------------
 # 4. Paquete de la versión
 # ---------------------------------------------------------------------------
+# Versión del central, con el token del nodo (vacía si no se puede leer)
+version_central() {
+    local conectar=()
+    [ -z "${ARGOSISP_NODO_CENTRAL_DIRECCION:-}" ] || conectar=(--connect-to "$CENTRAL_HOST:$CENTRAL_PUERTO:${ARGOSISP_NODO_CENTRAL_DIRECCION}")
+    [ "${ARGOSISP_NODO_CENTRAL_TLS:-}" = inseguro ] && conectar+=(-k)
+    curl -fsS --retry 2 --max-time 15 "${conectar[@]}" -H "X-Argos-Nodo-Token: $TOKEN" "$CENTRAL/api/v1/version" 2> /dev/null |
+        jq -r '.version // empty' 2> /dev/null || true
+}
+
+if [ "$ROL" = portal ]; then
+    # El nodo nunca queda más nuevo que el central
+    central_v="$(version_central)"
+    if [ -z "$VERSION" ]; then
+        [ -n "$central_v" ] || morir "no pude leer la versión de $CENTRAL con el token (GET /api/v1/version): revisa la URL y el token"
+        VERSION="$central_v"
+    elif [ -z "$central_v" ]; then
+        aviso "no pude leer la versión del central: instalo $VERSION; revisa después con argosisp estado"
+    elif [ "$(printf '%s\n%s\n' "$central_v" "$VERSION" | sort -V | tail -n1)" != "$central_v" ]; then
+        morir "$VERSION es más nueva que la del central ($central_v): instala $central_v"
+    fi
+fi
 if [ -z "$VERSION" ]; then
     if [ -n "$FUENTE" ]; then
         VERSION="$(tr -d '[:space:]' < "$FUENTE/estable")"
@@ -199,6 +284,33 @@ tls_global="email $CORREO"
 [ "${ARGOSISP_TLS:-}" = interno ] && tls_global="local_certs"
 
 umask 077
+if [ "$ROL" = portal ]; then
+    tls_extra=""
+    [ "${ARGOSISP_NODO_CENTRAL_TLS:-}" = inseguro ] && tls_extra=tls_insecure_skip_verify
+    cat > "$DIR/.env.nuevo" << EOF
+# ArgosIsp · NODO PORTAL. Lo generó instalar.sh el $(date -u +%Y-%m-%dT%H:%M:%SZ).
+# Solo root lo lee (600): lleva el token del nodo. Después de editarlo: argosisp levantar
+ARGOSISP_ROL=portal
+ARGOSISP_PROYECTO=argosisp-portal
+# Versión instalada (la cambia \`argosisp actualizar\`, que sigue al central)
+ARGOSISP_VERSION=$VERSION
+ARGOSISP_REGISTRO=$REGISTRO
+
+# Dominio del portal de este nodo (debe apuntar a este servidor)
+DOMINIO_PORTAL=$DOMINIO_PORTAL
+PROXY_TLS_GLOBAL="$tls_global"
+PORTAL_HSTS_MAX_AGE=300
+ARGOSISP_HTTP_PORT=$HTTP_PORT
+ARGOSISP_HTTPS_PORT=$HTTPS_PORT
+
+# API central (servidor principal) y token de este nodo (argosisp nodo-portal crear|revocar allá)
+NODO_CENTRAL_URL=$CENTRAL
+NODO_CENTRAL_HOST=$CENTRAL_HOST
+NODO_CENTRAL_DIRECCION=${ARGOSISP_NODO_CENTRAL_DIRECCION:-$CENTRAL_HOST:$CENTRAL_PUERTO}
+NODO_CENTRAL_TLS_EXTRA=$tls_extra
+NODO_PORTAL_TOKEN=$TOKEN
+EOF
+else
 cat > "$DIR/.env.nuevo" << EOF
 # ArgosIsp · configuración de producción. Lo generó instalar.sh el $(date -u +%Y-%m-%dT%H:%M:%SZ).
 # Solo root lo lee (600). No lo subas a ningún repositorio. Documentación de cada variable:
@@ -216,6 +328,11 @@ DOMINIO_PORTAL=$DOMINIO_PORTAL
 PROXY_TLS_GLOBAL="$tls_global"
 # HSTS del portal en segundos: súbelo a 31536000 cuando el certificado funcione
 PORTAL_HSTS_MAX_AGE=300
+
+# API del portal: un segundo proceso de la misma API (misma imagen, base y Redis) que atiende
+# /api/v1/portal/** para que el tráfico de los clientes no frene el panel. no = todo a "api".
+# Después de cambiarlo: argosisp levantar
+ARGOSISP_API_PORTAL=$API_PORTAL
 
 # Administrador inicial del panel (cámbiale la contraseña al entrar)
 SEED_ADMIN_EMAIL=$CORREO
@@ -255,6 +372,9 @@ COA_ORIGEN_IP=
 MAIL_FROM="ArgosIsp <no-responder@$DOMINIO>"
 NOTIFY_EMPRESA_NOMBRE=ArgosIsp
 EOF
+[ "$HTTP_PORT" = 80 ] || echo "ARGOSISP_HTTP_PORT=$HTTP_PORT" >> "$DIR/.env.nuevo"
+[ "$HTTPS_PORT" = 443 ] || echo "ARGOSISP_HTTPS_PORT=$HTTPS_PORT" >> "$DIR/.env.nuevo"
+fi
 mv -f "$DIR/.env.nuevo" "$DIR/.env"
 chmod 600 "$DIR/.env"
 umask 022
@@ -272,13 +392,39 @@ fi
 # 7. Imágenes y arranque
 # ---------------------------------------------------------------------------
 export ARGOSISP_DIR="$DIR"
-compose=(docker compose -p argosisp --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.yml")
+# Igual que `argosisp` (entorno_compose): perfil y destino de la API del portal
+if [ "$API_PORTAL" = si ]; then
+    export COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal
+else
+    export COMPOSE_PROFILES='' ARGOSISP_API_PORTAL_DESTINO=api
+fi
+if [ "$ROL" = portal ]; then
+    compose=(docker compose -p argosisp-portal --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.nodo-portal.yml")
+else
+    compose=(docker compose -p argosisp --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.yml")
+fi
 "${compose[@]}" config --quiet || morir "el compose de $VERSION no es válido con el .env generado"
 if [ "${ARGOSISP_SIN_DESCARGA:-0}" != 1 ]; then
     log "descargando imágenes de $REGISTRO (versión $VERSION)"
     "${compose[@]}" pull --quiet
 fi
 "$DIR/actual/argosisp" levantar || morir "ArgosIsp no quedó sano. Revisa: argosisp logs   (el .env queda en $DIR/.env)"
+
+if [ "$ROL" = portal ]; then
+    cat << EOF
+
+Nodo portal de ArgosIsp $VERSION instalado.
+
+  Portal:   https://$DOMINIO_PORTAL   (y /corte por HTTP en este servidor)
+  Central:  $CENTRAL
+
+  El dominio del portal debe apuntar a este servidor. El token está en $DIR/.env (600).
+  Actualiza primero el servidor principal y después este nodo: argosisp actualizar
+  (el nodo sigue la versión del central y nunca la pasa).
+
+EOF
+    exit 0
+fi
 
 cat > "$DIR/credenciales-iniciales.txt" << EOF
 Panel:    https://$DOMINIO_PANEL
