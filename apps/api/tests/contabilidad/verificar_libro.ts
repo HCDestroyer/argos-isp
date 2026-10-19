@@ -58,7 +58,10 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {
+    // línea descuento: mes gratis con certificar_al = emitir certifica una FACT de Q0.00
+    '12.dte_de_documento_en_cero': 'H21',
+}
 
 type Fila = Record<string, unknown>
 
@@ -606,6 +609,97 @@ async function verificarLibroCon(
            FROM billing.facturas f JOIN billing.notas_credito n ON n.factura_id = f.id AND NOT ${anulada('n')}
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
           GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
+    )
+    /*
+    | 9 · Línea `descuento` (localización §3.5, lealtad §5; rama a3/descuento-linea)
+    */
+    await revisar(
+        '9.linea_descuento_mal_formada (negativa, de una línea de su factura que no es descuento y con su gravable; la línea guarda Σ de sus descuentos, nunca queda bajo cero y su IVA con el de sus descuentos es el IVA del neto)',
+        `WITH d AS (
+             SELECT d.linea_id, sum(-d.total) AS total, sum(-d.iva) AS iva, count(*) AS n,
+                    bool_and(d.total < 0 AND d.iva <= 0) AS negativas,
+                    bool_and(o.id IS NOT NULL AND o.factura_id = d.factura_id AND o.tipo <> 'descuento' AND o.gravable = d.gravable) AS ligadas
+               FROM billing.facturas_lineas d LEFT JOIN billing.facturas_lineas o ON o.id = d.linea_id
+              WHERE d.tipo = 'descuento' GROUP BY 1
+         )
+         SELECT l.id, l.factura_id, l.total::text, l.iva::text, l.descuento::text, coalesce(d.total, 0)::text AS descuentos,
+                coalesce(d.iva, 0)::text AS iva_descuentos, d.negativas, d.ligadas
+           FROM billing.facturas_lineas l JOIN billing.facturas f ON f.id = l.factura_id
+           LEFT JOIN d ON d.linea_id = l.id
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND l.tipo <> 'descuento'
+            AND (l.descuento <> coalesce(d.total, 0) OR l.total - l.descuento < 0
+                 OR (d.linea_id IS NOT NULL AND (NOT d.negativas OR NOT d.ligadas
+                     OR l.iva - d.iva <> CASE WHEN l.gravable THEN round((l.total - d.total) - (l.total - d.total) / 1.12, 2) ELSE 0 END)))
+         UNION ALL
+         SELECT d.id, d.factura_id, d.total::text, d.iva::text, NULL, NULL, NULL, NULL, NULL
+           FROM billing.facturas_lineas d JOIN billing.facturas f ON f.id = d.factura_id
+           LEFT JOIN billing.facturas_lineas o ON o.id = d.linea_id
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND d.tipo = 'descuento'
+            AND (o.id IS NULL OR o.factura_id <> d.factura_id OR o.tipo = 'descuento')`,
+    )
+    await revisar(
+        '9.descuento_del_asiento_distinto (5.1.01 al debe del asiento de la factura = Σ subtotal de sus líneas descuento; 5.1.01 no se mueve desde otro origen)',
+        `WITH lin AS (
+             SELECT factura_id, sum(-(total - iva)) AS descuento FROM billing.facturas_lineas WHERE tipo = 'descuento' GROUP BY 1
+         ), mov AS (
+             SELECT a.origen_id AS factura_id, sum(m.debe - m.haber) AS descuento
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo IN ('factura', 'mora') AND a.reversa_de IS NULL AND c.codigo = '${CUENTAS.DESCUENTOS}'
+              GROUP BY 1
+         )
+         SELECT f.id, coalesce(lin.descuento, 0)::text AS lineas, coalesce(mov.descuento, 0)::text AS libro, NULL AS origen
+           FROM billing.facturas f LEFT JOIN lin ON lin.factura_id = f.id LEFT JOIN mov ON mov.factura_id = f.id
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+            AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo IN ('factura', 'mora') AND a.origen_id = f.id)
+            AND coalesce(lin.descuento, 0) <> coalesce(mov.descuento, 0)
+         UNION ALL
+         SELECT a.id, NULL, (m.debe - m.haber)::text, a.origen_tipo
+           FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+           JOIN ledger.cuentas c ON c.id = m.cuenta_id
+          WHERE ${E('a.empresa_id')} AND c.codigo = '${CUENTAS.DESCUENTOS}'
+            AND a.origen_tipo NOT IN ('factura', 'mora')
+            AND NOT (a.reversa_de IS NOT NULL AND EXISTS (SELECT 1 FROM ledger.asientos o WHERE o.id = a.reversa_de AND o.origen_tipo IN ('factura', 'mora')))`,
+    )
+    await revisar(
+        '9.nota_por_linea_sobre_el_neto (Σ notas vigentes de una línea ≤ total − sus descuentos; IVA ≤ el de la línea con sus descuentos; nunca a una línea descuento)',
+        `SELECT l.id AS linea_id, l.factura_id, l.tipo, l.total::text, l.descuento::text, sum(nl.monto)::text AS acreditado,
+                sum(nl.iva)::text AS iva_acreditado
+           FROM billing.notas_credito_lineas nl JOIN billing.notas_credito n ON n.id = nl.nota_id
+           JOIN billing.facturas_lineas l ON l.id = nl.linea_id JOIN billing.facturas f ON f.id = l.factura_id
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND NOT ${anulada('n')}
+          GROUP BY l.id
+         HAVING l.tipo = 'descuento' OR sum(nl.monto) > l.total - l.descuento
+             OR sum(nl.iva) > l.iva + coalesce((SELECT sum(d.iva) FROM billing.facturas_lineas d WHERE d.linea_id = l.id), 0)`,
+    )
+    await revisar(
+        '9.notas_acreditan_mas_que_el_neto (Σ lo que las notas vigentes debitan de 4.1.01 ≤ ingreso del servicio de la factura − 5.1.01)',
+        `WITH fac AS (
+             SELECT a.origen_id AS factura_id,
+                    sum(CASE WHEN c.codigo = '${CUENTAS.INGRESOS_INTERNET}' THEN m.haber - m.debe ELSE 0 END)
+                  - sum(CASE WHEN c.codigo = '${CUENTAS.DESCUENTOS}' THEN m.debe - m.haber ELSE 0 END) AS neto
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo IN ('factura', 'mora') AND a.reversa_de IS NULL
+                AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)
+              GROUP BY 1
+         ), nc AS (
+             SELECT n.factura_id, sum(m.debe - m.haber) AS acreditado
+               FROM billing.notas_credito n JOIN ledger.asientos a ON a.origen_tipo = 'nota_credito' AND a.origen_id = n.id
+               JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${CUENTAS.INGRESOS_INTERNET}' AND NOT ${anulada('n')}
+              GROUP BY 1
+         )
+         SELECT f.id, fac.neto::text, nc.acreditado::text
+           FROM billing.facturas f JOIN fac ON fac.factura_id = f.id JOIN nc ON nc.factura_id = f.id
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND nc.acreditado > fac.neto`,
+    )
+    await revisar(
+        '12.dte_de_documento_en_cero (H16 y H21: un documento sin venta, total 0, no se certifica; nunca un DTE de Q0.00)',
+        `SELECT d.id, d.documento_tipo, d.documento_id, d.estado, d.total::text
+           FROM fiscal.dte d
+          WHERE ${E('d.empresa_id')} AND d.estado <> 'rechazado' AND d.documento_tipo IN ('factura', 'nota_debito')
+            AND (d.total <= 0 OR EXISTS (SELECT 1 FROM billing.facturas f WHERE f.id = d.documento_id AND f.total <= 0))`,
     )
     await revisar(
         '9.origen_de_asiento_desconocido (promesas y demás no mueven dinero)',
