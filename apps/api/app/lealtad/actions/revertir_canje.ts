@@ -7,7 +7,8 @@ import { bloquearClienteLealtad, devolverCanje, movimientoPorClave } from '#leal
 
 /**
  * `lealtad.revertir_canje` (`POST /lealtad/canjes/:id/revertir { motivo }`, permiso
- * `lealtad.revertir_canje`, `Idempotency-Key`): solo un canje `reservado` (§5). Los puntos vuelven
+ * `lealtad.revertir_canje`, `Idempotency-Key`): un canje `reservado`, o `aplicado` a una factura que se
+ * anuló (§5). Los puntos vuelven
  * en un lote nuevo por cada lote que pagó el canje, con su vencimiento original y su valor
  * (`devolverCanje`: `ajuste` positivo con origen `canje`, asiento `4.1.05 / 2.1.10`); nunca se edita el
  * movimiento del canje. Si el
@@ -24,9 +25,19 @@ export default class RevertirCanje extends DomainAction<{ id: number; motivo: st
         t.fijarEmpresa(previo.empresa_id)
         await bloquearClienteLealtad(t.trx, previo.cliente_id)
         const actual = await verCanje(input.id, t.trx, true)
-        if (actual.estado !== 'reservado') {
+        // un descuento aplicado a una factura que después se anuló también vuelve (§5)
+        let facturaAnulada = false
+        if (actual.estado === 'aplicado' && actual.factura_id !== null && actual.nota_credito_id === null) {
+            const factura = (await t.trx
+                .from('billing.facturas')
+                .where('id', actual.factura_id)
+                .select('estado')
+                .first()) as { estado: string } | null
+            facturaAnulada = factura?.estado === 'anulada'
+        }
+        if (actual.estado !== 'reservado' && !facturaAnulada) {
             throw new CanjeNoRevertible(
-                `El canje ${actual.id} está ${actual.estado}: solo se revierte uno reservado`,
+                `El canje ${actual.id} está ${actual.estado}: solo se revierte uno reservado o aplicado a una factura anulada`,
             )
         }
         const motivo = input.motivo.trim()

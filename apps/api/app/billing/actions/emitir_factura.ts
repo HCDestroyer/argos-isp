@@ -5,6 +5,7 @@ import { claveFactura, sumarDias, type PeriodoFacturable } from '#billing/period
 import { aplicarDescuentos, lineaConIva, totalesDe, type LineaCalculada } from '#billing/facturas'
 import { bloquearCliente } from '#billing/cobros'
 import { emitirDocumento } from '#billing/emision'
+import { aplicarCanjesEmitidos, descuentosParaFactura } from '#lealtad/emision'
 
 /**
  * `facturas.emitir`: emite la factura de UN periodo de un servicio. La llama `generarFacturas`
@@ -17,6 +18,9 @@ import { emitirDocumento } from '#billing/emision'
  *   IVA incluido; el IVA se desglosa por línea (`lineaConIva`).
  * - Guarda `reglas_snapshot`: la configuración efectiva (plantilla + excepciones) y el precio con
  *   que se emitió. Vence `dias_gracia` días después del inicio del periodo.
+ * - Lealtad (`#lealtad/emision`, §5): con un plan temporal de lealtad activo, descuento hasta el precio
+ *   del plan original; los descuentos reservados del servicio van a esta factura y sus canjes quedan
+ *   `aplicados` en la misma transacción.
  * - Asiento: `CxC (cliente) / Ingresos por internet + Otros ingresos + IVA débito`; con `descuentos`,
  *   líneas `descuento` sobre la línea del plan (IVA del neto) y `5.1.01 Descuentos` al debe.
  * - Multiempresa: la factura (y su asiento) es de la empresa del servicio (`empresa_id`): sale con
@@ -106,11 +110,17 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             return { factura_id: null, creada: false, motivo: 'monto_cero' }
         }
         const plan = positivas.findIndex((linea) => linea.tipo === 'servicio')
+        // lealtad (§5): mejora de plan (descuento hasta el plan original) y descuentos reservados
+        const lealtad =
+            plan >= 0
+                ? await descuentosParaFactura(t, servicio, dec(positivas[plan]!.total), factor)
+                : { descuentos: [], canjes: [] }
+        const pedidos = [...lealtad.descuentos, ...(input.descuentos ?? [])]
         const conMonto =
-            plan >= 0 && input.descuentos && input.descuentos.length > 0
+            plan >= 0 && pedidos.length > 0
                 ? aplicarDescuentos(
                       positivas,
-                      input.descuentos.map((d) => ({ indice: plan, concepto: d.concepto, monto: d.monto })),
+                      pedidos.map((d) => ({ indice: plan, concepto: d.concepto, monto: d.monto })),
                   )
                 : positivas
 
@@ -137,6 +147,7 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         })
         if (!emision.creada) return { factura_id: emision.factura_id, creada: false, motivo: 'ya_existe' }
         const facturaId = emision.factura_id!
+        await aplicarCanjesEmitidos(t, facturaId, lealtad.canjes)
         return { factura_id: facturaId, creada: true, motivo: null }
     }
 }

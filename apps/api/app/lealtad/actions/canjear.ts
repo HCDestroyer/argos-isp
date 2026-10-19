@@ -8,6 +8,7 @@ import { valorParametro } from '#fiscal/parametros'
 import { dentroDeVentana } from '#fiscal/fel/dte'
 import { NotaFueraDePlazo } from '#fiscal/fel/errores'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import { bloquearCliente } from '#billing/cobros'
 import ProgramarPlanTemporal from '#core/actions/programar_plan_temporal'
 import {
     ParametroSinConfirmar,
@@ -113,6 +114,8 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
             )
         }
 
+        // mismo orden de locks que `facturas.emitir`: el de cobros del cliente y luego el de lealtad
+        await bloquearCliente(t.trx, input.cliente_id)
         await bloquearClienteLealtad(t.trx, input.cliente_id)
         const saldo = await saldoPuntos(t.trx, empresaId, input.cliente_id)
         const necesario = Math.max(premio.costo_puntos, programa.minimo_canje)

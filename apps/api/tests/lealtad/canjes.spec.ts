@@ -19,6 +19,8 @@ import EditarPrograma from '#lealtad/actions/editar_programa'
 import CrearPremio, { type EntradaPremio } from '#lealtad/actions/crear_premio'
 import Canjear from '#lealtad/actions/canjear'
 import RevertirCanje from '#lealtad/actions/revertir_canje'
+import AnularFactura from '#billing/actions/anular_factura'
+import { lineas as lineasAsiento } from '#tests/contabilidad/ayudas_contabilidad'
 import {
     afirmarPasivoLealtad,
     asientoLealtad,
@@ -309,6 +311,93 @@ test.group('Lealtad · canjes', (group) => {
         )
         assert.equal(vieja.codigo, 'nota_fuera_de_plazo')
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 120)
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('descuento reservado: la próxima factura trae la línea con el IVA del neto y el canje queda aplicado', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const s = await conPuntos(e, 100)
+        const p = await premio(e, s.programa.id, {
+            tipo: 'descuento_factura',
+            descuento_tipo: 'monto',
+            descuento_valor: '50.00',
+            costo_puntos: 60,
+        })
+        const canje = await new Canjear().execute(
+            { cliente_id: s.clienteId, servicio_id: s.servicioId, premio_id: p.id },
+            e.ctx,
+        )
+        assert.equal(canje.estado, 'reservado')
+        await generar(s.servicioId, '2026-11-01')
+        const [octubre, noviembre] = await facturasDelServicio(s.servicioId)
+        assert.include(octubre!, { total: '150.00', iva: '16.07' })
+        assert.include(noviembre!, { total: '200.00' })
+        const lineasOct = await db
+            .from('billing.facturas_lineas')
+            .where('factura_id', octubre!.id)
+            .orderBy('id')
+            .select('tipo', 'total', 'iva')
+        assert.deepEqual(
+            lineasOct.map((l) => [l.tipo, l.total, l.iva]),
+            [
+                ['servicio', '200.00', '21.43'],
+                ['descuento', '-50.00', '-5.36'],
+            ],
+        )
+        assert.deepEqual(await lineasAsiento('factura', octubre!.id), [
+            ['1.1.03', '150.00', '0.00'],
+            ['5.1.01', '44.64', '0.00'],
+            ['4.1.01', '0.00', '178.57'],
+            ['2.1.02', '0.00', '16.07'],
+        ])
+        const aplicado = await db.from('lealtad.canjes').where('id', canje.id).firstOrFail()
+        assert.include(aplicado, { estado: 'aplicado', descuento: '50.00' })
+        assert.equal(Number(aplicado.factura_id), octubre!.id)
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
+
+        // la factura se anula: el canje aplicado a ella se puede revertir y devuelve los puntos
+        await new AnularFactura().execute({ factura_id: octubre!.id, motivo: 'error de plan' }, e.ctx)
+        const revertido = await new RevertirCanje().execute(
+            { id: canje.id, motivo: 'factura anulada' },
+            e.ctx,
+        )
+        assert.equal(revertido.estado, 'revertido')
+        assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 100)
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('mejora de plan en la factura: cobra el plan superior con descuento hasta el precio del plan original', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const s = await conPuntos(e, 100)
+        const mejor = await crearPlanFila({ precio: '300.00', bajada_kbps: 50000, subida_kbps: 10000 })
+        const p = await premio(e, s.programa.id, { tipo: 'mejora_plan', plan_destino_id: mejor, dias: 60 })
+        const canje = await new Canjear().execute(
+            { cliente_id: s.clienteId, servicio_id: s.servicioId, premio_id: p.id },
+            e.ctx,
+        )
+        await generar(s.servicioId, '2026-10-01')
+        const [octubre] = await facturasDelServicio(s.servicioId)
+        assert.include(octubre!, { total: '200.00' })
+        const filas = await db
+            .from('billing.facturas_lineas')
+            .where('factura_id', octubre!.id)
+            .orderBy('id')
+            .select('tipo', 'total', 'concepto')
+        assert.deepEqual(
+            filas.map((l) => [l.tipo, l.total]),
+            [
+                ['servicio', '300.00'],
+                ['descuento', '-100.00'],
+            ],
+        )
+        assert.include(filas[1]!.concepto, `canje ${canje.id}`)
         await afirmarPasivoLealtad(assert, [e.B, e.C])
         await afirmarLibro(assert, [e.B, e.C])
     })
