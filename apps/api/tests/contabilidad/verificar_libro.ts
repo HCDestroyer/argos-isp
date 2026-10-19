@@ -2533,7 +2533,7 @@ async function verificarLibroCon(
     | Boletos por canje: inv. 14. El ISR de los premios en 2.1.05: inv. 15.retenciones.
     */
     await revisar(
-        '16.premio_de_sorteo_mal_contabilizado (entregado: ISR = round(valor × pct), un asiento sorteo vigente de su empresa con origen = ganador, efectivo con egreso premios por valor − ISR, bien con su compra (5.1.03 / cuenta de la línea por la base) o contra un activo (valor), servicio con canje sin puntos del ganador; sin entregar, sin documentos ni asientos vigentes)',
+        '16.premio_de_sorteo_mal_contabilizado (entregado, titular o suplente con el premio de un no reclamado: ISR = round(valor × pct), un asiento sorteo vigente de su empresa con origen = ganador, efectivo con egreso premios por valor − ISR, bien con su compra (5.1.03 / cuenta de la línea por la base) o contra un activo (valor), servicio con canje sin puntos del ganador; sin entregar, sin documentos ni asientos vigentes)',
         `WITH g AS (
              SELECT g.id, g.sorteo_id, g.estado, g.tipo, g.retencion_isr, g.asiento_id, g.egreso_id, g.canje_id,
                     g.compra_linea_id, s.empresa_id, p.tipo AS premio, p.valor, pa.cliente_id,
@@ -2543,7 +2543,8 @@ async function verificarLibroCon(
                FROM lealtad.sorteos_ganadores g
                JOIN lealtad.sorteos s ON s.id = g.sorteo_id
                JOIN lealtad.sorteos_participantes pa ON pa.id = g.participante_id
-               LEFT JOIN lealtad.sorteos_premios p ON p.sorteo_id = g.sorteo_id AND p.posicion = g.premio_posicion
+               LEFT JOIN lealtad.sorteos_premios p ON p.sorteo_id = g.sorteo_id
+                    AND p.posicion = coalesce(g.premio_posicion, g.premio_sustitucion)
                LEFT JOIN ledger.compras_lineas cl ON cl.id = g.compra_linea_id
                LEFT JOIN ledger.compras co ON co.id = cl.compra_id
                LEFT JOIN ledger.cuentas cuc ON cuc.id = cl.cuenta_id
@@ -2582,7 +2583,7 @@ async function verificarLibroCon(
           WHERE (estado <> 'entregado' AND (asiento_id IS NOT NULL OR egreso_id IS NOT NULL OR canje_id IS NOT NULL
                                             OR compra_linea_id IS NOT NULL OR asientos <> 0 OR retencion_isr IS NOT NULL))
              OR (estado = 'entregado' AND (
-                    tipo <> 'titular' OR premio IS NULL OR retencion_isr IS DISTINCT FROM isr
+                    premio IS NULL OR retencion_isr IS DISTINCT FROM isr
                  OR asientos <> CASE WHEN (premio = 'bien' AND bien > 0) OR isr > 0 THEN 1 ELSE 0 END
                  OR (asientos = 0) <> (asiento_id IS NULL)
                  OR (asiento_id IS NOT NULL AND (
@@ -2638,6 +2639,25 @@ async function verificarLibroCon(
                  OR EXISTS (SELECT 1 FROM lealtad.sorteos_ganadores g WHERE g.id = o.origen_id AND g.asiento_id = o.id))`,
     )
     await revisar(
+        '16.sustitucion_mal_formada (sorteos-2: el suplente que toma un premio sustituye a un ganador del mismo sorteo que quedó sustituido, sin entregar, con ese mismo premio; todo sustituido tiene un solo suplente; un no reclamado, ninguno)',
+        `SELECT g.id, g.sorteo_id, g.tipo, g.sustituye_a, g.premio_sustitucion, o.estado AS estado_sustituido,
+                coalesce(o.premio_posicion, o.premio_sustitucion) AS premio_sustituido
+           FROM lealtad.sorteos_ganadores g JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+           LEFT JOIN lealtad.sorteos_ganadores o ON o.id = g.sustituye_a
+          WHERE ${E('s.empresa_id')} AND g.sustituye_a IS NOT NULL
+            AND (o.id IS NULL OR o.sorteo_id <> g.sorteo_id OR g.tipo <> 'suplente' OR o.estado <> 'sustituido'
+                 OR coalesce(o.premio_posicion, o.premio_sustitucion) IS DISTINCT FROM g.premio_sustitucion
+                 OR g.premio_posicion IS NOT NULL)
+         UNION ALL
+         SELECT o.id, o.sorteo_id, o.tipo, NULL, NULL, o.estado, coalesce(o.premio_posicion, o.premio_sustitucion)
+           FROM lealtad.sorteos_ganadores o JOIN lealtad.sorteos s ON s.id = o.sorteo_id
+          WHERE ${E('s.empresa_id')}
+            AND ((o.estado = 'sustituido' AND (SELECT count(*) FROM lealtad.sorteos_ganadores g WHERE g.sustituye_a = o.id) <> 1)
+                 OR (o.estado <> 'sustituido' AND EXISTS (SELECT 1 FROM lealtad.sorteos_ganadores g WHERE g.sustituye_a = o.id))
+                 OR (o.estado IN ('sustituido', 'no_reclamado') AND (o.no_reclamado_en IS NULL
+                     OR coalesce(o.premio_posicion, o.premio_sustitucion) IS NULL)))`,
+    )
+    await revisar(
         '16.ganadores_distintos_del_resultado (ejecutado: SHA-256(semilla) = compromiso, lista_hash = la de los participantes, resultado = columnas, ganadores = elegidos en orden, titulares primero y premio por puesto; sin ejecutar, sin semilla ni ganadores)',
         `WITH s AS (
              SELECT s.* FROM lealtad.sorteos s WHERE ${E('s.empresa_id')}
@@ -2662,7 +2682,7 @@ async function verificarLibroCon(
          )
          SELECT 'sorteo' AS que, s.id AS sorteo_id, null::int AS posicion, s.estado, null AS codigo
            FROM s LEFT JOIN lista l ON l.sorteo_id = s.id
-          WHERE (s.estado IN ('ejecutado', 'premios_entregados') AND (
+          WHERE (s.estado IN ('ejecutado', 'acta_cerrada', 'premios_entregados') AND (
                     s.resultado IS NULL
                  OR encode(sha256(decode(s.semilla, 'hex')), 'hex') IS DISTINCT FROM s.compromiso
                  OR l.hash IS DISTINCT FROM s.lista_hash
@@ -2674,7 +2694,7 @@ async function verificarLibroCon(
                  OR (s.resultado ->> 'suplentes')::int IS DISTINCT FROM s.suplentes
                  OR (s.resultado ->> 'titulares')::int
                     IS DISTINCT FROM (SELECT count(*) FROM puestos u WHERE u.sorteo_id = s.id)::int))
-             OR (s.estado NOT IN ('ejecutado', 'premios_entregados')
+             OR (s.estado NOT IN ('ejecutado', 'acta_cerrada', 'premios_entregados')
                  AND (s.resultado IS NOT NULL OR s.semilla IS NOT NULL
                       OR EXISTS (SELECT 1 FROM ganadores g WHERE g.sorteo_id = s.id)))
          UNION ALL
@@ -2684,7 +2704,7 @@ async function verificarLibroCon(
            FULL JOIN elegidos e ON e.sorteo_id = g.sorteo_id AND e.posicion = g.posicion
            JOIN s ON s.id = coalesce(g.sorteo_id, e.sorteo_id)
            LEFT JOIN puestos u ON u.sorteo_id = g.sorteo_id AND u.puesto = g.posicion
-          WHERE s.estado IN ('ejecutado', 'premios_entregados')
+          WHERE s.estado IN ('ejecutado', 'acta_cerrada', 'premios_entregados')
             AND (g.codigo IS DISTINCT FROM e.codigo
                  OR (g.tipo = 'titular') <> (g.posicion <= (s.resultado ->> 'titulares')::int)
                  OR (g.tipo = 'titular' AND g.premio_posicion IS DISTINCT FROM u.premio))`,

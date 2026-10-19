@@ -25,6 +25,8 @@ import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
 import EntregarPremioSorteo from '#lealtad/actions/entregar_premio_sorteo'
 import { REQUISITOS_PARA_EJECUTAR, verificacionSorteo } from '#lealtad/sorteos'
 import { sortear } from '#lealtad/sorteo_v1'
+import NotificarGanadoresSorteo from '#lealtad/actions/notificar_ganadores_sorteo'
+import MarcarNoReclamadoSorteo from '#lealtad/actions/marcar_no_reclamado_sorteo'
 
 /**
  * Auditoría de sorteos (rama a3/sorteos, lealtad fase 3): el premio entregado como gasto 5.1.03 con
@@ -562,4 +564,80 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
             [],
         )
     })
+
+    test('sorteos-2 · el suplente que toma un premio en efectivo no reclamado: egreso e ISR suyos; el sustituido sin documentos', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const sorteo = await ejecutado(e)
+        await new NotificarGanadoresSorteo().execute({ id: sorteo.id }, e.ctx)
+        const efectivo = sorteo.ganadores.find((g) => g.premio_posicion === 1)!
+        const suplente = sorteo.ganadores.find((g) => g.tipo === 'suplente')!
+        await db.rawQuery(
+            `UPDATE lealtad.sorteos_ganadores SET reclamar_antes = now() - interval '1 day' WHERE id = ?`,
+            [efectivo.id],
+        )
+        await new MarcarNoReclamadoSorteo().execute(
+            { sorteo_id: sorteo.id, ganador_id: efectivo.id, motivo: 'no se presentó' },
+            e.ctx,
+        )
+        await new EntregarPremioSorteo().execute(
+            { sorteo_id: sorteo.id, ganador_id: suplente.id, metodo: 'caja', caja_id: e.cajas.get(e.B)! },
+            e.ctx,
+        )
+        const fila = await db.from('lealtad.sorteos_ganadores').where('id', suplente.id).firstOrFail()
+        assert.include(fila, { estado: 'entregado', retencion_isr: '50.00', premio_sustitucion: 1 })
+        const egreso = await db.from('ledger.egresos').where('id', fila.egreso_id).firstOrFail()
+        assert.equal(egreso.monto, '450.00')
+        assert.deepEqual(await lineas('sorteo', Number(suplente.id)), [
+            ['5.1.03', '50.00', '0.00'],
+            ['2.1.05', '0.00', '50.00'],
+        ])
+        const viejo = await db.from('lealtad.sorteos_ganadores').where('id', efectivo.id).firstOrFail()
+        assert.include(viejo, { estado: 'sustituido', asiento_id: null, egreso_id: null })
+        await afirmarLibro(assert, [e.B, e.C])
+
+        // el inv. 16 detecta un premio de sustitución distinto o una sustitución huérfana
+        for (const sql of [
+            `UPDATE lealtad.sorteos_ganadores SET premio_sustitucion = 2 WHERE id = ?`,
+            `UPDATE lealtad.sorteos_ganadores SET estado = 'notificado', no_reclamado_en = NULL WHERE id = ?`,
+        ]) {
+            const violaciones = await enTransaccion([e.B, e.C], async (trx) => {
+                const id = sql.includes('premio_sustitucion') ? suplente.id : efectivo.id
+                if (!(await intentar(trx, sql, [id]))) {
+                    // con el trigger de H26 la base lo rechaza: se simula con el trigger apagado
+                    await trx.rawQuery(`ALTER TABLE lealtad.sorteos_ganadores DISABLE TRIGGER USER`)
+                    await trx.rawQuery(sql, [id])
+                    await trx.rawQuery(`ALTER TABLE lealtad.sorteos_ganadores ENABLE TRIGGER USER`)
+                }
+            })
+            assert.include(violaciones, '16.sustitucion_mal_formada', sql)
+        }
+    })
+
+    test('H26: la sustitución de un premio no se reescribe en la base (sustituye_a, premio_sustitucion)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const sorteo = await ejecutado(e)
+        await new NotificarGanadoresSorteo().execute({ id: sorteo.id }, e.ctx)
+        const efectivo = sorteo.ganadores.find((g) => g.premio_posicion === 1)!
+        const suplente = sorteo.ganadores.find((g) => g.tipo === 'suplente')!
+        await db.rawQuery(
+            `UPDATE lealtad.sorteos_ganadores SET reclamar_antes = now() - interval '1 day' WHERE id = ?`,
+            [efectivo.id],
+        )
+        await new MarcarNoReclamadoSorteo().execute(
+            { sorteo_id: sorteo.id, ganador_id: efectivo.id, motivo: 'no se presentó' },
+            e.ctx,
+        )
+        await enTransaccion([e.B], async (trx) => {
+            for (const sql of [
+                `UPDATE lealtad.sorteos_ganadores SET premio_sustitucion = 2 WHERE id = ?`,
+                `UPDATE lealtad.sorteos_ganadores SET sustituye_a = NULL, premio_sustitucion = NULL WHERE id = ?`,
+            ]) {
+                assert.isFalse(await intentar(trx, sql, [suplente.id]), sql)
+            }
+        })
+    }).fails('H26: congelar_ganador no congela sustituye_a ni premio_sustitucion una vez asignados')
 })
