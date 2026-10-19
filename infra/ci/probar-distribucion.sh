@@ -5,7 +5,8 @@
 #
 #   infra/ci/probar-distribucion.sh          # en el runner de GitHub (sudo sin contraseña)
 #
-# Requiere las imágenes <registro>/argosisp-{api,web,portal,aaa,coa,backup}:0.0.1 ya construidas
+# Requiere las imágenes <registro>/argosisp-{api,web,portal,aaa,coa,backup,freeradius}:0.0.1 ya construidas
+# en la arquitectura del runner (amd64 o arm64)
 # (job `distribucion` de .github/workflows/ci.yml). De ellas deriva:
 #   0.0.2  las mismas con ARGOSISP_VERSION=0.0.2 (una actualización normal)
 #   0.0.3  api rota: sus migraciones dejan una marca en la base y la API no arranca nunca
@@ -30,7 +31,7 @@ DIR_NODO="${DIR}-nodo"
 V1=0.0.1
 V2=0.0.2
 V3=0.0.3
-IMAGENES=(api web portal aaa coa backup)
+IMAGENES=(api web portal aaa coa backup freeradius)
 DOMINIO=argosisp.test
 CORREO=admin@argosisp.test
 TMP="$(mktemp -d)"
@@ -137,13 +138,18 @@ for img in "${IMAGENES[@]}"; do
     ref="$REG/argosisp-$img:$V1"
     docker image inspect "$ref" > /dev/null || fallar "falta la imagen $ref"
     usuario="$(docker image inspect -f '{{.Config.User}}' "$ref")"
-    case "$usuario" in '' | 0 | root | 0:0 | root:*) fallar "$ref corre como root" ;; esac
+    # FreeRADIUS arranca como root, igual que la imagen oficial (infra/freeradius/Dockerfile)
+    if [ "$img" != freeradius ]; then
+        case "$usuario" in '' | 0 | root | 0:0 | root:*) fallar "$ref corre como root" ;; esac
+    fi
+    arq="$(docker image inspect -f '{{.Architecture}}' "$ref")"
+    [ "$arq" = "$(docker version --format '{{.Server.Arch}}')" ] || fallar "$ref es $arq y el runner no"
     docker run --rm --entrypoint sh "$ref" -c \
         'for b in pnpm npm npx yarn corepack; do command -v $b && exit 1; done; exit 0' > /dev/null ||
         fallar "$ref trae un gestor de paquetes"
     [ "$(docker image inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$ref" | grep '^ARGOSISP_VERSION=')" = "ARGOSISP_VERSION=$V1" ] ||
         fallar "$ref no lleva ARGOSISP_VERSION=$V1"
-    echo "    $img: usuario $usuario"
+    echo "    $img: usuario ${usuario:-root}, $arq"
 done
 fuentes="$(docker run --rm --entrypoint sh "$REG/argosisp-api:$V1" -c \
     "find /app -name '*.ts' -not -name '*.d.ts' -not -path '*/node_modules/*' | head -n 5")"

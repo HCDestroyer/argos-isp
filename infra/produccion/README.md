@@ -20,10 +20,22 @@ Versión instalada en la API: `GET /api/v1/version` (`apps/api/app/monitoreo/ver
 ## Decisiones
 
 - **release-please** para versiones y CHANGELOG: lee Conventional Commits (los que ya usa el repo), deja la versión en una PR revisable antes de publicar (encaja con "una PR se mergea con CI en verde" de CLAUDE.md), secciones del CHANGELOG configurables en español y la Release con las mismas notas. Solo `GITHUB_TOKEN`; no agrega dependencias al workspace. semantic-release publica en cada push sin revisión y necesita plugins de npm; changesets exige un archivo por cambio.
-- **Paquete en la Release** además de las imágenes: el compose monta configuración (Postgres, Caddy, FreeRADIUS) que no está en ninguna imagen. Cada versión trae la suya en `versiones/<v>/`, así revertir también vuelve a la configuración anterior. El paquete se sube al final: una versión existe para los servidores solo cuando sus seis imágenes ya están.
+- **Paquete en la Release** además de las imágenes: el compose monta configuración (Postgres, Caddy, FreeRADIUS) que no está en ninguna imagen. Cada versión trae la suya en `versiones/<v>/`, así revertir también vuelve a la configuración anterior. El paquete se sube al final: una versión existe para los servidores solo cuando sus siete imágenes ya están.
 - **Respaldo previo sin cifrar** en `respaldos/actualizaciones/`: la reversión automática tiene que poder restaurar sin la clave privada de age (que no debe vivir en el servidor). El servidor ya tiene la base en claro; el respaldo diario sigue cifrado y con copia remota como esté configurado.
 - **`backup` sin root** (uid 1000, el de `node` en las otras imágenes): lee y restaura los comprobantes. El servicio `permisos` deja `/comprobantes`, `/backups` y los clientes de FreeRADIUS a nombre de ese uid. En el compose de desarrollo corre como root (`BACKUP_USUARIO`), como antes.
 - **Salud propia en vez de `up --wait`**: compose espera indefinidamente a una dependencia que se reinicia en bucle; `argosisp` vigila los contenedores mientras corre `up` y declara la falla en segundos (unhealthy, salida con error o 3 reinicios).
+
+- **FreeRADIUS propio (`argosisp-freeradius`, `infra/freeradius/Dockerfile`):** la imagen oficial `freeradius/freeradius-server` se publica solo para amd64 (todas sus etiquetas) y no corre en un Raspberry Pi. La nuestra es la misma receta con la que FreeRADIUS arma la oficial (`scripts/docker/dists/ubuntu22` de su release): Ubuntu 22.04, sus `.deb` compilados desde el tarball firmado de 3.2.10 (sha256 fijo), `/etc/freeradius`, el usuario `freerad` y el mismo entrypoint. Rutas, comandos y configuración no cambian. Desarrollo y laboratorio siguen con la oficial. En `imagenes.yml` el arm64 se compila con QEMU: sin caché tarda bastante más que las de Node (timeout de 240 min para esa imagen).
+
+## Raspberry Pi
+
+Las siete imágenes son amd64 y arm64, y el job `distribucion` del CI corre la prueba completa (instalar, actualizar, versión rota que revierte, revertir, `api-portal` y nodo portal) en `ubuntu-24.04-arm`, en paralelo a la de amd64. Lo que hay que saber del equipo (detalle en `docs/runbooks/instalacion.md`, "Raspberry Pi"):
+
+- 64 bits obligatorio: Raspberry Pi OS de 64 bits o Ubuntu Server 24.04 arm64.
+- Nunca en la tarjeta SD: SSD NVMe (Pi 5) o USB 3 (Pi 4), de preferencia arrancando desde él. `instalar.sh` avisa si `$DIR` o el directorio de datos de Docker están en un `mmcblk`.
+- 8 GB recomendados. Con 4 GB funciona con margen justo: la regla (menos de 3 GB) deja `api-portal` encendido; si falta memoria, `ARGOSISP_API_PORTAL=no`. Con 2 GB se apaga solo.
+- UPS y respaldo fuera del equipo.
+- Capacidad orientativa: ISP pequeño o mediano.
 
 ## API del portal (`api-portal`)
 

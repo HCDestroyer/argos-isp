@@ -188,6 +188,27 @@ compose_version="$(docker compose version --short 2> /dev/null || true)"
 [ -n "$compose_version" ] || morir "falta el plugin docker compose (apt-get install docker-compose-plugin)"
 version_mayor_igual "${compose_version#v}" "$COMPOSE_MINIMO" || morir "hace falta docker compose $COMPOSE_MINIMO o más nuevo (hay $compose_version)"
 
+# Raspberry Pi: ¿la base quedaría en una tarjeta SD (mmcblk)? Los volúmenes (Postgres, Redis) viven
+# en el directorio de datos de Docker y los respaldos en $DIR. Solo avisa: no bloquea.
+en_tarjeta_sd() {
+    local ruta="$1" majmin fuente
+    majmin="$(findmnt -no MAJ:MIN -T "$ruta" 2> /dev/null | head -n1 | tr -d '[:space:]')"
+    if [ -n "$majmin" ] && [ -e "/sys/dev/block/$majmin" ]; then
+        case "$(readlink -f "/sys/dev/block/$majmin")" in */mmcblk*) return 0 ;; esac
+    fi
+    fuente="$(findmnt -no SOURCE -T "$ruta" 2> /dev/null | head -n1)"
+    case "$fuente" in /dev/mmcblk*) return 0 ;; esac
+    return 1
+}
+docker_root="$(docker info --format '{{.DockerRootDir}}' 2> /dev/null || echo /var/lib/docker)"
+for ruta in "$docker_root" "$DIR"; do
+    if en_tarjeta_sd "$ruta"; then
+        aviso "$ruta está en una tarjeta SD (mmcblk): la base de datos y los respaldos la desgastan y se corrompen con un corte de luz. Usa un SSD (NVMe en el Pi 5, USB 3 en el Pi 4), de preferencia arrancando desde él (docs/runbooks/instalacion.md, \"Raspberry Pi\")"
+    fi
+done
+[ "$(uname -m)" != aarch64 ] || [ "$ROL" = portal ] || [ "$ram_mb" -ge 7000 ] ||
+    aviso "Raspberry Pi o arm64 con ${ram_mb} MB: se recomiendan 8 GB$([ "$API_PORTAL" = no ] && echo '; api-portal queda apagado por la regla de RAM')"
+
 # ---------------------------------------------------------------------------
 # 3. Datos mínimos
 # ---------------------------------------------------------------------------

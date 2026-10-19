@@ -458,8 +458,10 @@ services:
       <<: *node-healthcheck
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3200/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 
+  # FreeRADIUS 3.2.10 multi-arquitectura (infra/freeradius/Dockerfile): la oficial
+  # freeradius/freeradius-server solo existe para amd64. Misma receta, rutas y comandos.
   freeradius:
-    image: freeradius/freeradius-server:3.2.10
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-freeradius:${ARGOSISP_VERSION}
     restart: unless-stopped
     command: [-l, stdout]
     environment:
