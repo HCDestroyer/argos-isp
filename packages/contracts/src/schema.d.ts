@@ -243,7 +243,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Depósitos de caja (en tránsito o acreditados) */
+        /**
+         * Depósitos de caja (en tránsito o acreditados)
+         * @description Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.
+         */
         get: operations["bancosDepositos"];
         put?: never;
         post?: never;
@@ -6776,7 +6779,7 @@ export interface components {
             }[];
         };
         /** @enum {string} */
-        EstadoFactura: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada";
+        EstadoFactura: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
         EstadoPortal: {
             /** @description false si la IP de origen no pertenece a ningún servicio */
             identificado: boolean;
@@ -6965,11 +6968,11 @@ export interface components {
             /** @description FACT, FPEQ… (null sin FEL) */
             tipo_dte?: string | null;
             /**
-             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura
+             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)
              * @enum {string}
              */
-            tipo?: "servicio" | "mora";
-            /** @description Factura que originó la mora */
+            tipo?: "servicio" | "mora" | "cargo";
+            /** @description Factura que originó la mora o el cargo */
             factura_origen_id?: number | null;
             /**
              * Format: date-time
@@ -7646,6 +7649,8 @@ export interface components {
             cuenta_bancaria_nombre?: string | null;
             /** @description Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco */
             proveedor_cobro_id?: number | null;
+            /** @description Nombre del proveedor de cobro; null sin proveedor */
+            proveedor_cobro_nombre?: string | null;
             /** @description Liquidación del proveedor que incluyó el pago; null = sin liquidar */
             liquidacion_id?: number | null;
             /** @description Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos */
@@ -10632,6 +10637,10 @@ export interface operations {
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
                 estado?: "en_transito" | "acreditado";
+                /** @description Solo los de esta caja (obligatoria sin bancos.ver: el cajero ve su caja) */
+                caja_id?: number;
+                /** @description Solo los de este turno */
+                turno_id?: number;
             };
             header?: never;
             path?: never;
@@ -10660,7 +10669,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso bancos.ver */
+            /** @description Sin el permiso cajas.ver */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -16839,10 +16848,10 @@ export interface operations {
                 limit?: number;
                 cliente_id?: number;
                 servicio_id?: number;
-                estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada";
+                estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
                 periodo?: string;
                 /** @description servicio = factura del periodo; mora = recargo por vencimiento */
-                tipo?: "servicio" | "mora";
+                tipo?: "servicio" | "mora" | "cargo";
             };
             header?: never;
             path?: never;

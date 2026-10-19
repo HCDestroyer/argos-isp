@@ -26,8 +26,7 @@ import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/act
 import { exigirReferenciaLibre, validarDatosBancarios, type DatosBancarios } from '#billing/datos_bancarios'
 import { resumenEmpresas } from '#billing/empresa'
 import { proveedorParaPago } from '#ledger/cobros_liquidar'
-import { porRecuperar } from '#ledger/cartera'
-import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { guardarRecuperacion, movimientosRecuperacion, repartirRecuperacion } from '#ledger/cartera'
 import { hoyGuatemala } from '#ledger/fechas'
 import {
     insertarConstanciasRecibidas,
@@ -621,19 +620,10 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         }
         // decisión (g) del líder: con castigos por recuperar, lo que sobra es recuperación (4.2.03), nunca un
         // anticipo eterno ni una aplicación a la factura castigada
-        let sobrante = restante
-        if (sobrante.gt(0)) {
-            const falta = await porRecuperar(t.trx, parte.empresaId, input.cliente_id)
-            const recuperado = falta.gt(0) ? (falta.lt(sobrante) ? falta : sobrante) : CERO
-            if (recuperado.gt(0)) {
-                movimientos.push({
-                    cuenta: CUENTAS_GT.RECUPERACION_INCOBRABLES,
-                    haber: aTexto(recuperado),
-                    cliente_id: input.cliente_id,
-                })
-                sobrante = sobrante.minus(recuperado)
-            }
-        }
+        // H17: la recuperación se parte en base (4.2.03) e IVA (2.1.11) en la proporción de cada castigo
+        const recuperacion = await repartirRecuperacion(t.trx, parte.empresaId, input.cliente_id, restante)
+        movimientos.push(...movimientosRecuperacion(recuperacion, input.cliente_id))
+        const sobrante = recuperacion.reduce((a, r) => a.minus(r.monto), restante)
         if (sobrante.gt(0)) {
             movimientos.push({
                 cuenta: CUENTAS.ANTICIPOS_CLIENTES,
@@ -657,6 +647,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             t.ctx,
             { trx: t.trx },
         )
+        await guardarRecuperacion(t.trx, parte.empresaId, pagoId, recuperacion)
 
         await t.emit('pago.registrado', {
             pago_id: pagoId,

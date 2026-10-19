@@ -14,6 +14,7 @@ import {
     type FacturaPendiente,
 } from '#billing/cobros'
 import { verPago, type PagoVista } from '#billing/pagos'
+import { crearCargoDiferencia } from '#billing/cargos'
 import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
@@ -161,31 +162,53 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
 
-        // H13: la diferencia de cobro que este pago cerró se justificaba con él; su nota interna se anula
-        // (reverso espejo). Una NCRE ya enviada a la SAT no se deshace aquí (contrato §18)
+        // H13 / H18: la diferencia de cobro que este pago cerró se justificaba con él. Sin documento fiscal
+        // (nota interna y la factura sin DTE vivo) su nota se anula con un reverso espejo; con DTE (la nota
+        // quedó en el neto del DTE o salió como NCRE) el documento no se toca y el cliente vuelve a deber la
+        // diferencia con un cargo interno no fiscal (`CxC / 5.3.05`, contrato §18)
         const diferencias = (await t.trx
             .from('billing.diferencias_cobro as d')
+            .join('billing.notas_credito as n', 'n.id', 'd.nota_credito_id')
             .where('d.pago_id', pago.id)
             .whereNotExists((q) =>
                 q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = d.nota_credito_id'),
             )
             .whereNotExists((q) =>
-                q
-                    .from('fiscal.dte as e')
-                    .whereRaw("e.documento_tipo = 'nota_credito' AND e.documento_id = d.nota_credito_id"),
-            )
-            // con el documento ya en la SAT (o en camino) la nota quedó en su neto: no se toca
-            .whereNotExists((q) =>
-                q
-                    .from('fiscal.dte as e')
-                    .join('billing.notas_credito as n', 'n.id', 'd.nota_credito_id')
-                    .whereRaw(
-                        "e.documento_tipo IN ('factura', 'nota_debito') AND e.documento_id = n.factura_id AND e.estado IN ('pendiente', 'error_temporal', 'contingencia', 'certificado', 'anulacion_pendiente')",
-                    ),
+                q.from('billing.diferencias_cobro_cargos as c').whereRaw('c.diferencia_id = d.id'),
             )
             .orderBy('d.id')
-            .select('d.nota_credito_id')) as Array<{ nota_credito_id: number }>
+            .select(
+                'd.id',
+                'd.pago_id',
+                'd.factura_id',
+                'd.monto',
+                'd.nota_credito_id',
+                t.trx.raw(
+                    `EXISTS (SELECT 1 FROM fiscal.dte e WHERE e.documento_tipo = 'nota_credito' AND e.documento_id = d.nota_credito_id)
+                  OR EXISTS (SELECT 1 FROM fiscal.dte e JOIN billing.facturas f ON f.id = n.factura_id
+                              WHERE e.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                                AND e.documento_id = f.id
+                                AND e.estado IN ('pendiente', 'error_temporal', 'contingencia', 'certificado', 'anulacion_pendiente'))
+                  AS con_documento`,
+                ),
+            )) as Array<{
+            id: number
+            pago_id: number
+            factura_id: number
+            monto: string
+            nota_credito_id: number
+            con_documento: boolean
+        }>
         for (const d of diferencias) {
+            if (d.con_documento) {
+                await crearCargoDiferencia(t, {
+                    id: Number(d.id),
+                    pago_id: Number(d.pago_id),
+                    factura_id: Number(d.factura_id),
+                    monto: d.monto,
+                })
+                continue
+            }
             await new AnularNotaCredito().execute(
                 {
                     nota_id: Number(d.nota_credito_id),
