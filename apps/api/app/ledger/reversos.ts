@@ -33,6 +33,20 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'facturas.anular',
         documento: 'la factura certificada (POST /facturas/:id/anular: anula su DTE)',
     },
+    // fase 4 (§10.3, §10.9): el documento (liquidación, depósito, traslado, línea del extracto, provisión,
+    // castigo) es de solo inserción y el libro lo refleja; revertir solo el asiento los desacuerda
+    liquidacion_cobro: {
+        accion: 'cobros.liquidar',
+        documento: 'la liquidación con un asiento de ajuste que la explique (las liquidaciones no se anulan)',
+    },
+    deposito: { accion: 'cajas.depositar', documento: 'el depósito con un asiento de ajuste (no se anula)' },
+    traslado: { accion: 'bancos.trasladar', documento: 'el traslado con otro traslado en sentido contrario' },
+    banco: {
+        accion: 'bancos.conciliar',
+        documento: 'la conciliación (POST /bancos/conciliaciones/:id/anular) y registra la línea otra vez',
+    },
+    provision: { accion: 'cartera.provisionar', documento: 'la estimación con un asiento de ajuste' },
+    castigo: { accion: 'cartera.castigar', documento: 'el castigo con un asiento de ajuste' },
 }
 
 /** null si el asiento se puede revertir directo; si no, qué acción usar. */

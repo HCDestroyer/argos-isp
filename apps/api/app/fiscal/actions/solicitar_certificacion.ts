@@ -117,6 +117,29 @@ export default class SolicitarCertificacion extends DomainAction<
                 .first()
             if (rechazado) return omitir('rechazado_definitivo')
         }
+        // castigo de cartera (§10.9): lo castigado nunca se causó y no genera DTE
+        const castigada = await t.trx
+            .from('ledger.castigos_facturas')
+            .where('factura_id', factura.id)
+            .select('castigo_id')
+            .first()
+        if (castigada) {
+            if (input.automatico) return omitir('castigada')
+            throw new Conflicto(
+                `La factura ${factura.id} está castigada (castigo ${castigada.castigo_id}): no se certifica`,
+                'factura_castigada',
+                'Factura castigada',
+            )
+        }
+        // H16: acreditada entera por notas internas, nadie pagó nada: no es venta (nunca un DTE de Q0.00)
+        if (factura.estado === 'acreditada') {
+            if (input.automatico) return omitir('acreditada')
+            throw new Conflicto(
+                `La factura ${factura.id} está acreditada por completo con notas de crédito: no es una venta`,
+                'factura_acreditada',
+                'Factura acreditada',
+            )
+        }
         if (factura.estado === 'anulada') {
             if (input.automatico) return omitir('anulada')
             throw new Conflicto(`La factura ${factura.id} está anulada`, 'factura_anulada', 'Factura anulada')

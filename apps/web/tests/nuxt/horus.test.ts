@@ -259,6 +259,7 @@ describe('horus · pantallas', () => {
     it('/sso/entrar sin vinculación: login normal que vincula; un ticket usado responde "venció"', async () => {
         sesionFixture(null)
         useUsuarioActual().value = null
+        const navegar = vi.spyOn(useRouter(), 'replace')
         const vista = await mountSuspended(PaginaSso, { route: `/sso/entrar#${TICKET_SIN_VINCULAR}` })
         await vi.waitFor(() => expect(vista.find('[data-prueba="sso-vincular"]').exists()).toBe(true))
         expect(vista.text()).toContain('Luis Pérez (Horus)')
@@ -268,12 +269,19 @@ describe('horus · pantallas', () => {
         await vista.get('form').trigger('submit')
         await vi.waitFor(() => expect(useUsuarioActual().value?.email).toBe('admin@argos.test'))
         expect(bd.horus.vinculaciones.some(v => v.id_externo === 'u-42' && v.usuario_id === 1)).toBe(true)
+        // Tras vincular, la página navega al destino del ticket (la ficha, con carga en diferido): se espera
+        // a que termine para que no siga viva cuando se desmonta el entorno de la prueba.
+        await vi.waitFor(() => expect(navegar).toHaveBeenCalled())
+        await Promise.allSettled(navegar.mock.results.map(r => r.value))
+        await flushPromises()
 
         await useRouter().replace(`/sso/entrar#${TICKET_SIN_VINCULAR}`)
         window.history.replaceState(null, '', `/sso/entrar#${TICKET_SIN_VINCULAR}`)
         const otra = await mountSuspended(PaginaSso, { route: `/sso/entrar#${TICKET_SIN_VINCULAR}` })
         await vi.waitFor(() => expect(otra.find('[data-prueba="sso-error"]').exists()).toBe(true))
         expect(otra.get('[data-prueba="sso-error"]').text()).toContain('El enlace venció')
+        await Promise.allSettled(navegar.mock.results.map(r => r.value))
+        await flushPromises()
     })
 
     it('Mi cuenta: lista y quita mis vinculaciones', async () => {
