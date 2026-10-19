@@ -13,6 +13,8 @@ const BASE_URL = process.env.PW_BASE_URL ?? `http://127.0.0.1:${PUERTO}`
 export default defineConfig({
     testDir: './tests/e2e',
     testMatch: '**/*.spec.ts',
+    // Con el servidor que levanta Playwright: lo calienta (login → inicio) antes de la primera prueba.
+    globalSetup: './tests/e2e/calentar.ts',
     fullyParallel: false,
     workers: 1,
     retries: process.env.CI ? 1 : 0,
