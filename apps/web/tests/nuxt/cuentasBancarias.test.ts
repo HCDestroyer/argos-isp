@@ -1,9 +1,10 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import PaginaCuentas from '~/pages/configuracion/cuentas-bancarias.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('configuración · cuentas bancarias', () => {
     beforeEach(() => {
@@ -43,14 +44,14 @@ describe('configuración · cuentas bancarias', () => {
 
     it('la pantalla lista, filtra inactivas y muestra el botón de crear solo con cuentas_bancarias.editar', async () => {
         const vista = await mountSuspended(PaginaCuentas)
-        await vi.waitFor(() => expect(vista.findAll('[data-cuenta]')).toHaveLength(4))
+        await esperar(() => expect(vista.findAll('[data-cuenta]')).toHaveLength(4))
         expect(vista.text()).toContain('Nueva cuenta')
         expect(vista.text()).toContain('Inactiva')
 
         sesionFixture('fixture-cajero')
         useUsuarioActual().value = meCajero
         const cajero = await mountSuspended(PaginaCuentas)
-        await vi.waitFor(() => expect(cajero.findAll('[data-cuenta]').length).toBeGreaterThan(0))
+        await esperar(() => expect(cajero.findAll('[data-cuenta]').length).toBeGreaterThan(0))
         expect(cajero.find('[aria-label^="Editar"]').exists()).toBe(false)
         expect(cajero.text()).not.toContain('Nueva cuenta')
     })

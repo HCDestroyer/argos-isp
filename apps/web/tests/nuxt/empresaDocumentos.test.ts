@@ -1,10 +1,11 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaAviso from '~/pages/configuracion/aviso-cobro.vue'
 import PaginaEmpresa from '~/pages/configuracion/empresa.vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('empresa y plantilla del aviso de cobro', () => {
     beforeEach(() => {
@@ -64,22 +65,22 @@ describe('empresa y plantilla del aviso de cobro', () => {
 
     it('el editor lista las variables de la API y las inserta en el HTML', async () => {
         const vista = await mountSuspended(PaginaAviso)
-        await vi.waitFor(() => expect(vista.find('[data-variable="cliente.nombre"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-variable="cliente.nombre"]').exists()).toBe(true))
         const area = vista.get<HTMLTextAreaElement>('textarea')
         await area.setValue('')
         await vista.get('[data-variable="cliente.nombre"]').trigger('click')
-        await vi.waitFor(() => expect(area.element.value).toBe('{{cliente.nombre}}'))
+        await esperar(() => expect(area.element.value).toBe('{{cliente.nombre}}'))
     })
 
     it('la pantalla de empresa muestra el aviso de versión 0 y carga los datos', async () => {
         const vista = await mountSuspended(PaginaEmpresa)
-        await vi.waitFor(() => expect(vista.text()).toContain('Aún no se ha guardado'))
+        await esperar(() => expect(vista.text()).toContain('Aún no se ha guardado'))
         expect(vista.get<HTMLInputElement>('input').element.value).toBe('ArgosIsp')
     })
 
     it('la factura tiene el botón "Aviso de cobro (PDF)" y el PDF llega como Blob', async () => {
         const vista = await mountSuspended(PaginaFactura, { route: '/facturas/109' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="aviso-pdf"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="aviso-pdf"]').exists()).toBe(true))
         const pdf = await useDocumentos().avisoCobro(109)
         expect(pdf.ok && pdf.data.size).toBeGreaterThan(100)
         const ausente = await useDocumentos().avisoCobro(999999)

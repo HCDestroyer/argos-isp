@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
@@ -8,6 +8,7 @@ import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import AsientoContable from '~/components/AsientoContable.vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 /** Asiento sin documento (ajuste manual): el único tipo que se revierte directo. */
 function ajusteManual(): Asiento {
@@ -129,22 +130,22 @@ describe('reverso de asiento y nota de crédito', () => {
         }
         const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaFactura) }) })
         const vista = await mountSuspended(conApp, { route: `/facturas/${vencida.id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="abrir-nota-credito"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="abrir-nota-credito"]').exists()).toBe(true))
         await vista.get('[data-prueba="abrir-nota-credito"]').trigger('click')
         const saldo = new Decimal(vencida.total).minus(vencida.pagado).toFixed(2)
-        await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('[data-prueba="nota-monto"] input, input[data-prueba="nota-monto"]')?.value).toBe(saldo))
+        await esperar(() => expect(document.body.querySelector<HTMLInputElement>('[data-prueba="nota-monto"] input, input[data-prueba="nota-monto"]')?.value).toBe(saldo))
         vista.unmount()
 
         await useFacturas().notaCredito(vencida.id, { monto: '5.00', motivo: 'Compensación' }, nuevaClaveIdempotencia())
         const otra = await mountSuspended(conApp, { route: `/facturas/${vencida.id}` })
-        await vi.waitFor(() => expect(otra.find('[data-prueba="notas-credito"]').exists()).toBe(true))
+        await esperar(() => expect(otra.find('[data-prueba="notas-credito"]').exists()).toBe(true))
         expect(otra.get('[data-prueba="notas-credito"]').text()).toContain('Compensación')
         expect(otra.get('[data-prueba="factura-acreditado"]').text()).toContain('Q 5.00')
         otra.unmount()
 
         useUsuarioActual().value = meCajero
         const cajero = await mountSuspended(conApp, { route: `/facturas/${vencida.id}` })
-        await vi.waitFor(() => expect(cajero.text()).toContain(`Factura #${vencida.id}`))
+        await esperar(() => expect(cajero.text()).toContain(`Factura #${vencida.id}`))
         expect(cajero.find('[data-prueba="abrir-nota-credito"]').exists()).toBe(false)
         cajero.unmount()
     })

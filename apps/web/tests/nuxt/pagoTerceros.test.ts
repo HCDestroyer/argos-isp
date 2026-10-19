@@ -1,9 +1,10 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import ClienteResponsablePago from '~/components/ClienteResponsablePago.vue'
 import ReciboPago from '~/components/ReciboPago.vue'
 import PaginaCobro from '~/pages/cobro/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Pago de terceros y responsable de pago (día 4). En los fixtures, Carlos Enrique Monterroso (10)
@@ -53,13 +54,13 @@ describe('pago de terceros y responsable de pago', () => {
         expect(ficha.get('[data-prueba="responsable-actual"]').text()).toContain('Carlos Enrique Monterroso')
 
         const fichaResponsable = await mountSuspended(ClienteResponsablePago, { props: { cliente: responsable.data } })
-        await vi.waitFor(() => expect(fichaResponsable.findAll('[data-dependiente]')).toHaveLength(2))
+        await esperar(() => expect(fichaResponsable.findAll('[data-dependiente]')).toHaveLength(2))
         expect(fichaResponsable.text()).toContain('Responsable de pago de:')
     })
 
     it('el cobro carga solas las facturas de los dependientes y el pago las cubre', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=10' })
-        await vi.waitFor(() => expect(vista.find('[data-grupo="12"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-grupo="12"]').exists()).toBe(true))
         expect(vista.get('[data-grupo="12"]').text()).toContain('Responsable de pago de:')
 
         const cuenta = await useClientes().estadoCuenta(12)
@@ -108,13 +109,13 @@ describe('pago de terceros y responsable de pago', () => {
 
     it('en pantalla: marcar el grupo del dependiente suma "de otros clientes" y tras el pago no quedan marcadas', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=10' })
-        await vi.waitFor(() => expect(vista.find('[data-grupo="12"] button[role="checkbox"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-grupo="12"] button[role="checkbox"]').exists()).toBe(true))
         await vista.get('[data-grupo="12"] button[role="checkbox"]').trigger('click')
-        await vi.waitFor(() => expect(vista.get('[data-prueba="total-marcadas"]').text()).toMatch(/de otros clientes \(Q [\d,]+\.\d{2}\)/))
+        await esperar(() => expect(vista.get('[data-prueba="total-marcadas"]').text()).toMatch(/de otros clientes \(Q [\d,]+\.\d{2}\)/))
 
         await vista.get('form').trigger('submit')
-        await vi.waitFor(() => expect(vista.find('article[aria-label="Recibo de pago"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('article[aria-label="Recibo de pago"]').exists()).toBe(true))
         expect(vista.get('article[aria-label="Recibo de pago"]').text()).toContain('pagado por Carlos Enrique Monterroso')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="total-marcadas"]').exists()).toBe(false))
+        await esperar(() => expect(vista.find('[data-prueba="total-marcadas"]').exists()).toBe(false))
     })
 })

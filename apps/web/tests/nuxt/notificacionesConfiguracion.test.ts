@@ -1,11 +1,12 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import { configuracionGlobal } from '~~/fixtures/notificaciones/datos'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaNotificaciones from '~/pages/configuracion/notificaciones.vue'
+import { esperar } from '../ayudas/esperar'
 
 /** Configuración → Notificaciones (A6): global y por empresa, secretos `***`, prueba con el error real. */
 describe('notificaciones · cuerpo del PUT', () => {
@@ -55,12 +56,12 @@ describe('notificaciones · pantalla', () => {
 
     it('guardar la global reemplaza la contraseña sin mostrarla y pasa a "Guardada"', async () => {
         const vista = await mountSuspended(PaginaNotificaciones, { route: '/configuracion/notificaciones' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="origen-notificaciones"]').text()).toContain('Del entorno'))
+        await esperar(() => expect(vista.find('[data-prueba="origen-notificaciones"]').text()).toContain('Del entorno'))
         const reemplazar = vista.findAll('button').find(b => b.text() === 'Reemplazar')
         await reemplazar?.trigger('click')
         await vista.get('input[data-prueba="secreto-correo.password"], [data-prueba="secreto-correo.password"] input').setValue('clave-smtp-nueva')
         await vista.get('[data-prueba="guardar-notificaciones"]').trigger('click')
-        await vi.waitFor(() => expect(vista.get('[data-prueba="origen-notificaciones"]').text()).toContain('Guardada'))
+        await esperar(() => expect(vista.get('[data-prueba="origen-notificaciones"]').text()).toContain('Guardada'))
         expect(bd.notificaciones.global.version).toBe(1)
         expect(bd.notificaciones.global.correo.password).toBe('***')
         expect(vista.html()).not.toContain('clave-smtp-nueva')
@@ -71,22 +72,22 @@ describe('notificaciones · pantalla', () => {
     it('"Enviar prueba" muestra el error real del servidor, y sin destino el 422', async () => {
         bd.notificaciones.global = { ...structuredClone(configuracionGlobal), correo: { ...configuracionGlobal.correo, host: 'smtp.falla.test' } }
         const vista = await mountSuspended(PaginaNotificaciones, { route: '/configuracion/notificaciones' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="probar-correo"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="probar-correo"]').exists()).toBe(true))
         await vista.get('[data-prueba="probar-correo"]').trigger('click')
-        await vi.waitFor(() => expect(vista.text()).toContain('Escribe el correo de destino'))
+        await esperar(() => expect(vista.text()).toContain('Escribe el correo de destino'))
         await vista.get('input[aria-label="Correo de destino de la prueba"]').setValue('cobros@argosnet.gt')
         await vista.get('[data-prueba="probar-correo"]').trigger('click')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="error-prueba"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="error-prueba"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="error-prueba"]').text()).toContain('getaddrinfo ENOTFOUND smtp.falla.test')
     })
 
     it('una empresa que hereda la global: su formulario queda bloqueado hasta apagar "Usar la configuración global"', async () => {
         const vista = await mountSuspended(PaginaNotificaciones, { route: '/configuracion/notificaciones?empresa=2' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="origen-notificaciones"]').text()).toContain('Hereda la global'))
+        await esperar(() => expect(vista.find('[data-prueba="origen-notificaciones"]').text()).toContain('Hereda la global'))
         expect(vista.get('input[placeholder="smtp.dominio.gt"]').attributes('disabled')).toBeDefined()
         await vista.get('button[role="switch"][data-prueba="hereda"], [data-prueba="hereda"] button[role="switch"]').trigger('click')
-        await vi.waitFor(() => expect(vista.get('input[placeholder="smtp.dominio.gt"]').attributes('disabled')).toBeUndefined())
+        await esperar(() => expect(vista.get('input[placeholder="smtp.dominio.gt"]').attributes('disabled')).toBeUndefined())
         await vista.get('[data-prueba="guardar-notificaciones"]').trigger('click')
-        await vi.waitFor(() => expect(bd.notificaciones.empresas[2]?.hereda).toBe(false))
+        await esperar(() => expect(bd.notificaciones.empresas[2]?.hereda).toBe(false))
     })
 })

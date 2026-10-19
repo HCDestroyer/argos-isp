@@ -7,6 +7,7 @@ import { UApp } from '#components'
 import MarkdownSeguro from '~/components/MarkdownSeguro.vue'
 import MenuUsuario from '~/components/MenuUsuario.vue'
 import QueCambioModal from '~/components/QueCambioModal.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Versión instalada y "Qué cambió" (`GET /version`, A6): Markdown del CHANGELOG dibujado sin HTML
@@ -71,7 +72,7 @@ describe('versión y qué cambió', () => {
     it('qué cambió: versión, cambios y notas; con error, Reintentar y nada más', async () => {
         const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(QueCambioModal, { open: true }) }) })
         const vista = await mountSuspended(conApp)
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="version-cambios"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="version-cambios"]')).not.toBeNull())
         expect(document.body.textContent).toContain('Qué cambió en la versión 1.4.2')
         expect(document.body.textContent).toContain('programa de lealtad')
         expect(document.body.querySelector('[data-prueba="version-notas"]')?.getAttribute('href')).toBe('https://github.com/HCDestroyer/argos-isp/releases/tag/v1.4.2')
@@ -81,7 +82,7 @@ describe('versión y qué cambió', () => {
         useVersion().version.value = null
         simularFalla('GET /api/v1/version', 500)
         const falla = await mountSuspended(defineComponent({ render: () => h(UApp, null, { default: () => h(QueCambioModal, { open: true }) }) }))
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="version-error"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="version-error"]')).not.toBeNull())
         expect(document.body.textContent).toContain('Reintentar')
         expect(document.body.querySelector('[data-prueba="version-cambios"]')).toBeNull()
         falla.unmount()
@@ -90,7 +91,7 @@ describe('versión y qué cambió', () => {
     it('desarrollo sin cambios: lo dice en lugar de dejar el modal vacío', async () => {
         bd.version = { version: 'desarrollo', commit: null, compilada: null, notas_url: null, cambios: null }
         const vista = await mountSuspended(defineComponent({ render: () => h(UApp, null, { default: () => h(QueCambioModal, { open: true }) }) }))
-        await vi.waitFor(() => expect(document.body.textContent).toContain('Sin notas para esta versión'))
+        await esperar(() => expect(document.body.textContent).toContain('Sin notas para esta versión'))
         expect(document.body.textContent).toContain('compilación de desarrollo')
         expect(document.body.querySelector('[data-prueba="version-notas"]')).toBeNull()
         vista.unmount()
@@ -99,8 +100,8 @@ describe('versión y qué cambió', () => {
     it('el menú recuerda la versión vista por usuario y avisa al entrar a una nueva', async () => {
         guardarVersionVista(meAdmin.id, '1.4.1')
         const vista = await mountSuspended(defineComponent({ render: () => h(UApp, null, { default: () => h(MenuUsuario) }) }))
-        await vi.waitFor(() => expect(leerVersionVista(meAdmin.id)).toBe('1.4.2'), { timeout: 5000 })
-        await vi.waitFor(() => expect(useToast().toasts.value.map(t => t.title)).toContain('ArgosIsp se actualizó a la versión 1.4.2'))
+        await esperar(() => expect(leerVersionVista(meAdmin.id)).toBe('1.4.2'), { timeout: 5000 })
+        await esperar(() => expect(useToast().toasts.value.map(t => t.title)).toContain('ArgosIsp se actualizó a la versión 1.4.2'))
         vista.unmount()
     })
 })

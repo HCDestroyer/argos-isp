@@ -1,10 +1,11 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaCobro from '~/pages/cobro/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Cobro repartido (A3, `contratos/multiempresa.md`): un cobro en efectivo con avisos de ArgosNet
@@ -85,18 +86,18 @@ describe('cobro repartido por empresa', () => {
 
     it('en pantalla: el cobro muestra los pagos por empresa y el recibo con las dos empresas', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=3' })
-        await vi.waitFor(() => expect(vista.find('[data-factura="410"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-factura="410"]').exists()).toBe(true))
         await vista.get('[data-factura="310"] button[role="checkbox"]').trigger('click')
         await vista.get('[data-factura="410"] button[role="checkbox"]').trigger('click')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="reparto-empresas"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="reparto-empresas"]').exists()).toBe(true))
 
         await vista.get('form').trigger('submit')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="pagos-por-empresa"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="pagos-por-empresa"]').exists()).toBe(true))
         const partes = vista.get('[data-prueba="pagos-por-empresa"]').text()
         expect(partes).toContain('ArgosNet')
         expect(partes).toContain('Fibra del Sur')
         expect(partes).toContain('Q 900.00')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="recibo-cobro"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="recibo-cobro"]').exists()).toBe(true))
         expect(vista.findAll('[data-prueba="recibo-cobro"] section[data-empresa]')).toHaveLength(2)
         expect(vista.get('[data-prueba="total-cobro"]').text()).toContain('Q 900.00')
     })
@@ -104,12 +105,12 @@ describe('cobro repartido por empresa', () => {
     it('en pantalla: sin caja abierta en una empresa, el aviso la nombra y ofrece abrir caja', async () => {
         cerrarCajaSur()
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=3' })
-        await vi.waitFor(() => expect(vista.find('[data-factura="410"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-factura="410"]').exists()).toBe(true))
         await vista.get('[data-factura="310"] button[role="checkbox"]').trigger('click')
         await vista.get('[data-factura="410"] button[role="checkbox"]').trigger('click')
         await flushPromises()
         await vista.get('form').trigger('submit')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="caja-no-abierta"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="caja-no-abierta"]').exists()).toBe(true))
         const aviso = vista.get('[data-prueba="caja-no-abierta"]')
         expect(aviso.text()).toContain('No tienes caja abierta en Fibra del Sur')
         expect(aviso.find('a[href="/caja"]').exists()).toBe(true)

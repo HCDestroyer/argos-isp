@@ -8,7 +8,7 @@ import {
     sacarDeLaColaFel,
     servicioEn,
 } from '#tests/contabilidad/ayudas_contabilidad'
-import { cola, dtesDe, empresasFel } from '#tests/fiscal/ayudas_fel'
+import { cola, empresasFel } from '#tests/fiscal/ayudas_fel'
 import { periodosHasta } from '#billing/periodos'
 import EmitirFactura from '#billing/actions/emitir_factura'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
@@ -38,7 +38,7 @@ async function facturaCon(
         { servicio_id: s.servicioId, periodo: NOVIEMBRE, descuentos },
         ctx,
     )
-    return { ...s, facturaId: r.factura_id! }
+    return { ...s, facturaId: r.factura_id!, bonificacionId: r.bonificacion_id ?? null }
 }
 
 test.group('Auditor contable · línea de descuento', (group) => {
@@ -54,7 +54,7 @@ test.group('Auditor contable · línea de descuento', (group) => {
         for (const [precio, descuentos] of [
             ['199.99', ['0.01', '0.01', '0.03']],
             ['333.33', ['111.11', '0.07', '0.05']],
-            ['99.01', ['33.33', '33.33', '50.00']],
+            ['99.01', ['33.33', '33.33', '32.34']],
         ] as const) {
             const f = await facturaCon(
                 e.B,
@@ -67,6 +67,24 @@ test.group('Auditor contable · línea de descuento', (group) => {
             assert.equal(factura.iva, ivaNeto.toFixed(2), `precio ${precio}, neto ${factura.total}`)
             await afirmarLibro(assert, [e.B, e.C])
         }
+        // decisión del PM: los descuentos que dejan el periodo en cero no hacen factura sino una bonificación;
+        // el IVA del neto (0) cuadra igual: Σ IVA de las líneas = 0 y el asiento no toca el IVA
+        const cero = await facturaCon(
+            e.B,
+            '99.01',
+            ['33.33', '33.33', '50.00'].map((m, i) => ({ concepto: `Puntos ${i}`, monto: m })),
+        )
+        assert.isUndefined(cero.facturaId ?? undefined)
+        const bonificacion = await db
+            .from('billing.bonificaciones')
+            .where('id', cero.bonificacionId!)
+            .firstOrFail()
+        assert.include(bonificacion, { origen: 'descuento_100', bruto: '99.01', base: '88.40' })
+        assert.deepEqual(await lineas('bonificacion', Number(bonificacion.id)), [
+            ['5.1.01', '88.40', '0.00'],
+            ['4.1.01', '0.00', '88.40'],
+        ])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('notas por monto en partes sobre una factura con descuento: nunca más que el neto; 4.1.01 − 5.1.01 y el IVA terminan en cero', async ({
@@ -112,13 +130,11 @@ test.group('Auditor contable · línea de descuento', (group) => {
     })
 
     for (const certificarAl of ['pagar', 'emitir'] as const) {
-        test(`mes gratis (descuento del 100 %) con certificar_al = ${certificarAl}: factura en cero pagada, sin CxC, sin cobro ni DTE de Q0.00`, async ({
+        test(`mes gratis (descuento del 100 %) con certificar_al = ${certificarAl}: bonificación sin factura, CxC, cobro ni DTE`, async ({
             assert,
         }) => {
-            // H21: con «emitir», app/billing/emision.ts deja la factura en cero por_certificar y la cola certifica una FACT
-            // de Q0.00 (después queda «emitida» con total 0, no «pagada»); con «pagar», el aviso en cero nace pagado y
-            // la cola (app/fiscal/fel/cola.ts) también lo certifica por Q0.00. Con H16 el líder decidió que un documento sin
-            // venta no se certifica: un mes gratis no es venta (o, si la SAT lo pide, que el contador lo confirme).
+            // H21 y decisión del PM (19 oct): un mes gratis no es venta; no hay factura de Q0 sino una bonificación con
+            // su asiento interno 5.1.01 / 4.1.01 por la base, y la cola FEL no tiene nada que certificar.
             const e = await empresasFel('obligatoria')
             const f = await facturaCon(
                 e.B,
@@ -129,15 +145,17 @@ test.group('Auditor contable · línea de descuento', (group) => {
             )
             await cola(e)
             assert.deepEqual(await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true }), [])
-            const factura = await db.from('billing.facturas').where('id', f.facturaId).firstOrFail()
-            const dtes = await dtesDe('factura', f.facturaId)
-            assert.lengthOf(
-                dtes,
-                0,
-                `DTE ${dtes[0]?.id} por Q${dtes[0]?.total} (${dtes[0]?.estado}); factura ${factura.estado}`,
-            )
-            assert.include(factura, { total: '0.00', iva: '0.00', estado: 'pagada' })
-            assert.deepEqual(await lineas('factura', f.facturaId), [
+            assert.isUndefined(f.facturaId ?? undefined, 'no hay factura de Q0')
+            const facturas = await db.from('billing.facturas').where('servicio_id', f.servicioId)
+            assert.lengthOf(facturas, 0)
+            const dtes = await db.from('fiscal.dte').where('empresa_id', e.B)
+            assert.lengthOf(dtes, 0, `DTE ${dtes[0]?.id} por Q${dtes[0]?.total} (${dtes[0]?.estado})`)
+            const bonificacion = await db
+                .from('billing.bonificaciones')
+                .where('id', f.bonificacionId!)
+                .firstOrFail()
+            assert.include(bonificacion, { bruto: '150.00', base: '133.93', servicio_id: f.servicioId })
+            assert.deepEqual(await lineas('bonificacion', Number(bonificacion.id)), [
                 ['5.1.01', '133.93', '0.00'],
                 ['4.1.01', '0.00', '133.93'],
             ])

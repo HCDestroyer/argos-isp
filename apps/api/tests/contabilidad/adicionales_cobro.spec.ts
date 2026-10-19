@@ -66,6 +66,8 @@ test.group('Auditor contable · adicionales cobrados', (group) => {
                 .where('id', a.id)
                 .update({
                     alta_en: alta,
+                    // decisión del PM 3: el cobro corre desde cobrado_desde (aquí, el mismo instante del alta)
+                    cobrado_desde: alta,
                     baja_en: baja,
                     ...(baja ? { estado: 'baja' } : {}),
                 })
@@ -114,7 +116,7 @@ test.group('Auditor contable · adicionales cobrados', (group) => {
         await db
             .from('core.servicios_adicionales')
             .where('id', a.id)
-            .update({ alta_en: '2026-10-16T15:00:00Z' })
+            .update({ alta_en: '2026-10-16T15:00:00Z', cobrado_desde: '2026-10-16T15:00:00Z' })
         const periodoOct = periodosHasta(
             { ciclo: 'dia_fijo', dia: 1, prorrateo: true },
             '2026-10-16',

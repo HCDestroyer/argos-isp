@@ -1,6 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Component } from 'vue'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
@@ -14,6 +14,7 @@ import PaginaDteDetalle from '~/pages/dte/[id].vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
 import PaginaNota from '~/pages/notas-credito/[id].vue'
 import PaginaNotas from '~/pages/notas-credito/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Lecturas FEL de la segunda tanda de A3 y A5 (`3e1c218`, `7078281`): catálogo de certificadores,
@@ -105,13 +106,13 @@ describe('FEL · lecturas nuevas', () => {
 
     it('la pestaña de diarios muestra la numeración y el detalle; con error, «Reintentar»', async () => {
         const vista = await mountSuspended(conApp(LibroDiarios))
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-diarios"]').text()).toContain('VEN'))
+        await esperar(() => expect(vista.find('[data-prueba="tabla-diarios"]').text()).toContain('VEN'))
         expect(vista.text()).toContain('Ventas')
         vista.unmount()
 
         simularFalla('GET /api/v1/libro/diarios', 501)
         const conError = await mountSuspended(conApp(LibroDiarios))
-        await vi.waitFor(() => expect(conError.find('[data-prueba="diarios-error"]').text()).toContain('Reintentar'))
+        await esperar(() => expect(conError.find('[data-prueba="diarios-error"]').text()).toContain('Reintentar'))
     })
 
     it('el cierre lista las NCRE sin certificar desde errors[] con enlace a cada nota', async () => {
@@ -124,32 +125,32 @@ describe('FEL · lecturas nuevas', () => {
         expect(!cierre.ok && ncreDeProblema(cierre.problema)).toEqual([{ notaId: ncre.documento_id, dteId: ncre.id, estado: 'rechazado' }])
 
         const vista = await mountSuspended(conApp(LibroCierres))
-        await vi.waitFor(() => expect(vista.find('[data-prueba="abrir-cerrar-periodo"]').attributes('disabled')).toBeUndefined())
+        await esperar(() => expect(vista.find('[data-prueba="abrir-cerrar-periodo"]').attributes('disabled')).toBeUndefined())
         await vista.find('[data-prueba="abrir-cerrar-periodo"]').trigger('click')
-        const confirmar = await vi.waitFor(() => {
+        const confirmar = await esperar(() => {
             const boton = document.querySelector<HTMLButtonElement>('[data-prueba="confirmar-cierre"]')
             expect(boton).not.toBeNull()
             return boton
         })
         confirmar?.click()
-        await vi.waitFor(() => expect(document.querySelector('[data-prueba="cierre-ncre"]')?.textContent).toContain(`Nota de crédito #${ncre.documento_id}`))
+        await esperar(() => expect(document.querySelector('[data-prueba="cierre-ncre"]')?.textContent).toContain(`Nota de crédito #${ncre.documento_id}`))
     })
 
     it('Configuración → FEL usa el catálogo: el falso no se ofrece en producción', async () => {
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="fel-modo"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="fel-modo"]').exists()).toBe(true))
         expect(vista.text()).toContain('Certificador de laboratorio (falso)')
         expect(vista.find('[data-prueba="credenciales-abrir-produccion"]').attributes('disabled')).toBeDefined()
 
         simularFalla('GET /api/v1/fel/proveedores', 501)
         const conError = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
-        await vi.waitFor(() => expect(conError.find('[data-prueba="fel-catalogo-error"]').exists()).toBe(true))
+        await esperar(() => expect(conError.find('[data-prueba="fel-catalogo-error"]').exists()).toBe(true))
     })
 
     it('el detalle del DTE lista los intentos ante el certificador', async () => {
         const rechazado = dteDe('rechazado')
         const vista = await mountSuspended(conApp(PaginaDteDetalle), { route: `/dte/${rechazado.id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="dte-intentos-lista"]').text()).toContain('Certificar'))
+        await esperar(() => expect(vista.find('[data-prueba="dte-intentos-lista"]').text()).toContain('Certificar'))
         expect(vista.find('[data-prueba="dte-intentos-lista"]').text()).toContain('Rechazado')
     })
 
@@ -158,23 +159,23 @@ describe('FEL · lecturas nuevas', () => {
         const sustitucion = await useFacturas().sustituir(sinDte?.id ?? 0, { motivo: 'NIT equivocado' }, nuevaClaveIdempotencia())
         const nueva = sustitucion.ok ? sustitucion.data.nueva.id : 0
         const original = await mountSuspended(conApp(PaginaFactura), { route: `/facturas/${sinDte?.id}` })
-        await vi.waitFor(() => expect(original.find('[data-prueba="factura-sustituida-por"]').text()).toContain(`#${nueva}`))
+        await esperar(() => expect(original.find('[data-prueba="factura-sustituida-por"]').text()).toContain(`#${nueva}`))
         expect(original.find('[data-prueba="abrir-sustituir"]').exists()).toBe(false)
         original.unmount()
         const sustituta = await mountSuspended(conApp(PaginaFactura), { route: `/facturas/${nueva}` })
-        await vi.waitFor(() => expect(sustituta.find('[data-prueba="factura-sustituye-a"]').text()).toContain(`#${sinDte?.id}`))
+        await esperar(() => expect(sustituta.find('[data-prueba="factura-sustituye-a"]').text()).toContain(`#${sinDte?.id}`))
     })
 
     it('la nota muestra su NCRE desde dte_id, su estado en la lista y el botón al PDF', async () => {
         const ncre = dteDe('rechazado', 'nota_credito')
         const vista = await mountSuspended(conApp(PaginaNota), { route: `/notas-credito/${ncre.documento_id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="dte-estado"]').text()).toBe('Rechazado'))
+        await esperar(() => expect(vista.find('[data-prueba="dte-estado"]').text()).toBe('Rechazado'))
         expect(vista.find('[data-prueba="nota-pdf"]').exists()).toBe(true)
         expect(vista.find('[data-prueba="abrir-anular-nota"]').exists()).toBe(true)
         vista.unmount()
 
         const lista = await mountSuspended(conApp(PaginaNotas), { route: '/notas-credito' })
-        await vi.waitFor(() => expect(lista.find('[data-prueba="tabla-notas"]').text()).toContain('Rechazado'))
+        await esperar(() => expect(lista.find('[data-prueba="tabla-notas"]').text()).toContain('Rechazado'))
         expect(lista.find('[data-prueba="tabla-notas"]').text()).toContain('Interna')
     })
 
@@ -189,21 +190,21 @@ describe('FEL · lecturas nuevas', () => {
     it('el editor: pestaña de nota de crédito, aviso por bloque FEL faltante, comparar y restaurar la de fábrica', async () => {
         bd.plantillaNotaCredito = { ...bd.plantillaNotaCredito, version: 2, html: '<h1>{{empresa.nombre}}</h1>\n{{nota.lineas}}\n' }
         const vista = await mountSuspended(conApp(PaginaAviso), { route: '/configuracion/aviso-cobro?tipo=nota_credito' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="falta-bloque-fel"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="falta-bloque-fel"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="falta-bloque-fel"]').text()).toContain('nota.fel_uuid')
         const insertar = vista.find('[data-prueba="falta-bloque-fel"]').findAll('button').find(b => b.text().includes('Insertar bloque FEL'))
         await insertar?.trigger('click')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="falta-bloque-fel"]').exists()).toBe(false))
+        await esperar(() => expect(vista.find('[data-prueba="falta-bloque-fel"]').exists()).toBe(false))
         expect((vista.find('textarea').element as HTMLTextAreaElement).value).toContain('{{/nota.fel}}')
 
         await vista.find('[data-prueba="comparar-fabrica"]').trigger('click')
-        const restaurar = await vi.waitFor(() => {
+        const restaurar = await esperar(() => {
             const boton = document.querySelector<HTMLButtonElement>('[data-prueba="restaurar-fabrica"]')
             expect(boton).not.toBeNull()
             return boton
         })
         expect(document.querySelector('[data-prueba="diferencias-fabrica"]')?.textContent).toContain('Solo en la de fábrica')
         restaurar?.click()
-        await vi.waitFor(() => expect((vista.find('textarea').element as HTMLTextAreaElement).value).toContain('Total acreditado'))
+        await esperar(() => expect((vista.find('textarea').element as HTMLTextAreaElement).value).toContain('Total acreditado'))
     })
 })

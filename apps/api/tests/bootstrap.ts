@@ -4,13 +4,17 @@ import app from '@adonisjs/core/services/app'
 import type { Config } from '@japa/runner/types'
 import { pluginAdonisJS } from '@japa/plugin-adonisjs'
 import testUtils from '@adonisjs/core/services/test_utils'
+import { rastrearRechazos } from '#tests/rechazos'
 
 /**
  * Las pruebas corren contra Postgres real (BD de `.env.test` o variables del entorno).
  * Al iniciar: rollback completo + migraciones + seed, para partir de un esquema limpio.
  * Las tablas de ledger y audit son inmutables, así que no se truncan: cada prueba usa datos únicos.
+ *
+ * `rastrearRechazos` escribe en stderr la pila completa y la prueba en curso de cada promesa
+ * rechazada o excepción sin manejar (`tests/rechazos.ts`); la corrida falla igual que sin él.
  */
-export const plugins: Config['plugins'] = [assert(), apiClient(), pluginAdonisJS(app)]
+export const plugins: Config['plugins'] = [assert(), apiClient(), pluginAdonisJS(app), rastrearRechazos()]
 
 export const runnerHooks: Required<Pick<Config, 'setup' | 'teardown'>> = {
     setup: [

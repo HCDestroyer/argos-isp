@@ -1,9 +1,10 @@
 import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Schema } from '@argosisp/contracts'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import PaginaCobro from '~/pages/cobro/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 type Factura = Schema<'Factura'>
 
@@ -65,20 +66,20 @@ describe('cobro · elegir facturas (pedido del PM)', () => {
 
     it('la pantalla marca las vencidas, cambia el monto al desmarcar y avisa del parcial', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=2' })
-        await vi.waitFor(() => expect(vista.find('[data-factura="209"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-factura="209"]').exists()).toBe(true))
         const monto = vista.get<HTMLInputElement>('input[inputmode="decimal"]')
-        await vi.waitFor(() => expect(monto.element.value).toBe('300.00'))
+        await esperar(() => expect(monto.element.value).toBe('300.00'))
         expect(vista.get('[data-prueba="total-marcadas"]').text()).toContain('2 marcadas')
 
         await vista.get('[data-factura="210"] button[role="checkbox"]').trigger('click')
-        await vi.waitFor(() => expect(monto.element.value).toBe('150.00'))
+        await esperar(() => expect(monto.element.value).toBe('150.00'))
 
         await monto.setValue('100.00')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="aviso-parcial"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="aviso-parcial"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="aviso-parcial"]').text()).toContain('#209')
 
         await monto.setValue('200.00')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="aviso-excedente"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="aviso-excedente"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="aviso-excedente"]').text()).toContain('#210')
     })
 })

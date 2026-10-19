@@ -15,6 +15,7 @@ import {
 import { EstadoServicio } from '#core/esquemas'
 import { METODOS_PAGO } from '#shared/eventos'
 import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
+import { TIPOS_PLAN } from '#network/tipos_plan'
 
 /**
  * Schemas del portal del cliente (A5). Desde la IP solo se muestra información mínima:
@@ -182,12 +183,43 @@ export const PortalVinculoTelegram = definirEsquema(
     }),
 )
 
+/**
+ * Servicio adicional activo de un servicio (contrato `adicionales.md`), como lo ve el cliente:
+ * nombre, identificador (usuario o correo de la cuenta) y modalidad. Nunca la credencial: ni
+ * siquiera si tiene una.
+ */
+export const PortalAdicional = definirEsquema(
+    'PortalAdicional',
+    objeto({
+        id,
+        nombre: texto,
+        identificador: { ...nulable(texto), description: 'Usuario de IPTV, correo de la cuenta…' },
+        modalidad: {
+            ...enumerado(['incluido', 'cortesia', 'cobrado']),
+            description: '`incluido` en el plan, de `cortesia` (sin cobro) o `cobrado` aparte (`precio`)',
+        },
+        precio: { ...nulable(Dinero), description: 'Precio mensual; solo con `cobrado`' },
+        bloqueado: {
+            ...booleano,
+            description: 'Bloqueado por la suspensión del servicio; vuelve solo al reactivarse',
+        },
+    }),
+)
+
 export const PortalServicio = definirEsquema(
     'PortalServicio',
     objeto({
         id,
         estado: EstadoServicio,
         plan: nulable(texto),
+        plan_tipo: {
+            ...nulable(enumerado([...TIPOS_PLAN])),
+            description: 'Tipo del plan: residencial, empresarial o dedicado (null sin plan)',
+        },
+        adicionales: {
+            ...lista(PortalAdicional),
+            description: 'Servicios adicionales activos (streaming, IPTV…), sin la credencial',
+        },
         direccion: nulable(texto),
         promesa_activa: booleano,
         monto_adeudado: Dinero,
@@ -637,6 +669,88 @@ export const PortalPagoEnLinea = definirEsquema(
         },
         expira_en: nulable(instante),
         pagado_en: nulable(instante),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Anuncios (contrato `anuncios.md`)
+|--------------------------------------------------------------------------
+*/
+
+const LUGAR_ANUNCIO = enumerado(['portal_inicio', 'pagina_corte'])
+
+const BotonAnuncio = nulable(
+    objeto({
+        texto: texto,
+        url: { ...texto, description: '`http(s)://…` o ruta del portal que empieza con `/`' },
+    }),
+)
+
+export const Anuncio = definirEsquema(
+    'Anuncio',
+    objeto({
+        id,
+        empresa_id: id,
+        titulo: texto,
+        texto: { ...texto, description: 'Texto plano, sin HTML' },
+        imagen: nulable(
+            objeto({
+                url: { ...texto, description: '`/api/v1/anuncios/:id/imagen?v=…` (con sesión del panel)' },
+                tipo: enumerado(['image/png', 'image/jpeg', 'image/webp']),
+                ancho: entero,
+                alto: entero,
+                alt: nulable(texto),
+            }),
+        ),
+        boton: BotonAnuncio,
+        inicio: nulable(instante),
+        fin: nulable(instante),
+        audiencia: enumerado(['todos', 'suspendidos', 'con_puntos', 'al_dia']),
+        lugares: lista(LUGAR_ANUNCIO),
+        orden: entero,
+        estado: enumerado(['borrador', 'publicado', 'archivado']),
+        vigente: { ...booleano, description: 'Publicado y dentro de su vigencia ahora mismo' },
+        publicado_en: nulable(instante),
+        archivado_en: nulable(instante),
+        creado_por: nulable(id),
+        version: { type: 'integer', minimum: 1, description: 'Control optimista: envíala al editar' },
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+/** Lo que el portal pinta: sin estado, audiencia ni datos internos. */
+export const PortalAnuncio = definirEsquema(
+    'PortalAnuncio',
+    objeto({
+        id,
+        empresa_id: id,
+        titulo: texto,
+        texto: { ...texto, description: 'Texto plano: mostrar como texto, nunca como HTML' },
+        imagen: nulable(
+            objeto({
+                url: { ...texto, description: '`/api/v1/portal/anuncios/:id/imagen?v=…` (mismo origen)' },
+                ancho: entero,
+                alto: entero,
+                alt: texto,
+            }),
+        ),
+        boton: BotonAnuncio,
+    }),
+)
+
+export const MetricasAnuncio = definirEsquema(
+    'MetricasAnuncio',
+    objeto({
+        anuncio_id: id,
+        vistas: {
+            ...entero,
+            description: 'Visitantes distintos que lo vieron (uno por sesión del navegador)',
+        },
+        clics: { ...entero, description: 'Visitantes distintos que tocaron su botón' },
+        por_lugar: lista(objeto({ lugar: LUGAR_ANUNCIO, vistas: entero, clics: entero })),
+        por_dia: lista(objeto({ dia: fecha, vistas: entero, clics: entero })),
     }),
 )
 

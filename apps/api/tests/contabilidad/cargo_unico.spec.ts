@@ -1,7 +1,12 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
-import { prepararEmpresas, sacarDeLaColaFel, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
+import {
+    lineas,
+    prepararEmpresas,
+    sacarDeLaColaFel,
+    servicioEn,
+} from '#tests/contabilidad/ayudas_contabilidad'
 import { cola, empresasFel } from '#tests/fiscal/ayudas_fel'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
 import CrearConceptoCargo from '#billing/actions/crear_concepto_cargo'
@@ -73,7 +78,7 @@ test.group('Auditor contable · cargo único', (group) => {
         assert.deepEqual(await verificarLibro([e.B, e.C]), [])
     })
 
-    test('Q0 sin costo con FEL obligatoria: pagado, sin CxC ni DTE después de la cola', async ({
+    test('Q0 sin costo con FEL obligatoria: bonificación con motivo, sin factura, CxC ni DTE después de la cola', async ({
         assert,
     }) => {
         const e = await empresasFel('obligatoria')
@@ -86,7 +91,11 @@ test.group('Auditor contable · cargo único', (group) => {
             .from('billing.motivos_sin_costo')
             .where({ empresa_id: e.B, nombre: 'Garantía' })
             .firstOrFail()
-        await new EmitirCargoUnico().execute(
+        const propio = await new CrearConceptoCargo().execute(
+            { empresa_id: e.B, nombre: 'Traslado', cuenta_codigo: '4.1.04' },
+            e.ctx,
+        )
+        const emitido = await new EmitirCargoUnico().execute(
             {
                 servicio_id: s.servicioId,
                 lineas: [
@@ -95,6 +104,11 @@ test.group('Auditor contable · cargo único', (group) => {
                         precio_unitario: '450.00',
                         descuentos: [{ concepto: 'Cambio por garantía', monto: '450.00' }],
                     },
+                    {
+                        concepto_id: propio.id,
+                        precio_unitario: '224.00',
+                        descuentos: [{ concepto: 'Traslado sin costo', monto: '224.00' }],
+                    },
                 ],
                 motivo_sin_costo_id: Number(motivo.id),
                 motivo_sin_costo_texto: 'router dañado de fábrica',
@@ -102,6 +116,17 @@ test.group('Auditor contable · cargo único', (group) => {
             e.ctx,
         )
         await cola(e)
+        assert.equal(emitido.documento, 'bonificacion')
+        const bonificacion = await db.from('billing.bonificaciones').where('id', emitido.id).firstOrFail()
+        assert.include(bonificacion, { origen: 'cargo_sin_costo', bruto: '674.00', base: '601.79' })
+        assert.equal(Number(bonificacion.motivo_id), Number(motivo.id))
+        assert.lengthOf(await db.from('billing.facturas').where('servicio_id', s.servicioId), 0)
+        assert.lengthOf(await db.from('fiscal.dte').where('empresa_id', e.B), 0)
+        assert.deepEqual(await lineas('bonificacion', Number(bonificacion.id)), [
+            ['5.1.01', '601.79', '0.00'],
+            ['4.1.03', '0.00', '401.79'],
+            ['4.1.04', '0.00', '200.00'],
+        ])
         assert.deepEqual(await verificarLibro([e.B, e.C]), [])
     })
 })
