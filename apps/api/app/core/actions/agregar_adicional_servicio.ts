@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Prohibido, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
-import type { ModalidadAdicional } from '#shared/eventos'
+import type { ModalidadAdicional, PrimerPeriodoAdicional } from '#shared/eventos'
 import {
     exigirMotivoCortesia,
     exigirPrecioPositivo,
@@ -25,6 +25,11 @@ export interface EntradaAgregarAdicionalServicio {
     motivo_id?: number | null
     motivo_detalle?: string | null
     /**
+     * Solo con `cobrado`: `prorrateado` (por defecto) cobra la parte proporcional del periodo en curso
+     * en la siguiente factura; `sin_costo` no cobra el periodo en curso (lo factura A3).
+     */
+    primer_periodo?: PrimerPeriodoAdicional | null
+    /**
      * El actor tiene `servicios.adicional_cortesia` (lo resuelve la ruta con el ACL). Sin él, una
      * cortesía responde 403. Ausente = sí (llamadas internas: crons, importador, consola).
      */
@@ -35,6 +40,19 @@ export interface EntradaAgregarAdicionalServicio {
 export function exigirPermisoCortesia(permite: boolean | undefined) {
     if (permite === false) {
         throw new Prohibido('Dar un adicional de cortesía requiere el permiso servicios.adicional_cortesia')
+    }
+}
+
+/** 422 en `primer_periodo` si viene sin `cobrado`. */
+export function exigirPrimerPeriodo(modalidad: ModalidadAdicional, primerPeriodo: unknown) {
+    if (modalidad !== 'cobrado' && primerPeriodo !== undefined && primerPeriodo !== null) {
+        throw new ValidacionFallida([
+            {
+                field: 'primer_periodo',
+                message: 'Solo un adicional cobrado lleva primer periodo',
+                rule: 'modalidad',
+            },
+        ])
     }
 }
 
@@ -79,7 +97,9 @@ export function validarModalidad(datos: {
  * empresa del servicio (422 `adicional_de_otra_empresa`) y estar activo (422
  * `adicional_inactivo`). Un mismo adicional puede ir varias veces (3 usuarios de IPTV). La
  * cortesía exige además `servicios.adicional_cortesia` (lo revisa la ruta). Emite
- * `servicio.adicional_agregado` (`origen: manual`).
+ * `servicio.adicional_agregado` (`origen: manual`). Un `cobrado` guarda `primer_periodo`
+ * (`prorrateado` por defecto) y `cobrado_desde`. En un servicio suspendido nace `bloqueado` y emite
+ * además `adicional.bloqueado`.
  */
 export default class AgregarAdicionalServicio extends DomainAction<
     EntradaAgregarAdicionalServicio,
@@ -119,6 +139,7 @@ export default class AgregarAdicionalServicio extends DomainAction<
             motivo_detalle: input.motivo_detalle ?? null,
         }
         validarModalidad(datos)
+        exigirPrimerPeriodo(datos.modalidad, input.primer_periodo)
         if (datos.modalidad === 'cortesia') exigirPermisoCortesia(input.permiteCortesia)
         if (datos.motivo_id !== null) await exigirMotivoCortesia(t, datos.motivo_id, servicio.empresa_id)
 
@@ -128,6 +149,7 @@ export default class AgregarAdicionalServicio extends DomainAction<
             {
                 ...datos,
                 adicional_id: input.adicional_id,
+                primer_periodo: input.primer_periodo ?? null,
                 identificador: input.identificador ?? null,
                 credencial: input.credencial ? cifrar(input.credencial) : null,
             },

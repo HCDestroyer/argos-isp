@@ -113,7 +113,23 @@ function cuentaDe(clienteId: number, empresaId: number | null): Omit<Schema<'Est
             abono: nota.monto,
         })
     }
-    eventos.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.referencia_id - b.referencia_id)
+    // Decisión B (A3): la diferencia de cobro cerrada como gasto abona la CxC del dueño de la factura
+    // (`referencia_id` = la diferencia). Su reverso, al anular el pago, la quita del auxiliar.
+    for (const diferencia of bd.diferenciasCerradas.filter(d => d.cliente_id === clienteId && d.revertida_en === null && deEmpresa(d.empresa_id))) {
+        eventos.push({
+            fecha: diferencia.fecha,
+            tipo: 'diferencia_cobro',
+            referencia_id: diferencia.id,
+            empresa_id: diferencia.empresa_id,
+            descripcion: diferencia.descripcion,
+            cargo: '0.00',
+            abono: diferencia.monto,
+        })
+    }
+    // La API ordena por asiento (fecha, id): el de una diferencia siempre es posterior al del pago
+    // que la dejó, así que el mismo día va después de los demás movimientos.
+    const despues = (m: Omit<Movimiento, 'saldo'>) => (m.tipo === 'diferencia_cobro' ? 1 : 0)
+    eventos.sort((a, b) => a.fecha.localeCompare(b.fecha) || despues(a) - despues(b) || a.referencia_id - b.referencia_id)
 
     let saldo = new Decimal(0)
     const movimientos: Movimiento[] = eventos.map((evento) => {

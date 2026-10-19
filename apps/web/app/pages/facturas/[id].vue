@@ -87,13 +87,10 @@ const puedeAnular = computed(() => puede('facturas.anular') && factura.value !==
 
 const tipoVisual = computed(() => tipoFacturaVisual(factura.value?.tipo))
 
-/** Aviso de lo que no es una factura normal: cargo interno (H18) o acreditada por notas (H16). */
+/** Aviso de lo que no es una factura normal: acreditada por notas (H16). */
 const avisoNoFiscal = computed<string | null>(() => {
     if (!factura.value) {
         return null
-    }
-    if (factura.value.tipo === 'cargo') {
-        return TIPOS_FACTURA.cargo.descripcion
     }
     if (factura.value.estado === 'acreditada') {
         return 'Cubierta entera por notas de crédito internas, sin ningún cobro: no es una venta y no se certifica en FEL.'
@@ -101,7 +98,7 @@ const avisoNoFiscal = computed<string | null>(() => {
     return null
 })
 
-/** Sustituir (`facturas.sustituir`): solo una factura de servicio vigente (ni mora ni cargo). La API decide el resto (409). */
+/** Sustituir (`facturas.sustituir`): solo una factura de servicio vigente (no una mora). La API decide el resto (409). */
 const sustituirAbierto = ref(false)
 const puedeSustituir = computed(() => puede('facturas.sustituir') && factura.value !== null && factura.value.estado !== 'anulada'
     && (factura.value.tipo ?? 'servicio') === 'servicio' && !factura.value.sustituida_por)
@@ -381,7 +378,7 @@ onMounted(cargar)
 
             <UAlert
                 v-if="avisoNoFiscal"
-                :title="factura.tipo === 'cargo' ? 'Cargo interno no fiscal' : 'Factura acreditada'"
+                title="Factura acreditada"
                 :description="avisoNoFiscal"
                 icon="i-lucide-info"
                 color="neutral"
@@ -502,7 +499,7 @@ onMounted(cargar)
             </div>
 
             <UPageCard
-                v-if="puede('fel.ver') && factura.tipo !== 'cargo'"
+                v-if="puede('fel.ver')"
                 :title="factura.tipo === 'mora' ? 'Certificación FEL (nota de débito)' : 'Certificación FEL'"
                 icon="i-lucide-badge-check"
                 variant="subtle"
