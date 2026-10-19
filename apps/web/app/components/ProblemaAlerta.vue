@@ -10,10 +10,15 @@ const props = withDefaults(defineProps<{
     reintentar?: () => void
     /** Pone el botón "Reintentar" en espera mientras se repite la llamada. */
     reintentando?: boolean
+    /** Lista también `errors[]` (p. ej. las líneas repetidas de un extracto, 409 `extracto_duplicado`). */
+    conErrores?: boolean
 }>(), {
     reintentar: undefined,
     reintentando: false,
+    conErrores: false,
 })
+
+const errores = computed(() => (props.conErrores ? (props.problema.errors ?? []) : []))
 
 const descripcion = computed(() => {
     if (props.problema.detail) {
@@ -48,5 +53,34 @@ const acciones = computed(() => {
         :title="problema.title"
         :description="descripcion"
         :actions="acciones"
-    />
+    >
+        <template
+            v-if="errores.length"
+            #description
+        >
+            <p v-if="descripcion">
+                {{ descripcion }}
+            </p>
+            <ul
+                class="mt-1 list-disc pl-5"
+                data-prueba="problema-errores"
+            >
+                <li
+                    v-for="(error, indice) in errores.slice(0, 20)"
+                    :key="indice"
+                >
+                    {{ error.message }}<span
+                        v-if="error.field"
+                        class="text-dimmed"
+                    > ({{ error.field }})</span>
+                </li>
+            </ul>
+            <p
+                v-if="errores.length > 20"
+                class="mt-1"
+            >
+                y {{ errores.length - 20 }} más.
+            </p>
+        </template>
+    </UAlert>
 </template>

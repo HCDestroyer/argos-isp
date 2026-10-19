@@ -25,6 +25,9 @@ import { cajaDelCajero } from '#ledger/cajas'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { exigirReferenciaLibre, validarDatosBancarios, type DatosBancarios } from '#billing/datos_bancarios'
 import { resumenEmpresas } from '#billing/empresa'
+import { proveedorParaPago } from '#ledger/cobros_liquidar'
+import { guardarRecuperacion, movimientosRecuperacion, repartirRecuperacion } from '#ledger/cartera'
+import { hoyGuatemala } from '#ledger/fechas'
 
 export { DATOS_POR_METODO } from '#billing/datos_bancarios'
 
@@ -51,7 +54,10 @@ export { DATOS_POR_METODO } from '#billing/datos_bancarios'
  *   `caja_id` va a la caja del turno abierto del cajero en esa empresa (`cajaDelCajero`) o, en un
  *   cobro de una sola empresa, a su caja principal. Los métodos bancarios (`deposito`,
  *   `transferencia`, `ach`, `remesa`) exigen sus datos (`DATOS_POR_METODO`, 422 por campo) y van a
- *   la subcuenta de la cuenta bancaria de destino; pasarela, agente y débito, al banco principal.
+ *   la subcuenta de la cuenta bancaria de destino; pasarela, agente y débito, al banco principal o,
+ *   con un proveedor de cobro configurado (`ledger.proveedores_cobro`, desde su fecha de corte), a
+ *   su `1.1.10.NN Cobros por liquidar` por el bruto, sin comisión: la comisión la trae la
+ *   liquidación (`cobros.liquidar`, contrato de localización fiscal §10.3).
  * - Evento `pago.registrado` por pago (con `empresa_id` y `cobro_id`) y, **en la misma
  *   transacción**, `evaluarEstadoServicio` de cada servicio cuyas facturas tocó: la reactivación
  *   sale con el pago (evento `servicio.estado_cambiado`), sin esperar al cron.
@@ -494,7 +500,17 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             caja: { cajaId: number; cuentaId: number; turnoId: number | null } | null
         },
     ): Promise<{ pagoId: number; aplicaciones: Aplicacion[] }> {
-        const { parte, referencia, comision, bancario, caja } = datos
+        const { parte, referencia, bancario, caja } = datos
+        // fase 4 (§10.3): pasarela, agente o débito de un proveedor configurado → su 1.1.10.NN por el
+        // bruto; la comisión sale después de su liquidación (no se estima aquí)
+        const proveedor = await proveedorParaPago(
+            t.trx,
+            parte.empresaId,
+            input.metodo,
+            input.pasarela,
+            hoyGuatemala(),
+        )
+        const comision = proveedor ? CERO : datos.comision
         await exigirReferenciaLibre(
             t.trx,
             input.metodo,
@@ -518,6 +534,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 turno_id: caja?.turnoId ?? null,
                 cuenta_bancaria_id: bancario.cuentaBancariaId,
                 banco_origen_id: bancario.bancoOrigenId,
+                proveedor_cobro_id: proveedor?.id ?? null,
                 estado: 'registrado',
                 nota: input.nota?.trim() || null,
                 registrado_por: usuarioDelActor(t.ctx.actor),
@@ -531,6 +548,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         // pasarela: el banco recibe el neto y la comisión es gasto (Bancos + Comisiones / CxC)
         const cuentaDebe =
             caja?.cuentaId ??
+            proveedor?.cuenta_id ??
             (input.metodo === 'caja' ? null : (bancario.cuentaLibro ?? CUENTAS.BANCO_PRINCIPAL))
         const movimientos: LineaAsiento[] = [
             { cuenta: cuentaDebe!, debe: aTexto(parte.monto.minus(comision)) },
@@ -549,10 +567,16 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 cliente_id: clienteId,
             })
         }
-        if (restante.gt(0)) {
+        // decisión (g) del líder: con castigos por recuperar, lo que sobra es recuperación (4.2.03), nunca un
+        // anticipo eterno ni una aplicación a la factura castigada
+        // H17: la recuperación se parte en base (4.2.03) e IVA (2.1.11) en la proporción de cada castigo
+        const recuperacion = await repartirRecuperacion(t.trx, parte.empresaId, input.cliente_id, restante)
+        movimientos.push(...movimientosRecuperacion(recuperacion, input.cliente_id))
+        const sobrante = recuperacion.reduce((a, r) => a.minus(r.monto), restante)
+        if (sobrante.gt(0)) {
             movimientos.push({
                 cuenta: CUENTAS.ANTICIPOS_CLIENTES,
-                haber: aTexto(restante),
+                haber: aTexto(sobrante),
                 cliente_id: input.cliente_id,
             })
         }
@@ -572,6 +596,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             t.ctx,
             { trx: t.trx },
         )
+        await guardarRecuperacion(t.trx, parte.empresaId, pagoId, recuperacion)
 
         await t.emit('pago.registrado', {
             pago_id: pagoId,

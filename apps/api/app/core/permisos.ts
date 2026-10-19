@@ -96,6 +96,21 @@ export const PERMISOS = {
     'egresos.registrar': 'Registrar egresos (gastos pagados por caja, banco o cuenta bancaria)',
     'egresos.anular': 'Anular egresos con asiento de reverso',
     'reportes.ver': 'Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard',
+    // Cobros y bancos (localización fiscal §10.3 y §10.9, fase 4; los endpoints son de A3)
+    'cobros.configurar':
+        'Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN',
+    'cobros.liquidar': 'Registrar la liquidación de un proveedor de cobro (banco neto y comisión)',
+    'cajas.depositar': 'Depositar en el banco el efectivo de un turno de caja (queda en fondos en tránsito)',
+    'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
+    'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
+    'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
+    'bancos.conciliar':
+        'Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas',
+    'bancos.reatribuir_llegada':
+        'Corregir la llegada al banco atribuida al depósito o traslado equivocado (reverso y llegada nueva)',
+    'cartera.provisionar': 'Registrar la estimación para cuentas incobrables (hasta el tope legal)',
+    'cartera.castigar': 'Castigar facturas incobrables con motivo y evidencia de gestión de cobro',
+    'pagos.cerrar_diferencia': 'Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)',
 
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
@@ -182,6 +197,8 @@ export const PERMISOS = {
     'tokens.ver': 'Ver tokens de API',
     'tokens.crear': 'Crear tokens de API',
     'tokens.revocar': 'Revocar tokens de API',
+    'nodos_portal.administrar':
+        'Crear, ver y revocar los tokens de los nodos portal remotos (portal del cliente en otro servidor); solo admin',
     'horus.generar_token':
         'Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)',
     'horus.revocar_token': 'Revocar el token de una integración',
@@ -258,6 +275,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.aprobar',
             'comprobantes.rechazar',
             'fel.ver',
+            'cajas.depositar',
             'lealtad.ver',
             'lealtad.canjear',
         ],
@@ -376,6 +394,17 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.anular',
             'reportes.ver',
             'bitacora.ver',
+            'cobros.configurar',
+            'cobros.liquidar',
+            'cajas.depositar',
+            'bancos.ver',
+            'bancos.trasladar',
+            'bancos.importar_extracto',
+            'bancos.conciliar',
+            'bancos.reatribuir_llegada',
+            'cartera.provisionar',
+            'cartera.castigar',
+            'pagos.cerrar_diferencia',
             ...PERMISOS_FISCALES_CONTABILIDAD,
             ...PERMISOS_LEALTAD_CONTABILIDAD,
         ],

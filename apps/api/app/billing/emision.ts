@@ -110,9 +110,12 @@ export interface ResultadoEmision {
 export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Promise<ResultadoEmision> {
     const config = await configuracionFel(datos.empresa_id, t.trx)
     const totales = totalesDe(datos.lineas)
+    // motivo del cargo único en Q0 (solo con total 0)
     const sinCosto = datos.sin_costo && totales.total.isZero() ? datos.sin_costo : null
-    // sin costo: no hay venta que certificar (ni aviso de cobro), como sin FEL
-    const modo: ModoEmision = sinCosto ? 'sin_fel' : modoEmision(config, datos.certificar_al)
+    // H21 (decisión del líder): ninguna factura de Q0 va a DTE, venga de donde venga (mes gratis de
+    // lealtad, descuento del 100 %, cargo sin costo) y sea cual sea el modo FEL: la SAT no certifica
+    // una FACT de Q0.00 (igual que H16). Nace `pagada`, sin CxC, con su asiento bruto / descuento
+    const modo: ModoEmision = totales.total.isZero() ? 'sin_fel' : modoEmision(config, datos.certificar_al)
     const avisoCobro = modo === 'aviso'
     const tipoDte = modo === 'sin_fel' ? null : await tipoFacturaDte(datos.empresa_id, hoyGuatemala(), t.trx)
 

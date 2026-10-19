@@ -1,6 +1,7 @@
 import { BaseSchema } from '@adonisjs/lucid/schema'
 import { DateTime } from 'luxon'
-import { instalarPaquete, paqueteDePais } from '#fiscal/instalador'
+import { instalarPaquete } from '#fiscal/instalador'
+import { PAQUETE_GT_2026_1 } from '#fiscal/l10n/gt/index'
 import { CUENTAS_PAQUETE_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
@@ -35,7 +36,8 @@ export default class extends BaseSchema {
                 .orderBy('id')
                 .select('id', 'pais')) as Array<{ id: number; pais: string }>
             for (const empresa of empresas) {
-                await instalarPaquete(cliente, paqueteDePais(empresa.pais.trim()), Number(empresa.id), {
+                // la versión de esta migración (las posteriores las instala su propia migración)
+                await instalarPaquete(cliente, PAQUETE_GT_2026_1, Number(empresa.id), {
                     instaladaPor: null,
                     hoy,
                 })

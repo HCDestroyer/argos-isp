@@ -117,9 +117,41 @@ export default class SolicitarCertificacion extends DomainAction<
                 .first()
             if (rechazado) return omitir('rechazado_definitivo')
         }
+        // castigo de cartera (§10.9): lo castigado nunca se causó y no genera DTE
+        const castigada = await t.trx
+            .from('ledger.castigos_facturas')
+            .where('factura_id', factura.id)
+            .select('castigo_id')
+            .first()
+        if (castigada) {
+            if (input.automatico) return omitir('castigada')
+            throw new Conflicto(
+                `La factura ${factura.id} está castigada (castigo ${castigada.castigo_id}): no se certifica`,
+                'factura_castigada',
+                'Factura castigada',
+            )
+        }
+        // H16: acreditada entera por notas internas, nadie pagó nada: no es venta (nunca un DTE de Q0.00)
+        if (factura.estado === 'acreditada') {
+            if (input.automatico) return omitir('acreditada')
+            throw new Conflicto(
+                `La factura ${factura.id} está acreditada por completo con notas de crédito: no es una venta`,
+                'factura_acreditada',
+                'Factura acreditada',
+            )
+        }
         if (factura.estado === 'anulada') {
             if (input.automatico) return omitir('anulada')
             throw new Conflicto(`La factura ${factura.id} está anulada`, 'factura_anulada', 'Factura anulada')
+        }
+        // H21: un documento de Q0 (mes gratis, descuento del 100 %, cargo sin costo) no es venta: nunca un DTE de Q0.00
+        if (dec(factura.total).isZero()) {
+            if (input.automatico) return omitir('en_cero')
+            throw new Conflicto(
+                `La factura ${factura.id} es de Q0.00: no se certifica`,
+                'factura_en_cero',
+                'Factura en cero',
+            )
         }
 
         const config = await configuracionFel(empresaId, t.trx)
@@ -161,6 +193,15 @@ export default class SolicitarCertificacion extends DomainAction<
 
         // H5/H11: todo documento con notas internas (aviso o no) se certifica por el neto
         const neto = await netoParaDte(t.trx, factura.id)
+        // H21: acreditada entera por notas internas antes del DTE, el neto es Q0.00: no hay venta que certificar
+        if (neto.total.lte(0)) {
+            if (input.automatico) return omitir('en_cero')
+            throw new Conflicto(
+                `La factura ${factura.id} quedó en Q0.00 por sus notas de crédito: no se certifica`,
+                'factura_en_cero',
+                'Factura en cero',
+            )
+        }
         const receptor = await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor)
         const falta = await receptorFaltante(empresaId, receptor, aTexto(neto.total), hoy, t.trx)
         if (falta && !input.automatico) {

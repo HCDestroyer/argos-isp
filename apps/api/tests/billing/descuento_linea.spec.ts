@@ -16,6 +16,7 @@ import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import { verDte, dteParaEnviar } from '#fiscal/fel/dte'
 import { xmlDte } from '#fiscal/fel/xml_gt'
+import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 
 /**
  * Línea `descuento` de las facturas (contrato de localización fiscal §3.5; lealtad §5): una línea
@@ -201,6 +202,38 @@ test.group('Facturas · línea de descuento', (group) => {
         assert.include(envio, { total: '150.00', iva: '16.07' })
         assert.include(xmlDte(envio), '<dte:Descuento>50.00</dte:Descuento>')
         await cola(e)
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('H21: un mes gratis en por_certificar nace pagada, sin CxC ni DTE; certificarla a mano responde 409', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioEn(e.B, {
+            precio: '200.00',
+            instalacion: '2026-10-01',
+            plantilla: { certificar_al: 'emitir' },
+        })
+        const r = await new EmitirFactura().execute(
+            {
+                servicio_id: s.servicioId,
+                periodo: NOVIEMBRE,
+                descuentos: [{ concepto: 'Mes gratis', monto: '200.00' }],
+            },
+            e.ctx,
+        )
+        const factura = await db.from('billing.facturas').where('id', r.factura_id!).firstOrFail()
+        assert.include(factura, { estado: 'pagada', total: '0.00', aviso_cobro: false, tipo_dte: null })
+        assert.deepEqual(await lineas('factura', r.factura_id!), [
+            ['5.1.01', '178.57', '0.00'],
+            ['4.1.01', '0.00', '178.57'],
+        ])
+        await cola(e)
+        assert.lengthOf(await dtesDe('factura', r.factura_id!), 0)
+        const manual = await errorDe(
+            new SolicitarCertificacion().execute({ factura_id: r.factura_id! }, e.ctx),
+        )
+        assert.equal(manual.codigo, 'factura_en_cero')
         await afirmarLibro(assert, [e.B, e.C])
     })
 })

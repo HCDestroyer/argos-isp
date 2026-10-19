@@ -301,7 +301,8 @@ export const COLUMNAS_FACTURADO = definirColumnas([
 ])
 
 /** Lo acreditado por notas de crédito a la factura `f` (parte de `f.pagado` que no es cobro). */
-const ACREDITADO = '(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = f.id)'
+const ACREDITADO = `(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = f.id
+    and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = n.id))`
 
 export interface FiltrosFacturado extends FiltrosCliente {
     desde?: string

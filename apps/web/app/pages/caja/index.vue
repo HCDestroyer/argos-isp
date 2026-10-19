@@ -57,6 +57,20 @@ const leeEgresos = computed(() => puede('egresos.ver'))
 const egresosTurno = computed(() => (turnoAbierto.value ? egresosEnEfectivo(egresos.value, turnoAbierto.value.id) : []))
 const totalEgresos = computed(() => egresosTurno.value.reduce((suma, e) => suma.plus(e.monto), new Decimal(0)))
 
+/*
+ * Depósitos al banco del turno (`GET /bancos/depositos?turno_id=`; fase 4): bajan el esperado
+ * como un egreso. El cajero los lee de su caja con `cajas.ver`; con `bancos.ver`, cualquier caja.
+ */
+const depositos = shallowRef<Deposito[]>([])
+const cargandoDepositos = ref(false)
+const problemaDepositos = ref<Problem | null>(null)
+const leeDepositos = computed(() => puede('cajas.ver') || puede('bancos.ver'))
+const depositosTurno = computed(() => (turnoAbierto.value ? depositosDelTurno(depositos.value, turnoAbierto.value.id) : []))
+const totalDepositos = computed(() => depositosTurno.value.reduce((suma, d) => suma.plus(d.monto), new Decimal(0)))
+const depositoAbierto = ref(false)
+/** El último depósito hecho en esta pantalla (lo ve también quien no tiene `bancos.ver`). */
+const ultimoDeposito = shallowRef<Deposito | null>(null)
+
 const aperturaAbierta = ref(false)
 const altaAbierta = ref(false)
 
@@ -73,9 +87,10 @@ const ultimoCierre = shallowRef<TurnoCaja | null>(null)
  * Fondo + efectivo cobrado − egresos en efectivo del turno: solo con cobros y egresos leídos
  * (nunca sobre una lista que falló ni sin poder leer los egresos).
  */
-const esperado = computed<Decimal | null>(() => (turnoAbierto.value && leeEgresos.value
+const esperado = computed<Decimal | null>(() => (turnoAbierto.value && leeEgresos.value && leeDepositos.value
     && !problemaCobros.value && !cargandoCobros.value && !problemaEgresos.value && !cargandoEgresos.value
-    ? esperadoProvisional(turnoAbierto.value.fondo_inicial, cobros.value, egresos.value, turnoAbierto.value.id)
+    && !problemaDepositos.value && !cargandoDepositos.value
+    ? esperadoProvisional(turnoAbierto.value.fondo_inicial, cobros.value, egresos.value, turnoAbierto.value.id).minus(totalDepositos.value)
     : null))
 
 const efectivo = computed(() => cobrosEnEfectivo(cobros.value))
@@ -89,8 +104,11 @@ const sinEsperado = computed<string | null>(() => {
     if (!leeEgresos.value) {
         return 'El esperado lo calcula la API al cerrar: resta los egresos en efectivo del turno, que tu usuario no puede ver (falta egresos.ver).'
     }
-    if (problemaCobros.value || problemaEgresos.value) {
-        return 'No se pudieron leer los cobros o los egresos del turno: la API calcula el esperado y la diferencia al cerrar.'
+    if (!leeDepositos.value) {
+        return 'El esperado lo calcula la API al cerrar: resta los depósitos al banco del turno, que tu usuario no puede ver (falta cajas.ver).'
+    }
+    if (problemaCobros.value || problemaEgresos.value || problemaDepositos.value) {
+        return 'No se pudieron leer los cobros, los egresos o los depósitos del turno: la API calcula el esperado y la diferencia al cerrar.'
     }
     return null
 })
@@ -151,10 +169,51 @@ async function cargarEgresos(turno: TurnoCaja) {
     problemaEgresos.value = fallo
 }
 
+/** Depósitos del turno abierto (`turno_id`, hasta 5 páginas de 200). */
+async function cargarDepositos() {
+    const turno = turnoAbierto.value
+    if (!leeDepositos.value || !turno) {
+        return
+    }
+    cargandoDepositos.value = true
+    const leidos: Deposito[] = []
+    let cursor: string | undefined
+    let fallo: Problem | null = null
+    for (let pagina = 0; pagina < 5; pagina++) {
+        const resultado = await useFondosEnTransito().depositos(undefined, cursor, 200, { turno_id: turno.id })
+        if (!resultado.ok) {
+            fallo = resultado.problema
+            break
+        }
+        leidos.push(...resultado.data.data)
+        if (!resultado.data.nextCursor) {
+            break
+        }
+        cursor = resultado.data.nextCursor
+    }
+    cargandoDepositos.value = false
+    depositos.value = fallo ? [] : leidos
+    problemaDepositos.value = fallo
+}
+
+function alDepositar(deposito: Deposito) {
+    ultimoDeposito.value = deposito
+    toast.add({
+        title: `Depósito de ${formatearQuetzales(deposito.monto)} registrado`,
+        description: `Boleta ${deposito.boleta} a ${deposito.cuenta_nombre}: queda en tránsito hasta conciliar el extracto.`,
+        icon: 'i-lucide-landmark',
+        color: 'success',
+    })
+    void cargarDepositos()
+}
+
 async function cargarTurno() {
     turnoAbierto.value = null
     cobros.value = []
     egresos.value = []
+    depositos.value = []
+    problemaDepositos.value = null
+    ultimoDeposito.value = null
     problemaEgresos.value = null
     problemaCobros.value = null
     problemaTurno.value = null
@@ -170,6 +229,7 @@ async function cargarTurno() {
     if (turnoAbierto.value) {
         void cargarCobros(turnoAbierto.value)
         void cargarEgresos(turnoAbierto.value)
+        void cargarDepositos()
     }
 }
 
@@ -357,13 +417,24 @@ onMounted(cargar)
                                     Desde {{ formatearFechaHora(turnoAbierto.abierto_en) }}
                                 </p>
                             </div>
-                            <UButton
-                                v-if="puede('cajas.cerrar')"
-                                label="Cerrar turno"
-                                class="glow-brand"
-                                icon="i-lucide-lock"
-                                @click="cierreAbierto = true"
-                            />
+                            <div class="flex flex-wrap gap-2">
+                                <UButton
+                                    v-if="puede('cajas.depositar')"
+                                    label="Depositar al banco"
+                                    icon="i-lucide-landmark"
+                                    color="neutral"
+                                    variant="outline"
+                                    data-prueba="abrir-deposito"
+                                    @click="depositoAbierto = true"
+                                />
+                                <UButton
+                                    v-if="puede('cajas.cerrar')"
+                                    label="Cerrar turno"
+                                    class="glow-brand"
+                                    icon="i-lucide-lock"
+                                    @click="cierreAbierto = true"
+                                />
+                            </div>
                         </div>
 
                         <dl class="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
@@ -388,17 +459,61 @@ onMounted(cargar)
                                     data-prueba="turno-egresos"
                                 />
                                 <DatoFicha
+                                    etiqueta="Depositado al banco"
+                                    :valor="totalDepositos.isZero() ? formatearQuetzales(totalDepositos) : `− ${formatearQuetzales(totalDepositos)}`"
+                                    data-prueba="turno-depositos"
+                                />
+                                <DatoFicha
                                     etiqueta="Esperado en caja"
                                     :valor="formatearQuetzales(esperado)"
                                     data-prueba="turno-esperado"
                                 />
                             </template>
                         </dl>
+                        <ul
+                            v-if="depositosTurno.length"
+                            class="flex flex-col gap-1 text-xs text-muted"
+                            data-prueba="depositos-turno"
+                        >
+                            <li
+                                v-for="deposito in depositosTurno"
+                                :key="deposito.id"
+                                class="flex flex-wrap items-center gap-2"
+                            >
+                                <UIcon
+                                    name="i-lucide-landmark"
+                                    class="size-3.5"
+                                />
+                                <span>Depósito #{{ deposito.id }} · boleta {{ deposito.boleta }} · {{ deposito.cuenta_nombre }} · <strong class="tabular-nums text-default">{{ formatearQuetzales(deposito.monto) }}</strong></span>
+                                <UBadge
+                                    :label="ESTADOS_TRANSITO[deposito.estado].etiqueta"
+                                    :color="ESTADOS_TRANSITO[deposito.estado].color"
+                                    :icon="ESTADOS_TRANSITO[deposito.estado].icono"
+                                    variant="subtle"
+                                    size="sm"
+                                />
+                            </li>
+                        </ul>
+                        <ProblemaAlerta
+                            v-if="problemaDepositos"
+                            :problema="problemaDepositos"
+                            :reintentar="cargarDepositos"
+                            :reintentando="cargandoDepositos"
+                        />
+                        <UAlert
+                            v-if="ultimoDeposito && !leeDepositos"
+                            color="success"
+                            variant="subtle"
+                            icon="i-lucide-landmark"
+                            :title="`Depósito #${ultimoDeposito.id} registrado`"
+                            :description="`${formatearQuetzales(ultimoDeposito.monto)} · boleta ${ultimoDeposito.boleta} · ${ultimoDeposito.cuenta_nombre}. La API lo resta del esperado al cerrar.`"
+                            data-prueba="resultado-deposito"
+                        />
                         <p
                             v-if="esperado"
                             class="text-xs text-muted"
                         >
-                            Esperado provisional: fondo + efectivo cobrado − {{ egresosTurno.length }} {{ egresosTurno.length === 1 ? 'egreso' : 'egresos' }} en efectivo del turno. La API calcula el oficial al cerrar.
+                            Esperado provisional: fondo + efectivo cobrado − {{ egresosTurno.length }} {{ egresosTurno.length === 1 ? 'egreso' : 'egresos' }} en efectivo − {{ depositosTurno.length }} {{ depositosTurno.length === 1 ? 'depósito' : 'depósitos' }} al banco del turno. La API calcula el oficial al cerrar.
                         </p>
                         <UAlert
                             v-else-if="sinEsperado"
@@ -578,6 +693,14 @@ onMounted(cargar)
                     v-model:open="aperturaAbierta"
                     :caja="caja"
                     @hecho="alAbrir"
+                />
+                <CajaDepositoModal
+                    v-if="turnoAbierto && puede('cajas.depositar')"
+                    v-model:open="depositoAbierto"
+                    :caja="caja"
+                    :turno="turnoAbierto"
+                    :efectivo="esperado"
+                    @hecho="alDepositar"
                 />
                 <CajaCierreModal
                     v-if="turnoAbierto"

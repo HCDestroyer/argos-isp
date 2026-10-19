@@ -223,4 +223,42 @@ test.group('ledger · cajas y turnos', () => {
         assert.lengthOf(pagina.body().data, 1)
         assert.isString(pagina.body().nextCursor)
     })
+
+    test('depósitos de caja (pedido de A4): el cajero lee los de su caja o turno; con bancos.ver, todos', async ({
+        client,
+        assert,
+    }) => {
+        const cajaId = await nuevaCaja()
+        const otraCaja = await nuevaCaja()
+        const { token } = await cajeroDe(cajaId)
+        await estado(client.get('/api/v1/bancos/depositos').bearerToken(token), 422)
+        await estado(client.get(`/api/v1/bancos/depositos?caja_id=${otraCaja}`).bearerToken(token), 403)
+        const propia = await estado(
+            client.get(`/api/v1/bancos/depositos?caja_id=${cajaId}`).bearerToken(token),
+            200,
+        )
+        assert.deepEqual(propia.body().data, [])
+
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const abierto = await estado(
+            client
+                .post(`/api/v1/cajas/${otraCaja}/abrir`)
+                .bearerToken(admin)
+                .header('Idempotency-Key', unico('abrir'))
+                .json({ fondo_inicial: '0' }),
+            201,
+        )
+        await estado(
+            client.get(`/api/v1/bancos/depositos?turno_id=${abierto.body().id}`).bearerToken(token),
+            403,
+        )
+        await estado(
+            client
+                .get(`/api/v1/bancos/depositos?caja_id=${cajaId}&turno_id=${abierto.body().id}`)
+                .bearerToken(token),
+            422,
+        )
+        const { token: contador } = await usuarioConRoles(['contabilidad'])
+        await estado(client.get('/api/v1/bancos/depositos').bearerToken(contador), 200)
+    })
 })
