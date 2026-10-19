@@ -26,6 +26,33 @@ const problemaReglas = ref<Problem | null>(null)
 const aConciliar = shallowRef<LineaExtracto | null>(null)
 const aRegistrar = shallowRef<LineaExtracto | null>(null)
 const aAnular = shallowRef<LineaExtracto | null>(null)
+/** Línea cuya llegada (depósito o traslado) se atribuyó al documento equivocado. */
+const aReatribuir = shallowRef<{ linea: LineaExtracto, llegada: MovimientoConciliado } | null>(null)
+const reatribuyendo = computed({
+    get: () => aReatribuir.value !== null,
+    set: (valor: boolean) => {
+        if (!valor) {
+            aReatribuir.value = null
+        }
+    },
+})
+
+/** La llegada de un depósito o traslado conciliada en la línea, si la hay. */
+function llegadaDe(linea: LineaExtracto): MovimientoConciliado | null {
+    return linea.movimientos.find(m => m.origen_tipo === 'deposito' || m.origen_tipo === 'traslado') ?? null
+}
+
+function reatribuir(linea: LineaExtracto) {
+    const llegada = llegadaDe(linea)
+    if (llegada) {
+        aReatribuir.value = { linea, llegada }
+    }
+}
+
+function alReatribuir() {
+    toast.add({ title: 'Llegada reatribuida', description: 'El documento anterior volvió a tránsito y la línea quedó con el correcto.', icon: 'i-lucide-arrow-left-right', color: 'success' })
+    void cargar()
+}
 
 function modelo(referencia: typeof aConciliar) {
     return computed({
@@ -272,15 +299,25 @@ onMounted(cargar)
                                     @click="aRegistrar = row.original"
                                 />
                             </template>
-                            <UButton
-                                v-else
-                                label="Deshacer"
-                                icon="i-lucide-unlink"
-                                size="xs"
-                                color="error"
-                                variant="ghost"
-                                @click="aAnular = row.original"
-                            />
+                            <template v-else>
+                                <UButton
+                                    label="Deshacer"
+                                    icon="i-lucide-unlink"
+                                    size="xs"
+                                    color="error"
+                                    variant="ghost"
+                                    @click="aAnular = row.original"
+                                />
+                                <UButton
+                                    v-if="puede('bancos.reatribuir_llegada') && llegadaDe(row.original)"
+                                    label="Reatribuir"
+                                    icon="i-lucide-arrow-left-right"
+                                    size="xs"
+                                    color="neutral"
+                                    variant="ghost"
+                                    @click="reatribuir(row.original)"
+                                />
+                            </template>
                         </div>
                     </div>
                 </template>
@@ -324,16 +361,27 @@ onMounted(cargar)
                                 @click="aRegistrar = row.original"
                             />
                         </template>
-                        <UButton
-                            v-else
-                            icon="i-lucide-unlink"
-                            size="sm"
-                            color="error"
-                            variant="ghost"
-                            :aria-label="`Deshacer la conciliación de la línea ${row.original.orden}`"
-                            :data-deshacer="row.original.id"
-                            @click="aAnular = row.original"
-                        />
+                        <template v-else>
+                            <UButton
+                                v-if="puede('bancos.reatribuir_llegada') && llegadaDe(row.original)"
+                                icon="i-lucide-arrow-left-right"
+                                size="sm"
+                                color="neutral"
+                                variant="ghost"
+                                :aria-label="`Reatribuir la llegada de la línea ${row.original.orden}`"
+                                :data-reatribuir="row.original.id"
+                                @click="reatribuir(row.original)"
+                            />
+                            <UButton
+                                icon="i-lucide-unlink"
+                                size="sm"
+                                color="error"
+                                variant="ghost"
+                                :aria-label="`Deshacer la conciliación de la línea ${row.original.orden}`"
+                                :data-deshacer="row.original.id"
+                                @click="aAnular = row.original"
+                            />
+                        </template>
                     </div>
                 </template>
                 <template #empty>
@@ -365,6 +413,13 @@ onMounted(cargar)
             v-model:open="registrando"
             :linea="aRegistrar"
             @hecho="alRegistrar"
+        />
+        <LlegadaReatribuirModal
+            v-if="aReatribuir"
+            v-model:open="reatribuyendo"
+            :linea="aReatribuir.linea"
+            :llegada="aReatribuir.llegada"
+            @hecho="alReatribuir"
         />
         <AccionMotivoModal
             v-model:open="anulando"

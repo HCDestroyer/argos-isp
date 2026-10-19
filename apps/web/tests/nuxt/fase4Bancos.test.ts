@@ -156,6 +156,14 @@ describe('fase 4 · cobros y bancos', () => {
             expect(pago.ok && pago.data.liquidacion_id).toBe(hecha.ok ? hecha.data.id : 0)
         })
 
+        it('una liquidación de solo contracargos (bruto ≤ 0) también se registra', async () => {
+            const esquema = esquemaLiquidacion('2026-10-15')
+            const datos = esquema.parse({ referencia: 'CC-1', fecha: '', bruto: '-50.00', comision: '0.00', pagos: [], contracargos: [7004], cuenta_id: null, archivo: '', nota: '' })
+            expect(esquema.safeParse({ ...datos, contracargos: [] }).success).toBe(false)
+            const hecha = await useLiquidaciones().registrar(cuerpoLiquidacion(1, datos, null), nuevaClaveIdempotencia())
+            expect(hecha.ok && hecha.data).toMatchObject({ bruto: '-50.00', neto: '-50.00', pagos: [{ pago_id: 7004, tipo: 'contracargo' }] })
+        })
+
         it('la pantalla marca la anomalía y el contracargo, y abre la liquidación con lo pendiente', async () => {
             const vista = await mountSuspended(PaginaPorLiquidar, { route: '/cobros/por-liquidar' })
             await vi.waitFor(() => expect(vista.find('[data-proveedor="1"]').exists()).toBe(true))
@@ -186,8 +194,15 @@ describe('fase 4 · cobros y bancos', () => {
             expect(creado.ok && creado.data).toMatchObject({ codigo: 'debito', cuenta_codigo: '1.1.10.03', cuenta_liquidacion_codigo: '1.1.02.02', activo: true })
             const otra = await api.crear({ metodo: 'debito', nombre: 'Otro débito', cuenta_id: 6 }, nuevaClaveIdempotencia())
             expect(!otra.ok && otra.problema.type).toBe('urn:argosisp:problema:proveedor_cobro_duplicado')
-            const desde = await api.editar(1, { version: 1, desde: '2026-12-01' }, nuevaClaveIdempotencia())
-            expect(!desde.ok && desde.problema.errors?.[0]).toMatchObject({ field: 'desde', rule: 'campo_solo_lectura' })
+            // Con pagos no se mueve la fecha de corte ni se desactiva; sin pagos, sí.
+            const conPagos = await api.editar(1, { version: 1, desde: '2099-12-01' }, nuevaClaveIdempotencia())
+            expect(!conPagos.ok && conPagos.problema.type).toBe('urn:argosisp:problema:proveedor_con_pagos')
+            const desactivar = await api.editar(1, { version: 1, activo: false }, nuevaClaveIdempotencia())
+            expect(!desactivar.ok && desactivar.problema.type).toBe('urn:argosisp:problema:proveedor_con_pagos')
+            if (creado.ok) {
+                const movido = await api.editar(creado.data.id, { version: 1, desde: '2099-12-01' }, nuevaClaveIdempotencia())
+                expect(movido.ok && movido.data.desde).toBe('2099-12-01')
+            }
             const vista = await mountSuspended(PaginaProveedores, { route: '/configuracion/proveedores-cobro' })
             await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-proveedores"]').text()).toContain('Débito BI'))
             expect(vista.find('[data-prueba="nuevo-proveedor"]').exists()).toBe(true)
@@ -287,6 +302,24 @@ describe('fase 4 · cobros y bancos', () => {
             expect(registrada.ok && registrada.data.movimientos[0]).toMatchObject({ origen_tipo: 'banco', descripcion: 'Intereses de octubre', monto: '2.10' })
         })
 
+        it('reatribuir la llegada al depósito correcto: el anterior vuelve a tránsito', async () => {
+            // Otro depósito de Q 900.00 en tránsito hacia la misma cuenta (el del turno anterior).
+            const [primero] = bd.depositos
+            if (!primero) {
+                throw new Error('sin depósito')
+            }
+            const nuevo = 2
+            bd.depositos.push({ ...primero, id: nuevo, turno_id: 39, boleta: 'B-4472' })
+            const conciliada = await useConciliaciones().conciliar({ linea_id: 4, depositos: [1] }, nuevaClaveIdempotencia())
+            expect(conciliada.ok).toBe(true)
+            const otra = await useFondosEnTransito().reatribuir({ tipo: 'deposito', documento_id: 1, nuevo_tipo: 'deposito', nuevo_documento_id: nuevo, motivo: 'Era la boleta de la tarde' }, nuevaClaveIdempotencia())
+            expect(otra.ok && otra.data.movimientos.map(m => [m.origen_tipo, m.origen_id])).toEqual([['deposito', nuevo]])
+            expect(bd.depositos.find(d => d.id === 1)?.estado).toBe('en_transito')
+            expect(bd.depositos.find(d => d.id === nuevo)?.estado).toBe('acreditado')
+            const vista = await mountSuspended(PaginaExtracto, { route: '/bancos/extractos/1' })
+            await vi.waitFor(() => expect(vista.find('[data-reatribuir="4"]').exists()).toBe(true))
+        })
+
         it('la pantalla del extracto: avance, aplicar reglas con su resultado y acciones por línea', async () => {
             const vista = await mountSuspended(PaginaExtracto, { route: '/bancos/extractos/1' })
             await vi.waitFor(() => expect(vista.find('[data-prueba="avance-conciliacion"]').text()).toBe('1 de 6'))
@@ -321,13 +354,19 @@ describe('fase 4 · cobros y bancos', () => {
             expect(!sinEvidencia.ok && sinEvidencia.problema).toMatchObject({ type: 'urn:argosisp:problema:castigo_sin_evidencia', errors: [{ field: 'evidencia' }] })
             const castigo = await useCartera().castigar({ facturas: [factura.id], motivo: 'Cliente cerró operaciones', evidencia: 'Tres llamadas y carta certificada' }, nuevaClaveIdempotencia())
             expect(castigo.ok && castigo.data).toMatchObject({ cliente_id: factura.cliente_id, estimacion: expect.any(String), facturas: [{ factura_id: factura.id }] })
+            // Decisión g: estado propio `castigada`; `pagado` sigue siendo solo lo cobrado.
             const leida = await useFacturas().ver(factura.id)
-            expect(leida.ok && leida.data.estado).toBe('pagada')
+            expect(leida.ok && leida.data).toMatchObject({ estado: 'castigada', pagado: factura.pagado })
 
             const vista = await mountSuspended(PaginaCartera, { route: '/cartera' })
             await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Cliente cerró operaciones'))
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Pagada'))
+            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Castigada'))
             expect(vista.find('[data-prueba="tabla-provisiones"]').text()).toContain('2025')
+        })
+
+        it('provisión fuera de orden: un corte anterior a la última estimación es 422', async () => {
+            const fuera = await useCartera().provisionar({ anio: 2025, fecha: '2025-06-30' }, nuevaClaveIdempotencia())
+            expect(!fuera.ok && fuera.problema.type).toBe('urn:argosisp:problema:provision_fuera_de_orden')
         })
 
         it('provisión: lo que falta hasta el tope del 3 %', async () => {

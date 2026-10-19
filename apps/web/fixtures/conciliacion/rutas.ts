@@ -555,7 +555,48 @@ function reporte(solicitud: SolicitudFixture): RespuestaFixture {
     return { status: 200, cuerpo: filas }
 }
 
+/**
+ * Como `ReatribuirLlegada` (A3, corrección del desvío c): deshace la conciliación de la línea, la
+ * llegada equivocada se revierte (aquí se quita su movimiento y el documento vuelve a tránsito) y
+ * se registra la llegada del documento correcto con la misma línea.
+ */
+function reatribuir(solicitud: SolicitudFixture): RespuestaFixture {
+    const cuerpo = cuerpoObjeto(solicitud)
+    const tipos = ['deposito', 'traslado']
+    if (!tipos.includes(String(cuerpo.tipo)) || !tipos.includes(String(cuerpo.nuevo_tipo))) {
+        return invalido([{ field: 'tipo', message: 'Tipo inválido (deposito, traslado)', rule: 'enum' }])
+    }
+    const motivo = typeof cuerpo.motivo === 'string' ? cuerpo.motivo.trim() : ''
+    if (motivo.length < 3) {
+        return invalido([{ field: 'motivo', message: 'El motivo lleva al menos 3 caracteres', rule: 'minLength' }])
+    }
+    const documento = (tipo: unknown, id: unknown) => (tipo === 'deposito' ? bd.depositos.find(d => d.id === id) : bd.traslados.find(t => t.id === id))
+    const anterior = documento(cuerpo.tipo, cuerpo.documento_id)
+    const conciliacion = vigentes().find(c => c.movimientos.some(m => m.origen_tipo === cuerpo.tipo && m.origen_id === cuerpo.documento_id))
+    if (!anterior || !conciliacion) {
+        return conflicto('llegada_no_conciliada', 'Llegada no conciliada', `El ${String(cuerpo.tipo)} ${String(cuerpo.documento_id)} no tiene una llegada conciliada`)
+    }
+    const nuevo = documento(cuerpo.nuevo_tipo, cuerpo.nuevo_documento_id)
+    const linea = bd.lineasExtracto.find(l => l.id === conciliacion.linea_id)
+    const destino = nuevo && ('cuenta_destino_id' in nuevo ? nuevo.cuenta_destino_id : nuevo.cuenta_id)
+    if (!nuevo || !linea || nuevo.estado !== 'en_transito' || destino !== linea.cuenta_id) {
+        return invalido([{ field: 'nuevo_documento_id', message: 'El documento no está en tránsito hacia la cuenta de la línea', rule: 'exists' }])
+    }
+    if (!new Decimal(nuevo.monto).equals(anterior.monto)) {
+        return regla422('conciliacion_descuadrada', 'Conciliación descuadrada', `La llegada era de Q${new Decimal(anterior.monto).toFixed(2)} y el documento nuevo es de Q${new Decimal(nuevo.monto).toFixed(2)}`)
+    }
+    Object.assign(conciliacion, { anulada: true, motivo_anulacion: motivo })
+    const vieja = conciliacion.movimientos.find(m => m.origen_tipo === cuerpo.tipo && m.origen_id === cuerpo.documento_id)
+    bd.movimientosBanco = bd.movimientosBanco.filter(m => m.movimiento_id !== vieja?.movimiento_id)
+    Object.assign(anterior, { estado: 'en_transito', acreditado_en: null })
+    const resto = bd.movimientosBanco.filter(m => conciliacion.movimientos.some(c => c.movimiento_id === m.movimiento_id))
+    const nueva = nuevaConciliacion(linea, [...resto, llegada(cuerpo.nuevo_tipo === 'deposito' ? 'deposito' : 'traslado', nuevo, linea)], null, solicitud)
+    registrarAccion(solicitud, 'bancos.reatribuir_llegada', { tipo: 'conciliacion', id: nueva.id }, cuerpo)
+    return { status: 201, cuerpo: nueva }
+}
+
 export const rutasConciliacion: RutasFixture = {
+    'POST /api/v1/bancos/llegadas/reatribuir': conPermiso('bancos.reatribuir_llegada', conIdempotencia(reatribuir)),
     'POST /api/v1/cajas/:id/depositar': conPermiso('cajas.depositar', conIdempotencia(depositar)),
     'GET /api/v1/bancos/depositos': conPermiso('bancos.ver', solicitud => porEstado(deLaEmpresa(bd.depositos, solicitud), solicitud)),
     'GET /api/v1/bancos/traslados': conPermiso('bancos.ver', solicitud => porEstado(deLaEmpresa(bd.traslados, solicitud), solicitud)),

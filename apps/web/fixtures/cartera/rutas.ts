@@ -1,7 +1,7 @@
 /**
- * Rutas de la fase 4 · cartera (A3, §10.9): estimación de incobrables y castigo. Como la API, el
- * castigo deja la factura con `pagado = total` y estado `pagada` (§18, desvío g) y usa primero la
- * estimación disponible y luego el gasto.
+ * Rutas de la fase 4 · cartera (A3, §10.9): estimación de incobrables y castigo. Como la API tras la
+ * decisión g (§18), la factura castigada pasa a estado `castigada` con `pagado` igual a lo cobrado
+ * (lo castigado está en el castigo); se usa primero la estimación disponible y luego el gasto.
  */
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
@@ -40,6 +40,11 @@ function provisionar(solicitud: SolicitudFixture): RespuestaFixture {
         return invalido([{ field: 'fecha', message: 'El corte no puede ser futuro', rule: 'futuro' }])
     }
     const empresaId = typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : (empresaActivaDe(solicitud) ?? 1)
+    // H12: un corte anterior al de la última estimación es 422 `provision_fuera_de_orden`.
+    const ultima = bd.provisiones.filter(p => p.empresa_id === empresaId).sort((a, b) => b.fecha.localeCompare(a.fecha))[0]
+    if (ultima && fecha < ultima.fecha) {
+        return regla422('provision_fuera_de_orden', 'Estimación fuera de orden', `El corte ${fecha} es anterior al de la última estimación (${ultima.fecha})`, [{ field: 'fecha', message: `Corte posterior a ${ultima.fecha}`, rule: 'provision_fuera_de_orden' }])
+    }
     const base = bd.facturas
         .filter(f => (f.empresa_id ?? 1) === empresaId && ['emitida', 'parcial', 'vencida'].includes(f.estado) && f.emitida_en.slice(0, 10) <= fecha)
         .reduce((s, f) => s.plus(saldo(f)), new Decimal(0))
@@ -126,7 +131,7 @@ function castigar(solicitud: SolicitudFixture): RespuestaFixture {
     }
     bd.castigos.push(castigo)
     for (const factura of facturas) {
-        Object.assign(factura, { pagado: factura.total, estado: 'pagada', version: factura.version + 1, updated_at: momento })
+        Object.assign(factura, { estado: 'castigada', version: factura.version + 1, updated_at: momento })
     }
     registrarAccion(solicitud, 'cartera.castigar', { tipo: 'castigo', id: castigo.id }, cuerpo)
     return { status: 201, cuerpo: castigo }

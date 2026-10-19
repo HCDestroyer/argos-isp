@@ -8,7 +8,7 @@ import Decimal from 'decimal.js'
  * facturas con saldo, el motivo y la evidencia de la gestión de cobro (LAT art. 21.20), con
  * confirmación escrita porque no se deshace desde el panel. Usa primero la estimación (1.1.12) y
  * luego el gasto (5.3.02). Al terminar se vuelve a leer cada factura y se muestra el estado que
- * diga la API (hoy queda `pagada`; puede cambiar a uno propio).
+ * diga la API (estado propio `castigada`, decisión g; uno que el panel no conozca se muestra tal cual).
  */
 const abierto = defineModel<boolean>('open', { default: false })
 

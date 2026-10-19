@@ -23,6 +23,7 @@ export const METODOS_PROVEEDOR: Record<MetodoProveedor, { etiqueta: string, icon
 }
 
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
+const MONTO_SIGNO = /^-?\d{1,12}(\.\d{1,2})?$/
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
 
 /** `''` o un monto con hasta 2 decimales sin comas. */
@@ -33,9 +34,10 @@ function montoTexto(mensaje = 'Escribe un monto con hasta 2 decimales, sin comas
 /**
  * Espejo de `crearProveedorCobroValidator` y `CrearProveedorCobro`: nombre de 2 a 80, el nombre de
  * la pasarela solo con `pasarela` (hasta 60), fecha de corte hoy o futura (vacía = hoy) y el banco
- * donde liquida obligatorio (`cuenta_id` de 1.1.02.NN).
+ * donde liquida obligatorio (`cuenta_id` de 1.1.02.NN). Al editar, la fecha actual se puede dejar
+ * como está aunque ya pasó (`EditarProveedorCobro`: cambiarla con pagos es 409 `proveedor_con_pagos`).
  */
-export function esquemaProveedorCobro(hoy: string) {
+export function esquemaProveedorCobro(hoy: string, desdeActual: string | null = null) {
     return z.object({
         metodo: z.enum(['pasarela', 'agente', 'debito']),
         pasarela: z.string().trim().max(60, 'Máximo 60 caracteres'),
@@ -43,7 +45,7 @@ export function esquemaProveedorCobro(hoy: string) {
         desde: z.string()
             .trim()
             .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
-            .refine(valor => valor === '' || valor >= hoy, 'La fecha de corte no puede ser anterior a hoy'),
+            .refine(valor => valor === '' || valor >= hoy || valor === desdeActual, 'La fecha de corte no puede ser anterior a hoy'),
         cuenta_id: z.number({ message: 'Elige el banco donde liquida' }).int().positive().nullable()
             .refine(valor => valor !== null, 'Elige el banco donde liquida'),
         activo: z.boolean(),
@@ -80,7 +82,7 @@ export function cuerpoProveedor(datos: SalidaProveedorCobro): CuerpoProveedor {
     return cuerpo
 }
 
-/** Cuerpo de `PUT /cobros/proveedores/:id`: nunca manda `desde` (no se edita). */
+/** Cuerpo de `PUT /cobros/proveedores/:id`: solo lo que cambió (`desde` solo si se movió). */
 export function cuerpoEdicionProveedor(proveedor: Proveedor, datos: SalidaProveedorCobro): CuerpoEdicionProveedor {
     const cuerpo: CuerpoEdicionProveedor = { version: proveedor.version }
     if (datos.nombre !== proveedor.nombre) {
@@ -92,6 +94,9 @@ export function cuerpoEdicionProveedor(proveedor: Proveedor, datos: SalidaProvee
     if (datos.cuenta_id !== proveedor.cuenta_liquidacion_id) {
         cuerpo.cuenta_id = datos.cuenta_id
     }
+    if (datos.desde && datos.desde !== proveedor.desde) {
+        cuerpo.desde = datos.desde
+    }
     return cuerpo
 }
 
@@ -100,18 +105,19 @@ export function brutoEsperado(elegidos: readonly Pick<PagoPendiente, 'tipo' | 'm
     return elegidos.reduce((suma, p) => (p.tipo === 'contracargo' ? suma.minus(p.monto) : suma.plus(p.monto)), new Decimal(0))
 }
 
-/** Neto = bruto − comisión, o `null` si alguno no es un monto válido. */
+/** Neto = bruto − comisión (el bruto lleva signo: solo contracargos lo dejan ≤ 0), o `null` si no son montos. */
 export function netoDe(bruto: string, comision: string): Decimal | null {
-    if (!MONTO.test(bruto.trim()) || !MONTO.test(comision.trim())) {
+    if (!MONTO_SIGNO.test(bruto.trim()) || !MONTO.test(comision.trim())) {
         return null
     }
     return new Decimal(bruto.trim()).minus(comision.trim())
 }
 
 /**
- * Espejo de `liquidarCobrosValidator`: referencia de 1 a 120, bruto y comisión en string con hasta
- * 2 decimales, al menos un pago, fecha no futura (vacía = hoy) y nota hasta 500. El neto no se
- * captura: es bruto − comisión y no puede ser negativo.
+ * Espejo de `liquidarCobrosValidator`: referencia de 1 a 120, bruto con signo y comisión en string
+ * con hasta 2 decimales, al menos un pago o un contracargo (H14: una liquidación de solo
+ * contracargos tiene bruto ≤ 0 y debita el banco), fecha no futura (vacía = hoy) y nota hasta 500.
+ * El neto no se captura: es bruto − comisión.
  */
 export function esquemaLiquidacion(hoy: string) {
     return z.object({
@@ -120,16 +126,19 @@ export function esquemaLiquidacion(hoy: string) {
             .trim()
             .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
             .refine(valor => valor === '' || valor <= hoy, 'La fecha del depósito no puede ser futura'),
-        bruto: montoTexto(),
+        bruto: z.string().trim().regex(MONTO_SIGNO, 'Escribe un monto con hasta 2 decimales, sin comas (ej. 150.00 o -50.00)'),
         comision: montoTexto(),
-        pagos: z.array(z.number().int().positive()).min(1, 'Elige al menos un pago de la liquidación'),
+        pagos: z.array(z.number().int().positive()),
         contracargos: z.array(z.number().int().positive()),
         cuenta_id: z.number().int().positive().nullable(),
         archivo: z.string().trim().max(200, 'Máximo 200 caracteres'),
         nota: z.string().trim().max(500, 'Máximo 500 caracteres'),
     }).superRefine((datos, ctx) => {
+        if (!datos.pagos.length && !datos.contracargos.length) {
+            ctx.addIssue({ code: 'custom', path: ['pagos'], message: 'Elige al menos un pago o un contracargo de la liquidación' })
+        }
         const neto = netoDe(datos.bruto, datos.comision)
-        if (neto?.isNegative()) {
+        if (neto?.isNegative() && datos.pagos.length && new Decimal(datos.bruto).gt(0)) {
             ctx.addIssue({ code: 'custom', path: ['comision'], message: 'La comisión no puede ser mayor que el bruto' })
         }
     })

@@ -226,8 +226,19 @@ function editarProveedor(solicitud: SolicitudFixture): RespuestaFixture {
     if (cuerpo.version !== proveedor.version) {
         return versionCambiada()
     }
-    if (cuerpo.desde !== undefined && cuerpo.desde !== null) {
-        return invalido([{ field: 'desde', message: 'La fecha de corte no se edita: crea otro proveedor si cambia', rule: 'campo_solo_lectura' }])
+    // Como `EditarProveedorCobro` tras la revisión: sin pagos, `desde` (hoy o futura) y `activo` se
+    // cambian; con pagos, mover `desde` o desactivarlo es 409 `proveedor_con_pagos`.
+    const desde = typeof cuerpo.desde === 'string' && cuerpo.desde ? cuerpo.desde : proveedor.desde
+    const desactiva = proveedor.activo && cuerpo.activo === false
+    if (desde !== proveedor.desde || desactiva) {
+        const pagos = bd.pagos.filter(p => p.proveedor_cobro_id === proveedor.id).length
+        if (pagos) {
+            return conflicto('proveedor_con_pagos', 'Proveedor con pagos', `El proveedor ${proveedor.nombre} ya tiene ${pagos} pago(s): no se mueve su fecha de corte ni se desactiva`)
+        }
+        if (desde !== proveedor.desde && (!FECHA.test(desde) || desde < hoy())) {
+            return invalido([{ field: 'desde', message: 'La fecha de corte no puede ser anterior a hoy', rule: 'fecha_pasada' }])
+        }
+        proveedor.desde = desde
     }
     if (cuerpo.nombre !== undefined && cuerpo.nombre !== null) {
         const nombre = typeof cuerpo.nombre === 'string' ? cuerpo.nombre.trim() : ''
@@ -266,18 +277,23 @@ function liquidar(solicitud: SolicitudFixture): RespuestaFixture {
     if (!referencia) {
         errores.push({ field: 'referencia', message: 'El campo referencia es obligatorio', rule: 'required' })
     }
-    for (const campo of ['bruto', 'comision'] as const) {
-        if (typeof cuerpo[campo] !== 'string' || !MONTO.test(String(cuerpo[campo]))) {
-            errores.push({ field: campo, message: 'Monto con hasta 2 decimales, como string', rule: 'regex' })
-        }
+    if (typeof cuerpo.bruto !== 'string' || !/^-?\d{1,12}(\.\d{1,2})?$/.test(cuerpo.bruto)) {
+        errores.push({ field: 'bruto', message: 'Monto con signo y hasta 2 decimales', rule: 'regex' })
+    }
+    if (typeof cuerpo.comision !== 'string' || !MONTO.test(cuerpo.comision)) {
+        errores.push({ field: 'comision', message: 'Monto con hasta 2 decimales, como string', rule: 'regex' })
     }
     const pagos = idsDe(cuerpo.pagos)
-    if (!pagos || !pagos.length) {
-        errores.push({ field: 'pagos', message: 'El campo pagos debe tener al menos 1 elemento', rule: 'minLength' })
-    }
     const contracargos = idsDe(cuerpo.contracargos)
+    if (!pagos) {
+        errores.push({ field: 'pagos', message: 'Lista de ids de pago', rule: 'array' })
+    }
     if (!contracargos) {
         errores.push({ field: 'contracargos', message: 'Lista de ids de pago', rule: 'array' })
+    }
+    // H14: una liquidación puede traer solo contracargos.
+    if (pagos && contracargos && !pagos.length && !contracargos.length) {
+        errores.push({ field: 'pagos', message: 'La liquidación necesita pagos o contracargos', rule: 'required' })
     }
     const fecha = typeof cuerpo.fecha === 'string' && cuerpo.fecha ? cuerpo.fecha : hoy()
     if (!FECHA.test(fecha) || fecha > hoy()) {
@@ -322,7 +338,7 @@ function liquidar(solicitud: SolicitudFixture): RespuestaFixture {
         return regla422('liquidacion_descuadrada', 'Liquidación descuadrada', `El bruto (Q${bruto.toFixed(2)}) no es la suma de los pagos menos los contracargos (Q${esperado.toFixed(2)})`, [{ field: 'bruto', message: `Σ pagos − contracargos = Q${esperado.toFixed(2)}`, rule: 'liquidacion_descuadrada' }])
     }
     const neto = bruto.minus(comision)
-    if (neto.isNegative()) {
+    if (neto.isNegative() && bruto.gt(0)) {
         return invalido([{ field: 'comision', message: 'La comisión no puede ser mayor que el bruto', rule: 'max' }])
     }
     if (typeof cuerpo.neto === 'string' && !new Decimal(cuerpo.neto).equals(neto)) {

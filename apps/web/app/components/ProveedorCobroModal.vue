@@ -4,7 +4,8 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 
 /**
  * Alta y edición de un proveedor de cobro (`POST`/`PUT /cobros/proveedores`, `cobros.configurar`).
- * La fecha de corte solo se elige al crear (hoy o futura); al editar se muestra y no viaja.
+ * La fecha de corte es hoy o futura; al editar se puede mover o desactivar el proveedor mientras no
+ * tenga pagos (con pagos la API responde 409 `proveedor_con_pagos` y se muestra aquí).
  */
 const props = withDefaults(defineProps<{
     proveedor?: ProveedorCobro | null
@@ -20,7 +21,7 @@ const emit = defineEmits<{
 
 const formulario = useTemplateRef('formulario')
 const hoy = hoyGuatemala()
-const esquema = esquemaProveedorCobro(hoy)
+const esquema = computed(() => esquemaProveedorCobro(hoy, props.proveedor?.desde ?? null))
 const estado = reactive<EntradaProveedorCobro>(entradaProveedorVacia())
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
@@ -128,13 +129,12 @@ async function enviar(evento: FormSubmitEvent<SalidaProveedorCobro>) {
                     <UFormField
                         label="Fecha de corte"
                         name="desde"
-                        :help="editando ? 'No se edita: si cambia, crea otro proveedor.' : 'Vacía: hoy. Los pagos anteriores siguen contra el banco.'"
+                        :help="editando ? 'Solo se mueve mientras el proveedor no tenga pagos.' : 'Vacía: hoy. Los pagos anteriores siguen contra el banco.'"
                     >
                         <UInput
                             v-model="estado.desde"
                             type="date"
                             :min="hoy"
-                            :disabled="editando"
                             class="w-full"
                         />
                     </UFormField>
@@ -145,7 +145,7 @@ async function enviar(evento: FormSubmitEvent<SalidaProveedorCobro>) {
                     >
                         <USwitch
                             v-model="estado.activo"
-                            :label="estado.activo ? 'Activo' : 'Inactivo: sus pagos vuelven al banco'"
+                            :label="estado.activo ? 'Activo' : 'Inactivo: sus pagos nuevos vuelven al banco'"
                         />
                     </UFormField>
                 </div>

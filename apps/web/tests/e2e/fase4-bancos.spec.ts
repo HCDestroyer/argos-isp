@@ -9,7 +9,8 @@ import { entrar, ir } from './ayudas'
  * 2. Depósito de caja y conciliación: se deposita desde el turno abierto, el depósito queda en
  *    tránsito y se concilia con su línea del extracto (pasa a acreditado); las reglas concilian la
  *    comisión y la transferencia; deshacer pide motivo.
- * 3. Cartera: el castigo pide la frase escrita y muestra el estado de la factura que dice la API.
+ * 3. Cartera: el castigo pide la frase escrita y muestra el estado de la factura que dice la API
+ *    (`castigada`, decisión g).
  */
 test('registrar la liquidación de la pasarela', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
@@ -99,6 +100,6 @@ test('castigar una factura con la frase escrita', async ({ page }) => {
 
     const resultado = page.locator('[data-prueba="resultado-castigo"]')
     await expect(resultado).toContainText('Juan Carlos Ramírez')
-    await expect(resultado.locator('[data-estado-factura]').first()).toHaveText('Pagada')
+    await expect(resultado.locator('[data-estado-factura]').first()).toHaveText('Castigada')
     await expect(page.locator('[data-prueba="tabla-castigos"]')).toContainText('Cliente se mudó del país')
 })

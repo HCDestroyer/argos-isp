@@ -5,6 +5,7 @@ export type Traslado = Schema<'Traslado'>
 export type ResumenFondosEnTransito = Schema<'ResumenFondosEnTransito'>
 export type DatosTraslado = paths['/api/v1/bancos/trasladar']['post']['requestBody']['content']['application/json']
 export type EstadoTransito = Deposito['estado']
+export type DatosReatribucion = paths['/api/v1/bancos/llegadas/reatribuir']['post']['requestBody']['content']['application/json']
 
 /**
  * Fondos en tránsito `1.1.11` (A3, fase 4 §10.3): depósitos de caja y traslados entre bancos que
@@ -49,5 +50,17 @@ export function useFondosEnTransito() {
         }))
     }
 
-    return { resumen, depositos, traslados, trasladar }
+    /**
+     * `POST /bancos/llegadas/reatribuir` (`bancos.reatribuir_llegada`): la llegada se atribuyó al
+     * depósito o traslado equivocado. Deshace la conciliación de la línea, revierte esa llegada (el
+     * documento vuelve a tránsito) y registra la del documento correcto con la misma línea.
+     */
+    function reatribuir(datos: DatosReatribucion, claveIdempotencia: string): Promise<Resultado<Conciliacion>> {
+        return resolver(api.POST('/api/v1/bancos/llegadas/reatribuir', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { resumen, depositos, traslados, trasladar, reatribuir }
 }

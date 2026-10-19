@@ -110,7 +110,8 @@
     "bancos.conciliar",
     "cartera.provisionar",
     "cartera.castigar",
-    "pagos.cerrar_diferencia"
+    "pagos.cerrar_diferencia",
+    "bancos.reatribuir_llegada"
   ],
   "alcance_global": true,
   "empresas": [
