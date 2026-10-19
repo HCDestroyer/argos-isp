@@ -164,6 +164,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // La ficha del plan solo edita; el alta ("Nuevo plan", `planes.crear`) está en la lista.
     'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue', 'pages/planes/[id].vue'], exentos: { 'pages/planes/[id].vue': ['planes.crear'] } },
     // Servicios adicionales (A1, `contratos/adicionales.md`).
+    'AdicionalBloqueosModal.vue': { permisos: ['servicios.ver'], desde: ['components/ServicioAdicionales.vue'] },
     'AdicionalCredencialModal.vue': { permisos: ['servicios.ver_credencial_adicional'], desde: ['components/ServicioAdicionales.vue'] },
     'AdicionalModal.vue': { permisos: ['adicionales.crear', 'adicionales.editar'], desde: ['pages/adicionales/index.vue'] },
     'AdicionalQuitarModal.vue': { permisos: ['servicios.quitar_adicional'], desde: ['components/ServicioAdicionales.vue'] },

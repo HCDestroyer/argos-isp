@@ -12,7 +12,7 @@ import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
 import type { PlanAdicionalFixture } from './adicionales/datos'
-import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
+import { adicionales, adicionalesServicio, bloqueosAdicionales, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -149,6 +149,8 @@ interface BaseFixtures {
     /** Credencial en claro por asignación (la API la guarda cifrada y nunca la lista). */
     credencialesAdicionales: Record<number, string>
     planesAdicionales: PlanAdicionalFixture[]
+    /** Bloqueos y desbloqueos de los adicionales por el estado del servicio (A1). */
+    bloqueosAdicionales: Schema<'BloqueoAdicional'>[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
     movimientosPuntos: Schema<'MovimientoPuntos'>[]
     lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
@@ -230,6 +232,7 @@ function inicial(): BaseFixtures {
         adicionalesServicio,
         credencialesAdicionales,
         planesAdicionales,
+        bloqueosAdicionales,
         reglasLealtad,
         movimientosPuntos,
         lotesPuntos,
