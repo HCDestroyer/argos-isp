@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, versionCambiada } from '../comun'
+import { advertenciasPlan, TIPOS_PLAN } from './tipos'
 import { validarVelocidad, velocidadDePlan, vistaPreviaVelocidad } from './velocidad'
 
 type Plan = Schema<'Plan'>
@@ -26,6 +27,9 @@ function validar(plan: Plan): Errores {
     if (!MONTO.test(plan.precio)) {
         errores.push({ field: 'precio', message: 'Monto inválido', rule: 'dinero' })
     }
+    if (!TIPOS_PLAN.includes(plan.tipo ?? 'residencial')) {
+        errores.push({ field: 'tipo', message: 'Debe ser residencial, empresarial o dedicado', rule: 'enum' })
+    }
     for (const campo of ['bajada_kbps', 'subida_kbps', 'bajada_limitada_kbps', 'subida_limitada_kbps'] as const) {
         if (!entero(plan[campo], 1, 100_000_000)) {
             errores.push({ field: campo, message: 'Debe ser un entero entre 1 y 100000000', rule: 'range' })
@@ -42,6 +46,7 @@ function planDe(cuerpo: Record<string, unknown>, base: Plan): Plan {
     return {
         ...base,
         nombre: typeof cuerpo.nombre === 'string' ? cuerpo.nombre.trim() : base.nombre,
+        tipo: valor('tipo') ?? 'residencial',
         precio: typeof cuerpo.precio === 'string' ? cuerpo.precio : base.precio,
         bajada_kbps: valor('bajada_kbps'),
         subida_kbps: valor('subida_kbps'),
@@ -80,14 +85,20 @@ function guardar(solicitud: SolicitudFixture, base: Plan, accion: string, status
         bd.planes.push(plan)
     }
     registrarAccion(solicitud, accion, { tipo: 'plan', id: plan.id }, cuerpoObjeto(solicitud))
-    return { status, cuerpo: plan }
+    // Como la API (A1): crear y editar traen `warnings[]` del tipo de plan (nunca bloquean).
+    return { status, cuerpo: { ...plan, warnings: advertenciasPlan(plan) } }
 }
 
 export const rutasPlanes: RutasFixture = {
     'GET /api/v1/planes': conPermiso('planes.ver', (solicitud) => {
         const activo = solicitud.query.get('activo')
         const router = numeroQuery(solicitud, 'router_id')
+        const tipo = solicitud.query.get('tipo')
+        if (tipo && !(TIPOS_PLAN as readonly string[]).includes(tipo)) {
+            return datosInvalidos([{ field: 'tipo', message: 'Debe ser residencial, empresarial o dedicado', rule: 'enum' }])
+        }
         const filas = bd.planes
+            .filter(plan => !tipo || (plan.tipo ?? 'residencial') === tipo)
             .filter(plan => activo === null || String(plan.activo) === activo)
             .filter(plan => router === undefined || (bd.planesPorRouter[router] ?? []).includes(plan.id))
         return { status: 200, cuerpo: paginar(filas, solicitud) }
@@ -100,6 +111,7 @@ export const rutasPlanes: RutasFixture = {
         const base: Plan = {
             id: 0,
             nombre: 'Vista previa',
+            tipo: 'residencial',
             precio: '0.00',
             bajada_kbps: 0,
             subida_kbps: 0,
@@ -140,6 +152,7 @@ export const rutasPlanes: RutasFixture = {
         const base: Plan = {
             id: siguienteId(bd.planes),
             nombre: '',
+            tipo: 'residencial',
             precio: '',
             bajada_kbps: 0,
             subida_kbps: 0,

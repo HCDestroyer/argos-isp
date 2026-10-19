@@ -170,8 +170,14 @@ describe('multiempresa · acciones contra la API (fixtures)', () => {
         expect(!respuesta.ok && respuesta.problema.type).toBe('urn:argosisp:problema:servicio_con_saldo')
         expect(!respuesta.ok && respuesta.problema.detail).toContain('pendientes')
 
+        // Adicionales (A1): con una cortesía o un cobrado vigentes, 422 `servicio_con_adicionales`.
+        const conAdicionales = bd.servicios.find(s => s.id === 1)
+        const bloqueado = await useServicios().cambiarEmpresa(1, { empresa_id: 2, version: conAdicionales?.version ?? 0, motivo: 'Cambio de zona' }, nuevaClaveIdempotencia())
+        expect(!bloqueado.ok && bloqueado.problema.type).toBe('urn:argosisp:problema:servicio_con_adicionales')
+
         const alDia = bd.servicios.find(s => s.estado === 'activo' && s.empresa_id === 1
-            && !bd.facturas.some(f => f.servicio_id === s.id && f.estado !== 'pagada' && f.estado !== 'anulada'))
+            && !bd.facturas.some(f => f.servicio_id === s.id && f.estado !== 'pagada' && f.estado !== 'anulada')
+            && !bd.adicionalesServicio.some(a => a.servicio_id === s.id && a.estado === 'activo' && a.modalidad !== 'incluido'))
         expect(alDia).toBeTruthy()
         const movido = await useServicios().cambiarEmpresa(alDia?.id ?? 0, { empresa_id: 2, version: alDia?.version ?? 0, motivo: 'Cambio de zona' }, nuevaClaveIdempotencia())
         expect(movido.ok && movido.data.empresa_id).toBe(2)

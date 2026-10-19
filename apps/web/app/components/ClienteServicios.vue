@@ -73,6 +73,11 @@ onMounted(async () => {
                             {{ etiquetaServicio(row.original) }}
                         </ULink>
                         <span class="text-xs text-muted">#{{ row.original.id }} · {{ nombreRouter(row.original) }}</span>
+                        <TipoPlanBadge
+                            :tipo="row.original.plan_tipo"
+                            size="sm"
+                            class="mt-1 self-start"
+                        />
                         <span
                             v-if="row.original.ipv4"
                             class="font-mono text-xs text-muted sm:hidden"
