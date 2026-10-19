@@ -47,7 +47,9 @@ export function useEmpresa(origen: OrigenEmpresa = {}) {
                     : de.value === 'cliente' ? { de: 'cliente' } : {},
             },
         })),
-        { server: false },
+        // Varios componentes montan a la vez con la misma clave (layout, página, tarjetas): con
+        // `defer` comparten la petición en vuelo; con `cancel` (por defecto) cada uno la repetía.
+        { server: false, dedupe: 'defer' },
     )
 
     const empresa = computed(() => consulta.data.value?.ok ? consulta.data.value.data : null)

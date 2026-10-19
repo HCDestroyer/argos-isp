@@ -30,6 +30,13 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'servicios.iniciar_plan_temporal': 'Plan temporal iniciado',
     'servicios.terminar_plan_temporal': 'Plan temporal terminado',
     'servicios.cancelar_plan_temporal': 'Plan temporal cancelado',
+    // Anuncios del portal (A5, `contratos/anuncios.md`).
+    'anuncios.crear': 'Anuncio creado',
+    'anuncios.editar': 'Anuncio editado',
+    'anuncios.cambiar_imagen': 'Imagen del anuncio cambiada',
+    'anuncios.publicar': 'Anuncio publicado',
+    'anuncios.archivar': 'Anuncio archivado',
+    'anuncios.registrar_evento': 'Vista o clic de un anuncio en el portal (solo si falló)',
     'sesiones.iniciar': 'Sesión PPPoE iniciada',
     'sesiones.actualizar': 'Sesión PPPoE actualizada',
     'sesiones.terminar': 'Sesión PPPoE terminada',
@@ -337,6 +344,7 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     referido_lealtad: { etiqueta: 'Referido' },
     // Mejora de plan temporal (A1, `core.servicios_planes_temporales`): se ve en la ficha del servicio.
     plan_temporal: { etiqueta: 'Plan temporal' },
+    anuncio: { etiqueta: 'Anuncio', ruta: id => `/anuncios/${id}` },
     adicional: { etiqueta: 'Adicional', ruta: () => '/adicionales' },
     motivo_cortesia: { etiqueta: 'Motivo de cortesía', ruta: () => '/adicionales/motivos' },
 }
