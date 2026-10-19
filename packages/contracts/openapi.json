@@ -18,6 +18,9 @@
       "name": "activos"
     },
     {
+      "name": "adicionales"
+    },
+    {
       "name": "auth"
     },
     {
@@ -794,6 +797,932 @@
           }
         },
         "x-permiso": "activos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/adicionales": {
+      "get": {
+        "operationId": "adicionalesListar",
+        "summary": "Catálogo de servicios adicionales (streaming, IPTV…) de la empresa activa",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Busca en nombre y código",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de adicionales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Adicional"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "adicionalesCrear",
+        "summary": "Crear un servicio adicional en el catálogo de la empresa",
+        "description": "409 `adicional_duplicado` si el código ya existe en la empresa (también desactivado).",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa (NIT) del catálogo; por defecto, la empresa activa"
+                  },
+                  "codigo": {
+                    "type": "string",
+                    "pattern": "^[A-Z0-9][A-Z0-9_-]{0,39}$",
+                    "description": "Código único en la empresa: letras, dígitos, guion y guion bajo (se guarda en mayúsculas)"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "precio_sugerido": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Precio sugerido para asignarlo `cobrado` (solo una sugerencia)",
+                    "examples": [
+                      "150.00"
+                    ]
+                  }
+                },
+                "required": [
+                  "codigo",
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Adicional creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Adicional"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/adicionales/{id}": {
+      "get": {
+        "operationId": "adicionalesVer",
+        "summary": "Ver un servicio adicional del catálogo",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Adicional",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Adicional"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "adicionalesEditar",
+        "summary": "Editar un servicio adicional del catálogo",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "codigo": {
+                    "type": "string",
+                    "pattern": "^[A-Z0-9][A-Z0-9_-]{0,39}$",
+                    "description": "Código único en la empresa: letras, dígitos, guion y guion bajo (se guarda en mayúsculas)"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "precio_sugerido": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Adicional actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Adicional"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/adicionales/{id}/desactivar": {
+      "post": {
+        "operationId": "adicionalesDesactivar",
+        "summary": "Desactivar un servicio adicional (no se borra; las asignaciones vigentes siguen)",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Adicional desactivado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Adicional"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.desactivar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/adicionales/motivos": {
+      "get": {
+        "operationId": "adicionalesMotivos",
+        "summary": "Motivos de cortesía: los comunes y los de la empresa activa",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Motivos de cortesía",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MotivoCortesia"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "adicionalesCrearMotivo",
+        "summary": "Crear un motivo de cortesía de la empresa",
+        "description": "409 `motivo_duplicado` si el código ya existe en la empresa o entre los comunes.",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Empresa (NIT) del catálogo; por defecto, la empresa activa"
+                  },
+                  "codigo": {
+                    "type": "string",
+                    "pattern": "^[A-Z0-9][A-Z0-9_-]{0,39}$",
+                    "description": "Código único en la empresa: letras, dígitos, guion y guion bajo (se guarda en mayúsculas)"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "codigo",
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Motivo creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotivoCortesia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.crear_motivo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.crear_motivo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/adicionales/motivos/{id}/desactivar": {
+      "post": {
+        "operationId": "adicionalesDesactivarMotivo",
+        "summary": "Desactivar un motivo de cortesía (no se borra)",
+        "description": "Un motivo común solo con alcance global (403 `empresa_no_permitida`).",
+        "tags": [
+          "adicionales"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Motivo desactivado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotivoCortesia"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso adicionales.desactivar_motivo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "adicionales.desactivar_motivo",
         "x-implementado": true
       }
     },
@@ -27710,6 +28639,19 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "residencial",
+                "empresarial",
+                "dedicado"
+              ]
+            }
           }
         ],
         "responses": {
@@ -27895,6 +28837,15 @@
                       48
                     ],
                     "type": "integer"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "residencial",
+                      "empresarial",
+                      "dedicado"
+                    ],
+                    "description": "residencial (por defecto), empresarial o dedicado; solo advierte, nunca bloquea"
                   },
                   "global": {
                     "type": "boolean"
@@ -28170,6 +29121,14 @@
                     ],
                     "type": "integer"
                   },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "residencial",
+                      "empresarial",
+                      "dedicado"
+                    ]
+                  },
                   "global": {
                     "type": "boolean"
                   },
@@ -28192,6 +29151,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso planes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "planes.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/planes/{id}/adicionales": {
+      "get": {
+        "operationId": "planesAdicionales",
+        "summary": "Adicionales que trae el plan (con su cantidad)",
+        "description": "De todas las empresas; cada servicio recibe solo los de su empresa.",
+        "tags": [
+          "planes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Adicionales del plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdicionalPlan"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso planes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "planes.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "planesDefinirAdicionales",
+        "summary": "Definir los adicionales que trae el plan (reemplaza la lista)",
+        "description": "Sube la `version` del plan (409 si cambió). No toca los servicios existentes: se aplica al crear un servicio o al cambiar de plan.",
+        "tags": [
+          "planes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída del plan (la lista es parte del plan); si cambió responde 409"
+                  },
+                  "adicionales": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "adicional_id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "cantidad": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 50
+                        }
+                      },
+                      "required": [
+                        "adicional_id",
+                        "cantidad"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 100,
+                    "description": "Lista completa (reemplaza la anterior); [] la vacía"
+                  }
+                },
+                "required": [
+                  "version",
+                  "adicionales"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Adicionales del plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdicionalPlan"
+                  }
                 }
               }
             }
@@ -35129,6 +36304,12 @@
                         "activos.dar_de_baja",
                         "activos.registrar",
                         "activos.ver",
+                        "adicionales.crear",
+                        "adicionales.crear_motivo",
+                        "adicionales.desactivar",
+                        "adicionales.desactivar_motivo",
+                        "adicionales.editar",
+                        "adicionales.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.reatribuir_llegada",
@@ -35257,18 +36438,23 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.adicional_cortesia",
+                        "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
                         "servicios.cancelar_plan_temporal",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
+                        "servicios.editar_adicional",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
+                        "servicios.quitar_adicional",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
                         "servicios.suspender",
                         "servicios.ver",
+                        "servicios.ver_credencial_adicional",
                         "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
@@ -35403,6 +36589,12 @@
                         "activos.dar_de_baja",
                         "activos.registrar",
                         "activos.ver",
+                        "adicionales.crear",
+                        "adicionales.crear_motivo",
+                        "adicionales.desactivar",
+                        "adicionales.desactivar_motivo",
+                        "adicionales.editar",
+                        "adicionales.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.reatribuir_llegada",
@@ -35531,18 +36723,23 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.adicional_cortesia",
+                        "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
                         "servicios.cancelar_plan_temporal",
                         "servicios.crear",
                         "servicios.desconectar",
                         "servicios.editar",
+                        "servicios.editar_adicional",
                         "servicios.limitar",
                         "servicios.programar_plan_temporal",
+                        "servicios.quitar_adicional",
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
                         "servicios.suspender",
                         "servicios.ver",
+                        "servicios.ver_credencial_adicional",
                         "servicios.ver_credenciales",
                         "sesiones.desconectar",
                         "sesiones.ver",
@@ -37354,6 +38551,20 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "description": "Tipo del plan del servicio: residencial, empresarial o dedicado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "residencial",
+                "empresarial",
+                "dedicado"
+              ]
+            }
           }
         ],
         "responses": {
@@ -38208,6 +39419,727 @@
           }
         },
         "x-permiso": "servicios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/adicionales": {
+      "get": {
+        "operationId": "serviciosAdicionales",
+        "summary": "Adicionales del servicio (sin credenciales)",
+        "description": "Del más reciente al más viejo; `estado` filtra activos o bajas.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "description": "Solo los activos o solo las bajas; sin él, todos",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activo",
+                "baja"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de adicionales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdicionalServicio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "serviciosAgregarAdicional",
+        "summary": "Agregar un adicional al servicio (incluido, cortesía o cobrado)",
+        "description": "`cobrado` exige `precio` > 0; `cortesia` exige `motivo_id` y además el permiso `servicios.adicional_cortesia` (403). 422 `adicional_de_otra_empresa`, `adicional_inactivo` o `servicio_retirado`. Un mismo adicional puede agregarse varias veces.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adicional_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Adicional activo de la empresa del servicio"
+                  },
+                  "modalidad": {
+                    "type": "string",
+                    "enum": [
+                      "incluido",
+                      "cortesia",
+                      "cobrado"
+                    ],
+                    "description": "cortesia exige además el permiso servicios.adicional_cortesia y motivo_id"
+                  },
+                  "identificador": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Usuario de IPTV, correo de la cuenta de streaming…"
+                  },
+                  "credencial": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "Se guarda cifrada; nunca vuelve en las respuestas (ver `/credencial`)"
+                  },
+                  "precio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Obligatorio y > 0 con cobrado; solo con cobrado",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "motivo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Motivo de cortesía (GET /adicionales/motivos); obligatorio con cortesia"
+                  },
+                  "motivo_detalle": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "adicional_id",
+                  "modalidad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Adicional agregado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdicionalServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.agregar_adicional; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.agregar_adicional",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}": {
+      "put": {
+        "operationId": "serviciosEditarAdicional",
+        "summary": "Editar un adicional del servicio (modalidad, identificador, credencial, precio, motivo)",
+        "description": "409 si `version` cambió; 422 `adicional_dado_de_baja`. Pasar a `cortesia` o cambiar su motivo exige además `servicios.adicional_cortesia`. `credencial: null` la borra.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "asignacionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "modalidad": {
+                    "type": "string",
+                    "enum": [
+                      "incluido",
+                      "cortesia",
+                      "cobrado"
+                    ]
+                  },
+                  "identificador": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Usuario de IPTV, correo de la cuenta de streaming…"
+                  },
+                  "credencial": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "Se guarda cifrada; nunca vuelve en las respuestas (ver `/credencial`)"
+                  },
+                  "precio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "motivo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "motivo_detalle": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Adicional actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdicionalServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.editar_adicional; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.editar_adicional",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}/credencial": {
+      "get": {
+        "operationId": "serviciosCredencialAdicional",
+        "summary": "Ver la credencial de un adicional del servicio (queda auditado)",
+        "description": "422 `sin_credencial` si no tiene.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "asignacionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credencial en claro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredencialAdicional"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver_credencial_adicional",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver_credencial_adicional",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}/quitar": {
+      "post": {
+        "operationId": "serviciosQuitarAdicional",
+        "summary": "Dar de baja un adicional del servicio (con fecha; nunca se borra)",
+        "description": "409 si `version` cambió; 422 `adicional_dado_de_baja` si ya estaba de baja.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "asignacionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Adicional dado de baja",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdicionalServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.quitar_adicional; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.quitar_adicional",
         "x-implementado": true
       }
     },
@@ -40554,6 +42486,12 @@
                             "activos.dar_de_baja",
                             "activos.registrar",
                             "activos.ver",
+                            "adicionales.crear",
+                            "adicionales.crear_motivo",
+                            "adicionales.desactivar",
+                            "adicionales.desactivar_motivo",
+                            "adicionales.editar",
+                            "adicionales.ver",
                             "bancos.conciliar",
                             "bancos.importar_extracto",
                             "bancos.reatribuir_llegada",
@@ -40682,18 +42620,23 @@
                             "routers.editar",
                             "routers.marcar_migrado",
                             "routers.ver",
+                            "servicios.adicional_cortesia",
+                            "servicios.agregar_adicional",
                             "servicios.cambiar_empresa",
                             "servicios.cancelar_plan_temporal",
                             "servicios.crear",
                             "servicios.desconectar",
                             "servicios.editar",
+                            "servicios.editar_adicional",
                             "servicios.limitar",
                             "servicios.programar_plan_temporal",
+                            "servicios.quitar_adicional",
                             "servicios.quitar_limite",
                             "servicios.reactivar",
                             "servicios.retirar",
                             "servicios.suspender",
                             "servicios.ver",
+                            "servicios.ver_credencial_adicional",
                             "servicios.ver_credenciales",
                             "sesiones.desconectar",
                             "sesiones.ver",
@@ -42418,6 +44361,281 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "Adicional": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "codigo",
+          "nombre",
+          "descripcion",
+          "precio_sugerido",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa (NIT) del catálogo"
+          },
+          "codigo": {
+            "type": "string",
+            "description": "Único en la empresa, en mayúsculas"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "precio_sugerido": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sugerencia para asignarlo cobrado"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Desactivado: no se asigna ni lo traen los planes"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdicionalPlan": {
+        "type": "object",
+        "required": [
+          "plan_id",
+          "adicional_id",
+          "empresa_id",
+          "adicional_codigo",
+          "adicional_nombre",
+          "adicional_activo",
+          "cantidad"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "adicional_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Empresa del adicional: solo lo reciben servicios de esa empresa"
+          },
+          "adicional_codigo": {
+            "type": "string"
+          },
+          "adicional_nombre": {
+            "type": "string"
+          },
+          "adicional_activo": {
+            "type": "boolean"
+          },
+          "cantidad": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      },
+      "AdicionalServicio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "servicio_id",
+          "adicional_id",
+          "adicional_codigo",
+          "adicional_nombre",
+          "modalidad",
+          "identificador",
+          "tiene_credencial",
+          "precio",
+          "motivo_id",
+          "motivo_nombre",
+          "motivo_detalle",
+          "plan_id",
+          "estado",
+          "alta_en",
+          "baja_en",
+          "motivo_baja",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Id de la asignación (`asignacionId` en las rutas)"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "adicional_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "adicional_codigo": {
+            "type": "string"
+          },
+          "adicional_nombre": {
+            "type": "string"
+          },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "incluido",
+              "cortesia",
+              "cobrado"
+            ]
+          },
+          "identificador": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Usuario de IPTV, correo de la cuenta…"
+          },
+          "tiene_credencial": {
+            "type": "boolean",
+            "description": "Si hay credencial guardada; se lee con GET …/credencial (queda auditado)"
+          },
+          "precio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Solo con cobrado"
+          },
+          "motivo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Motivo de cortesía (solo con cortesia)"
+          },
+          "motivo_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo_detalle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plan_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Plan que lo trajo (solo incluido asignado por el plan)"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "baja"
+            ]
+          },
+          "alta_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "baja_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo_baja": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Texto de la baja, o retiro, cambio_plan, cambio_empresa"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Advertencia": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "mensaje"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "enum": [
+              "plan_dedicado_asimetrico",
+              "plan_dedicado_compartido",
+              "servicio_cliente_cf"
+            ]
+          },
+          "mensaje": {
+            "type": "string"
           }
         }
       },
@@ -45882,6 +48100,35 @@
                 }
               }
             }
+          }
+        }
+      },
+      "CredencialAdicional": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "asignacion_id",
+          "identificador",
+          "credencial"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "asignacion_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "identificador": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credencial": {
+            "type": "string",
+            "description": "En claro; cada consulta queda auditada"
           }
         }
       },
@@ -50945,6 +53192,55 @@
           }
         }
       },
+      "MotivoCortesia": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "codigo",
+          "nombre",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null = común a todas las empresas"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Movimiento": {
         "type": "object",
         "required": [
@@ -52519,6 +54815,15 @@
               48
             ]
           },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial",
+              "dedicado"
+            ],
+            "description": "residencial (por defecto), empresarial o dedicado"
+          },
           "global": {
             "type": "boolean"
           },
@@ -52537,6 +54842,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Advertencia"
+            },
+            "description": "Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)"
           }
         }
       },
@@ -52729,6 +55041,15 @@
           },
           "no_crear_reglas": {
             "type": "boolean"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial",
+              "dedicado"
+            ],
+            "description": "Tipo del plan (residencial, empresarial, dedicado)"
           }
         }
       },
@@ -60421,6 +62742,15 @@
           "plan_nombre": {
             "type": "string"
           },
+          "plan_tipo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial",
+              "dedicado"
+            ],
+            "description": "Tipo del plan del servicio (solo lectura; se cambia en el plan)"
+          },
           "router_nombre": {
             "type": "string"
           },
@@ -60512,6 +62842,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Advertencia"
+            },
+            "description": "Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)"
           }
         }
       },
