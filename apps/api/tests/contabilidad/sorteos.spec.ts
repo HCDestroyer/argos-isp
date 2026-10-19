@@ -11,6 +11,7 @@ import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import { programaConReglas } from '#tests/lealtad/ayudas_lealtad'
 import { hoyGuatemala } from '#ledger/fechas'
 import AnularEgreso from '#ledger/actions/anular_egreso'
+import RegistrarCompra from '#ledger/actions/registrar_compra'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import CrearPremio from '#lealtad/actions/crear_premio'
 import RevertirCanje from '#lealtad/actions/revertir_canje'
@@ -108,12 +109,38 @@ async function ejecutado(e: EmpresasGt, valorPublico = '90210') {
     )
 }
 
+/** Cuenta de activo (no control) de donde sale el bien: «otros bienes muebles», como inventario de premios. */
+const CUENTA_BIEN = '1.2.01.07'
+
+/** Línea de una compra a crédito con factura de un bien de la empresa B. */
+async function lineaDeCompra(e: EmpresasGt, total: string, cuenta: string): Promise<number> {
+    const proveedor = await proveedorEn(e.B, e.ctx)
+    const compra = await new RegistrarCompra().execute(
+        {
+            proveedor_id: Number(proveedor.id),
+            tipo_documento: 'FACT',
+            serie: 'A',
+            numero: unico('R'),
+            fecha_documento: hoyGuatemala(),
+            condicion: 'credito',
+            lineas: [{ descripcion: 'Router Wi-Fi 6', tipo: 'bien', cuenta, total }],
+        },
+        e.ctx,
+    )
+    const linea = await db.from('ledger.compras_lineas').where('compra_id', compra.id).firstOrFail()
+    return Number(linea.id)
+}
+
 async function datosDeEntrega(e: EmpresasGt, sorteo: Ejecutado, premioPosicion: number) {
     const premio = sorteo.premios.find((p) => p.posicion === premioPosicion)!
     if (premio.tipo === 'efectivo') return { metodo: 'caja' as const, caja_id: e.cajas.get(e.B)! }
     if (premio.tipo === 'bien') {
-        const proveedor = await proveedorEn(e.B, e.ctx)
-        return { contrapartida: 'proveedor' as const, proveedor_id: Number(proveedor.id) }
+        // decisión del PM: el bien se compró con factura (a crédito, base 340 ≠ valor declarado 333.35); el
+        // gasto es la base de la línea y el ISR sale del valor del premio
+        return {
+            contrapartida: 'compra' as const,
+            compra_linea_id: await lineaDeCompra(e, '380.80', CUENTA_BIEN),
+        }
     }
     return {}
 }
@@ -171,7 +198,7 @@ async function scriptVerificar(datos: unknown) {
 test.group('Contabilidad · sorteos (auditor)', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    test('entrega: efectivo ×2, bien con ISR redondeado y servicio con ISR propio; inv. 9 y 15 limpios', async ({
+    test('entrega: efectivo ×2, bien con ISR redondeado y servicio con ISR propio; inv. 9, 15 y 16 limpios', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -198,8 +225,9 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
             ])
         }
         assert.deepEqual(await lineas('sorteo', Number(porPremio(2)[0]!.id)), [
-            ['5.1.03', '366.69', '0.00'],
-            ['2.1.03', '0.00', '333.35'],
+            ['5.1.03', '340.00', '0.00'],
+            ['1.2.01.07', '0.00', '340.00'],
+            ['5.1.03', '33.34', '0.00'],
             ['2.1.05', '0.00', '33.34'],
         ])
         assert.equal(porPremio(2)[0]!.retencion_isr, '33.34')
@@ -212,7 +240,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('inv. 15 detecta la entrega mal contabilizada, el asiento huérfano y los ganadores alterados', async ({
+    test('inv. 16 detecta la entrega mal contabilizada, el asiento huérfano y los ganadores alterados', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -231,7 +259,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                     [bien.id],
                 )
             }),
-            '15.premio_de_sorteo_mal_contabilizado',
+            '16.premio_de_sorteo_mal_contabilizado',
         )
         // el efectivo entregado sin su egreso (o con el egreso de otro premio)
         assert.include(
@@ -240,7 +268,17 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                     efectivo.id,
                 ])
             }),
-            '15.premio_de_sorteo_mal_contabilizado',
+            '16.premio_de_sorteo_mal_contabilizado',
+        )
+        // el bien sin su compra: el asiento acredita una cuenta que ya no es la de su línea
+        assert.include(
+            await enTransaccion(empresas, async (trx) => {
+                await trx.rawQuery(
+                    `UPDATE lealtad.sorteos_ganadores SET compra_linea_id = NULL WHERE id = ?`,
+                    [bien.id],
+                )
+            }),
+            '16.premio_de_sorteo_mal_contabilizado',
         )
         // el asiento del bien apunta a otro ganador
         assert.include(
@@ -249,7 +287,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                     bien.id,
                 ])
             }),
-            '15.asiento_de_sorteo_sin_ganador',
+            '16.asiento_de_sorteo_sin_ganador',
         )
         // egreso anulado o asiento revertido por fuera de la acción
         assert.include(
@@ -261,7 +299,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                     [efectivo.egreso_id],
                 )
             }),
-            '15.premio_entregado_deshecho',
+            '16.premio_entregado_deshecho',
         )
         // ganadores distintos del resultado: un suplente que pasa a titular o cambia de participante
         const otro = await db
@@ -290,7 +328,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                     await trx.rawQuery(`ALTER TABLE lealtad.sorteos ENABLE TRIGGER USER`)
                 }
             }),
-            '15.ganadores_distintos_del_resultado',
+            '16.ganadores_distintos_del_resultado',
         )
         // un participante que entra después del corte cambia la lista: ya no da lista_hash
         assert.include(
@@ -302,7 +340,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                     [sorteo.id, intruso.clienteId],
                 )
             }),
-            '15.ganadores_distintos_del_resultado',
+            '16.ganadores_distintos_del_resultado',
         )
         await afirmarLibro(assert, empresas)
     })
@@ -491,7 +529,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
         })
     })
 
-    test('H25: el bien se entrega solo contra 2.1.03 o un activo que no sea cuenta control (caja, banco, tránsito, estimación)', async ({
+    test('H25: el bien se entrega solo con su compra o contra un activo que no sea cuenta control (caja, banco, tránsito, estimación)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()

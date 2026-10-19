@@ -46,16 +46,12 @@ import { REQUISITOS_PARA_EJECUTAR, verificacionSorteo } from '#lealtad/sorteos'
  * de premios como gasto `5.1.03` (efectivo por egreso, bien ligado a su compra o contra un activo,
  * servicio como canje) con el ISR retenido a `2.1.05`.
  *
- * Pendiente del auditor (filtro temporal, se quita cuando lo actualice): `15.retenciones_por_pagar_distintas`
- * (fase 5) aún no suma el ISR de los premios a 2.1.05 (decisión del líder, opción a); el inv. 15 de sorteos
- * aún no admite el reverso de una entrega anulada (`.fails` «H-anular-entrega»).
+ * El ISR de los premios va a 2.1.05 (`15.retenciones_por_pagar_distintas`) y la entrega, su anulación y
+ * la compra del bien los revisa el inv. 16 del auditor.
  */
 
-/**
- * Temporales hasta que el auditor actualice sus invariantes: el ISR de los premios en 2.1.05 (decisión
- * del líder, opción a) y el bien ligado a su compra (decisión del PM 4, contrapartida `compra`).
- */
-const PENDIENTES_DEL_AUDITOR = ['15.retenciones_por_pagar_distintas', '15.premio_de_sorteo_mal_contabilizado']
+/** Nada pendiente del auditor: 15.retenciones suma el ISR de los premios y el inv. 16 conoce la compra. */
+const PENDIENTES_DEL_AUDITOR: string[] = []
 
 async function otrasViolaciones(empresas: number[]) {
     const violaciones = await verificarLibro(empresas)
@@ -607,23 +603,10 @@ test.group('Lealtad · sorteos', (group) => {
             ),
         )
         assert.equal(otraVez.codigo, 'premio_no_entregado')
-        // el inv. 15 del auditor aún no admite el reverso de una entrega anulada (H-anular-entrega, abajo)
-        const violaciones = await verificarLibro([e.B, e.C])
-        assert.deepEqual(
-            violaciones.filter(
-                (v) =>
-                    ![
-                        '15.premio_de_sorteo_mal_contabilizado',
-                        '15.asiento_de_sorteo_sin_ganador',
-                        '15.asiento_de_sorteo_revertido',
-                        '15.retenciones_por_pagar_distintas',
-                    ].some((p) => v.invariante.startsWith(p)),
-            ),
-            [],
-        )
+        assert.deepEqual(await verificarLibro([e.B, e.C]), [])
     })
 
-    test('H-anular-entrega: anular y volver a entregar un premio deja el libro limpio para el auditor', async ({
+    test('anular y volver a entregar un premio deja el libro limpio para el auditor (antes H-anular-entrega)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -643,9 +626,7 @@ test.group('Lealtad · sorteos', (group) => {
             e.ctx,
         )
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'H-anular-entrega: el inv. 15 del auditor no admite el reverso de los asientos sorteo de una entrega anulada (sorteos.anular_entrega)',
-    )
+    })
 
     test('decisión del PM: un bien comprado con factura se liga a su compra; gasto 5.1.03 por la base sin IVA y la compra no se anula', async ({
         assert,
@@ -722,18 +703,6 @@ test.group('Lealtad · sorteos', (group) => {
         )
         const libre = await db.from('lealtad.sorteos_ganadores').where('id', bien.id).firstOrFail()
         assert.isNull(libre.compra_linea_id)
-        const violaciones = await verificarLibro([e.B, e.C])
-        assert.deepEqual(
-            violaciones.filter(
-                (v) =>
-                    ![
-                        '15.premio_de_sorteo_mal_contabilizado',
-                        '15.asiento_de_sorteo_sin_ganador',
-                        '15.asiento_de_sorteo_revertido',
-                        '15.retenciones_por_pagar_distintas',
-                    ].some((p) => v.invariante.startsWith(p)),
-            ),
-            [],
-        )
+        assert.deepEqual(await verificarLibro([e.B, e.C]), [])
     })
 })
