@@ -174,6 +174,11 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `dte.certificado` / `dte.rechazado` / `dte.anulado` | fiscal (FEL) | dte_id, empresa_id, documento_tipo, documento_id; certificado: tipo_dte, autorizacion, serie, numero, contingencia; rechazado: error, definitivo; anulado: motivo |
 | `fel.contingencia_cambiada` | fiscal (FEL) | empresa_id, activa, motivo |
 | `factura.sustituida` | billing | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo |
+| `lealtad.programa_cambiado` | lealtad | programa_id, empresa_id, campos[] |
+| `lealtad.puntos_acumulados` | lealtad | movimiento_id, empresa_id, cliente_id, servicio_id, regla_id, puntos, vence_en |
+| `lealtad.puntos_revertidos` | lealtad | movimiento_id, empresa_id, cliente_id, puntos, origen_tipo, origen_id |
+| `lealtad.puntos_por_vencer` / `lealtad.puntos_vencidos` | lealtad (cron) | empresa_id, cliente_id, puntos; por vencer: vence_en, lote_id; vencidos: movimiento_id |
+| `lealtad.referido_calificado` | lealtad | referido_id, empresa_id, referidor_id, cliente_id |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

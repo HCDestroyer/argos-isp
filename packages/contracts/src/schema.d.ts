@@ -329,6 +329,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes/{id}/puntos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Puntos del cliente: saldo y lotes por empresa, y movimientos
+         * @description Un saldo por empresa (los puntos son por NIT) con sus lotes vivos (el que vence antes primero) y lo que vence dentro del aviso del programa. Con empresa activa, solo esa. Movimientos con cursor, del más reciente al más antiguo.
+         */
+        get: operations["lealtadPuntosCliente"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes/{id}/quitar-responsable-pago": {
         parameters: {
             query?: never;
@@ -1950,6 +1970,206 @@ export interface paths {
         put?: never;
         /** Crear pool IPv6 (enlace /64 o delegación /56, /48) */
         post: operations["ipv6PoolsCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/ajustes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ajuste manual de puntos (con motivo)
+         * @description En la empresa activa. Positivo: un lote nuevo (con diferimiento, asiento 4.1.05 / 2.1.10). Negativo: consume lotes (el que vence antes primero) y revierte su diferimiento; 422 `saldo_insuficiente` si dejaría el saldo negativo. 422 `programa_inactivo` sin programa activo; 422 `servicio_no_valido` si el cliente no tiene servicio en la empresa.
+         */
+        post: operations["lealtadAjustar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/programa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Programa de lealtad de la empresa activa
+         * @description El activo o, sin él, el más reciente. `programa: null` = la empresa no tiene programa.
+         */
+        get: operations["lealtadPrograma"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/programas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Programas de lealtad (de la empresa activa o el consolidado) */
+        get: operations["lealtadProgramas"];
+        put?: never;
+        /**
+         * Crear el programa de lealtad de la empresa (inactivo)
+         * @description Nace inactivo. Por defecto: diferimiento = false (indicador, sin asientos), canje_esperado_pct = 100, vencimiento_meses = 12 (null = no vencen), aviso 30 días. Con diferimiento, 422 `cuentas_lealtad_faltantes` si faltan 2.1.10, 4.1.05 o 4.1.06. Emite lealtad.programa_cambiado.
+         */
+        post: operations["lealtadCrearPrograma"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/programas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Editar el programa de lealtad
+         * @description valor_punto, canje_esperado_pct y vencimiento_meses aplican a los lotes nuevos (cada lote conserva su valor y su vencimiento). Cambiar terminos recalcula terminos_hash. Emite lealtad.programa_cambiado con los campos.
+         */
+        put: operations["lealtadEditarPrograma"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/programas/{id}/activar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activar el programa de lealtad
+         * @description Uno activo por empresa: 409 `programa_activo_existente`; 409 `programa_ya_activo`. Desde aquí los pagos y aniversarios nuevos otorgan puntos (nada retroactivo).
+         */
+        post: operations["lealtadActivarPrograma"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/programas/{id}/desactivar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desactivar el programa de lealtad
+         * @description Deja de otorgar; los lotes conservan su vencimiento y su valor, y los reversos se siguen aplicando. 409 `programa_inactivo_ya`.
+         */
+        post: operations["lealtadDesactivarPrograma"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/referidos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Referidos y su estado */
+        get: operations["lealtadReferidos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/referidos/{id}/rechazar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rechazar un referido (falso o duplicado)
+         * @description Si ya estaba calificado revierte los puntos del referidor y el bono del referido. 409 `referido_rechazado`.
+         */
+        post: operations["lealtadRechazarReferido"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/reglas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reglas para ganar puntos */
+        get: operations["lealtadReglas"];
+        put?: never;
+        /**
+         * Crear una regla para ganar puntos
+         * @description Unión por tipo (pago_a_tiempo, antiguedad, referido, pago_adelantado), cada uno con su esquema de condiciones (§4); lo que falte toma el valor por defecto. Fase 1: recompensa = puntos (422 `recompensa_no_disponible`). vigente_desde por defecto = la del programa. Emite lealtad.programa_cambiado (reglas).
+         */
+        post: operations["lealtadCrearRegla"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/reglas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver una regla */
+        get: operations["lealtadVerRegla"];
+        /**
+         * Editar o desactivar una regla
+         * @description El tipo no cambia; condiciones se valida con el esquema del tipo de la regla (422 en condiciones.<campo>). Una regla no se borra: activa = false. Aplica a los otorgamientos nuevos.
+         */
+        put: operations["lealtadEditarRegla"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3678,6 +3898,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/lealtad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Puntos emitidos, canjeados y vencidos, y el pasivo contra 2.1.10
+         * @description Por empresa: flujos del periodo (desde/hasta por fecha de Guatemala) y, al día de hoy, Σ valor vivo de los lotes contra el saldo de 2.1.10; `cuadra` debe ser true (§6).
+         */
+        get: operations["reportesLealtad"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reportes/promesas": {
         parameters: {
             query?: never;
@@ -4541,6 +4781,10 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        AjustePuntos: {
+            movimiento: components["schemas"]["MovimientoPuntos"];
+            saldo: number;
+        };
         AplicacionPago: {
             factura_id: number;
             monto: components["schemas"]["Dinero"];
@@ -4563,7 +4807,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "lealtad";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -6331,6 +6575,22 @@ export interface components {
                 detalle: string;
             }[];
         };
+        LotePuntos: {
+            id: number;
+            programa_id: number;
+            servicio_id: number | null;
+            regla_id: number | null;
+            /** @enum {string} */
+            tipo: "acumulacion" | "canje" | "vencimiento" | "reverso" | "ajuste";
+            puntos: number;
+            restante: number;
+            valor: components["schemas"]["Dinero"];
+            valor_restante: components["schemas"]["Dinero"];
+            /** Format: date */
+            vence_en: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         Mayor: {
             cuenta: components["schemas"]["Cuenta"];
             saldo_inicial: components["schemas"]["Dinero"];
@@ -6410,6 +6670,35 @@ export interface components {
             abono: components["schemas"]["Dinero"];
             saldo: components["schemas"]["Dinero"];
         };
+        MovimientoPuntos: {
+            id: number;
+            empresa_id: number;
+            programa_id: number;
+            cliente_id: number;
+            servicio_id: number | null;
+            /** @enum {string} */
+            tipo: "acumulacion" | "canje" | "vencimiento" | "reverso" | "ajuste";
+            /** @description Con signo: positivo = lote, negativo = salida */
+            puntos: number;
+            regla_id: number | null;
+            /** @enum {string} */
+            origen_tipo: "factura" | "pago" | "servicio" | "referido" | "canje" | "sorteo" | "ajuste" | "nota_credito" | "lote";
+            origen_id: number | null;
+            clave_unica: string;
+            /**
+             * Format: date
+             * @description Solo lotes; null = no vence
+             */
+            vence_en: string | null;
+            /** @description Q diferidos (lote) o liberados (salida); 0.00 sin diferimiento */
+            valor: components["schemas"]["Dinero"];
+            asiento_id: number | null;
+            reversa_de: number | null;
+            motivo: string | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -6461,6 +6750,14 @@ export interface components {
             data: components["schemas"]["Comprobante"][];
             nextCursor: string | null;
             resumen: components["schemas"]["ResumenComprobantes"];
+        };
+        PaginaReferidosLealtad: {
+            data: components["schemas"]["ReferidoLealtad"][];
+            nextCursor: string | null;
+        };
+        PaginaReglasLealtad: {
+            data: components["schemas"]["ReglaLealtad"][];
+            nextCursor: string | null;
         };
         Pago: {
             id: number;
@@ -7163,6 +7460,45 @@ export interface components {
                 rule?: string;
             }[];
         };
+        ProgramaLealtad: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            activo: boolean;
+            /** @description Q por punto */
+            valor_punto: components["schemas"]["Dinero"];
+            /** @description NIIF 15: los puntos son un pasivo (2.1.10) con asientos; false = solo un indicador */
+            diferimiento: boolean;
+            /**
+             * @description Porcentaje con 6 decimales, como string
+             * @example 100.000000
+             */
+            canje_esperado_pct: string;
+            /** @description valor_punto × canje_esperado_pct / 100: lo que difiere cada punto (6 decimales) */
+            valor_pasivo_punto: string;
+            /** @description null = los puntos no vencen */
+            vencimiento_meses: number | null;
+            aviso_vencimiento_dias: number;
+            minimo_canje: number;
+            terminos: string;
+            /** @description SHA-256 de los términos publicados */
+            terminos_hash: string;
+            /** Format: date */
+            vigente_desde: string;
+            /** Format: date */
+            vigente_hasta: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ProgramaLealtadEmpresa: {
+            empresa_id: number;
+            /** @description El activo o, sin él, el más reciente; null = la empresa no tiene programa */
+            programa: components["schemas"]["ProgramaLealtad"] | null;
+        };
         Promesa: {
             id: number;
             /** @description Empresa del servicio (multiempresa) */
@@ -7207,6 +7543,24 @@ export interface components {
                 contingencia: boolean;
                 consulta_nit: boolean;
                 pdf: boolean;
+            };
+        };
+        PuntosCliente: {
+            cliente_id: number;
+            saldos: {
+                empresa_id: number;
+                /** @description Σ movimientos; puede ser negativo tras un reverso (§4) */
+                saldo: number;
+                /** @description Puntos que vencen dentro del aviso del programa */
+                por_vencer: number;
+                /** Format: date */
+                proximo_vencimiento: string | null;
+                valor_pasivo: components["schemas"]["Dinero"];
+                lotes: components["schemas"]["LotePuntos"][];
+            }[];
+            movimientos: {
+                data: components["schemas"]["MovimientoPuntos"][];
+                nextCursor: string | null;
             };
         };
         QuienSoy: {
@@ -7255,6 +7609,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ReferidoLealtad: {
+            id: number;
+            empresa_id: number;
+            referidor_id: number;
+            referidor_nombre: string;
+            referido_id: number;
+            referido_nombre: string;
+            codigo: string;
+            /** @enum {string} */
+            estado: "pendiente" | "calificado" | "rechazado";
+            /** Format: date-time */
+            calificado_en: string | null;
+            motivo: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         RegimenCambiado: {
             empresa_id: number;
             regimen: string;
@@ -7290,6 +7664,55 @@ export interface components {
             detalle: string;
             /** @description Solo en la simulación: false si la configuración no la exige */
             aplica?: boolean;
+        };
+        ReglaLealtad: {
+            id: number;
+            empresa_id: number;
+            programa_id: number;
+            /** @enum {string} */
+            tipo: "pago_a_tiempo" | "antiguedad" | "referido" | "pago_adelantado";
+            /** @description Condiciones completas del tipo (§4), con sus valores por defecto */
+            condiciones: {
+                dias_antes_vencimiento: number;
+                solo_servicio: boolean;
+                sin_promesa: boolean;
+                racha: {
+                    periodos: number;
+                    puntos_extra: number;
+                } | null;
+                monto_minimo: components["schemas"]["Dinero"] | null;
+            } | {
+                cada_meses: number;
+                sin_vencidas_mas_de_dias: number | null;
+                estados_validos: ("activo" | "limitado" | "suspendido")[];
+            } | {
+                facturas_pagadas_minimas: number;
+                dias_maximos: number | null;
+                tope_por_referidor: number | null;
+                puntos_referido: number;
+            } | {
+                periodos_minimos: number;
+                puntos_por_periodo: number;
+            };
+            /** @enum {string} */
+            recompensa: "puntos" | "premio" | "boletos";
+            puntos: number;
+            premio_id: number | null;
+            sorteo_id: number | null;
+            tope_por_cliente: number | null;
+            /** @enum {string|null} */
+            periodo_tope: "mes" | "anio" | null;
+            activa: boolean;
+            /** Format: date */
+            vigente_desde: string;
+            /** Format: date */
+            vigente_hasta: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         ReglaSimulada: {
             regla: string;
@@ -7658,6 +8081,30 @@ export interface components {
             };
             /** Format: date-time */
             generado_en: string;
+        };
+        ReporteLealtad: {
+            /** Format: date */
+            desde: string | null;
+            /** Format: date */
+            hasta: string | null;
+            empresas: {
+                empresa_id: number;
+                emitidos: number;
+                valor_emitido: components["schemas"]["Dinero"];
+                canjeados: number;
+                vencidos: number;
+                revertidos: number;
+                ajustes_negativos: number;
+                valor_liberado: components["schemas"]["Dinero"];
+                saldo_puntos: number;
+                puntos_vivos: number;
+                /** @description Σ valor vivo de los lotes */
+                pasivo_lotes: components["schemas"]["Dinero"];
+                /** @description Saldo acreedor de 2.1.10 en el libro */
+                pasivo_libro: components["schemas"]["Dinero"];
+                /** @description pasivo_lotes = pasivo_libro (invariante del contrato §6) */
+                cuadra: boolean;
+            }[];
         };
         ReportePromesas: {
             reporte: string;
@@ -9727,6 +10174,69 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso clientes.estado_cuenta */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadPuntosCliente: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Puntos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PuntosCliente"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15677,6 +16187,993 @@ export interface operations {
             };
         };
     };
+    lealtadAjustar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cliente_id: number;
+                    servicio_id?: number;
+                    /** @description Con signo, distinto de 0: positivo agrega un lote, negativo descuenta (sin dejar saldo negativo) */
+                    puntos: number;
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Ajuste registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AjustePuntos"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ajustar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadPrograma: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Programa de la empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgramaLealtadEmpresa"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadProgramas: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Programas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgramaLealtad"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCrearPrograma: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa del programa; por defecto la activa */
+                    empresa_id?: number;
+                    nombre: string;
+                    /**
+                     * @description Q por punto con hasta 2 decimales, como string
+                     * @example 0.10
+                     */
+                    valor_punto: string;
+                    /** @description NIIF 15: true = los puntos son un pasivo (2.1.10) y llevan asientos; false (por defecto) = solo un indicador */
+                    diferimiento?: boolean;
+                    /**
+                     * @description Porcentaje de 0 a 100 con hasta 6 decimales, como string
+                     * @example 100
+                     * @example 80.5
+                     */
+                    canje_esperado_pct?: string;
+                    /** @description Meses desde la acumulación (por defecto 12); null = los puntos no vencen */
+                    vencimiento_meses?: number | null;
+                    aviso_vencimiento_dias?: number;
+                    minimo_canje?: number;
+                    /** @description Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24) */
+                    terminos?: string;
+                    /** Format: date */
+                    vigente_desde?: string;
+                    /** Format: date */
+                    vigente_hasta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Programa creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgramaLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadEditarPrograma: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    valor_punto?: string;
+                    /** @description NIIF 15: true = los puntos son un pasivo (2.1.10) y llevan asientos; false (por defecto) = solo un indicador */
+                    diferimiento?: boolean;
+                    /**
+                     * @description Porcentaje de 0 a 100 con hasta 6 decimales, como string
+                     * @example 100
+                     * @example 80.5
+                     */
+                    canje_esperado_pct?: string;
+                    /** @description Meses desde la acumulación (por defecto 12); null = los puntos no vencen */
+                    vencimiento_meses?: number | null;
+                    aviso_vencimiento_dias?: number;
+                    minimo_canje?: number;
+                    /** @description Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24) */
+                    terminos?: string;
+                    /** Format: date */
+                    vigente_desde?: string;
+                    /** Format: date */
+                    vigente_hasta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Programa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgramaLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadActivarPrograma: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Programa activo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgramaLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadDesactivarPrograma: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Programa inactivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgramaLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadReferidos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "pendiente" | "calificado" | "rechazado";
+                referidor_id?: number;
+                referido_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Referidos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaReferidosLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadRechazarReferido: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Referido rechazado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferidoLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ajustar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadReglas: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                programa_id?: number;
+                tipo?: "pago_a_tiempo" | "antiguedad" | "referido" | "pago_adelantado";
+                activa?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reglas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaReglasLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCrearRegla: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    programa_id: number;
+                    /** @enum {string} */
+                    tipo: "pago_a_tiempo";
+                    condiciones?: {
+                        dias_antes_vencimiento?: number;
+                        solo_servicio?: boolean;
+                        sin_promesa?: boolean;
+                        /** @description Bono cada vez que se completan `periodos` facturas seguidas a tiempo */
+                        racha?: {
+                            periodos: number;
+                            puntos_extra: number;
+                        } | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        monto_minimo?: string | null;
+                    };
+                    /**
+                     * @description Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)
+                     * @enum {string}
+                     */
+                    recompensa?: "puntos";
+                    puntos: number;
+                    /** @description Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope */
+                    tope_por_cliente?: number | null;
+                    periodo_tope?: ("mes" | "anio") | null;
+                    activa?: boolean;
+                    /** Format: date */
+                    vigente_desde?: string;
+                    /** Format: date */
+                    vigente_hasta?: string | null;
+                } | {
+                    programa_id: number;
+                    /** @enum {string} */
+                    tipo: "antiguedad";
+                    condiciones?: {
+                        cada_meses?: number;
+                        sin_vencidas_mas_de_dias?: number | null;
+                        estados_validos?: ("activo" | "limitado" | "suspendido")[];
+                    };
+                    /**
+                     * @description Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)
+                     * @enum {string}
+                     */
+                    recompensa?: "puntos";
+                    puntos: number;
+                    /** @description Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope */
+                    tope_por_cliente?: number | null;
+                    periodo_tope?: ("mes" | "anio") | null;
+                    activa?: boolean;
+                    /** Format: date */
+                    vigente_desde?: string;
+                    /** Format: date */
+                    vigente_hasta?: string | null;
+                } | {
+                    programa_id: number;
+                    /** @enum {string} */
+                    tipo: "referido";
+                    condiciones?: {
+                        facturas_pagadas_minimas?: number;
+                        dias_maximos?: number | null;
+                        tope_por_referidor?: number | null;
+                        puntos_referido?: number;
+                    };
+                    /**
+                     * @description Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)
+                     * @enum {string}
+                     */
+                    recompensa?: "puntos";
+                    puntos: number;
+                    /** @description Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope */
+                    tope_por_cliente?: number | null;
+                    periodo_tope?: ("mes" | "anio") | null;
+                    activa?: boolean;
+                    /** Format: date */
+                    vigente_desde?: string;
+                    /** Format: date */
+                    vigente_hasta?: string | null;
+                } | {
+                    programa_id: number;
+                    /** @enum {string} */
+                    tipo: "pago_adelantado";
+                    condiciones?: {
+                        periodos_minimos?: number;
+                        puntos_por_periodo?: number;
+                    };
+                    /**
+                     * @description Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)
+                     * @enum {string}
+                     */
+                    recompensa?: "puntos";
+                    puntos: number;
+                    /** @description Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope */
+                    tope_por_cliente?: number | null;
+                    periodo_tope?: ("mes" | "anio") | null;
+                    activa?: boolean;
+                    /** Format: date */
+                    vigente_desde?: string;
+                    /** Format: date */
+                    vigente_hasta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Regla creada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerRegla: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Regla */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadEditarRegla: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Condiciones del tipo de la regla (mismo esquema que en el alta, §4) */
+                    condiciones?: {
+                        [key: string]: unknown;
+                    };
+                    /**
+                     * @description Fase 1: solo puntos (premio y boletos llegan con canjes y sorteos)
+                     * @enum {string}
+                     */
+                    recompensa?: "puntos";
+                    puntos?: number;
+                    /** @description Otorgamientos de esta regla por cliente en cada periodo_tope; null = sin tope */
+                    tope_por_cliente?: number | null;
+                    periodo_tope?: ("mes" | "anio") | null;
+                    activa?: boolean;
+                    /** Format: date */
+                    vigente_desde?: string;
+                    /** Format: date */
+                    vigente_hasta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Regla */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     libroVerAsiento: {
         parameters: {
             query?: never;
@@ -15970,7 +17467,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "lealtad";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };
@@ -21538,6 +23035,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReporteIva"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesLealtad: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteLealtad"];
                 };
             };
             /** @description No autenticado */
