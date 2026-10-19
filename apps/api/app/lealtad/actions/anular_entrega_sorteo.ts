@@ -18,9 +18,10 @@ import { detalleSorteo, exigirEstado, ganadoresDe, verSorteo } from '#lealtad/so
  *   el descuento ya se aplicó a una factura, 409 `canje_no_revertible`;
  * - el asiento del ISR (`5.1.03 / 2.1.05`) se revierte en todos los casos.
  *
- * El ganador vuelve a `por_notificar` (sin asiento, egreso, canje ni retención) y, si el sorteo estaba
- * `premios_entregados`, vuelve a `ejecutado` (única vuelta atrás que permite el trigger del estado,
- * con `lealtad.reabrir_entrega`). Directo, `AnularEgreso`, `RevertirCanje` y `RevertirAsiento`
+ * El ganador vuelve a `notificado` (o `por_notificar` si no se le había avisado), sin asiento, egreso,
+ * canje, compra, constancia ni retención, y si el sorteo estaba `premios_entregados` vuelve a
+ * `acta_cerrada` (o `ejecutado` sin acta): única vuelta atrás que permite el trigger del estado, con
+ * `lealtad.reabrir_entrega`. Directo, `AnularEgreso`, `RevertirCanje` y `RevertirAsiento`
  * rechazan esos documentos (422). Evento `sorteo.entrega_anulada`.
  */
 
@@ -51,7 +52,11 @@ export default class AnularEntregaSorteo extends DomainAction<
         const sorteo = await verSorteo(input.sorteo_id, t.trx, true)
         exigirAccesoEmpresa(t.ctx, sorteo.empresa_id)
         t.fijarEmpresa(sorteo.empresa_id)
-        exigirEstado(sorteo, ['ejecutado', 'premios_entregados'], 'anular la entrega de un premio')
+        exigirEstado(
+            sorteo,
+            ['ejecutado', 'acta_cerrada', 'premios_entregados'],
+            'anular la entrega de un premio',
+        )
         const todos = await ganadoresDe(sorteo.id, t.trx)
         const ganador = todos.find((g) => g.id === input.ganador_id)
         if (!ganador) throw new NoEncontrado(`El ganador ${input.ganador_id} no es del sorteo ${sorteo.id}`)
@@ -86,6 +91,8 @@ export default class AnularEntregaSorteo extends DomainAction<
             )
         }
 
+        // vuelve a esperar su entrega: notificado (con su plazo) si ya se le avisó
+        const volverA = ganador.notificado_en ? 'notificado' : 'por_notificar'
         const antes = {
             estado: ganador.estado,
             asiento_id: ganador.asiento_id,
@@ -98,11 +105,12 @@ export default class AnularEntregaSorteo extends DomainAction<
             .from('lealtad.sorteos_ganadores')
             .where('id', ganador.id)
             .update({
-                estado: 'por_notificar',
+                estado: volverA,
                 asiento_id: null,
                 egreso_id: null,
                 canje_id: null,
                 compra_linea_id: null,
+                constancia_archivo_id: null,
                 retencion_isr: null,
                 contrapartida: null,
                 entregado_en: null,
@@ -112,7 +120,7 @@ export default class AnularEntregaSorteo extends DomainAction<
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
         await t.registrarCambios({ tipo: 'sorteo_ganador', id: ganador.id }, antes, {
-            estado: 'por_notificar',
+            estado: volverA,
             asiento_id: null,
             egreso_id: null,
             canje_id: null,
@@ -120,12 +128,14 @@ export default class AnularEntregaSorteo extends DomainAction<
             contrapartida: null,
         })
         if (sorteo.estado === 'premios_entregados') {
+            // reabre al estado del que venía: con el acta cerrada, acta_cerrada
+            const reabierto = sorteo.acta_hash ? 'acta_cerrada' : 'ejecutado'
             await t.trx.rawQuery(`SET LOCAL lealtad.reabrir_entrega = 'on'`)
             await t.trx
                 .from('lealtad.sorteos')
                 .where('id', sorteo.id)
                 .update({
-                    estado: 'ejecutado',
+                    estado: reabierto,
                     version: t.trx.knexRawQuery('version + 1'),
                     updated_at: t.trx.knexRawQuery('now()'),
                 } as Record<string, unknown>)
@@ -133,7 +143,7 @@ export default class AnularEntregaSorteo extends DomainAction<
             await t.registrarCambios(
                 { tipo: 'sorteo', id: sorteo.id },
                 { estado: 'premios_entregados' },
-                { estado: 'ejecutado' },
+                { estado: reabierto },
             )
         }
         t.fijarEntidad('sorteo', sorteo.id)
