@@ -15,6 +15,9 @@
 #   argosisp auto activar|desactivar|estado
 #                                         parches automáticos (timer de systemd, apagado por defecto)
 #   argosisp radius-clientes              regenera los clientes de FreeRADIUS desde network.routers
+#   argosisp nodo-portal crear <nombre> | listar | revocar <nombre>
+#                                         nodos portal remotos (servidor principal): el token de
+#                                         `crear` se muestra una sola vez
 #   argosisp logs [servicio...]           últimos registros (docker compose logs -f)
 #   argosisp compose <args...>            docker compose del proyecto con la versión instalada
 #
@@ -29,11 +32,15 @@
 #   ARGOSISP_SIN_DESCARGA 1 = no hacer `docker compose pull` (imágenes ya cargadas, CI)
 #   ARGOSISP_ESPERA_S     segundos para que todo quede sano (600)
 #   ARGOSISP_AUTO_NIVEL   parche (por defecto) o menor: hasta dónde llega --auto
+#
+# API del portal: ARGOSISP_API_PORTAL=si|no en el .env (README de infra/produccion). Si falta, `si`,
+# salvo con menos de 3 GB de RAM (`no`, con aviso); `actualizar` y `levantar` la escriben.
+# Nodo portal (ARGOSISP_ROL=portal, `instalar.sh --rol portal`): solo portal y proxy; `actualizar`
+# sigue la versión del central (GET /api/v1/version) y nunca la pasa; no hay base que respaldar.
 set -Eeuo pipefail
 
 ARGOSISP_DIR="${ARGOSISP_DIR:-/opt/argosisp}"
 ENV_FILE="$ARGOSISP_DIR/.env"
-PROYECTO=argosisp
 REPO="${ARGOSISP_REPO:-HCDestroyer/argos-isp}"
 FUENTE="${ARGOSISP_FUENTE:-}"
 ESPERA_S="${ARGOSISP_ESPERA_S:-600}"
@@ -42,6 +49,9 @@ REGISTROS_DIR="$ARGOSISP_DIR/registros"
 # Servicios de una sola vez (terminan con 0) y servicios de datos (no se detienen al actualizar)
 UNA_VEZ=" permisos migrate "
 DATOS=" postgres redis backup permisos "
+# Con menos RAM que esto (MemTotal en MB; el kernel reserva parte de los 3 GB) api-portal queda
+# apagado si el .env no dice nada
+API_PORTAL_RAM_MINIMA_MB=2900
 # Versiones que se conservan en versiones/ (además de la actual y la anterior)
 CONSERVAR_VERSIONES=3
 
@@ -50,7 +60,7 @@ CONSERVAR_VERSIONES=3
 # ---------------------------------------------------------------------------
 log() { printf '%s argosisp: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
 morir() { log "ERROR: $*"; exit 1; }
-uso() { sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+uso() { sed -n '2,/^set -E/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 
 es_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 
@@ -131,13 +141,92 @@ registrar() {
 
 version_instalada() { leer_env ARGOSISP_VERSION; }
 
-compose_de() { printf '%s/versiones/%s/docker-compose.yml' "$ARGOSISP_DIR" "$1"; }
+# ---------------------------------------------------------------------------
+# API del portal (servicio api-portal, perfil `api-portal` del compose)
+# ---------------------------------------------------------------------------
+ram_mb() { echo $(($(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024)); }
+
+# si|no: el valor del .env o, si falta, la regla (si, salvo RAM < 3 GB)
+api_portal_valor() {
+    local valor
+    valor="$(leer_env ARGOSISP_API_PORTAL)"
+    case "${valor,,}" in
+        si | sí) echo si ;;
+        no) echo no ;;
+        '') if [ "$(ram_mb)" -lt "$API_PORTAL_RAM_MINIMA_MB" ]; then echo no; else echo si; fi ;;
+        *) log "ARGOSISP_API_PORTAL='$valor' no es si ni no: queda en no"; echo no ;;
+    esac
+}
+
+api_portal_activo() { ! es_nodo_portal && [ "$(api_portal_valor)" = si ]; }
+
+# Escribe ARGOSISP_API_PORTAL en el .env si falta (instalaciones anteriores a api-portal)
+fijar_api_portal() {
+    es_nodo_portal && return 0
+    [ -z "$(leer_env ARGOSISP_API_PORTAL)" ] || return 0
+    local valor
+    valor="$(api_portal_valor)"
+    if [ "$valor" = no ]; then
+        log "aviso: $(ram_mb) MB de RAM (menos de 3 GB): api-portal queda apagado (ARGOSISP_API_PORTAL=no en el .env)"
+    else
+        log "api-portal activado (ARGOSISP_API_PORTAL=si en el .env; para apagarlo: no y argosisp levantar)"
+    fi
+    fijar_env ARGOSISP_API_PORTAL "$valor"
+}
+
+# Perfil y destino del portal para docker compose (el entorno manda sobre el .env)
+entorno_compose() {
+    if api_portal_activo; then
+        export COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal
+    else
+        export COMPOSE_PROFILES='' ARGOSISP_API_PORTAL_DESTINO=api
+    fi
+}
+
+# api-portal está activo y el compose de <versión> lo trae
+con_api_portal() {
+    api_portal_activo && grep -q '^  api-portal:' "$(compose_de "$1")" 2> /dev/null
+}
+
+# completo (servidor principal, por defecto) o portal (nodo portal remoto)
+rol() {
+    local r
+    r="$(leer_env ARGOSISP_ROL)"
+    printf '%s' "${r:-completo}"
+}
+es_nodo_portal() { [ "$(rol)" = portal ]; }
+requiere_principal() { es_nodo_portal && morir "esto no aplica en un nodo portal: se hace en el servidor principal"; return 0; }
+
+# Proyecto de compose (argosisp; argosisp-portal en un nodo portal)
+proyecto() {
+    local p
+    p="$(leer_env ARGOSISP_PROYECTO)"
+    printf '%s' "${p:-argosisp}"
+}
+
+compose_de() {
+    if es_nodo_portal; then
+        printf '%s/versiones/%s/docker-compose.nodo-portal.yml' "$ARGOSISP_DIR" "$1"
+    else
+        printf '%s/versiones/%s/docker-compose.yml' "$ARGOSISP_DIR" "$1"
+    fi
+}
+
+# Versión del servidor central, preguntada por el proxy del nodo (mismo token y TLS que el portal)
+version_central() {
+    local v
+    v="$(dc exec -T proxy sh -c 'wget -qO- --header "X-Request-Id: argosisp-version" http://127.0.0.1:8081/api/v1/version' 2> /dev/null |
+        jq -r '.version // empty' 2> /dev/null || true)"
+    es_semver "$v" || return 1
+    printf '%s' "$v"
+}
 
 # dc_v <versión> <args de docker compose...>
 dc_v() {
     local version="$1"
     shift
-    docker compose -p "$PROYECTO" --env-file "$ENV_FILE" -f "$(compose_de "$version")" "$@"
+    entorno_compose
+    docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$version")" "$@"
 }
 
 dc() { dc_v "$(version_instalada)" "$@"; }
@@ -285,13 +374,27 @@ esperar_sano() {
     done
 }
 
-# La API responde /health y es de la versión esperada
+# La API (y api-portal si está activo) responde /health y es de la versión esperada
 verificar_version() {
-    local v="$1" corriendo
-    dc_v "$v" exec -T api node -e "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" ||
-        { log "la API no responde /health"; return 1; }
-    corriendo="$(dc_v "$v" exec -T api printenv ARGOSISP_VERSION | tr -d '[:space:]')"
-    [ "$corriendo" = "$v" ] || { log "la API corre la versión '$corriendo' y se esperaba $v"; return 1; }
+    local v="$1" corriendo s central
+    if es_nodo_portal; then
+        corriendo="$(dc_v "$v" exec -T portal printenv ARGOSISP_VERSION | tr -d '[:space:]')"
+        [ "$corriendo" = "$v" ] || { log "el portal corre la versión '$corriendo' y se esperaba $v"; return 1; }
+        if ! central="$(version_central)"; then
+            log "aviso: no pude leer la versión del central (¿token revocado o central caído?)"
+        elif [ "$central" != "$v" ]; then
+            log "aviso: este nodo está en $v y el central en $central: argosisp actualizar"
+        fi
+        return 0
+    fi
+    local -a servicios=(api)
+    if con_api_portal "$v"; then servicios+=(api-portal); fi
+    for s in "${servicios[@]}"; do
+        dc_v "$v" exec -T "$s" node -e "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" ||
+            { log "$s no responde /health"; return 1; }
+        corriendo="$(dc_v "$v" exec -T "$s" printenv ARGOSISP_VERSION | tr -d '[:space:]')"
+        [ "$corriendo" = "$v" ] || { log "$s corre la versión '$corriendo' y se esperaba $v"; return 1; }
+    done
 }
 
 # `up -d` en segundo plano mientras se vigila la salud: compose espera indefinidamente a una
@@ -301,7 +404,13 @@ levantar_version() {
     log "levantando $v"
     t0="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
     salida="$(mktemp)"
-    timeout "$ESPERA_S" docker compose -p "$PROYECTO" --env-file "$ENV_FILE" -f "$(compose_de "$v")" \
+    entorno_compose
+    # Apagado: compose no trata como huérfano el contenedor de un perfil inactivo; se quita aquí.
+    if ! api_portal_activo; then
+        docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$v")" --profile api-portal \
+            rm -sf api-portal > /dev/null 2>&1 || true
+    fi
+    timeout "$ESPERA_S" docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$v")" \
         up -d --remove-orphans > "$salida" 2>&1 &
     pid=$!
     if ! esperar_sano "$v" "$t0"; then
@@ -386,11 +495,27 @@ cmd_estado() {
     v="$(version_instalada)"
     ultima="$(ultima_version 2> /dev/null || echo '¿?')"
     echo "Versión instalada: $v"
-    echo "Última en estable: $ultima"
-    if es_semver "$ultima" && [ "$(comparar_versiones "$v" "$ultima")" = -1 ]; then
+    if es_nodo_portal; then
+        ultima="$(version_central || echo '¿?')"
+        echo "Nodo portal de: $(leer_env NODO_CENTRAL_URL)"
+        echo "Versión del central: $ultima"
+        if es_semver "$ultima" && [ "$ultima" != "$v" ]; then
+            echo "AVISO: la versión no coincide con la del central: argosisp actualizar"
+        fi
+    else
+        echo "Última en estable: $ultima"
+    fi
+    if ! es_nodo_portal && es_semver "$ultima" && [ "$(comparar_versiones "$v" "$ultima")" = -1 ]; then
         echo "Hay una versión nueva ($(tipo_cambio "$v" "$ultima")): argosisp actualizar"
     fi
     echo "Parches automáticos: $(estado_auto)"
+    if es_nodo_portal; then
+        :
+    elif [ -n "$(leer_env ARGOSISP_API_PORTAL)" ]; then
+        echo "API del portal (api-portal): $(api_portal_valor)"
+    else
+        echo "API del portal (api-portal): $(api_portal_valor) (sin ARGOSISP_API_PORTAL en el .env: regla por RAM)"
+    fi
     if leer_estado version > /dev/null 2>&1; then
         echo "Última actualización: $(leer_estado anterior) → $(leer_estado version) el $(leer_estado fecha)"
     fi
@@ -401,12 +526,14 @@ cmd_estado() {
 cmd_levantar() {
     requiere_instalacion
     bloquear
+    fijar_api_portal
     levantar_version "$(version_instalada)" || morir "la versión $(version_instalada) no quedó sana (argosisp logs)"
     log "ArgosIsp $(version_instalada) arriba y sano"
 }
 
 cmd_respaldar() {
     requiere_instalacion
+    requiere_principal
     dc exec -T backup respaldar.sh
 }
 
@@ -424,10 +551,21 @@ cmd_actualizar() {
     requiere_instalacion
     bloquear
     registrar actualizar
+    fijar_api_portal
 
     local instalada tipo respaldo
     instalada="$(version_instalada)"
     es_semver "$instalada" || morir "ARGOSISP_VERSION del .env no es una versión: '$instalada'"
+    if es_nodo_portal; then
+        # Un nodo portal sigue al central y nunca queda más nuevo que él
+        local central
+        central="$(version_central)" || morir "no pude leer la versión del central: el nodo no se actualiza a ciegas"
+        [ -n "$objetivo" ] || objetivo="$central"
+        objetivo="${objetivo#v}"
+        es_semver "$objetivo" || morir "versión inválida: $objetivo"
+        [ "$(comparar_versiones "$objetivo" "$central")" != 1 ] ||
+            morir "$objetivo es más nueva que la del central ($central): actualiza primero el servidor principal"
+    fi
     [ -n "$objetivo" ] || objetivo="$(ultima_version)"
     objetivo="${objetivo#v}"
     es_semver "$objetivo" || morir "versión inválida: $objetivo"
@@ -464,9 +602,11 @@ cmd_actualizar() {
         dc_v "$objetivo" pull --quiet || morir "no se pudieron descargar las imágenes de $objetivo (nada cambió)"
     fi
 
-    # 2. Aplicación detenida y respaldo
+    # 2. Aplicación detenida y respaldo (un nodo portal no tiene base: "-")
     detener_app "$instalada"
-    if ! respaldo="$(respaldo_previo "$instalada")"; then
+    if es_nodo_portal; then
+        respaldo=-
+    elif ! respaldo="$(respaldo_previo "$instalada")"; then
         log "el respaldo falló: no se actualiza; vuelvo a levantar $instalada"
         levantar_version "$instalada" || true
         morir "actualización cancelada: no se pudo respaldar"
@@ -486,7 +626,10 @@ cmd_actualizar() {
 
     # 4. Falló: vuelta a la versión anterior con el respaldo
     log "la versión $objetivo no quedó sana: revirtiendo a $instalada"
-    dc_v "$objetivo" logs --no-color --tail 40 migrate api 2> /dev/null | sed 's/^/  | /' >&2 || true
+    local -a con_logs=(migrate api)
+    es_nodo_portal && con_logs=(portal proxy)
+    if con_api_portal "$objetivo"; then con_logs+=(api-portal); fi
+    dc_v "$objetivo" logs --no-color --tail 40 "${con_logs[@]}" 2> /dev/null | sed 's/^/  | /' >&2 || true
     revertir_a "$objetivo" "$instalada" "$respaldo"
     rm -f "$ESTADO_DIR/en-curso"
     morir "la actualización a $objetivo falló; ArgosIsp volvió a $instalada con el respaldo $respaldo"
@@ -497,7 +640,7 @@ revertir_a() {
     local mala="$1" buena="$2" respaldo="$3"
     detener_app "$mala"
     cambiar_a "$buena"
-    restaurar_respaldo "$buena" "$respaldo" || morir "NO SE PUDO RESTAURAR $respaldo. ArgosIsp está detenido en $buena; runbook: docs/runbooks/actualizacion.md"
+    [ "$respaldo" = - ] || restaurar_respaldo "$buena" "$respaldo" || morir "NO SE PUDO RESTAURAR $respaldo. ArgosIsp está detenido en $buena; runbook: docs/runbooks/actualizacion.md"
     levantar_version "$buena" || morir "LA VERSIÓN $buena NO QUEDÓ SANA después de restaurar. Runbook: docs/runbooks/actualizacion.md"
     log "ArgosIsp de vuelta en $buena"
 }
@@ -520,10 +663,14 @@ cmd_revertir() {
     version="$(leer_estado version)"
     respaldo="$(leer_estado respaldo)"
     [ "$version" = "$actual" ] || morir "la última actualización registrada es a $version y la instalada es $actual: no reviertas a ciegas (runbook)"
-    [ -f "$(dir_respaldos)/$respaldo" ] || morir "no está el respaldo $respaldo en $(dir_respaldos)"
+    [ "$respaldo" = - ] || [ -f "$(dir_respaldos)/$respaldo" ] || morir "no está el respaldo $respaldo en $(dir_respaldos)"
     [ -f "$(compose_de "$anterior")" ] || descargar_version "$anterior"
-    echo "Revertir vuelve a $anterior y RESTAURA LA BASE al respaldo $respaldo (tomado el $(leer_estado fecha))."
-    echo "Todo lo registrado después (pagos, facturas, cambios) se pierde: respáldalo antes si lo necesitas."
+    if [ "$respaldo" = - ]; then
+        echo "Revertir vuelve este nodo portal a $anterior (no tiene base que restaurar)."
+    else
+        echo "Revertir vuelve a $anterior y RESTAURA LA BASE al respaldo $respaldo (tomado el $(leer_estado fecha))."
+        echo "Todo lo registrado después (pagos, facturas, cambios) se pierde: respáldalo antes si lo necesitas."
+    fi
     $si || confirmar "Escribe 'revertir' para confirmar:" revertir || morir "cancelado"
     revertir_a "$actual" "$anterior" "$respaldo"
     mv -f "$ESTADO_DIR/ultima-actualizacion" "$ESTADO_DIR/revertida-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -549,8 +696,67 @@ cmd_auto() {
 
 cmd_radius_clientes() {
     requiere_instalacion
+    requiere_principal
     dc exec -T aaa node dist/clientes/cli.js
     dc restart freeradius
+}
+
+# api_interna <método> <ruta bajo /api/v1/internal> [cuerpo JSON]: llamada a la API desde su propio
+# contenedor con el token interno (INTERNAL_TOKEN, nunca sale del servidor). Imprime el cuerpo;
+# sale con 4 si la ruta no existe en esta versión de la API.
+api_interna() {
+    dc exec -T -e METODO="$1" -e RUTA="/api/v1/internal$2" -e CUERPO="${3:-}" api node -e "
+        const c = process.env.CUERPO
+        fetch('http://127.0.0.1:3333' + process.env.RUTA, {
+            method: process.env.METODO,
+            headers: { authorization: 'Bearer ' + process.env.INTERNAL_TOKEN, 'content-type': 'application/json', 'x-canal': 'consola' },
+            body: c ? c : undefined,
+        }).then(async (r) => {
+            process.stdout.write(await r.text())
+            process.exit(r.ok ? 0 : r.status === 404 ? 4 : 1)
+        }, (e) => { console.error(String(e)); process.exit(1) })"
+}
+
+# Nodos portal remotos (contrato: .claude/integration/contratos/nodo-portal.md)
+cmd_nodo_portal() {
+    requiere_instalacion
+    requiere_principal
+    local sub="${1:-}" nombre="${2:-}" respuesta codigo=0
+    case "$sub" in
+        crear)
+            [[ "$nombre" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || morir "nombre inválido: '$nombre' (minúsculas, números y guiones)"
+            respuesta="$(api_interna POST /nodos-portal "{\"nombre\":\"$nombre\"}")" || codigo=$?
+            [ "$codigo" = 0 ] || morir "no se pudo crear el nodo $nombre: $(jq -r '.detail // .title // .' <<< "$respuesta" 2> /dev/null || echo "$respuesta")"
+            local token
+            token="$(jq -r '.token // empty' <<< "$respuesta")"
+            [ -n "$token" ] || morir "la API no devolvió el token"
+            if [ "${3:-}" = --solo-token ]; then printf '%s\n' "$token"; return 0; fi
+            echo "Nodo portal $nombre creado. Este token se muestra UNA sola vez:"
+            echo
+            echo "  $token"
+            echo
+            echo "En el servidor del nodo:"
+            echo "  curl -fsSL https://github.com/$REPO/releases/latest/download/instalar.sh | sudo bash -s -- \\"
+            echo "    --rol portal --central https://$(leer_env DOMINIO_API) --token '$token' --dominio <dominio> --correo <correo>"
+            ;;
+        listar)
+            respuesta="$(api_interna GET /nodos-portal)" || codigo=$?
+            [ "$codigo" = 0 ] || morir "no se pudieron listar los nodos: $(jq -r '.detail // .title // .' <<< "$respuesta" 2> /dev/null || echo "$respuesta")"
+            jq -r '(["NOMBRE", "CREADO", "ULTIMO_USO", "REVOCADO"] | @tsv),
+                (.data[] | [.nombre, .creado_en, (.ultimo_uso_en // "-"), (.revocado_en // "-")] | @tsv)' <<< "$respuesta"
+            ;;
+        revocar)
+            [ -n "$nombre" ] || morir "uso: argosisp nodo-portal revocar <nombre>"
+            if [ "${3:-}" != --si ]; then
+                confirmar "El nodo $nombre deja de poder hablar con la API. Escribe su nombre para confirmar:" "$nombre" ||
+                    morir "cancelado (sin preguntar: --si)"
+            fi
+            respuesta="$(api_interna POST "/nodos-portal/$nombre/revocar")" || codigo=$?
+            [ "$codigo" = 0 ] || morir "no se pudo revocar $nombre: $(jq -r '.detail // .title // .' <<< "$respuesta" 2> /dev/null || echo "$respuesta")"
+            log "nodo portal $nombre revocado"
+            ;;
+        *) morir "uso: argosisp nodo-portal crear <nombre> | listar | revocar <nombre>" ;;
+    esac
 }
 
 principal() {
@@ -565,6 +771,7 @@ principal() {
         levantar) cmd_levantar ;;
         auto) cmd_auto "$@" ;;
         radius-clientes) cmd_radius_clientes ;;
+        nodo-portal) cmd_nodo_portal "$@" ;;
         logs) requiere_instalacion; dc logs -f --tail 100 "$@" ;;
         compose) requiere_instalacion; dc "$@" ;;
         '' | -h | --help | ayuda) uso 0 ;;
