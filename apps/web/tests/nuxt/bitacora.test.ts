@@ -1,8 +1,9 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import BitacoraDetalle from '~/components/BitacoraDetalle.vue'
 import PaginaBitacora from '~/pages/bitacora/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('tarea 14 · bitácora', () => {
     beforeEach(() => {
@@ -47,7 +48,7 @@ describe('tarea 14 · bitácora', () => {
 
     it('la pestaña de cambios muestra *** tal cual', async () => {
         const vista = await mountSuspended(PaginaBitacora, { route: '/bitacora?tab=cambios&tipo=servicio&entidad=1' })
-        await vi.waitFor(() => expect(vista.find('[data-campo="pass_ppp"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-campo="pass_ppp"]').exists()).toBe(true))
         expect(vista.get('[data-campo="pass_ppp"]').text()).toBe('***')
     })
 
@@ -56,7 +57,7 @@ describe('tarea 14 · bitácora', () => {
         const accion = lista.ok ? lista.data.data[0] : undefined
         expect(accion).toBeDefined()
         const vista = await mountSuspended(BitacoraDetalle, { props: { accion: accion ?? null, open: true } })
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="entrada"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="entrada"]')).not.toBeNull())
         expect(document.body.querySelector('[data-prueba="entrada"]')?.textContent).toContain('"pass_ppp": "***"')
         expect(document.body.textContent).toContain(accion?.request_id ?? '')
         vista.unmount()
@@ -65,7 +66,7 @@ describe('tarea 14 · bitácora', () => {
     it('con la API en error la página muestra el Problem y no una lista vacía', async () => {
         simularFalla('GET /api/v1/bitacora/acciones', 500)
         const vista = await mountSuspended(PaginaBitacora, { route: '/bitacora' })
-        await vi.waitFor(() => expect(vista.text()).toContain('Error interno'))
+        await esperar(() => expect(vista.text()).toContain('Error interno'))
         expect(vista.text()).toContain('Reintentar')
         expect(vista.text()).not.toContain('La bitácora está vacía')
     })

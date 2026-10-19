@@ -1,10 +1,11 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import LibroCierres from '~/components/LibroCierres.vue'
 import PaginaEgresos from '~/pages/egresos/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('semana 2 · egresos y cierre de periodo', () => {
     beforeEach(() => {
@@ -87,7 +88,7 @@ describe('semana 2 · egresos y cierre de periodo', () => {
 
     it('la lista suma solo los egresos vigentes y ofrece anular solo esos', async () => {
         const vista = await mountSuspended(PaginaEgresos, { route: '/egresos' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="total-egresos"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="total-egresos"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="total-egresos"]').text()).toBe('Q 14,350.40')
         expect(vista.findAll('[data-prueba="anular-egreso"]')).toHaveLength(2)
         expect(vista.find('[data-prueba="abrir-registrar-egreso"]').exists()).toBe(true)
@@ -97,13 +98,13 @@ describe('semana 2 · egresos y cierre de periodo', () => {
     it('con error la lista muestra el aviso y ningún total', async () => {
         simularFalla('GET /api/v1/egresos', 500)
         const vista = await mountSuspended(PaginaEgresos, { route: '/egresos' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="egresos-error"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="egresos-error"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="total-egresos"]').exists()).toBe(false)
     })
 
     it('cierres: reabrir solo en meses cerrados; sin permisos no hay botones', async () => {
         const vista = await mountSuspended(LibroCierres)
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-cierres"]').text()).toContain('septiembre 2026'))
+        await esperar(() => expect(vista.find('[data-prueba="tabla-cierres"]').text()).toContain('septiembre 2026'))
         expect(vista.find('[data-prueba="reabrir-2026-09"]').exists()).toBe(true)
         expect(vista.find('[data-prueba="reabrir-2026-08"]').exists()).toBe(false)
         expect(vista.text()).toContain('Faltó la factura de energía de agosto')
@@ -111,7 +112,7 @@ describe('semana 2 · egresos y cierre de periodo', () => {
 
         useUsuarioActual().value = { ...meCajero, permisos: [...meCajero.permisos, 'libro.ver'] }
         const sinPermiso = await mountSuspended(LibroCierres)
-        await vi.waitFor(() => expect(sinPermiso.find('[data-prueba="tabla-cierres"]').text()).toContain('septiembre 2026'))
+        await esperar(() => expect(sinPermiso.find('[data-prueba="tabla-cierres"]').text()).toContain('septiembre 2026'))
         expect(sinPermiso.find('[data-prueba="abrir-cerrar-periodo"]').exists()).toBe(false)
         expect(sinPermiso.find('[data-prueba="reabrir-2026-09"]').exists()).toBe(false)
     })

@@ -1,8 +1,9 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PromesaSimularModal from '~/components/PromesaSimularModal.vue'
+import { esperar } from '../ayudas/esperar'
 
 function enDias(dias: number): string {
     return sumarDiasFecha(hoyGuatemala(), dias)
@@ -82,7 +83,7 @@ describe('semana 2 · simulador de promesas', () => {
         const formulario = enCuerpo('#form-simular-promesa')
         expect(formulario).not.toBeNull()
         formulario?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-        await vi.waitFor(() => expect(enCuerpo('[data-prueba="simulacion"]')).not.toBeNull())
+        await esperar(() => expect(enCuerpo('[data-prueba="simulacion"]')).not.toBeNull())
         const texto = enCuerpo('[data-prueba="simulacion-reglas"]')?.textContent ?? ''
         expect(texto).toContain('Plazo máximo')
         expect(texto).toContain('Máximo por periodo')
@@ -90,7 +91,7 @@ describe('semana 2 · simulador de promesas', () => {
         expect(enCuerpo('[data-prueba="simulacion-decision"]')?.textContent).toBeTruthy()
 
         enCuerpo('[data-prueba="crear-simulada"]')?.click()
-        await vi.waitFor(() => expect(enCuerpo('[data-prueba="simulador-creada"]')).not.toBeNull())
+        await esperar(() => expect(enCuerpo('[data-prueba="simulador-creada"]')).not.toBeNull())
         expect(creadas).toHaveLength(1)
         expect(creadas[0]?.servicio_id).toBe(2)
         wrapper.unmount()

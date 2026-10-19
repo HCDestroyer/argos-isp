@@ -1,5 +1,5 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
@@ -7,6 +7,7 @@ import RouterConexion from '~/components/RouterConexion.vue'
 import PaginaComprobante from '~/pages/comprobantes/[id].vue'
 import PaginaComprobantes from '~/pages/comprobantes/index.vue'
 import * as velocidad from '~/utils/velocidad'
+import { esperar } from '../ayudas/esperar'
 
 const PEM = '-----BEGIN CERTIFICATE-----\nMIIBfakeCAcertificado\n-----END CERTIFICATE-----'
 
@@ -50,7 +51,7 @@ describe('semana 3 (2.ª tanda) · tarea 1: adoptar lo que ya está en main', ()
                 return
             }
             const wrapper = await mountSuspended(RouterConexion, { props: { router: guardado.data, open: true } })
-            await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="router-ca-estado"]')?.textContent).toContain('CA cargada'))
+            await esperar(() => expect(document.body.querySelector('[data-prueba="router-ca-estado"]')?.textContent).toContain('CA cargada'))
             expect(document.body.innerHTML).not.toContain('MIIBfakeCAcertificado')
             expect(document.body.querySelector('[data-prueba="router-ca"]')).toBeNull()
             const url = document.body.querySelector<HTMLInputElement>('[data-prueba="router-api-url"] input, input[data-prueba="router-api-url"]')
@@ -67,7 +68,7 @@ describe('semana 3 (2.ª tanda) · tarea 1: adoptar lo que ya está en main', ()
                 return
             }
             const wrapper = await mountSuspended(RouterConexion, { props: { router, open: true } })
-            await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="router-ca-estado"]')).not.toBeNull())
+            await esperar(() => expect(document.body.querySelector('[data-prueba="router-ca-estado"]')).not.toBeNull())
             expect(document.body.querySelector('[data-prueba="router-conexion-guardar"]')).toBeNull()
             expect(document.body.querySelector('[data-prueba="router-ca-accion"]')).toBeNull()
             wrapper.unmount()
@@ -123,21 +124,21 @@ describe('semana 3 (2.ª tanda) · tarea 1: adoptar lo que ya está en main', ()
 
         it('la pantalla muestra el resumen y quién revisó, con su nombre', async () => {
             const lista = await mountSuspended(PaginaComprobantes, { route: '/comprobantes?estado=rechazado' })
-            await vi.waitFor(() => expect(lista.find('[data-prueba="resumen-comprobantes"]').exists()).toBe(true))
+            await esperar(() => expect(lista.find('[data-prueba="resumen-comprobantes"]').exists()).toBe(true))
             expect(lista.text()).toContain('Por Ana Administradora')
             lista.unmount()
 
             const rechazado = await useComprobantes().rechazar(4, 'No coincide', nuevaClaveIdempotencia())
             expect(rechazado.ok && rechazado.data.verificado_por_nombre).toBe('Ana Administradora')
             const detalle = await mountSuspended(PaginaComprobante, { route: '/comprobantes/4' })
-            await vi.waitFor(() => expect(detalle.find('[data-prueba="comprobante-rechazado"]').text()).toContain('por Ana Administradora'))
+            await esperar(() => expect(detalle.find('[data-prueba="comprobante-rechazado"]').text()).toContain('por Ana Administradora'))
             detalle.unmount()
         })
 
         it('con error no se muestra el resumen', async () => {
             simularFalla('GET /api/v1/comprobantes', 501)
             const lista = await mountSuspended(PaginaComprobantes, { route: '/comprobantes' })
-            await vi.waitFor(() => expect(lista.text()).toContain('Reintentar'))
+            await esperar(() => expect(lista.text()).toContain('Reintentar'))
             expect(lista.find('[data-prueba="resumen-comprobantes"]').exists()).toBe(false)
             lista.unmount()
         })
