@@ -11,6 +11,7 @@ export const AVISOS_TODOS: Configuracion['avisos'] = {
     pago: true,
     promesa: true,
     comprobante: true,
+    lealtad: true,
 }
 
 /**
