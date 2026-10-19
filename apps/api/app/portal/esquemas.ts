@@ -14,6 +14,7 @@ import {
 } from '#shared/openapi/esquemas'
 import { EstadoServicio } from '#core/esquemas'
 import { METODOS_PAGO } from '#shared/eventos'
+import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 
 /**
  * Schemas del portal del cliente (A5). Desde la IP solo se muestra información mínima:
@@ -211,6 +212,23 @@ export const PortalFacturaPendiente = definirEsquema(
     }),
 )
 
+/**
+ * Bonificación (decisión del PM: nunca una factura de Q0): un periodo que el cliente no paga (mes
+ * gratis, descuento del 100 %, canje, cargo sin costo). Sin montos ni documento ni motivo interno.
+ */
+export const PortalBonificacion = definirEsquema(
+    'PortalBonificacion',
+    objeto({
+        id,
+        empresa: { ...PortalMarcaEmpresa, description: 'Empresa que bonificó el periodo' },
+        servicio_id: nulable(id),
+        periodo: { ...fecha, description: 'Primer día del periodo bonificado' },
+        concepto: { ...texto, description: 'Qué se bonificó, sin el motivo interno' },
+        origen: enumerado(ORIGENES_BONIFICACION),
+        created_at: instante,
+    }),
+)
+
 export const PortalCuentaEmpresa = definirEsquema(
     'PortalCuentaEmpresa',
     objeto({
@@ -223,6 +241,11 @@ export const PortalCuentaEmpresa = definirEsquema(
         facturas_pendientes: {
             ...lista(PortalFacturaPendiente),
             description: 'Emitidas, parciales y vencidas de esta empresa, la más antigua primero',
+        },
+        bonificaciones: {
+            ...lista(PortalBonificacion),
+            description:
+                'Periodos bonificados recientes (este mes y los dos anteriores), el más reciente primero',
         },
     }),
 )

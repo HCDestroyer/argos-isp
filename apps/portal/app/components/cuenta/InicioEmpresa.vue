@@ -33,6 +33,8 @@ const { empresa } = useEmpresa({ empresaId: () => props.grupo.empresa.id })
 
 /** Facturas pendientes de esta empresa y su saldo a favor (sección de `PortalCuenta.empresas`). */
 const facturas = computed(() => resumenFacturas(props.grupo.cuenta))
+/** Periodos bonificados recientes de esta empresa (estado de cuenta): «Mes bonificado», sin monto. */
+const bonificadas = computed(() => props.grupo.cuenta?.bonificaciones ?? [])
 const aFavor = computed(() => {
     const saldo = props.grupo.cuenta?.saldo_a_favor
     return saldo && new Decimal(saldo).greaterThan(0) ? saldo : null
@@ -114,6 +116,19 @@ const accesos = computed(() => {
             :titulo="props.mostrarMarca ? `Accesos rápidos de ${props.grupo.empresa.nombre_comercial}` : 'Accesos rápidos'"
             @accion="emit('accion', $event)"
         />
+
+        <UCard
+            v-if="bonificadas.length > 0"
+            :ui="{ body: 'flex flex-col gap-2 p-3 sm:p-4' }"
+            data-testid="bonificaciones-grupo"
+        >
+            <CuentaBonificacion
+                v-for="bonificacion in bonificadas"
+                :key="bonificacion.id"
+                :bonificacion="bonificacion"
+                compacta
+            />
+        </UCard>
 
         <UCard
             v-if="props.grupo.servicios.length > 0"

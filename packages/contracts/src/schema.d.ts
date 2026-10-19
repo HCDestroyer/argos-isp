@@ -4374,6 +4374,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/bonificaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Periodos bonificados del cliente de la sesión (mes gratis, canje, cargo sin costo)
+         * @description Decisión del PM: un periodo en cero no es una factura de Q0 sino una bonificación (A3). Sin montos, documento ni motivo interno: el portal la muestra como «Mes bonificado». Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalBonificaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/codigo": {
         parameters: {
             query?: never;
@@ -9370,6 +9390,23 @@ export interface components {
             id: number;
             nombre: string;
         };
+        PortalBonificacion: {
+            id: number;
+            /** @description Empresa que bonificó el periodo */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            servicio_id: number | null;
+            /**
+             * Format: date
+             * @description Primer día del periodo bonificado
+             */
+            periodo: string;
+            /** @description Qué se bonificó, sin el motivo interno */
+            concepto: string;
+            /** @enum {string} */
+            origen: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+            /** Format: date-time */
+            created_at: string;
+        };
         PortalComprobante: {
             id: number;
             servicio_id: number | null;
@@ -9471,6 +9508,8 @@ export interface components {
             saldo_a_favor: components["schemas"]["Dinero"];
             /** @description Emitidas, parciales y vencidas de esta empresa, la más antigua primero */
             facturas_pendientes: components["schemas"]["PortalFacturaPendiente"][];
+            /** @description Periodos bonificados recientes (este mes y los dos anteriores), el más reciente primero */
+            bonificaciones: components["schemas"]["PortalBonificacion"][];
         };
         PortalDte: {
             /** @description Tipo de DTE de la SAT: FACT, FCAM, NDEB, NCRE… */
@@ -29330,6 +29369,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalBanco"][];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalBonificaciones: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de bonificaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalBonificacion"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */

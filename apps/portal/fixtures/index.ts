@@ -10,6 +10,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { ESCENARIOS_CORTE, ESTADO_REACTIVADO, estadoDe, type EscenarioCorte } from './corte'
 import {
+    BONIFICACIONES_FIXTURE,
     CODIGO_FIXTURE,
     CONTACTO_FIXTURE,
     CUENTA_DOS_EMPRESAS_FIXTURE,
@@ -385,6 +386,7 @@ const rutasBase: RutasFixture = {
                 } satisfies Schema<'PortalCuenta'>,
             }),
     'GET /api/v1/portal/facturas': conSesion(() => pagina(FACTURAS_FIXTURE)),
+    'GET /api/v1/portal/bonificaciones': conSesion(() => pagina(BONIFICACIONES_FIXTURE)),
     'GET /api/v1/portal/notas-credito': conSesion(() => pagina(NOTAS_CREDITO_FIXTURE)),
     'GET /api/v1/portal/pagos': conSesion(() => pagina(PAGOS_FIXTURE)),
     'GET /api/v1/portal/promesas': conSesion(() => pagina(PROMESAS_FIXTURE)),

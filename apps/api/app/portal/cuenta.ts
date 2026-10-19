@@ -7,6 +7,7 @@ import { saldoDelServicio, type EstadoServicio } from '#portal/consultas'
 import type { MetodoPago } from '#shared/eventos'
 import { EMPRESA_PRINCIPAL } from '#core/empresas'
 import { estadoCuenta } from '#billing/estado_cuenta'
+import { bonificacionesRecientes, type BonificacionPortal } from '#portal/bonificaciones'
 import { DateTime } from 'luxon'
 import {
     SQL_EMPRESA_FACTURA,
@@ -77,6 +78,7 @@ export interface CuentaEmpresaPortal {
     saldo: string
     saldo_a_favor: string
     facturas_pendientes: FacturaPendientePortal[]
+    bonificaciones: BonificacionPortal[]
 }
 
 export interface CuentaPortal {
@@ -223,6 +225,7 @@ export async function cuentaPortal(clienteId: number): Promise<CuentaPortal> {
 export async function cuentaPorEmpresa(clienteId: number, principal: number): Promise<CuentaEmpresaPortal[]> {
     const estado = await estadoCuenta(clienteId)
     const marcas = await marcasDeEmpresas(estado.empresas.map((e) => e.empresa_id))
+    const bonificaciones = await bonificacionesRecientes(clienteId)
     const hoy = DateTime.now().setZone('America/Guatemala').toISODate()!
     const secciones: CuentaEmpresaPortal[] = []
     for (const seccion of estado.empresas) {
@@ -243,6 +246,7 @@ export async function cuentaPorEmpresa(clienteId: number, principal: number): Pr
                     saldo: aTexto(D.max(dec(f.total).minus(dec(f.pagado)), 0)),
                 }
             }),
+            bonificaciones: bonificaciones.get(seccion.empresa_id) ?? [],
         })
     }
     return secciones.sort(
