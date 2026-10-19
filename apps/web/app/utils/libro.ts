@@ -22,6 +22,31 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
 }
 
+interface OrigenVisual {
+    etiqueta: string
+    icono: string
+}
+
+/**
+ * Orígenes que la API ya escribe y el contrato aún no declara en `Asiento.origen_tipo` (pedido a A3
+ * en `a4.md`): `diferencia_cobro` es el saldo pequeño de un pago cerrado como gasto (decisión B).
+ */
+const ORIGENES_SIN_CONTRATO: Record<string, OrigenVisual> = {
+    diferencia_cobro: { etiqueta: 'Diferencia de cobro', icono: 'i-lucide-scissors' },
+}
+
+/** Etiqueta e icono del origen de un asiento; uno desconocido se muestra por su nombre, sin romper la vista. */
+export function origenAsiento(tipo: string): OrigenVisual {
+    if (Object.hasOwn(ORIGENES_ASIENTO, tipo)) {
+        return ORIGENES_ASIENTO[tipo as Origen]
+    }
+    if (Object.hasOwn(ORIGENES_SIN_CONTRATO, tipo)) {
+        return ORIGENES_SIN_CONTRATO[tipo]!
+    }
+    const texto = tipo.replace(/_/g, ' ')
+    return { etiqueta: texto.charAt(0).toUpperCase() + texto.slice(1), icono: 'i-lucide-file' }
+}
+
 export const TIPOS_CUENTA: Record<Schema<'Cuenta'>['tipo'], string> = {
     activo: 'Activo',
     pasivo: 'Pasivo',

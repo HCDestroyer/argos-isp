@@ -45,6 +45,24 @@ export interface CobroFixture {
 }
 
 /** Cookie `argos_sesion` simulada: token, `csrf` y vencimientos (ISO, o `null` si no vence). */
+/**
+ * Fila de `billing.diferencias_cobro` (A3, decisión B): el saldo pequeño de una factura que dejó un
+ * pago, cerrado como gasto con un asiento `diferencia_cobro` (5.3.05 / CxC). `pagado` de la factura
+ * no cambia; anular el pago la revierte (`revertida_en`).
+ */
+export interface DiferenciaCobroFixture {
+    id: number
+    empresa_id: number
+    pago_id: number
+    factura_id: number
+    cliente_id: number
+    monto: string
+    asiento_id: number
+    fecha: string
+    descripcion: string
+    revertida_en: string | null
+}
+
 export interface SesionSimulada {
     token: string | null
     csrf: string | null
@@ -133,8 +151,8 @@ interface BaseFixtures {
     reglasConciliacion: Schema<'ReglaConciliacion'>[]
     provisiones: Schema<'ProvisionCartera'>[]
     castigos: Schema<'CastigoCartera'>[]
-    /** Pago y factura con la diferencia ya cerrada (`billing.diferencias_cobro`). */
-    diferenciasCerradas: { pago_id: number, factura_id: number }[]
+    /** Diferencias de cobro cerradas como gasto (`billing.diferencias_cobro`, decisión B). */
+    diferenciasCerradas: DiferenciaCobroFixture[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
     programasLealtad: Schema<'ProgramaLealtad'>[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
