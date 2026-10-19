@@ -4,6 +4,8 @@ import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, empresasConsulta, fechaIso, idEntidad, motivo, versionEsperada } from '#shared/validadores'
 import { ESTADOS_REFERIDO } from '#lealtad/referidos'
+import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
+import { ESTADOS_CANJE } from '#lealtad/canjes'
 import { completarCondiciones, TIPOS_REGLA, type CondicionesPorTipo, type TipoRegla } from '#lealtad/reglas'
 
 /**
@@ -250,5 +252,75 @@ export const reporteLealtadValidator = vine.compile(
         empresas: empresasConsulta(),
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
+    }),
+)
+
+/*
+| Premios y canjes (fase 2)
+*/
+
+const camposPremio = {
+    nombre: vine.string().trim().minLength(1).maxLength(120),
+    costo_puntos: vine.number().withoutDecimals().range([1, 10_000_000]),
+    descuento_tipo: vine.enum(TIPOS_DESCUENTO).nullable().optional(),
+    descuento_valor: dinero().nullable().optional(),
+    tope: dinero().nullable().optional(),
+    plan_destino_id: idEntidad().nullable().optional(),
+    dias: vine.number().withoutDecimals().range([1, 366]).nullable().optional(),
+    costo_unitario: dinero().nullable().optional(),
+    existencias: vine.number().withoutDecimals().min(0).nullable().optional(),
+    en_portal: vine.boolean().optional(),
+    activo: vine.boolean().optional(),
+}
+
+export const crearPremioValidator = vine.compile(
+    vine.object({
+        programa_id: idEntidad(),
+        tipo: vine.enum(TIPOS_PREMIO).meta({
+            description:
+                'descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien; boletos llega en la fase 3',
+        }),
+        ...camposPremio,
+    }),
+)
+
+export const editarPremioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        ...camposPremio,
+        nombre: camposPremio.nombre.optional(),
+        costo_puntos: vine.number().withoutDecimals().range([1, 10_000_000]).optional(),
+    }),
+)
+
+export const listarPremiosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        programa_id: idEntidad().optional(),
+        tipo: vine.enum(TIPOS_PREMIO).optional(),
+        activo: vine.boolean().optional(),
+        en_portal: vine.boolean().optional(),
+    }),
+)
+
+export const canjearValidator = vine.compile(
+    vine.object({
+        cliente_id: idEntidad(),
+        servicio_id: idEntidad(),
+        premio_id: idEntidad(),
+        factura_id: idEntidad().optional().meta({
+            description: 'Solo descuentos: aplicarlo a una factura ya emitida con nota de crédito (NCRE con FEL)',
+        }),
+    }),
+)
+
+export const listarCanjesValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        cliente_id: idEntidad().optional(),
+        servicio_id: idEntidad().optional(),
+        estado: vine.enum(ESTADOS_CANJE).optional(),
     }),
 )

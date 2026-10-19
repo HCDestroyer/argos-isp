@@ -399,6 +399,10 @@ export interface CatalogoEventos {
         cliente_id: number
         puntos: number
     }
+    /** canje de puntos (fase 2): reservado para la próxima factura, aplicado (nota o plan temporal) o revertido */
+    'lealtad.canje_reservado': PayloadCanjeLealtad
+    'lealtad.canje_aplicado': PayloadCanjeLealtad
+    'lealtad.canje_revertido': PayloadCanjeLealtad
     'lealtad.referido_calificado': {
         /** `lealtad.referidos.id` */
         referido_id: number
@@ -470,6 +474,20 @@ type PayloadHallazgoHorus = PayloadClienteHorus & {
     }
 }
 
+/** Canje de lealtad (`contratos/lealtad.md` §13). */
+interface PayloadCanjeLealtad {
+    canje_id: number
+    empresa_id: number
+    cliente_id: number
+    servicio_id: number
+    premio_id: number
+    /** tipo de premio: descuento_factura, mes_gratis, mejora_plan… */
+    tipo: string
+    puntos: number
+    /** factura con el descuento (nota de crédito o próxima factura); null si no aplica */
+    factura_id: number | null
+}
+
 export type NombreEvento = keyof CatalogoEventos
 export type PayloadEvento<E extends NombreEvento> = CatalogoEventos[E]
 
@@ -519,6 +537,9 @@ export const EVENTOS = [
     'lealtad.puntos_revertidos',
     'lealtad.puntos_por_vencer',
     'lealtad.puntos_vencidos',
+    'lealtad.canje_reservado',
+    'lealtad.canje_aplicado',
+    'lealtad.canje_revertido',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',

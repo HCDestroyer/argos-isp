@@ -557,19 +557,7 @@ export async function descontar(
         fecha: string
     },
 ): Promise<MovimientoPuntos> {
-    const lotes = await lotesVivos(t.trx, programa.empresa_id, datos.cliente_id)
-    const consumos: Consumo[] = []
-    let faltan = datos.puntos
-    for (const lote of lotes) {
-        if (faltan <= 0) break
-        const toma = Math.min(faltan, lote.restante)
-        consumos.push({
-            lote_id: lote.id,
-            puntos: toma,
-            valor: valorConsumo(lote, lote.restante, dec(lote.valor_restante), toma),
-        })
-        faltan -= toma
-    }
+    const consumos = await consumirLotes(t, programa.empresa_id, datos.cliente_id, datos.puntos)
     const valor = consumos.reduce((s, c) => s.plus(c.valor), CERO)
     const movimiento = await insertarMovimiento(t, {
         programa,
@@ -601,6 +589,120 @@ export async function descontar(
         origen_id: null,
     })
     return movimiento
+}
+
+/** Reparte `puntos` entre los lotes vivos del cliente, el que vence antes primero. */
+async function consumirLotes(
+    t: Transaccion,
+    empresaId: number,
+    clienteId: number,
+    puntos: number,
+): Promise<Consumo[]> {
+    const lotes = await lotesVivos(t.trx, empresaId, clienteId)
+    const consumos: Consumo[] = []
+    let faltan = puntos
+    for (const lote of lotes) {
+        if (faltan <= 0) break
+        const toma = Math.min(faltan, lote.restante)
+        consumos.push({
+            lote_id: lote.id,
+            puntos: toma,
+            valor: valorConsumo(lote, lote.restante, dec(lote.valor_restante), toma),
+        })
+        faltan -= toma
+    }
+    return consumos
+}
+
+/**
+ * Salida de un canje (§5 y §6): consume `puntos` de los lotes (el que vence antes primero) con un
+ * movimiento `canje` (clave `canje:<id>`) y, si los lotes tenían valor, el asiento `2.1.10 / 4.1.06`
+ * por el valor consumido. Quien llama ya verificó el saldo y tiene el cliente bloqueado.
+ */
+export async function salidaCanje(
+    t: Transaccion,
+    programa: Pick<ProgramaVista, 'id' | 'empresa_id'>,
+    datos: { canje_id: number; cliente_id: number; servicio_id: number; puntos: number; fecha: string; concepto: string },
+): Promise<MovimientoPuntos> {
+    const consumos = await consumirLotes(t, programa.empresa_id, datos.cliente_id, datos.puntos)
+    return insertarMovimiento(t, {
+        programa,
+        cliente_id: datos.cliente_id,
+        servicio_id: datos.servicio_id,
+        tipo: 'canje',
+        puntos: -datos.puntos,
+        regla_id: null,
+        origen_tipo: 'canje',
+        origen_id: datos.canje_id,
+        clave: `canje:${datos.canje_id}`,
+        vence_en: null,
+        valor: consumos.reduce((s, c) => s.plus(c.valor), CERO),
+        fecha: datos.fecha,
+        asiento: {
+            debe: CUENTAS_GT.PASIVO_LEALTAD,
+            haber: CUENTAS_GT.INGRESOS_PUNTOS,
+            descripcion: `Lealtad · canje ${datos.canje_id}: ${datos.puntos} puntos del cliente ${datos.cliente_id} (${datos.concepto})`,
+        },
+        consumos,
+    })
+}
+
+/**
+ * Devuelve los puntos de un canje revertido (§5): un movimiento `reverso` por cada lote que pagó el
+ * canje, con los puntos, el valor y el **vencimiento original** de ese lote (son lotes nuevos), y el
+ * asiento espejo `4.1.06 / 2.1.10`. Idempotente por `reverso:canje:<canje>:lote:<lote>`.
+ */
+export async function devolverCanje(
+    t: Transaccion,
+    salida: MovimientoPuntos,
+    canjeId: number,
+    fecha: string,
+    motivo: string,
+): Promise<MovimientoPuntos[]> {
+    const consumos = (await t.trx
+        .from('lealtad.consumos as c')
+        .join('lealtad.movimientos as l', 'l.id', 'c.lote_id')
+        .where('c.movimiento_id', salida.id)
+        .orderBy('c.id', 'asc')
+        .select(
+            'c.lote_id',
+            'c.puntos',
+            'c.valor',
+            t.trx.raw(`to_char(l.vence_en, 'YYYY-MM-DD') as vence_en`),
+        )) as Array<{ lote_id: number; puntos: number; valor: string; servicio_id: number | null; vence_en: string | null }>
+    const devueltos: MovimientoPuntos[] = []
+    for (const c of consumos) {
+        const clave = `reverso:canje:${canjeId}:lote:${c.lote_id}`
+        const previo = await movimientoPorClave(t.trx, salida.empresa_id, clave)
+        if (previo) {
+            devueltos.push(previo)
+            continue
+        }
+        devueltos.push(
+            await insertarMovimiento(t, {
+                programa: { id: salida.programa_id, empresa_id: salida.empresa_id },
+                cliente_id: salida.cliente_id,
+                servicio_id: salida.servicio_id,
+                tipo: 'reverso',
+                puntos: Number(c.puntos),
+                regla_id: null,
+                origen_tipo: 'canje',
+                origen_id: canjeId,
+                clave,
+                vence_en: c.vence_en,
+                valor: dec(c.valor),
+                reversa_de: salida.id,
+                motivo,
+                fecha,
+                asiento: {
+                    debe: CUENTAS_GT.INGRESOS_PUNTOS,
+                    haber: CUENTAS_GT.PASIVO_LEALTAD,
+                    descripcion: `Lealtad · canje ${canjeId} revertido: vuelven ${c.puntos} puntos del cliente ${salida.cliente_id}`,
+                },
+            }),
+        )
+    }
+    return devueltos
 }
 
 /*
