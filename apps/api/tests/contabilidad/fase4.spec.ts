@@ -13,6 +13,7 @@ import ConciliarLinea from '#ledger/actions/conciliar_linea'
 import AnularConciliacion from '#ledger/actions/anular_conciliacion'
 import RegistrarDesdeExtracto from '#ledger/actions/registrar_desde_extracto'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
+import ReatribuirLlegada from '#ledger/actions/reatribuir_llegada'
 import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
 import CastigarCartera from '#ledger/actions/castigar_cartera'
 import { crearClienteFila } from '#tests/core/fabricas'
@@ -242,5 +243,68 @@ test.group('Auditor contable · fase 4 (cobros y bancos)', (group) => {
                 assert.isFalse(aceptado, `${tabla} aceptó: ${sql}`)
             }
         }
+    })
+    test('reatribuir una llegada y recuperar lo castigado: el libro cuadra en cada paso (decisiones c y g)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const s = await servicioFacturado(e.B, '2026-10-01', { instalacion: '2026-10-01' })
+        const cajaId = e.cajas.get(e.B)!
+        const banco = e.cuentas.get(e.B)!
+        await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '20.00', caja_id: cajaId, empresa_id: e.B },
+            e.ctx,
+        )
+        const d1 = await new DepositarCaja().execute(
+            { caja_id: cajaId, monto: '40.00', boleta: 'R-1', cuenta_bancaria_id: banco },
+            e.ctx,
+        )
+        const d2 = await new DepositarCaja().execute(
+            { caja_id: cajaId, monto: '40.00', boleta: 'R-2', cuenta_bancaria_id: banco },
+            e.ctx,
+        )
+        const hoy = hoyGuatemala()
+        const ext = await new ImportarExtracto().execute(
+            {
+                cuenta_bancaria_id: banco,
+                desde: hoy,
+                hasta: hoy,
+                saldo_inicial: '0.00',
+                saldo_final: '40.00',
+                lineas: [{ fecha: hoy, descripcion: 'DEPOSITO', referencia: 'R-2', monto: '40.00' }],
+            },
+            e.ctx,
+        )
+        const linea = (await db
+            .from('ledger.extractos_lineas')
+            .where('extracto_id', ext.id)
+            .firstOrFail()) as {
+            id: number
+        }
+        await new ConciliarLinea().execute({ linea_id: linea.id, depositos: [d1.id] }, e.ctx)
+        await afirmarLibro(assert, [e.B, e.C])
+        await new ReatribuirLlegada().execute(
+            {
+                tipo: 'deposito',
+                documento_id: d1.id,
+                nuevo_tipo: 'deposito',
+                nuevo_documento_id: d2.id,
+                motivo: 'boleta R-2',
+            },
+            e.ctx,
+        )
+        await afirmarLibro(assert, [e.B, e.C])
+
+        // castigo de lo que falta y recuperación posterior
+        await new CastigarCartera().execute(
+            { facturas: [s.facturas[0]!.id], motivo: 'incobrable', evidencia: 'gestión documentada' },
+            e.ctx,
+        )
+        await afirmarLibro(assert, [e.B, e.C])
+        await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '200.00', caja_id: cajaId, empresa_id: e.B },
+            e.ctx,
+        )
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

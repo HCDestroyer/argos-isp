@@ -13,6 +13,9 @@ import { saldoCuenta } from '#tests/contabilidad/ayudas_contabilidad'
 import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
+import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import { cola, datosNit, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { sacarDeLaColaFel } from '#tests/contabilidad/ayudas_contabilidad'
 
 /**
  * Auditor contable · HALLAZGOS de la fase 4 (cobros, bancos y cartera; `a3/fase4-bancos`). Como en
@@ -21,7 +24,10 @@ import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
  */
 
 test.group('Auditor contable · hallazgos de la fase 4', (group) => {
-    group.each.teardown(() => soloEmpresaPrincipal())
+    group.each.teardown(async () => {
+        await sacarDeLaColaFel()
+        await soloEmpresaPrincipal()
+    })
 
     test('H12 · una provisión con corte pasado toma el saldo de 1.1.12 de hoy: la reserva al corte supera el tope', async ({
         assert,
@@ -65,8 +71,8 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
             { empresa_id: e.B, anio: 2026, fecha: corte },
             e.ctx,
         )
-        assert.equal(p2.monto, '0.00', 'al 30-sep la reserva ya estaba en el tope')
         assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
+        assert.equal(p2.monto, '0.00', 'al 30-sep la reserva ya estaba en el tope')
     })
 
     test('H13 · anular el pago deja viva la diferencia de cobro que ese pago cerró', async ({ assert }) => {
@@ -141,7 +147,61 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
             },
             e.ctx,
         )
-        assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), '0.00')
         assert.deepEqual(await verificarLibro(e.B), [])
+        assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), '0.00')
     })
+    test('H16 · un aviso acreditado por completo con notas internas se certifica como DTE de Q0.00', async ({
+        assert,
+    }) => {
+        // Producto: app/fiscal/fel/cola.ts (avisosPorCertificar: estado pagada) y app/fiscal/actions/solicitar_certificacion.ts
+        // (netoParaDte): «pagada» incluye lo acreditado por notas. Un aviso que nadie pagó y se acreditó entero no es una
+        // venta: no debe generar DTE (la SAT no certifica una FACT de Q0.00).
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const f = s.facturas[0]!
+        await new EmitirNotaCredito().execute({ factura_id: f.id, monto: '150.00', motivo: 'baja' }, e.ctx)
+        await cola(e)
+        const dtes = await dtesDe('factura', f.id)
+        assert.lengthOf(dtes, 0, `DTE ${dtes[0]?.id} por Q${dtes[0]?.total} (${dtes[0]?.estado})`)
+    }).fails('H16: el aviso acreditado al 100 % sale certificado por Q0.00')
+
+    test('H17 · recuperar un aviso castigado lleva todo a 4.2.03: el IVA que salió de 2.1.11 no vuelve (confirmar con contador)', async ({
+        assert,
+    }) => {
+        // Producto: app/billing/actions/registrar_pago.ts (y registrar_pago_historico.ts) abona todo lo recuperado a 4.2.03.
+        // El castigo de un aviso sin DTE sacó su IVA de 2.1.11 porque «nunca se causó»; al cobrarlo sí se percibe
+        // (LIVA art. 4.1): la parte de IVA de lo recuperado es IVA por certificar (o débito), no ingreso. Propuesta:
+        // recuperación proporcional al castigo (cf.iva / cf.monto) a 2.1.11 y el resto a 4.2.03.
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const k = await new CastigarCartera().execute(
+            { facturas: [s.facturas[0]!.id], motivo: 'incobrable', evidencia: 'gestión documentada' },
+            e.ctx,
+        )
+        assert.equal(k.iva, '16.07')
+        await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '150.00', empresa_id: e.B },
+            e.ctx,
+        )
+        assert.equal(await saldoCuenta(e.B, '4.2.03'), '-133.93', 'solo la base es recuperación')
+    }).fails('H17: lo recuperado va entero a 4.2.03 (Q150.00) y 2.1.11 queda sin el IVA percibido')
+
+    test('H18 · con DTE de la factura, anular el pago deja viva la diferencia que cerró (sin cargo ni NDEB)', async ({
+        assert,
+    }) => {
+        // Producto: app/billing/actions/anular_pago.ts no anula la nota de la diferencia si la factura ya tiene DTE (el DTE
+        // se certificó por el neto). La decisión H13 dice que anular el pago revierte su diferencia; con documento
+        // fiscal haría falta un cargo o una NDEB por la diferencia. Hoy el cliente queda con Q0.50 descontados sin causa.
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const pago = await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '149.50', empresa_id: e.B },
+            e.ctx,
+        )
+        await new CerrarDiferenciaPago().execute({ pago_id: pago.id }, e.ctx)
+        await cola(e)
+        assert.equal(await dtesDe('factura', s.facturas[0]!.id).then((r) => r[0]?.estado), 'certificado')
+        await new AnularPago().execute({ pago_id: pago.id, motivo: 'cheque rechazado' }, e.ctx)
+        assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
+    }).fails('H18: la diferencia sigue viva con el pago anulado (13.diferencia_de_cobro_con_pago_anulado)')
 })

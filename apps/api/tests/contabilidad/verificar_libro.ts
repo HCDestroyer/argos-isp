@@ -59,7 +59,10 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {
+    // H13 con DTE de la factura: anular el pago deja viva la diferencia (hallazgo H18 de la fase 4)
+    '13.diferencia_de_cobro_con_pago_anulado': 'H18',
+}
 
 type Fila = Record<string, unknown>
 
@@ -272,7 +275,7 @@ async function verificarLibroCon(
           WHERE coalesce(cxc.saldo, 0) <> coalesce(fac.pendiente, 0)`,
     )
     await revisar(
-        '3.anticipos_distintos_de_excedentes (Σ pago − aplicado + saldos a favor sin aplicar)',
+        '3.anticipos_distintos_de_excedentes (Σ pago − aplicado − recuperado de castigos + saldos a favor sin aplicar)',
         `WITH ant AS (
              SELECT a.empresa_id, m.cliente_id, sum(m.haber - m.debe) AS saldo
                FROM ledger.movimientos m
@@ -282,9 +285,16 @@ async function verificarLibroCon(
               GROUP BY 1, 2
          ), apl AS (
              SELECT pago_id, sum(monto) AS monto FROM billing.pagos_aplicaciones GROUP BY 1
+         ), rec AS (
+             -- decisión (g): con castigos por recuperar, lo que sobra del pago va a 4.2.03 (su propio asiento)
+             SELECT a.origen_id AS pago_id, sum(m.haber - m.debe) AS monto
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo = 'pago' AND a.reversa_de IS NULL AND c.codigo = '${CUENTAS_GT.RECUPERACION_INCOBRABLES}'
+              GROUP BY 1
          ), pag AS (
-             SELECT p.empresa_id, p.cliente_id, sum(p.monto - coalesce(apl.monto, 0)) AS restante
-               FROM billing.pagos p LEFT JOIN apl ON apl.pago_id = p.id
+             SELECT p.empresa_id, p.cliente_id, sum(p.monto - coalesce(apl.monto, 0) - coalesce(rec.monto, 0)) AS restante
+               FROM billing.pagos p LEFT JOIN apl ON apl.pago_id = p.id LEFT JOIN rec ON rec.pago_id = p.id
               WHERE p.estado = 'registrado' AND ${E('p.empresa_id')} AND ${C('p.cliente_id')}
               GROUP BY 1, 2
          ), apls AS (
@@ -341,7 +351,7 @@ async function verificarLibroCon(
     | 5 · Pagos y facturas
     */
     await revisar(
-        '5.factura_pagado_inconsistente (pagado ≠ Σ aplicaciones vigentes + notas + saldos a favor + castigos, o fuera de [0, total])',
+        '5.factura_pagado_inconsistente (pagado ≠ Σ aplicaciones vigentes + notas + saldos a favor, o fuera de [0, total]; el castigo no es pago, decisión (g))',
         `WITH apl AS (
              SELECT a.factura_id, sum(a.monto) AS monto
                FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
@@ -353,21 +363,17 @@ async function verificarLibroCon(
                FROM billing.saldos_iniciales_aplicaciones a
                JOIN billing.saldos_iniciales s ON s.id = a.saldo_inicial_id
               WHERE s.anulado_en IS NULL GROUP BY 1
-         ), cas AS (
-             -- fase 4 (§10.9): el castigo de cartera cubre la factura
-             SELECT factura_id, sum(monto) AS monto FROM ledger.castigos_facturas GROUP BY 1
          ), con_asiento AS (
              SELECT DISTINCT origen_id FROM ledger.asientos
               WHERE origen_tipo IN ('factura', 'mora') AND reversa_de IS NULL
          ), x AS (
              SELECT f.id, f.estado, f.total, f.pagado,
-                    coalesce(apl.monto, 0) + coalesce(nc.monto, 0) + coalesce(si.monto, 0) + coalesce(cas.monto, 0) AS cubierto,
+                    coalesce(apl.monto, 0) + coalesce(nc.monto, 0) + coalesce(si.monto, 0) AS cubierto,
                     f.id IN (SELECT origen_id FROM con_asiento) AS tiene_asiento
                FROM billing.facturas f
                LEFT JOIN apl ON apl.factura_id = f.id
                LEFT JOIN nc ON nc.factura_id = f.id
                LEFT JOIN si ON si.factura_id = f.id
-               LEFT JOIN cas ON cas.factura_id = f.id
               WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado <> 'anulada'
          )
          SELECT id, estado, total::text, pagado::text, cubierto::text, tiene_asiento FROM x
@@ -966,10 +972,14 @@ async function verificarLibroCon(
              SELECT d.id AS dte_id, d.estado, f.id AS factura_id, d.total, d.iva, f.total AS bruto, f.iva AS iva_bruto,
                     coalesce((SELECT sum(n.monto) FROM billing.notas_credito n
                                WHERE n.factura_id = f.id AND n.created_at < d.created_at
+                                 AND NOT EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones xa
+                                                  WHERE xa.nota_id = n.id AND xa.anulado_en < d.created_at)
                                  AND NOT EXISTS (SELECT 1 FROM fiscal.dte o
                                                   WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = n.id)), 0) AS notas,
                     coalesce((SELECT sum(n.iva) FROM billing.notas_credito n
                                WHERE n.factura_id = f.id AND n.created_at < d.created_at
+                                 AND NOT EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones xa
+                                                  WHERE xa.nota_id = n.id AND xa.anulado_en < d.created_at)
                                  AND NOT EXISTS (SELECT 1 FROM fiscal.dte o
                                                   WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = n.id)), 0) AS iva_notas
                FROM fiscal.dte d JOIN billing.facturas f ON f.id = d.documento_id
@@ -1034,9 +1044,24 @@ async function verificarLibroCon(
                  -- su NCRE: rechazada en definitivo, nunca certificada (ni en curso)
                  OR EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'nota_credito' AND d.documento_id = x.nota_id
                               AND NOT (d.estado = 'rechazado' AND d.definitivo))
-                 -- sin DTE: solo fuera de obligatoria (una nota interna)
+                 -- sin DTE: en obligatoria solo la nota interna de la diferencia de un pago anulado (H13), anulada con
+                 -- ese pago y sin un DTE de la factura emitido antes de anularla; fuera de obligatoria, una nota interna
                  OR (NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'nota_credito' AND d.documento_id = x.nota_id)
-                     AND coalesce(c.modo, 'desactivada') = 'obligatoria')`,
+                     AND coalesce(c.modo, 'desactivada') = 'obligatoria'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM billing.notas_credito_anulaciones xa
+                           JOIN billing.diferencias_cobro dc ON dc.nota_credito_id = xa.nota_id AND dc.pago_id = xa.pago_id
+                           JOIN billing.pagos pa ON pa.id = xa.pago_id AND pa.estado = 'anulado'
+                           JOIN billing.notas_credito nn ON nn.id = xa.nota_id
+                           JOIN billing.facturas ff ON ff.id = nn.factura_id
+                          WHERE xa.nota_id = x.nota_id
+                            AND NOT EXISTS (SELECT 1 FROM fiscal.dte fd WHERE fd.documento_id = ff.id
+                                             AND fd.documento_tipo = CASE WHEN ff.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                                             AND fd.estado <> 'rechazado' AND fd.created_at <= xa.anulado_en)))
+                 -- la anulación por pago es solo la de su diferencia, y de un pago anulado
+                 OR EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones xa WHERE xa.nota_id = x.nota_id AND xa.pago_id IS NOT NULL
+                              AND NOT EXISTS (SELECT 1 FROM billing.diferencias_cobro dc JOIN billing.pagos pa ON pa.id = dc.pago_id
+                                               WHERE dc.nota_credito_id = xa.nota_id AND dc.pago_id = xa.pago_id AND pa.estado = 'anulado'))`,
         )
     }
 
