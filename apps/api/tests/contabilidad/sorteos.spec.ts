@@ -119,7 +119,7 @@ async function ejecutado(e: EmpresasGt, valorPublico = '90210') {
 const CUENTA_BIEN = '5.2.99'
 
 /** Línea de una compra a crédito con factura de un bien de la empresa B. */
-async function lineaDeCompra(e: EmpresasGt, total: string, cuenta: string): Promise<number> {
+async function lineaDeCompra(e: EmpresasGt, total: string, cuenta: string, cantidad = 1): Promise<number> {
     const proveedor = await proveedorEn(e.B, e.ctx)
     const compra = await new RegistrarCompra().execute(
         {
@@ -129,7 +129,7 @@ async function lineaDeCompra(e: EmpresasGt, total: string, cuenta: string): Prom
             numero: unico('R'),
             fecha_documento: hoyGuatemala(),
             condicion: 'credito',
-            lineas: [{ descripcion: 'Router Wi-Fi 6', tipo: 'bien', cuenta, total }],
+            lineas: [{ descripcion: 'Router Wi-Fi 6', tipo: 'bien', cuenta, total, cantidad }],
         },
         e.ctx,
     )
@@ -643,5 +643,53 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 assert.isFalse(await intentar(trx, sql, [suplente.id]), sql)
             }
         })
+    })
+
+    test('sorteos-final · el bien de una línea con varias unidades: gasto por su parte (compra_base); el inv. 16 detecta unidades o bases de más', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const sorteo = await ejecutado(e)
+        const bien = sorteo.ganadores.find((g) => g.premio_posicion === 2)!
+        // 3 routers por Q112.00 (base 100.00): el premio se lleva 2 → 66.67 (prorrateo redondeado)
+        const linea = await lineaDeCompra(e, '112.00', CUENTA_BIEN, 3)
+        await new EntregarPremioSorteo().execute(
+            {
+                sorteo_id: sorteo.id,
+                ganador_id: bien.id,
+                contrapartida: 'compra',
+                compra_linea_id: linea,
+                unidades: 2,
+            },
+            e.ctx,
+        )
+        const fila = await db.from('lealtad.sorteos_ganadores').where('id', bien.id).firstOrFail()
+        assert.include(fila, { compra_unidades: 2, compra_base: '66.67' })
+        assert.deepEqual(await lineas('sorteo', Number(bien.id)), [
+            ['5.1.03', '66.67', '0.00'],
+            ['5.2.99', '0.00', '66.67'],
+            ['5.1.03', '33.34', '0.00'],
+            ['2.1.05', '0.00', '33.34'],
+        ])
+        await afirmarLibro(assert, [e.B, e.C])
+        // más unidades que las de la línea, una parte que no es su prorrateo
+        for (const [sql, invariante] of [
+            [
+                `UPDATE lealtad.sorteos_ganadores SET compra_unidades = 4 WHERE id = ?`,
+                '16.unidades_de_compra_de_mas',
+            ],
+            [
+                `UPDATE lealtad.sorteos_ganadores SET compra_base = 10.00 WHERE id = ?`,
+                '16.unidades_de_compra_de_mas',
+            ],
+        ] as const) {
+            assert.include(
+                await enTransaccion([e.B, e.C], async (trx) => {
+                    await trx.rawQuery(sql, [bien.id])
+                }),
+                invariante,
+                sql,
+            )
+        }
     })
 })

@@ -1190,13 +1190,7 @@ test.group('Lealtad · sorteos', (group) => {
             [libre.compra_linea_id, libre.compra_unidades, libre.compra_base],
             [null, null, null],
         )
-        // pendiente del auditor: 16.premio_de_sorteo_mal_contabilizado compara con toda la base de la
-        // línea (cl.base); con unidades debe usar g.compra_base (aviso en .claude/integration/a3.md)
-        const todas = await verificarLibro([e.B, e.C])
-        const violaciones = todas.filter(
-            (v) => !v.invariante.startsWith('16.premio_de_sorteo_mal_contabilizado'),
-        )
-        assert.deepEqual(violaciones, [])
+        assert.deepEqual(await verificarLibro([e.B, e.C]), [])
     })
 
     test('observación del auditor: un bien no va a activo fijo sin su activo, ni se entrega como premio desde ahí (422)', async ({

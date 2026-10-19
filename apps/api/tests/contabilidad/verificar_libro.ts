@@ -2533,10 +2533,10 @@ async function verificarLibroCon(
     | Boletos por canje: inv. 14. El ISR de los premios en 2.1.05: inv. 15.retenciones.
     */
     await revisar(
-        '16.premio_de_sorteo_mal_contabilizado (entregado, titular o suplente con el premio de un no reclamado: ISR = round(valor × pct), un asiento sorteo vigente de su empresa con origen = ganador, efectivo con egreso premios por valor − ISR, bien con su compra (5.1.03 / cuenta de la línea por la base) o contra un activo (valor), servicio con canje sin puntos del ganador; sin entregar, sin documentos ni asientos vigentes)',
+        '16.premio_de_sorteo_mal_contabilizado (entregado, titular o suplente con el premio de un no reclamado; el bien de una compra por su parte compra_base de la línea, nunca de activo fijo: ISR = round(valor × pct), un asiento sorteo vigente de su empresa con origen = ganador, efectivo con egreso premios por valor − ISR, bien con su compra (5.1.03 / cuenta de la línea por la base) o contra un activo (valor), servicio con canje sin puntos del ganador; sin entregar, sin documentos ni asientos vigentes)',
         `WITH g AS (
              SELECT g.id, g.sorteo_id, g.estado, g.tipo, g.retencion_isr, g.asiento_id, g.egreso_id, g.canje_id,
-                    g.compra_linea_id, s.empresa_id, p.tipo AS premio, p.valor, pa.cliente_id,
+                    g.compra_linea_id, g.compra_unidades, g.compra_base, s.empresa_id, p.tipo AS premio, p.valor, pa.cliente_id,
                     CASE WHEN p.retiene_isr THEN round(p.valor * p.isr_pct / 100, 2) ELSE 0 END AS isr,
                     cl.base AS base_compra, cuc.codigo AS cuenta_compra, cl.tipo AS tipo_linea, co.empresa_id AS empresa_compra,
                     co.tipo_documento, ${compraAnulada('co')} AS compra_anulada
@@ -2568,7 +2568,7 @@ async function verificarLibroCon(
                     k.empresa_id AS canje_empresa, k.sorteo_ganador_id AS canje_ganador,
                     -- lo que el bien carga a 5.1.03 además del ISR y lo que acredita a su contrapartida
                     CASE WHEN g.compra_linea_id IS NULL THEN g.valor
-                         WHEN g.cuenta_compra = '${CUENTAS_GT.PREMIOS_PROMOCIONES}' THEN 0 ELSE g.base_compra END AS bien
+                         WHEN g.cuenta_compra = '${CUENTAS_GT.PREMIOS_PROMOCIONES}' THEN 0 ELSE g.compra_base END AS bien
                FROM g
                LEFT JOIN ledger.asientos a ON a.id = g.asiento_id
                LEFT JOIN ledger.egresos e ON e.id = g.egreso_id
@@ -2581,7 +2581,8 @@ async function verificarLibroCon(
                 canje_id, compra_linea_id
            FROM x
           WHERE (estado <> 'entregado' AND (asiento_id IS NOT NULL OR egreso_id IS NOT NULL OR canje_id IS NOT NULL
-                                            OR compra_linea_id IS NOT NULL OR asientos <> 0 OR retencion_isr IS NOT NULL))
+                                            OR compra_linea_id IS NOT NULL OR compra_unidades IS NOT NULL
+                                            OR compra_base IS NOT NULL OR asientos <> 0 OR retencion_isr IS NOT NULL))
              OR (estado = 'entregado' AND (
                     premio IS NULL OR retencion_isr IS DISTINCT FROM isr
                  OR asientos <> CASE WHEN (premio = 'bien' AND bien > 0) OR isr > 0 THEN 1 ELSE 0 END
@@ -2602,7 +2603,11 @@ async function verificarLibroCon(
                  OR (premio <> 'servicio' AND canje_id IS NOT NULL)
                  OR (premio <> 'bien' AND compra_linea_id IS NOT NULL)
                  OR (compra_linea_id IS NOT NULL AND (tipo_linea <> 'bien' OR empresa_compra <> empresa_id
-                        OR tipo_documento = 'NCRE'))))`,
+                        OR tipo_documento = 'NCRE' OR compra_unidades IS NULL OR compra_unidades < 1
+                        OR compra_base IS NULL OR compra_base < 0
+                        OR cuenta_compra LIKE '${CUENTAS_GT.PROPIEDAD_PLANTA_EQUIPO}.%'
+                        OR cuenta_compra LIKE '${CUENTAS_GT.DEPRECIACION_ACUMULADA}.%'))
+                 OR (compra_linea_id IS NULL AND (compra_unidades IS NOT NULL OR compra_base IS NOT NULL))))`,
     )
     await revisar(
         '16.asiento_de_sorteo_sin_ganador (todo asiento sorteo original es de un ganador de su empresa: el vigente es el de su entrega; uno revertido, de una entrega anulada que ya no lo tiene)',
@@ -2637,6 +2642,18 @@ async function verificarLibroCon(
             AND (o.origen_tipo <> 'sorteo' OR o.origen_id IS DISTINCT FROM r.origen_id
                  OR (SELECT count(*) FROM ledger.asientos r2 WHERE r2.reversa_de = o.id) <> 1
                  OR EXISTS (SELECT 1 FROM lealtad.sorteos_ganadores g WHERE g.id = o.origen_id AND g.asiento_id = o.id))`,
+    )
+    await revisar(
+        '16.unidades_de_compra_de_mas (por línea de compra: Σ unidades de las entregas vivas ≤ cantidad y Σ compra_base ≤ base; con todas las unidades entregadas, Σ compra_base = base; cada parte = su prorrateo ± el resto de la última)',
+        `SELECT l.id AS linea_id, l.cantidad, l.base::text, sum(g.compra_unidades)::int AS unidades,
+                sum(g.compra_base)::text AS base_entregada
+           FROM ledger.compras_lineas l JOIN lealtad.sorteos_ganadores g ON g.compra_linea_id = l.id
+           JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+          WHERE ${E('s.empresa_id')} AND g.estado = 'entregado'
+          GROUP BY l.id, l.cantidad, l.base
+         HAVING sum(g.compra_unidades) > l.cantidad OR sum(g.compra_base) > l.base
+             OR (sum(g.compra_unidades) = l.cantidad AND sum(g.compra_base) <> l.base)
+             OR bool_or(abs(g.compra_base - l.base * g.compra_unidades / l.cantidad) >= g.compra_unidades * 0.01 + 0.01)`,
     )
     await revisar(
         '16.sustitucion_mal_formada (sorteos-2: el suplente que toma un premio sustituye a un ganador del mismo sorteo que quedó sustituido, sin entregar, con ese mismo premio; todo sustituido tiene un solo suplente; un no reclamado, ninguno)',
