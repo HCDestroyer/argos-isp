@@ -91,7 +91,16 @@ export const PlantillaFacturacion = definirEsquema(
 
 export const EstadoFactura = definirEsquema(
     'EstadoFactura',
-    enumerado(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
+    enumerado([
+        'por_certificar',
+        'emitida',
+        'parcial',
+        'pagada',
+        'vencida',
+        'anulada',
+        'castigada',
+        'acreditada',
+    ]),
 )
 
 export const FacturaLinea = definirEsquema(
@@ -156,10 +165,11 @@ export const Factura = definirEsquema(
             certificar_al: nulable(enumerado(['emitir', 'pagar', 'nunca'])),
             tipo_dte: { ...nulable(texto), description: 'FACT, FPEQ… (null sin FEL)' },
             tipo: {
-                ...enumerado(['servicio', 'mora']),
-                description: 'servicio = factura del periodo; mora = recargo por vencimiento de otra factura',
+                ...enumerado(['servicio', 'mora', 'cargo']),
+                description:
+                    'servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)',
             },
-            factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora' },
+            factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora o el cargo' },
             vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
             anulada_en: { ...nulable(instante), description: 'Cuándo se anuló' },
             motivo_anulacion: nulable(texto),
@@ -408,8 +418,29 @@ export const Pago = definirEsquema(
             cliente_id: id,
             cliente_nombre: { ...texto, description: 'Nombre del pagador' },
             metodo: enumerado([...METODOS_PAGO]),
-            monto: Dinero,
+            monto: {
+                ...Dinero,
+                description:
+                    'Lo que el pago aplica a la deuda (efectivo o depósito + constancias de retención)',
+            },
             comision: Dinero,
+            retenido: {
+                ...Dinero,
+                description:
+                    'Parte del monto cubierta con constancias de retención del cliente (fase 5): a caja o banco entró monto − comision − retenido',
+            },
+            constancias: {
+                ...lista(
+                    objeto({
+                        impuesto: enumerado(['iva', 'isr']),
+                        impuesto_codigo: texto,
+                        numero: texto,
+                        fecha,
+                        monto: Dinero,
+                    }),
+                ),
+                description: 'Constancias de retención recibidas con el pago (1.1.05 IVA, 1.1.06 ISR)',
+            },
             referencia: nulable(texto),
             caja_id: nulable(id),
             pasarela: nulable(texto),
@@ -434,6 +465,19 @@ export const Pago = definirEsquema(
                 ...nulable(texto),
                 description: 'Banco y alias de la cuenta de destino',
             },
+            proveedor_cobro_id: {
+                ...nulable(id),
+                description:
+                    'Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco',
+            },
+            proveedor_cobro_nombre: {
+                ...nulable(texto),
+                description: 'Nombre del proveedor de cobro; null sin proveedor',
+            },
+            liquidacion_id: {
+                ...nulable(id),
+                description: 'Liquidación del proveedor que incluyó el pago; null = sin liquidar',
+            },
             historico: {
                 ...booleano,
                 description:
@@ -448,6 +492,11 @@ export const Pago = definirEsquema(
             ...auditable,
         },
         [
+            'retenido',
+            'constancias',
+            'proveedor_cobro_id',
+            'proveedor_cobro_nombre',
+            'liquidacion_id',
             'historico',
             'origen',
             'id_externo',

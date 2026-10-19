@@ -29,6 +29,8 @@ export interface EntradaReverso {
     fecha?: string
     /** solo desde la anulación del documento dueño del asiento (anular pago, factura, egreso…) */
     por_anulacion?: boolean
+    /** copia la etiqueta de impuesto de cada partida con el signo contrario (fase 5, compras) */
+    invertir_etiquetas?: boolean
 }
 
 export default class RevertirAsiento extends DomainAction<EntradaReverso, AsientoRegistrado> {
@@ -109,11 +111,22 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
             .from('ledger.movimientos')
             .where('asiento_id', original.id)
             .orderBy('id', 'asc')
-            .select('cuenta_id', 'debe', 'haber', 'cliente_id')) as Array<{
+            .select(
+                'cuenta_id',
+                'debe',
+                'haber',
+                'cliente_id',
+                'proveedor_id',
+                'impuesto_codigo',
+                'cuadricula',
+            )) as Array<{
             cuenta_id: number
             debe: string
             haber: string
             cliente_id: number | null
+            proveedor_id: number | null
+            impuesto_codigo: string | null
+            cuadricula: string | null
         }>
 
         // el reverso va al mismo diario que su original (con el número que le toque hoy)
@@ -138,6 +151,15 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
                     debe: m.haber,
                     haber: m.debe,
                     cliente_id: m.cliente_id,
+                    proveedor_id: m.proveedor_id === null ? null : Number(m.proveedor_id),
+                    // con `invertir_etiquetas` el reverso lleva la etiqueta con el signo contrario
+                    // (compras: el libro de compras resta la anulación en su mes, §10.2)
+                    ...(input.invertir_etiquetas && m.cuadricula
+                        ? {
+                              impuesto_codigo: m.impuesto_codigo,
+                              cuadricula: `${m.cuadricula.startsWith('+') ? '-' : '+'}${m.cuadricula.slice(1)}`,
+                          }
+                        : {}),
                 })),
             },
             t.ctx,

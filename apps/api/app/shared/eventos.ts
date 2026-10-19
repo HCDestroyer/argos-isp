@@ -110,6 +110,27 @@ export const CAMPOS_CLIENTE_ACTUALIZADO = [
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
+export const MODALIDADES_ADICIONAL = ['incluido', 'cortesia', 'cobrado'] as const
+export type ModalidadAdicional = (typeof MODALIDADES_ADICIONAL)[number]
+export const CAMPOS_ADICIONAL_CAMBIADO = [
+    'modalidad',
+    'identificador',
+    'credencial',
+    'precio',
+    'motivo',
+] as const
+export type CampoAdicionalCambiado = (typeof CAMPOS_ADICIONAL_CAMBIADO)[number]
+
+/** Asignación de un adicional a un servicio (`core.servicios_adicionales`). */
+interface PayloadAdicional {
+    servicio_id: number
+    cliente_id: number
+    empresa_id: number
+    adicional_id: number
+    asignacion_id: number
+    modalidad: ModalidadAdicional
+}
+
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
     'servicio.creado': {
@@ -168,6 +189,25 @@ export interface CatalogoEventos {
         capacidad_bajada_kbps: number | null
         capacidad_subida_kbps: number | null
         campos: Array<'control_velocidad' | 'capacidad'>
+        motivo: string | null
+    }
+    /**
+     * Servicios adicionales de un servicio (decisión del PM, 19 oct; `contratos/adicionales.md`):
+     * streaming, IPTV… Nunca llevan la credencial. A3 factura los `cobrado`; A5 los muestra en el
+     * portal. No cambian nada en la red (`aaa-cache` y `routeros` los ignoran).
+     */
+    'servicio.adicional_agregado': PayloadAdicional & {
+        /** `manual`: lo agregó alguien; `plan`: lo trajo el plan al crear el servicio o cambiar de plan */
+        origen: 'manual' | 'plan'
+    }
+    'servicio.adicional_cambiado': PayloadAdicional & {
+        /** campos que cambiaron; `credencial` solo dice que cambió (nunca el valor) */
+        campos: CampoAdicionalCambiado[]
+        modalidad_anterior: ModalidadAdicional
+    }
+    'servicio.adicional_quitado': PayloadAdicional & {
+        /** `manual` (quitado a mano), `cambio_plan`, `retiro` o `cambio_empresa` */
+        origen: 'manual' | 'cambio_plan' | 'retiro' | 'cambio_empresa'
         motivo: string | null
     }
     'asignacion.cambiada': {
@@ -355,6 +395,85 @@ export interface CatalogoEventos {
         cliente_id: number
         motivo: string
     }
+    /**
+     * Cobros y bancos (contrato de localización fiscal §10.3 y §10.9, fase 4). `proveedor` es el código
+     * del proveedor de cobro (`falsa`, `agente`, `debito`); `pagos` los ids incluidos (sin contracargos).
+     */
+    'cobros.liquidados': {
+        liquidacion_id: number
+        empresa_id: number
+        proveedor: string
+        bruto: Dinero
+        comision: Dinero
+        neto: Dinero
+        pagos: number[]
+    }
+    /** Efectivo de un turno de caja depositado en el banco (queda en 1.1.11 hasta conciliarse). */
+    'caja.depositada': {
+        deposito_id: number
+        empresa_id: number
+        caja_id: number
+        /** cuenta bancaria propia (null si el depósito fue a un banco del libro sin cuenta propia) */
+        cuenta_bancaria_id: number | null
+        /** subcuenta del libro (1.1.02.NN) que recibe el depósito */
+        cuenta_id: number
+        monto: Dinero
+    }
+    'banco.extracto_importado': {
+        extracto_id: number
+        empresa_id: number
+        cuenta_bancaria_id: number | null
+        cuenta_id: number
+        /** número de líneas importadas */
+        lineas: number
+        /** Σ de las líneas (con signo) */
+        monto: Dinero
+    }
+    'banco.conciliado': {
+        /** primera fila de la conciliación (su `id` en `POST /bancos/conciliaciones/:id/anular`) */
+        conciliacion_id: number
+        empresa_id: number
+        cuenta_bancaria_id: number | null
+        cuenta_id: number
+        /** línea del extracto conciliada */
+        linea_id: number
+        lineas: number
+        monto: Dinero
+    }
+    'cartera.castigada': {
+        castigo_id: number
+        empresa_id: number
+        cliente_id: number
+        facturas: number[]
+        monto: Dinero
+    }
+    /**
+     * Compras, activos y diferidos (contrato de localización fiscal §3.4 y §10.10, fase 5).
+     * `periodo_iva` es el mes del libro de compras (YYYY-MM).
+     */
+    'compra.registrada': {
+        compra_id: number
+        empresa_id: number
+        proveedor_id: number
+        total: Dinero
+        iva: Dinero
+        periodo_iva: string
+    }
+    'compra.anulada': {
+        compra_id: number
+        empresa_id: number
+        proveedor_id: number
+        total: Dinero
+        iva: Dinero
+        periodo_iva: string
+    }
+    /** Baja (venta, retiro o anulación de su compra) de un activo fijo; `valor_libros` al darlo de baja. */
+    'activo.dado_de_baja': {
+        activo_id: number
+        empresa_id: number
+        motivo: string
+        valor_libros: Dinero
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -479,6 +598,9 @@ export const EVENTOS = [
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
     'asignacion.cambiada',
+    'servicio.adicional_agregado',
+    'servicio.adicional_cambiado',
+    'servicio.adicional_quitado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
     'cliente.actualizado',
@@ -514,6 +636,14 @@ export const EVENTOS = [
     'dte.anulado',
     'fel.contingencia_cambiada',
     'factura.sustituida',
+    'cobros.liquidados',
+    'caja.depositada',
+    'banco.extracto_importado',
+    'banco.conciliado',
+    'cartera.castigada',
+    'compra.registrada',
+    'compra.anulada',
+    'activo.dado_de_baja',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

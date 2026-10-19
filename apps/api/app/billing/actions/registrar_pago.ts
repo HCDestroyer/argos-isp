@@ -25,6 +25,17 @@ import { cajaDelCajero } from '#ledger/cajas'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { exigirReferenciaLibre, validarDatosBancarios, type DatosBancarios } from '#billing/datos_bancarios'
 import { resumenEmpresas } from '#billing/empresa'
+import { proveedorParaPago } from '#ledger/cobros_liquidar'
+import { guardarRecuperacion, movimientosRecuperacion, repartirRecuperacion } from '#ledger/cartera'
+import { hoyGuatemala } from '#ledger/fechas'
+import {
+    exigirDocumentoDeRetencionIva,
+    insertarConstanciasRecibidas,
+    leerRetencionesRecibidas,
+    validarRetencionesRecibidas,
+    type ConstanciaRecibida,
+    type PedidoConstancia,
+} from '#ledger/retenciones'
 
 export { DATOS_POR_METODO } from '#billing/datos_bancarios'
 
@@ -51,7 +62,21 @@ export { DATOS_POR_METODO } from '#billing/datos_bancarios'
  *   `caja_id` va a la caja del turno abierto del cajero en esa empresa (`cajaDelCajero`) o, en un
  *   cobro de una sola empresa, a su caja principal. Los métodos bancarios (`deposito`,
  *   `transferencia`, `ach`, `remesa`) exigen sus datos (`DATOS_POR_METODO`, 422 por campo) y van a
- *   la subcuenta de la cuenta bancaria de destino; pasarela, agente y débito, al banco principal.
+ *   la subcuenta de la cuenta bancaria de destino; pasarela, agente y débito, al banco principal o,
+ *   con un proveedor de cobro configurado (`ledger.proveedores_cobro`, desde su fecha de corte), a
+ *   su `1.1.10.NN Cobros por liquidar` por el bruto, sin comisión: la comisión la trae la
+ *   liquidación (`cobros.liquidar`, contrato de localización fiscal §10.3).
+ * - **Retenciones recibidas** (contrato de localización fiscal §3.5, fase 5): `retenciones[]` son
+ *   las constancias de IVA o ISR que el cliente (agente de retención o el Estado) entrega con el
+ *   pago. `monto` es lo que entra a caja o banco; el pago aplica `monto + Σ constancias` a la deuda
+ *   (`billing.pagos.monto`, con la parte retenida en `retenido`) y su asiento lleva `1.1.05 IVA
+ *   retenido por clientes` o `1.1.06 ISR retenido por clientes` en el debe por cada constancia, con
+ *   su etiqueta (`+RET_IVA_REC`, `+RET_ISR_REC`). Un pago con constancias es de una sola empresa
+ *   (422 `retencion_en_cobro_repartido`) y no va a un proveedor de cobro (422
+ *   `retencion_con_proveedor_cobro`); número de constancia repetido entre pagos vigentes: 409
+ *   `constancia_duplicada`. Una constancia de IVA en un pago que recupera (total o parcialmente)
+ *   un aviso castigado sin DTE: 422 `retencion_sin_documento_fiscal` (H19; no hay DTE que la
+ *   respalde).
  * - Evento `pago.registrado` por pago (con `empresa_id` y `cobro_id`) y, **en la misma
  *   transacción**, `evaluarEstadoServicio` de cada servicio cuyas facturas tocó: la reactivación
  *   sale con el pago (evento `servicio.estado_cambiado`), sin esperar al cron.
@@ -78,6 +103,8 @@ export interface EntradaRegistrarPago {
      * de la cuenta bancaria, de las facturas pedidas o de la deuda del cliente.
      */
     empresa_id?: number | null
+    /** constancias de retención que entrega el cliente (fase 5): se suman al monto que se aplica */
+    retenciones?: PedidoConstancia[] | null
     /** interno (ruta): alcance ACL del cajero para elegir y validar la caja de cada empresa */
     alcance?: Alcance
 }
@@ -121,8 +148,8 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
     readonly nombre = 'pagos.registrar'
 
     protected async handle(input: EntradaRegistrarPago, t: Transaccion): Promise<ResultadoRegistrarPago> {
-        const monto = dec(input.monto)
-        if (monto.lte(0) || !tieneCentavosExactos(monto)) {
+        const efectivo = dec(input.monto)
+        if (efectivo.lte(0) || !tieneCentavosExactos(efectivo)) {
             throw new ValidacionFallida([
                 {
                     field: 'monto',
@@ -143,11 +170,14 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             ...(await duenosDeFacturas(t.trx, input.facturas ?? [])),
         ])
 
+        // fase 5: las constancias se suman a lo que entra para aplicar a la deuda
+        const constancias = leerRetencionesRecibidas(input.retenciones ?? [])
+        const monto = efectivo.plus(constancias.total)
         const comision = dec(input.comision ?? '0')
         if (
             comision.isNegative() ||
             !tieneCentavosExactos(comision) ||
-            (comision.gt(0) && comision.gte(monto))
+            (comision.gt(0) && comision.gte(efectivo))
         ) {
             throw new ValidacionFallida([
                 {
@@ -192,6 +222,16 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         }
 
         const plan = await this.planear(t, input, monto, fija, preferidas)
+        let recibidas: ConstanciaRecibida[] = []
+        if (constancias.pedidos.length > 0) {
+            if (plan.length > 1) {
+                throw new ReglaNegocio(
+                    `El cobro se reparte entre las empresas ${plan.map((p) => p.empresaId).join(', ')}: un pago con constancias de retención es de una sola empresa (indica empresa_id o facturas)`,
+                    'retencion_en_cobro_repartido',
+                )
+            }
+            recibidas = await validarRetencionesRecibidas(t.trx, plan[0]!.empresaId, constancias.pedidos)
+        }
         const cajas = await this.cajasDelCobro(t, input, plan)
 
         const cobroId = await this.registrarCobro(t, input, monto)
@@ -205,6 +245,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 comision: plan.length === 1 ? comision : CERO,
                 bancario,
                 caja: cajas.get(parte.empresaId) ?? null,
+                constancias: recibidas,
             })
             registrados.push(pagoId)
             aplicadas.push(...aplicaciones)
@@ -492,9 +533,27 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             comision: Dec
             bancario: DatosBancarios
             caja: { cajaId: number; cuentaId: number; turnoId: number | null } | null
+            constancias: ConstanciaRecibida[]
         },
     ): Promise<{ pagoId: number; aplicaciones: Aplicacion[] }> {
-        const { parte, referencia, comision, bancario, caja } = datos
+        const { parte, referencia, bancario, caja, constancias } = datos
+        const retenido = constancias.reduce((s, c) => s.plus(c.monto), CERO)
+        // fase 4 (§10.3): pasarela, agente o débito de un proveedor configurado → su 1.1.10.NN por el
+        // bruto; la comisión sale después de su liquidación (no se estima aquí)
+        const proveedor = await proveedorParaPago(
+            t.trx,
+            parte.empresaId,
+            input.metodo,
+            input.pasarela,
+            hoyGuatemala(),
+        )
+        const comision = proveedor ? CERO : datos.comision
+        if (proveedor && retenido.gt(0)) {
+            throw new ReglaNegocio(
+                `El pago por ${input.metodo} va al proveedor de cobro ${proveedor.id} (1.1.10.NN): sus retenciones las trae la liquidación, no el pago`,
+                'retencion_con_proveedor_cobro',
+            )
+        }
         await exigirReferenciaLibre(
             t.trx,
             input.metodo,
@@ -512,18 +571,21 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 metodo: input.metodo,
                 monto: aTexto(parte.monto),
                 comision: aTexto(comision),
+                retenido: aTexto(retenido),
                 pasarela: input.pasarela?.trim() || null,
                 referencia,
                 caja_id: caja?.cajaId ?? null,
                 turno_id: caja?.turnoId ?? null,
                 cuenta_bancaria_id: bancario.cuentaBancariaId,
                 banco_origen_id: bancario.bancoOrigenId,
+                proveedor_cobro_id: proveedor?.id ?? null,
                 estado: 'registrado',
                 nota: input.nota?.trim() || null,
                 registrado_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>
         const pagoId = pago!.id
+        await insertarConstanciasRecibidas(t, pagoId, parte.empresaId, input.cliente_id, constancias)
 
         const { aplicaciones, restante } = await aplicarAFacturas(t.trx, pagoId, parte.monto, parte.facturas)
 
@@ -531,12 +593,22 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         // pasarela: el banco recibe el neto y la comisión es gasto (Bancos + Comisiones / CxC)
         const cuentaDebe =
             caja?.cuentaId ??
+            proveedor?.cuenta_id ??
             (input.metodo === 'caja' ? null : (bancario.cuentaLibro ?? CUENTAS.BANCO_PRINCIPAL))
         const movimientos: LineaAsiento[] = [
-            { cuenta: cuentaDebe!, debe: aTexto(parte.monto.minus(comision)) },
+            { cuenta: cuentaDebe!, debe: aTexto(parte.monto.minus(comision).minus(retenido)) },
         ]
         if (comision.gt(0)) {
             movimientos.push({ cuenta: CUENTAS.COMISIONES_PASARELAS, debe: aTexto(comision) })
+        }
+        // fase 5: cada constancia de retención recibida, a 1.1.05 o 1.1.06 con su etiqueta
+        for (const constancia of constancias) {
+            movimientos.push({
+                cuenta: constancia.cuenta,
+                debe: aTexto(constancia.monto),
+                impuesto_codigo: constancia.impuesto_codigo,
+                cuadricula: `+${constancia.cuadricula}`,
+            })
         }
         const porCliente = new Map<number, Dec>()
         for (const a of aplicaciones) {
@@ -549,10 +621,21 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 cliente_id: clienteId,
             })
         }
-        if (restante.gt(0)) {
+        // decisión (g) del líder: con castigos por recuperar, lo que sobra es recuperación (4.2.03), nunca un
+        // anticipo eterno ni una aplicación a la factura castigada
+        // H17: la recuperación se parte en base (4.2.03) e IVA (2.1.11) en la proporción de cada castigo
+        const recuperacion = await repartirRecuperacion(t.trx, parte.empresaId, input.cliente_id, restante)
+        // H19: una constancia de IVA no respalda lo recuperado de un aviso castigado sin DTE
+        exigirDocumentoDeRetencionIva(
+            constancias,
+            recuperacion.reduce((a, r) => a.plus(r.iva), CERO),
+        )
+        movimientos.push(...movimientosRecuperacion(recuperacion, input.cliente_id))
+        const sobrante = recuperacion.reduce((a, r) => a.minus(r.monto), restante)
+        if (sobrante.gt(0)) {
             movimientos.push({
                 cuenta: CUENTAS.ANTICIPOS_CLIENTES,
-                haber: aTexto(restante),
+                haber: aTexto(sobrante),
                 cliente_id: input.cliente_id,
             })
         }
@@ -572,6 +655,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             t.ctx,
             { trx: t.trx },
         )
+        await guardarRecuperacion(t.trx, parte.empresaId, pagoId, recuperacion)
 
         await t.emit('pago.registrado', {
             pago_id: pagoId,

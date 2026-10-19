@@ -6,7 +6,7 @@ Para el operador que instala ArgosIsp desde cero. El servidor solo descarga: las
 
 | Qué | Mínimo |
 | --- | --- |
-| Sistema | Ubuntu 22.04/24.04 o Debian 12, amd64 o arm64, con systemd |
+| Sistema | Ubuntu 22.04/24.04 o Debian 12 (también Raspberry Pi OS de 64 bits), amd64 o arm64, con systemd |
 | Memoria y disco | 2 GB de RAM (4 GB recomendados), 10 GB libres en `/opt` (más los respaldos) |
 | Puertos libres | TCP 80 y 443 (panel, API, portal y `/corte`), UDP 1812 y 1813 (RADIUS) |
 | DNS | `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>` apuntando a la IP pública del servidor |
@@ -39,6 +39,16 @@ Qué hace, en orden:
 6. Descarga las imágenes y levanta todo; espera a que cada servicio esté sano (migraciones y seed incluidos) y comprueba que la API responde con la versión instalada.
 7. Muestra las URL y la clave del admin (también en `/opt/argosisp/credenciales-iniciales.txt`, 600).
 
+## Raspberry Pi
+
+ArgosIsp corre en un Raspberry Pi con las mismas imágenes (todas son amd64 y arm64; el CI prueba la instalación completa en arm64). Capacidad orientativa: un ISP pequeño o mediano.
+
+- **64 bits obligatorio:** Raspberry Pi OS de 64 bits (Debian) o Ubuntu Server 24.04 arm64. Con un sistema de 32 bits (`armv7l`) el instalador se niega.
+- **Nunca en la tarjeta SD.** La base de datos la desgasta en meses y un corte de luz la corrompe. Usa un SSD NVMe (Pi 5, con el HAT o la base M.2) o un SSD por USB 3 (Pi 4), y de preferencia arranca desde el SSD. Si `/opt/argosisp` o el directorio de datos de Docker (`/var/lib/docker`) quedan en una tarjeta SD (`mmcblk`), el instalador lo avisa (no bloquea).
+- **Memoria:** 8 GB recomendados (Pi 5 de 8 GB). Con 4 GB funciona con margen justo: la regla de RAM solo apaga `api-portal` con menos de 3 GB (un Pi de 4 GB reporta unos 3,8 GB, así que queda encendido). Si el equipo se queda sin memoria, `ARGOSISP_API_PORTAL=no` en el `.env` y `sudo argosisp levantar` (todo va a `api`). Con 2 GB, `api-portal` queda apagado solo.
+- **UPS** (o un HAT de batería) y **respaldo fuera del equipo** (`BACKUP_RCLONE_DESTINO`, o `BACKUP_HOST_DIR` en otro disco o NFS): un Pi no tiene redundancia de disco ni de fuente.
+- La instalación es la misma: `curl … | sudo bash` (arriba).
+
 ## Después de instalar
 
 1. Entra a `https://panel.<dominio>` con el correo y la clave mostrados, **cambia la clave** y borra `credenciales-iniciales.txt`.
@@ -64,7 +74,24 @@ Qué hace, en orden:
 
 Los datos viven en volúmenes de Docker del proyecto `argosisp` (`pgdata`, `redisdata`, `comprobantes`, `caddydata`, `aaa-datos`, `radius-clientes`): no cambian entre versiones.
 
-Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `aaa-vigia`, `web`, `portal`, `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
+Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `aaa-vigia`, `web`, `portal`, `api-portal` (si `ARGOSISP_API_PORTAL=si`), `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
+
+## API del portal (`api-portal`)
+
+Un segundo proceso de la misma API (misma imagen, misma base, mismo Redis) que atiende solo `/api/v1/portal/**`, para que el tráfico de los clientes y la página de corte no hagan lenta la API del panel. No guarda datos propios: no hay nada que sincronizar. El instalador lo deja encendido (`ARGOSISP_API_PORTAL=si` en el `.env`), salvo con menos de 3 GB de RAM, donde lo deja apagado y avisa. Para apagarlo: `ARGOSISP_API_PORTAL=no` en `/opt/argosisp/.env` y `sudo argosisp levantar` (todo vuelve a `api`). Detalle: `infra/produccion/README.md`.
+
+## Nodo portal (otro servidor, opcional)
+
+Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para llevar el portal a otro VPS:
+
+1. En el servidor principal: `sudo argosisp nodo-portal crear <nombre>`. Copia el token: se muestra una sola vez.
+2. En el VPS del nodo (con `portal.<dominio>`, o el que pongas en `ARGOSISP_DOMINIO_PORTAL`, apuntando a él):
+   ```sh
+   curl -fsSL https://github.com/HCDestroyer/argos-isp/releases/latest/download/instalar.sh | sudo bash -s -- \
+     --rol portal --central https://api.<dominio> --token '<token>' --dominio <dominio> --correo <correo>
+   ```
+   Instala solo el portal y Caddy (sin Postgres, Redis ni workers), en la versión del central.
+3. `sudo argosisp nodo-portal listar` y `revocar <nombre>` en el principal. Un token revocado deja al nodo sin API.
 
 ## Comandos
 
@@ -89,4 +116,4 @@ Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `
 
 ## Cómo se prueba
 
-El job `distribucion` del CI (`infra/ci/probar-distribucion.sh`) construye las seis imágenes del commit, instala con `instalar.sh --si` en el runner (TLS con la CA interna de Caddy, `ARGOSISP_TLS=interno`), comprueba el `.env` en 600, el login del admin y `GET /api/v1/version` a través del proxy, `/corte` por HTTP con cualquier Host, y sigue con actualizar y revertir (`actualizacion.md`).
+El job `distribucion` del CI (`infra/ci/probar-distribucion.sh`) construye las siete imágenes del commit en amd64 y en arm64 (dos runners nativos en paralelo, `ubuntu-24.04` y `ubuntu-24.04-arm`), instala con `instalar.sh --si` en el runner (TLS con la CA interna de Caddy, `ARGOSISP_TLS=interno`), comprueba el `.env` en 600, el login del admin y `GET /api/v1/version` a través del proxy, `/corte` por HTTP con cualquier Host, sigue con actualizar y revertir (`actualizacion.md`), comprueba en cada versión que `/api/v1/portal/*` lo sirve `api-portal` (por su log de acceso) y al final instala un nodo portal en el mismo runner (segundo proyecto de compose, puertos 8080/8443) y comprueba que sus peticiones llegan a `api-portal` del central.

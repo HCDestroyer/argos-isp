@@ -17,19 +17,7 @@ interface Pendiente {
 const PENDIENTES: Pendiente[] = [
     // Localización fiscal · fase 2: activados en `fase2.spec.ts` (instalación, vigencia y cadena de hash)
     // Fase 3 (FEL): activados en `fase3.spec.ts`
-    // Fase 4 (compras y retenciones)
-    {
-        titulo: 'libro de compras = cuenta 1.1.04 IVA crédito fiscal',
-        fase: 'localización fiscal, fase 4 (compras)',
-        criterio:
-            'PLAN fase 4: por empresa y mes, Σ iva de ledger.compras con credito_fiscal = movimiento del mes de 1.1.04; FPEQ y FCAP no suman; compra desde egreso = reclasificación IVA crédito / gasto sin tocar el asiento original.',
-    },
-    {
-        titulo: 'retención recibida: CxC baja por el total y 1.1.05 por la constancia',
-        fase: 'localización fiscal, fase 4 (retenciones)',
-        criterio:
-            'Contrato §3.5 y §12: asiento del pago = Caja/Banco (neto) + 1.1.05 o 1.1.06 (constancia) / CxC (total); Σ constancias recibidas = saldo de 1.1.05 + 1.1.06 antes de liquidar.',
-    },
+    // Compras y retenciones (localización fiscal, fase 5 de A3): activados en `fase5.spec.ts`
     // Fase 5 (libros, bloqueos, cierre anual)
     {
         titulo: 'el cierre anual deja los resultados en cero',
@@ -69,11 +57,12 @@ const PENDIENTES: Pendiente[] = [
             'Estudio Odoo n.º 7: Σ de ledger.movimientos con impuesto_codigo = IVA y cuadrícula de cuota en el periodo = IVA de la declaración; Σ de la cuadrícula de base = base declarada; cada asiento de factura y nota etiqueta base y cuota.',
     },
     // Conciliación bancaria (estudio Odoo)
+    // «conciliación bancaria solo por inserción»: activado en `fase4.spec.ts` (fase 4, §10.3) salvo el bloqueo duro
     {
-        titulo: 'conciliación bancaria solo por inserción',
-        fase: 'sin fase en PLAN (estudio Odoo n.º 19, propuesta para después de la fase 5)',
+        titulo: 'el bloqueo duro exige cero líneas del extracto sin conciliar',
+        fase: 'localización fiscal, fase 5 (bloqueos; estudio Odoo n.º 19)',
         criterio:
-            'ledger.extractos, extractos_lineas y conciliaciones rechazan UPDATE/DELETE (trigger y REVOKE); deshacer una conciliación es una fila nueva; nunca se reescribe el asiento conciliado (a diferencia de Odoo); el bloqueo duro exige cero líneas sin conciliar.',
+            'Con ledger.bloqueos duro hasta F, ninguna línea de extracto con fecha ≤ F queda sin conciliación vigente; poner el bloqueo con líneas pendientes responde 422.',
     },
     // Lealtad
     // lealtad, fase 1: activados en `lealtad.spec.ts` (2.1.10 = lotes vivos; evento repetido)

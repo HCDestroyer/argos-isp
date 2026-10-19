@@ -26,6 +26,16 @@ export interface PagoVista {
     metodo: MetodoPago
     monto: string
     comision: string
+    /** parte de `monto` cubierta con constancias de retención del cliente (fase 5); entró `monto − comision − retenido` */
+    retenido: string
+    /** constancias de retención recibidas con el pago (1.1.05 IVA, 1.1.06 ISR) */
+    constancias: Array<{
+        impuesto: 'iva' | 'isr'
+        impuesto_codigo: string
+        numero: string
+        fecha: string
+        monto: string
+    }>
     referencia: string | null
     caja_id: number | null
     pasarela: string | null
@@ -38,6 +48,12 @@ export interface PagoVista {
     banco_origen_nombre: string | null
     cuenta_bancaria_id: number | null
     cuenta_bancaria_nombre: string | null
+    /** proveedor de cobro cuya cuenta puente 1.1.10.NN recibió el pago (fase 4); null = al banco */
+    proveedor_cobro_id: number | null
+    /** nombre del proveedor de cobro (para la pantalla); null sin proveedor */
+    proveedor_cobro_nombre: string | null
+    /** liquidación del proveedor que incluyó el pago (null = sin liquidar o sin proveedor) */
+    liquidacion_id: number | null
     /** pago importado de otro sistema (`RegistrarPagoHistorico`): no pasó por caja ni bancos */
     historico: boolean
     /** sistema de origen del pago histórico (`mikrowisp`, `smartisp`…); null si es de ArgosIsp */
@@ -60,6 +76,7 @@ const COLUMNAS = [
     'p.metodo',
     'p.monto',
     'p.comision',
+    'p.retenido',
     'p.referencia',
     'p.caja_id',
     'p.pasarela',
@@ -74,6 +91,13 @@ const COLUMNAS = [
     db.raw(
         "case when cb.id is null then null else bd.nombre || ' · ' || cb.alias end as cuenta_bancaria_nombre",
     ),
+    'p.proveedor_cobro_id',
+    db.raw(
+        '(select pc.nombre from ledger.proveedores_cobro pc where pc.id = p.proveedor_cobro_id) as proveedor_cobro_nombre',
+    ),
+    db.raw(
+        "(select lp.liquidacion_id from ledger.liquidaciones_pagos lp where lp.pago_id = p.id and lp.tipo = 'cobro') as liquidacion_id",
+    ),
     'p.historico',
     'p.origen',
     'p.clave_externa as id_externo',
@@ -84,7 +108,7 @@ const COLUMNAS = [
 
 async function conAplicaciones(
     cliente: QueryClientContract,
-    pagos: Array<Omit<PagoVista, 'aplicaciones'>>,
+    pagos: Array<Omit<PagoVista, 'aplicaciones' | 'constancias'>>,
 ): Promise<PagoVista[]> {
     if (pagos.length === 0) return []
     const filas = (await cliente
@@ -109,8 +133,27 @@ async function conAplicaciones(
         cliente_id: number
         cliente_nombre: string
     }>
+    const constancias = (await cliente
+        .from('ledger.constancias_retencion')
+        .whereIn(
+            'pago_id',
+            pagos.map((p) => p.id),
+        )
+        .where('direccion', 'recibida')
+        .orderBy('id', 'asc')
+        .select(
+            'pago_id',
+            'impuesto',
+            'impuesto_codigo',
+            'numero',
+            cliente.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`),
+            'monto',
+        )) as Array<PagoVista['constancias'][number] & { pago_id: number }>
     return pagos.map((pago) => ({
         ...pago,
+        constancias: constancias
+            .filter((c) => Number(c.pago_id) === Number(pago.id))
+            .map(({ pago_id: _p, ...c }) => c),
         aplicaciones: filas
             .filter((f) => f.pago_id === pago.id)
             .map((f) => ({

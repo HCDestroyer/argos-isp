@@ -41,6 +41,9 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.pagos_proveedores': 'pago a proveedor (§3.4)',
     'ledger.pagos_proveedores_anulaciones': 'anulación de pago a proveedor (§3.4)',
     'ledger.constancias_retencion': 'constancia de retención (§3.4)',
+    // fase 5 (A3): retención emitida por impuesto y aplicación de un pago a proveedor (§3.4)
+    'ledger.compras_retenciones': 'retención emitida en una compra, por impuesto (§3.4)',
+    'ledger.pagos_proveedores_aplicaciones': 'aplicación de un pago a proveedor a una compra (§3.4)',
     // §3.7 y §10.4–§10.5 cierres y bloqueos
     'ledger.bloqueos': 'bloqueo; el vigente es la última fila (§3.7)',
     'ledger.bloqueos_excepciones': 'excepción de bloqueo; revocar = fila nueva (§10.4)',
@@ -51,6 +54,20 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.extractos_lineas': 'línea de extracto (§10.3)',
     'ledger.conciliaciones': 'conciliación; deshacer = conciliaciones_anulaciones (§10.3)',
     'ledger.conciliaciones_anulaciones': 'anulación de conciliación (§10.3)',
+    // fase 4 (A3): cobros por liquidar (§10.3)
+    'ledger.liquidaciones_cobro': 'liquidación de un proveedor de cobro (§10.3)',
+    'ledger.liquidaciones_pagos': 'pago o contracargo incluido en una liquidación (§10.3)',
+    'ledger.depositos': 'depósito de caja a banco (§10.3)',
+    'ledger.traslados': 'traslado entre cuentas propias (§10.3)',
+    'ledger.transitos_acreditados': 'llegada al banco de un depósito o traslado, al conciliar (§10.3)',
+    'ledger.transitos_reatribuciones':
+        'llegada reatribuida a otro documento (reverso y llegada nueva, §18 desvío c)',
+    'ledger.recuperaciones_castigo': 'recuperación de un castigo, base e IVA (§18, H17)',
+    // fase 4 (A3): cartera y diferencias de cobro (§10.9)
+    'ledger.provisiones_cartera': 'estimación para cuentas incobrables (§10.9)',
+    'ledger.castigos': 'castigo de cartera (§10.9)',
+    'ledger.castigos_facturas': 'factura castigada (§10.9)',
+    'billing.diferencias_cobro': 'diferencia de cobro cerrada con su nota (§10.9)',
     // §10.10 integridad, activos y diferidos
     'ledger.asientos_sellos': 'cadena de hash de asientos (§10.10)',
     'ledger.activos': 'activo fijo; la baja es activos_bajas (§10.10)',
@@ -58,6 +75,8 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.activos_cuotas': 'cuota de depreciación (§10.10)',
     'ledger.diferimientos': 'diferimiento (§10.10)',
     'ledger.diferimientos_cuotas': 'cuota de diferimiento (§10.10)',
+    // fase 5 (A3): diferimiento cancelado al anular su compra antes de amortizarlo (§10.10)
+    'ledger.diferimientos_cancelaciones': 'cancelación de un diferimiento (§10.10)',
     // programa de lealtad, fase 1 (`contratos/lealtad.md` §3): el auxiliar de puntos
     'lealtad.movimientos': 'auxiliar de puntos: lotes y salidas; corregir = reverso (lealtad §3)',
     'lealtad.consumos': 'qué lote paga cada salida de puntos (lealtad §3)',
@@ -80,10 +99,19 @@ export const MUTABLES: Record<string, string> = {
     'ledger.secuencias': 'contador del correlativo (`ultimo`) tomado con FOR UPDATE (§10.7)',
     'ledger.proveedores': 'catálogo de proveedores con version (§3.4)',
     'ledger.reglas_conciliacion': 'configuración con version y audit.cambios (§10.3)',
+    'ledger.proveedores_cobro':
+        'fase 4 (A3): configuración del proveedor de cobro (nombre, banco, activo) con version y audit.cambios (§10.3)',
     'lealtad.programas': 'configuración del programa con version y audit.cambios (lealtad §3)',
     'lealtad.reglas':
         'reglas para ganar con version y audit.cambios; se desactivan, no se borran (lealtad §3)',
     'lealtad.referidos': 'estado del referido por acción, con version y audit.cambios (lealtad §3)',
+    // servicios adicionales (`contratos/adicionales.md`, A1): no son dinero ni libro; la factura de
+    // los `cobrado` la hace A3 en billing
+    'core.adicionales': 'catálogo por empresa con version y audit.cambios; se desactiva, no se borra',
+    'core.motivos_cortesia': 'catálogo de motivos con version y audit.cambios; se desactiva, no se borra',
+    'core.servicios_adicionales':
+        'asignación a un servicio con version y audit.cambios; la baja es estado + baja_en, nunca DELETE',
+    'network.planes_adicionales': 'configuración del plan (lista reemplazable) con el diff en audit.cambios',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */

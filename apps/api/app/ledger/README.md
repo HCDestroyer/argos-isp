@@ -96,7 +96,7 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 | Acción         | Archivo                  | Qué hace                                                                                                                                                                                                                                                                                            |
 | -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cajas.abrir`  | `actions/abrir_caja.ts`  | Abre un turno con `fondo_inicial` y `abierto_por`. Uno abierto por caja (409 `turno_abierto`). Sin asiento: el fondo ya está en la cuenta de la caja                                                                                                                                                |
-| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto` |
+| `cajas.cerrar` | `actions/cerrar_caja.ts` | `esperado = fondo_inicial + Σ pagos vigentes del turno − egresos − depósitos del turno`, `diferencia = contado − esperado`. Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja`: faltante `5.2.06 Faltantes de caja / Caja`, sobrante `Caja / 4.1.04 Sobrantes de caja`. Emite `caja.cerrada`. 409 `sin_turno_abierto` |
 
 - Cada pago en efectivo guarda el turno abierto de su caja (`billing.pagos.turno_id`, con `FOR SHARE` frente al cierre). `POST /pagos` con `caja` sin `caja_id` usa la caja del turno abierto del cajero (`cajaDelCajero`: el que él abrió o una caja asignada a él, dentro de su alcance) y, si no tiene, la principal.
 - Alcance ACL por caja (`exigirAlcance` / `filtrarPorAlcance` de `#core/acl`): un cajero con el rol acotado a su caja solo la lista, la abre, la cierra, ve sus turnos y cobra en ella (403 en otra).
@@ -142,6 +142,60 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 | POST   | `/api/v1/cajas/:id/cerrar`                                            | `cajas.cerrar` |
 | GET    | `/api/v1/cajas/:id/turnos?cursor&limit`                               | `cajas.ver`    |
 
+## Cobros y bancos (fase 4, contrato de localización fiscal §10.3 y §10.9)
+
+Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REVOKE`) salvo la configuración (`proveedores_cobro`, `reglas_conciliacion`: `version` y `audit.cambios`). Las cuentas bancarias se piden como `cuenta_bancaria_id`, `banco_id` o `cuenta_id` (`cuentas_banco.ts`); el libro guarda la subcuenta `1.1.02.NN`.
+
+| Acción (permiso) | Ruta | Asiento |
+| --- | --- | --- |
+| `cobros.crear_proveedor`, `cobros.editar_proveedor` (`cobros.configurar`) | `GET/POST /cobros/proveedores`, `PUT /cobros/proveedores/:id` | Crea la subcuenta `1.1.10.NN`; `desde` = fecha de corte. Se activa por empresa; con pagos, `desde` y la desactivación responden 409 `proveedor_con_pagos` |
+| `cobros.liquidar` | `POST /cobros/liquidaciones` | `Banco (neto) + 5.1.02 (comisión) / 1.1.10.NN (bruto)`; bruto = Σ pagos − contracargos; con solo contracargos (bruto ≤ 0) el proveedor debita el banco |
+| `cajas.depositar` | `POST /cajas/:id/depositar` | `1.1.11 / Caja`; baja el esperado del turno |
+| `bancos.trasladar` | `POST /bancos/trasladar` | `1.1.11 / Banco A` (misma empresa) |
+| `bancos.importar_extracto` | `POST /bancos/extractos` | Ninguno (neutral al origen; huella única por cuenta) |
+| `bancos.conciliar` | `POST /bancos/conciliaciones` | Ninguno sobre lo existente; la llegada de un depósito o traslado es un asiento nuevo `Banco / 1.1.11` |
+| `bancos.anular_conciliacion` (`bancos.conciliar`) | `POST /bancos/conciliaciones/:id/anular` | Ninguno (fila de anulación por fila del grupo) |
+| `bancos.reatribuir_llegada` | `POST /bancos/llegadas/reatribuir` | Reverso de la llegada equivocada y llegada nueva del documento correcto (`ledger.transitos_reatribuciones`) |
+| `bancos.registrar_desde_extracto` (`bancos.conciliar`) | `POST /bancos/extractos/lineas/:id/registrar` | Nuevo, origen `banco`: `5.3.07 / Banco` (cargo) o `Banco / contrapartida` (abono) |
+| `bancos.crear_regla`, `bancos.editar_regla`, `bancos.aplicar_reglas` (`bancos.conciliar`) | `GET/POST/PUT /bancos/reglas`, `POST /bancos/extractos/:id/aplicar-reglas` | El de `registrar_desde_extracto` (acción contrapartida) |
+| `cartera.provisionar` | `POST /cartera/provisionar` | `5.3.02 / 1.1.12` hasta el tope (`reserva_incobrables_max` de los saldos deudores); la reserva se mide al corte y un corte anterior al último responde 422 `provision_fuera_de_orden` |
+| `cartera.castigar` | `POST /cartera/castigos` | `2.1.11 (IVA de avisos sin DTE) + 1.1.12 (o 5.3.02) / CxC`; la factura queda `castigada` (pagado intacto). Lo cobrado después es recuperación: `Caja/Banco / 4.2.03` hasta lo castigado |
+
+- `registrarPago`: pasarela, agente o débito de un proveedor activo (desde su fecha de corte) → su `1.1.10.NN` por el bruto, sin comisión (`pagos.proveedor_cobro_id`); sin proveedor, al banco como antes.
+- Lecturas (`bancos.ver`): `GET /cobros/por-liquidar` (puente = pagos sin liquidar − contracargos, antigüedad sobre `cobros_liquidar_dias`), `/cobros/liquidaciones[/:id]`, `/bancos/depositos`, `/bancos/traslados`, `/bancos/fondos-en-transito` (`1.1.11` = sin acreditar), `/bancos/extractos[/:id][/lineas]`, `/bancos/movimientos-sin-conciliar`, `/bancos/reglas`. `reportes.ver`: `GET /reportes/conciliacion-bancaria`, `/cartera/provisiones`, `/cartera/castigos`.
+- Errores: 409 `proveedor_cobro_duplicado`, `pago_ya_liquidado`, `liquidacion_duplicada`, `deposito_duplicado`, `traslado_duplicado`, `extracto_duplicado`, `linea_conciliada`, `movimiento_conciliado`, `conciliacion_anulada`, `linea_registrada`, `sin_turno_abierto`; 422 `liquidacion_descuadrada`, `deposito_excede_efectivo`, `extracto_descuadrado`, `extracto_no_encadena`, `conciliacion_descuadrada`, `castigo_sin_evidencia`, `cuenta_de_otra_empresa` (por campo).
+- Eventos: `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado`, `cartera.castigada`.
+- Diarios: `liquidacion_cobro` → `COB` (o `BAN-n` si va a una cuenta propia), depósito → `CAJ-n`, el resto `BAN-n` o `VAR`. Los asientos de estos orígenes no se revierten directo (`reversos.ts`).
+- Pruebas: `tests/ledger/cobros_liquidar.spec.ts`, `depositos_traslados.spec.ts`, `conciliacion_bancaria.spec.ts`, `cartera.spec.ts`, `rutas_bancos.spec.ts`; cada una termina en `afirmarLibro` (el auditor completo, con los invariantes de la fase 4 que agregó el auditor).
+
+## Compras, proveedores, retenciones, activos y diferidos (fase 5, contrato §3.4, §3.5 y §10.10)
+
+Detalle y desvíos en §19 del contrato. Todo de solo inserción (trigger y `REVOKE`) salvo `ledger.proveedores` (`version` y `audit.cambios`). `ledger.movimientos.proveedor_id` es el auxiliar de `2.1.03 Proveedores` (obligatorio por trigger, de la empresa del asiento); el saldo de un proveedor es la suma de su auxiliar.
+
+| Acción (permiso) | Ruta | Asiento |
+| --- | --- | --- |
+| `proveedores.crear`, `proveedores.editar` (`proveedores.editar`) | `GET/POST /proveedores`, `GET/PUT /proveedores/:id` | Ninguno (NIT con el validador del núcleo; documento de solo lectura) |
+| `compras.registrar` | `POST /compras` | Origen `compra`: `Gasto/Activo (+IVA sin crédito) + 1.1.04 / Caja·Banco (contado, crea su egreso) o 2.1.03 (crédito) + 2.1.04 + 2.1.05`; NCRE al revés |
+| `compras.registrar_desde_egreso` (`compras.registrar`) | `POST /compras/desde-egreso/:egresoId` | Origen `compra` (reclasificación): `líneas + 1.1.04 / cuenta del egreso + retenciones`; el asiento del egreso no se toca |
+| `compras.anular` | `POST /compras/:id/anular` | Reverso con etiquetas en signo contrario; al contado anula su egreso con el mismo reverso |
+| `compras.registrar_constancia` (`compras.registrar`) | `POST /compras/:id/constancias` | Ninguno (la retención ya está en 2.1.04/2.1.05) |
+| `compras.pagar` / `compras.anular_pago` (`compras.pagar`) | `POST /pagos-proveedores`, `POST /pagos-proveedores/:id/anular` | Origen `pago_proveedor`: `2.1.03 / Caja·Banco`; la compra más antigua primero |
+| `activos.registrar` | `POST /activos` | Origen `alta_activo`: `1.2.01.NN / 1.2.02.NN (inicial) + 2.9.01·3.1.01·3.3.01` |
+| `activos.depreciar` (`activos.registrar`; cron `depreciar`) | `POST /activos/depreciar` | Origen `depreciacion`: `5.3.01 / 1.2.02.NN`, una cuota por activo y mes |
+| `activos.dar_de_baja` | `POST /activos/:id/dar-de-baja` | Origen `baja_activo`: `1.2.02 + Banco (precio) + 5.3.06 / 1.2.01 + 4.2.02` |
+| `libro.registrar_diferimiento` (`libro.registrar_asiento`) | `POST /diferimientos` | Origen `diferido`: `Ingreso / 2.1.12` (factura) o `1.1.13 / Gasto` (compra) |
+| `libro.amortizar_diferidos` (`libro.registrar_asiento`; cron `diferir`) | `POST /diferimientos/amortizar` | Origen `diferido`: `Gasto / 1.1.13` o `2.1.12 / Ingreso`, una cuota por diferimiento y mes |
+
+- Una línea `activo_fijo` de una compra da de alta su activo y una con `diferir_meses` va a `1.1.13` con su diferimiento, en la misma transacción (`altas_compra.ts`).
+- Crédito fiscal por `periodo_iva` dentro de `credito_fiscal_ventana_meses` (422 `credito_fiscal_extemporaneo`); FPEQ, FCAP y RECIBO sin IVA ni crédito. Fecha contable = max(fecha del documento, inicio de `periodo_iva`): el libro de compras de cada mes cuadra con `1.1.04` (`GET /libros/compras`, `GET /libros/compras/cuadre`, `#fiscal/libros`).
+- Retenciones emitidas sugeridas (`retenciones.ts`): agente de IVA → `RET_IVA_ESP_C` desde `ret_iva_minimo` o `RET_IVA_PEQ_C`; régimen opcional → `RET_ISR_OPC_C`; las demás, pedidas. Recibidas: `POST /pagos` con `retenciones[]` (constancias del cliente a `1.1.05`/`1.1.06`; `billing.pagos.retenido`).
+- Lecturas: `GET /compras[/:id]`, `/constancias`, `/pagos-proveedores[/:id]`, `/proveedores/:id/estado-cuenta` (`proveedores.ver`), `/reportes/cuentas-por-pagar` (`reportes.ver`, cuadra con 2.1.03), `/activos[/:id]` (`activos.ver`), `/diferimientos[/:id]` (`libro.ver`).
+- El esperado del turno de caja resta los pagos a proveedores en efectivo y cuenta solo el efectivo de los pagos con constancias.
+- Errores: 409 `proveedor_duplicado`, `compra_duplicada`, `compra_anulada`, `compra_con_notas`, `compra_con_pagos`, `compra_con_constancia`, `egreso_de_compra`, `egreso_con_compra`, `egreso_anulado`, `pago_anulado`, `constancia_duplicada`, `constancia_registrada`, `activo_dado_de_baja`, `activo_con_cuotas`, `diferido_con_cuotas`, `linea_diferida`, `factura_diferida`, `factura_no_emitida`; 422 `credito_fiscal_extemporaneo`, `ncre_excede_saldo`, `compra_distinta_del_egreso`, `pago_excede_saldo`, `tasa_sobre_tope`, `retencion_en_cobro_repartido`, `retencion_con_proveedor_cobro`, `retencion_sin_documento_fiscal` (H19), `pago_anterior_a_compra`, `periodo_cerrado` (baja retroactiva con una cuota en un mes cerrado, H20) y por campo (`documento_no_permitido`, `credito_no_permitido`, `cuenta_compra`, `retencion`, `mes_terminado`).
+- Pruebas: `tests/ledger/compras.spec.ts`, `retenciones.spec.ts`, `pagos_proveedores.spec.ts`, `activos.spec.ts`, `diferidos.spec.ts`; `hallazgos_fase5.spec.ts` (H19, H20 y las observaciones del auditor); cada una termina en `afirmarLibro` (el auditor completo, con los invariantes `15.*` de la fase 5).
+- Baja retroactiva (H20): revierte las cuotas vigentes del mes de la baja en adelante, cada una en su mes (422 `periodo_cerrado` si alguno está cerrado). Locks: `LOCK_ACTIVO` (depreciación, baja y anulación de la compra), `LOCK_DIFERIDO` (amortización y anulación de la compra), `LOCK_COMPRA` (pagos, constancias y anulación).
+
 ## Eventos
 
-Emite: `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+Emite: `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+- `GET /bancos/depositos?caja_id=&turno_id=` (permiso `cajas.ver`): con `bancos.ver`, todos; sin él (el cajero), `caja_id` o `turno_id` obligatorio y la caja en su alcance (403; sin filtro 422).

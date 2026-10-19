@@ -33,6 +33,36 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'facturas.anular',
         documento: 'la factura certificada (POST /facturas/:id/anular: anula su DTE)',
     },
+    // fase 4 (§10.3, §10.9): el documento (liquidación, depósito, traslado, línea del extracto, provisión,
+    // castigo) es de solo inserción y el libro lo refleja; revertir solo el asiento los desacuerda
+    liquidacion_cobro: {
+        accion: 'cobros.liquidar',
+        documento: 'la liquidación con un asiento de ajuste que la explique (las liquidaciones no se anulan)',
+    },
+    deposito: { accion: 'cajas.depositar', documento: 'el depósito con un asiento de ajuste (no se anula)' },
+    traslado: { accion: 'bancos.trasladar', documento: 'el traslado con otro traslado en sentido contrario' },
+    banco: {
+        accion: 'bancos.conciliar',
+        documento: 'la conciliación (POST /bancos/conciliaciones/:id/anular) y registra la línea otra vez',
+    },
+    provision: { accion: 'cartera.provisionar', documento: 'la estimación con un asiento de ajuste' },
+    castigo: { accion: 'cartera.castigar', documento: 'el castigo con un asiento de ajuste' },
+    // fase 5 (§3.4, §10.10): compras, pagos a proveedores, activos y diferidos
+    compra: { accion: 'compras.anular', documento: 'la compra (POST /compras/:id/anular)' },
+    pago_proveedor: {
+        accion: 'compras.pagar',
+        documento: 'el pago al proveedor (POST /pagos-proveedores/:id/anular)',
+    },
+    depreciacion: {
+        accion: 'activos.dar_de_baja',
+        documento: 'la cuota con un asiento de ajuste (las cuotas de depreciación no se anulan)',
+    },
+    baja_activo: { accion: 'activos.dar_de_baja', documento: 'la baja con un asiento de ajuste' },
+    alta_activo: { accion: 'activos.dar_de_baja', documento: 'el activo dándolo de baja (retiro)' },
+    diferido: {
+        accion: 'libro.registrar_asiento',
+        documento: 'el diferimiento con un asiento de ajuste (las cuotas no se anulan)',
+    },
 }
 
 /** null si el asiento se puede revertir directo; si no, qué acción usar. */

@@ -1,4 +1,4 @@
-# Imágenes de producción de ArgosIsp (A6, distribución): construye y publica en GHCR las seis
+# Imágenes de producción de ArgosIsp (A6, distribución): construye y publica en GHCR las siete
 # imágenes multi-arquitectura (linux/amd64 y linux/arm64) de una versión, mueve `estable` cuando
 # están TODAS y sube a la GitHub Release el paquete de instalación (infra/produccion/empaquetar.sh).
 #
@@ -71,17 +71,20 @@ jobs:
     name: ${{ matrix.imagen }} (amd64 + arm64)
     needs: preparar
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # FreeRADIUS se compila (arm64 con QEMU): sin caché tarda mucho más que las de Node
+    timeout-minutes: ${{ matrix.imagen == 'freeradius' && 240 || 90 }}
     strategy:
       fail-fast: true
       matrix:
         include:
-          - { imagen: api, dockerfile: apps/api/Dockerfile }
-          - { imagen: web, dockerfile: apps/web/Dockerfile }
-          - { imagen: portal, dockerfile: apps/portal/Dockerfile }
-          - { imagen: aaa, dockerfile: services/aaa/Dockerfile }
-          - { imagen: coa, dockerfile: services/coa/Dockerfile }
-          - { imagen: backup, dockerfile: infra/backups/Dockerfile }
+          - { imagen: api, dockerfile: apps/api/Dockerfile, contexto: . }
+          - { imagen: web, dockerfile: apps/web/Dockerfile, contexto: . }
+          - { imagen: portal, dockerfile: apps/portal/Dockerfile, contexto: . }
+          - { imagen: aaa, dockerfile: services/aaa/Dockerfile, contexto: . }
+          - { imagen: coa, dockerfile: services/coa/Dockerfile, contexto: . }
+          - { imagen: backup, dockerfile: infra/backups/Dockerfile, contexto: . }
+          # La oficial freeradius/freeradius-server solo existe para amd64 (infra/freeradius)
+          - { imagen: freeradius, dockerfile: infra/freeradius/Dockerfile, contexto: infra/freeradius }
     steps:
       - uses: actions/checkout@v5
         with:
@@ -100,7 +103,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ needs.preparar.outputs.registro }}/argosisp-${{ matrix.imagen }}
-          # Solo la versión: `estable` se mueve en el job `estable`, cuando están las seis.
+          # Solo la versión: `estable` se mueve en el job `estable`, cuando están las siete.
           tags: type=raw,value=${{ needs.preparar.outputs.version }}
           labels: |
             org.opencontainers.image.title=argosisp-${{ matrix.imagen }}
@@ -109,7 +112,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.contexto }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
@@ -152,12 +155,12 @@ jobs:
             echo "::notice::$VERSION es anterior a $ultima: estable no se mueve"
             exit 0
           fi
-          for imagen in api web portal aaa coa backup; do
+          for imagen in api web portal aaa coa backup freeradius; do
             docker buildx imagetools create -t "$REGISTRO/argosisp-$imagen:estable" "$REGISTRO/argosisp-$imagen:$VERSION"
           done
 
       # El paquete va al final: `argosisp actualizar` e `instalar.sh` solo ven una versión cuando su
-      # paquete está publicado, y para entonces las seis imágenes ya existen.
+      # paquete está publicado, y para entonces las siete imágenes ya existen.
       - name: Paquete de instalación en la Release v${{ needs.preparar.outputs.version }}
         run: |
           infra/produccion/empaquetar.sh "$VERSION" dist

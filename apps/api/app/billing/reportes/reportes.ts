@@ -301,7 +301,8 @@ export const COLUMNAS_FACTURADO = definirColumnas([
 ])
 
 /** Lo acreditado por notas de crédito a la factura `f` (parte de `f.pagado` que no es cobro). */
-const ACREDITADO = '(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = f.id)'
+const ACREDITADO = `(select coalesce(sum(n.monto), 0) from billing.notas_credito n where n.factura_id = f.id
+    and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = n.id))`
 
 export interface FiltrosFacturado extends FiltrosCliente {
     desde?: string
@@ -493,7 +494,7 @@ export async function cierresCaja(
             'uc.nombre as cerrado_por',
             't.fondo_inicial',
             db.raw(
-                `(select coalesce(sum(p.monto), 0) from billing.pagos p where p.turno_id = t.id and p.estado <> 'anulado')::text as cobrado`,
+                `(select coalesce(sum(p.monto - p.retenido), 0) from billing.pagos p where p.turno_id = t.id and p.estado <> 'anulado')::text as cobrado`,
             ),
             db.raw(
                 `(select coalesce(sum(e.monto), 0) from ledger.egresos e where e.turno_id = t.id

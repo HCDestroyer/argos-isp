@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
+import type { TipoPlan } from '#network/tipos_plan'
 
 /**
  * Lecturas de planes y de su implementación por router (`network.planes_routers`).
@@ -27,6 +28,8 @@ export interface PlanVista {
     prioridad: number
     dual_stack: 'ambos' | 'v4' | 'v6'
     tamano_prefijo_delegado: 64 | 56 | 48
+    /** `residencial` (por defecto), `empresarial` o `dedicado`; solo informa y advierte */
+    tipo: TipoPlan
     global: boolean
     activo: boolean
     version: number
@@ -74,6 +77,7 @@ const COLUMNAS_PLAN_SIMPLES = [
     'prioridad',
     'dual_stack',
     'tamano_prefijo_delegado',
+    'tipo',
     'global',
     'activo',
     'version',
@@ -121,11 +125,13 @@ export interface FiltrosPlanes extends OpcionesPaginacion {
     activo?: boolean
     /** solo planes disponibles en ese router (globales o con implementación) */
     router_id?: number
+    tipo?: TipoPlan
 }
 
 export async function listarPlanes(filtros: FiltrosPlanes): Promise<Pagina<PlanVista>> {
     const consulta = db.from('network.planes as p').select(columnasPlan('p'))
     if (filtros.activo !== undefined) consulta.where('p.activo', filtros.activo)
+    if (filtros.tipo) consulta.where('p.tipo', filtros.tipo)
     if (filtros.router_id) {
         const routerId = filtros.router_id
         consulta.where((q) =>

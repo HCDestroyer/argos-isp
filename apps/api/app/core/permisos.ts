@@ -33,6 +33,20 @@ export const PERMISOS = {
         'Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)',
     'servicios.cancelar_plan_temporal':
         'Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)',
+    'servicios.agregar_adicional':
+        'Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado',
+    'servicios.editar_adicional':
+        'Editar un adicional de un servicio (modalidad, identificador, credencial, precio)',
+    'servicios.quitar_adicional': 'Dar de baja un adicional de un servicio (con fecha; no se borra)',
+    'servicios.adicional_cortesia':
+        'Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar',
+    'servicios.ver_credencial_adicional': 'Ver la credencial de un adicional de un servicio (queda auditado)',
+    'adicionales.ver': 'Ver el catálogo de servicios adicionales y los motivos de cortesía',
+    'adicionales.crear': 'Crear servicios adicionales en el catálogo de la empresa',
+    'adicionales.editar': 'Editar servicios adicionales del catálogo',
+    'adicionales.desactivar': 'Desactivar un servicio adicional del catálogo (no se borra)',
+    'adicionales.crear_motivo': 'Crear motivos de cortesía de la empresa',
+    'adicionales.desactivar_motivo': 'Desactivar un motivo de cortesía (no se borra)',
 
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
@@ -89,6 +103,21 @@ export const PERMISOS = {
     'egresos.registrar': 'Registrar egresos (gastos pagados por caja, banco o cuenta bancaria)',
     'egresos.anular': 'Anular egresos con asiento de reverso',
     'reportes.ver': 'Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard',
+    // Cobros y bancos (localización fiscal §10.3 y §10.9, fase 4; los endpoints son de A3)
+    'cobros.configurar':
+        'Dar de alta y editar proveedores de cobro (pasarela, agente, débito) con su cuenta puente 1.1.10.NN',
+    'cobros.liquidar': 'Registrar la liquidación de un proveedor de cobro (banco neto y comisión)',
+    'cajas.depositar': 'Depositar en el banco el efectivo de un turno de caja (queda en fondos en tránsito)',
+    'bancos.ver': 'Ver proveedores de cobro, liquidaciones, depósitos, traslados, extractos y conciliaciones',
+    'bancos.trasladar': 'Trasladar fondos entre cuentas bancarias propias de la empresa',
+    'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
+    'bancos.conciliar':
+        'Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas',
+    'bancos.reatribuir_llegada':
+        'Corregir la llegada al banco atribuida al depósito o traslado equivocado (reverso y llegada nueva)',
+    'cartera.provisionar': 'Registrar la estimación para cuentas incobrables (hasta el tope legal)',
+    'cartera.castigar': 'Castigar facturas incobrables con motivo y evidencia de gestión de cobro',
+    'pagos.cerrar_diferencia': 'Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)',
 
     'notificaciones.ver': 'Ver plantillas y envíos de notificaciones',
     'notificaciones.editar': 'Editar plantillas de notificaciones',
@@ -129,6 +158,9 @@ export const PERMISOS = {
     'compras.registrar': 'Registrar compras, también desde un egreso',
     'compras.anular': 'Anular compras con asiento de reverso',
     'compras.pagar': 'Registrar y anular pagos a proveedores',
+    'activos.ver': 'Ver activos fijos, su depreciación y sus bajas',
+    'activos.registrar': 'Dar de alta activos fijos sin compra y registrar la depreciación pendiente',
+    'activos.dar_de_baja': 'Dar de baja (venta o retiro) un activo fijo con su asiento',
     'libros.ver': 'Ver los libros legales (vista previa) y sus habilitaciones',
     'libros.emitir': 'Emitir libros legales con folio sobre un periodo bloqueado',
     'libros.habilitar': 'Registrar habilitaciones de folios de libros',
@@ -175,6 +207,8 @@ export const PERMISOS = {
     'tokens.ver': 'Ver tokens de API',
     'tokens.crear': 'Crear tokens de API',
     'tokens.revocar': 'Revocar tokens de API',
+    'nodos_portal.administrar':
+        'Crear, ver y revocar los tokens de los nodos portal remotos (portal del cliente en otro servidor); solo admin',
     'horus.generar_token':
         'Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)',
     'horus.revocar_token': 'Revocar el token de una integración',
@@ -200,7 +234,7 @@ const lectura = NOMBRES_PERMISOS.filter((p) => p.endsWith('.ver'))
 const PERMISOS_FISCALES = NOMBRES_PERMISOS.filter(
     (p) =>
         p === 'empresas.cambiar_pais' ||
-        /^(fiscal|fel|proveedores|compras|libros|declaraciones)\./.test(p) ||
+        /^(fiscal|fel|proveedores|compras|libros|declaraciones|activos)\./.test(p) ||
         /^libro\.(cerrar_ejercicio|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear)$/.test(p),
 )
 const SOLO_ADMIN_FISCAL: readonly Permiso[] = [
@@ -236,6 +270,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.quitar_responsable_pago',
             'zonas.ver',
             'servicios.ver',
+            'adicionales.ver',
             'planes.ver',
             'facturas.ver',
             'pagos.ver',
@@ -250,6 +285,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.aprobar',
             'comprobantes.rechazar',
             'fel.ver',
+            'cajas.depositar',
             'lealtad.ver',
             'lealtad.canjear',
         ],
@@ -275,6 +311,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.quitar_limite',
             'servicios.desconectar',
             'servicios.ver_credenciales',
+            'servicios.agregar_adicional',
+            'servicios.editar_adicional',
+            'servicios.quitar_adicional',
+            'servicios.ver_credencial_adicional',
+            'adicionales.ver',
             'routers.ver',
             'redes.ver',
             'ipv6.ver',
@@ -307,6 +348,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.editar',
             'servicios.desconectar',
             'servicios.ver_credenciales',
+            'servicios.agregar_adicional',
+            'servicios.editar_adicional',
+            'servicios.quitar_adicional',
+            'servicios.ver_credencial_adicional',
+            'adicionales.ver',
             'routers.ver',
             'routers.crear',
             'routers.editar',
@@ -330,6 +376,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.estado_cuenta',
             'zonas.ver',
             'servicios.ver',
+            'adicionales.ver',
             'planes.ver',
             'plantillas.ver',
             'plantillas.crear',
@@ -363,6 +410,17 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'egresos.anular',
             'reportes.ver',
             'bitacora.ver',
+            'cobros.configurar',
+            'cobros.liquidar',
+            'cajas.depositar',
+            'bancos.ver',
+            'bancos.trasladar',
+            'bancos.importar_extracto',
+            'bancos.conciliar',
+            'bancos.reatribuir_llegada',
+            'cartera.provisionar',
+            'cartera.castigar',
+            'pagos.cerrar_diferencia',
             ...PERMISOS_FISCALES_CONTABILIDAD,
             ...PERMISOS_LEALTAD_CONTABILIDAD,
         ],

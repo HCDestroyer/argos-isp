@@ -10,6 +10,12 @@
 #   80 redirige a HTTPS; en el del portal, solo /entrar y /cuenta.
 # - IP real del cliente: Caddy recibe la conexión con la IP de origen y la pone en X-Forwarded-For;
 #   la API confía en la red de compose (PORTAL_PROXIES_CONFIABLES).
+# - API del portal (ARGOSISP_API_PORTAL, `argosisp`): el navegador del cliente llama a
+#   /api/v1/portal/** en el host del portal y Nitro (servicio portal) lo reenvía a api-portal; aquí
+#   no se toca para no saltarse su control de origen (CSRF) ni X-Canal. En el host de la API,
+#   /api/v1/portal/* va a {$API_PORTAL_DESTINO} (api-portal:3333 o api:3333, lo fija el compose).
+# - Límite por IP: lo aplica la API en Redis (PORTAL_LIMITE_PETICIONES), compartido entre api y
+#   api-portal. La imagen de Caddy no trae un módulo de rate limit (pendiente, sin dependencias nuevas).
 
 {
 	# `email <correo>` (avisos de Let's Encrypt) o `local_certs` (CA interna, pruebas en CI)
@@ -35,6 +41,12 @@
 		reverse_proxy api:3333 {
 			flush_interval -1
 		}
+	}
+
+	@portalApi path /api/v1/portal/*
+	handle @portalApi {
+		encode zstd gzip
+		reverse_proxy {$API_PORTAL_DESTINO:api:3333}
 	}
 
 	handle {
