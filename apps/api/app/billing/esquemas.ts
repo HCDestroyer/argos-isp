@@ -91,7 +91,16 @@ export const PlantillaFacturacion = definirEsquema(
 
 export const EstadoFactura = definirEsquema(
     'EstadoFactura',
-    enumerado(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada', 'castigada']),
+    enumerado([
+        'por_certificar',
+        'emitida',
+        'parcial',
+        'pagada',
+        'vencida',
+        'anulada',
+        'castigada',
+        'acreditada',
+    ]),
 )
 
 export const FacturaLinea = definirEsquema(
@@ -156,10 +165,11 @@ export const Factura = definirEsquema(
             certificar_al: nulable(enumerado(['emitir', 'pagar', 'nunca'])),
             tipo_dte: { ...nulable(texto), description: 'FACT, FPEQ… (null sin FEL)' },
             tipo: {
-                ...enumerado(['servicio', 'mora']),
-                description: 'servicio = factura del periodo; mora = recargo por vencimiento de otra factura',
+                ...enumerado(['servicio', 'mora', 'cargo']),
+                description:
+                    'servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)',
             },
-            factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora' },
+            factura_origen_id: { ...nulable(id), description: 'Factura que originó la mora o el cargo' },
             vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
             anulada_en: { ...nulable(instante), description: 'Cuándo se anuló' },
             motivo_anulacion: nulable(texto),
@@ -439,6 +449,10 @@ export const Pago = definirEsquema(
                 description:
                     'Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco',
             },
+            proveedor_cobro_nombre: {
+                ...nulable(texto),
+                description: 'Nombre del proveedor de cobro; null sin proveedor',
+            },
             liquidacion_id: {
                 ...nulable(id),
                 description: 'Liquidación del proveedor que incluyó el pago; null = sin liquidar',
@@ -458,6 +472,7 @@ export const Pago = definirEsquema(
         },
         [
             'proveedor_cobro_id',
+            'proveedor_cobro_nombre',
             'liquidacion_id',
             'historico',
             'origen',

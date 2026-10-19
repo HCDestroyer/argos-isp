@@ -132,9 +132,14 @@ function filtrarEstado(tipo: TipoTransito, alias: string, estado: FiltrosTransit
     }
 }
 
-export async function listarDepositos(filtros: FiltrosTransito, empresas: number[] | null) {
+export async function listarDepositos(
+    filtros: FiltrosTransito & { caja_id?: number; turno_id?: number },
+    empresas: number[] | null,
+) {
     const consulta = consultaDepositos(db.connection())
     filtrarEstado('deposito', 'd', filtros.estado)(consulta)
+    if (filtros.caja_id !== undefined) consulta.where('d.caja_id', filtros.caja_id)
+    if (filtros.turno_id !== undefined) consulta.where('d.turno_id', filtros.turno_id)
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('d.empresa_id', ids))
     const pagina = await paginar<DepositoVista>(consulta, filtros, { columna: 'd.id' })
     return { ...pagina, data: pagina.data.map(conEstado) }

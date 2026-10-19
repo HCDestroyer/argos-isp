@@ -11,8 +11,7 @@ import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_a
 import { aplicarAFacturas, bloquearClientes, duenosDeFacturas, facturasPendientes } from '#billing/cobros'
 import { claveImportacion, exigirPeriodoAbierto, textoClave } from '#billing/importacion'
 import { verPago, type PagoVista } from '#billing/pagos'
-import { porRecuperar } from '#ledger/cartera'
-import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { guardarRecuperacion, movimientosRecuperacion, repartirRecuperacion } from '#ledger/cartera'
 
 /**
  * `pagos.registrar_historico` = `registrarPagoHistorico` (importador de A6, sin endpoint): un
@@ -177,19 +176,10 @@ export default class RegistrarPagoHistorico extends DomainAction<
         }
         // decisión (g) del líder, igual que registrarPago: con castigos por recuperar, lo que sobra es
         // recuperación (4.2.03) antes que anticipo
-        let sobrante = restante
-        if (sobrante.gt(0)) {
-            const falta = await porRecuperar(t.trx, empresaId, input.cliente_id)
-            const recuperado = falta.gt(0) ? (falta.lt(sobrante) ? falta : sobrante) : CERO
-            if (recuperado.gt(0)) {
-                movimientos.push({
-                    cuenta: CUENTAS_GT.RECUPERACION_INCOBRABLES,
-                    haber: aTexto(recuperado),
-                    cliente_id: input.cliente_id,
-                })
-                sobrante = sobrante.minus(recuperado)
-            }
-        }
+        // H17: la recuperación se parte en base (4.2.03) e IVA (2.1.11) en la proporción de cada castigo
+        const recuperacion = await repartirRecuperacion(t.trx, empresaId, input.cliente_id, restante)
+        movimientos.push(...movimientosRecuperacion(recuperacion, input.cliente_id))
+        const sobrante = recuperacion.reduce((a, r) => a.minus(r.monto), restante)
         if (sobrante.gt(0)) {
             movimientos.push({
                 cuenta: CUENTAS.ANTICIPOS_CLIENTES,
@@ -214,6 +204,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
             t.ctx,
             { trx: t.trx },
         )
+        await guardarRecuperacion(t.trx, empresaId, pagoId, recuperacion)
 
         return { ...(await verPago(pagoId, t.trx)), creado: true }
     }
