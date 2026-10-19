@@ -164,8 +164,11 @@ export async function sumarAPagado(
  * `pagos_aplicaciones` y actualiza `pagado`/`estado`. Devuelve lo aplicado y lo que sobra.
  * No escribe el asiento: lo hace quien llama, con la contrapartida que corresponda.
  */
-/** De dónde sale el dinero aplicado: un pago o un saldo inicial a favor (importación). */
-export type FuenteAplicacion = number | { saldo_inicial_id: number }
+/**
+ * De dónde sale el dinero aplicado: un pago, un saldo inicial a favor (importación) o el saldo a favor
+ * de una nota de crédito (`notas_credito.a_favor`).
+ */
+export type FuenteAplicacion = number | { saldo_inicial_id: number } | { nota_credito_id: number }
 
 export async function aplicarAFacturas(
     trx: TransactionClientContract,
@@ -185,7 +188,9 @@ export async function aplicarAFacturas(
             .table(
                 typeof fuente === 'number'
                     ? 'billing.pagos_aplicaciones'
-                    : 'billing.saldos_iniciales_aplicaciones',
+                    : 'saldo_inicial_id' in fuente
+                      ? 'billing.saldos_iniciales_aplicaciones'
+                      : 'billing.notas_credito_aplicaciones',
             )
             .insert({
                 ...(typeof fuente === 'number' ? { pago_id: fuente } : fuente),
@@ -346,6 +351,52 @@ export async function aplicarAnticipos(
                     .join(', ')}`,
                 origen_tipo: 'ajuste',
                 origen_id: saldo.id,
+                movimientos: [
+                    { cuenta: CUENTAS.ANTICIPOS_CLIENTES, debe: aTexto(aplicado), cliente_id: clienteId },
+                    { cuenta: CUENTAS.CXC_CLIENTES, haber: aTexto(aplicado), cliente_id: clienteId },
+                ],
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        todas.push(...aplicaciones)
+        disponible = disponible.minus(aplicado)
+    }
+
+    // saldos a favor de notas de crédito (lealtad §15.2), después de pagos y saldos iniciales
+    const notas = (await t.trx
+        .from('billing.notas_credito as n')
+        .leftJoin('billing.notas_credito_aplicaciones as a', 'a.nota_credito_id', 'n.id')
+        .where('n.cliente_id', clienteId)
+        .where('n.empresa_id', empresaId)
+        .where('n.a_favor', '>', 0)
+        .whereNotExists((q) => q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'))
+        .groupBy('n.id', 'n.a_favor')
+        .havingRaw('n.a_favor > coalesce(sum(a.monto), 0)')
+        .orderBy('n.id', 'asc')
+        .select('n.id', t.trx.raw('(n.a_favor - coalesce(sum(a.monto), 0))::text as restante'))) as Array<{
+        id: number
+        restante: string
+    }>
+    for (const nota of notas) {
+        if (disponible.lte(0)) break
+        const restante = dec(nota.restante)
+        const usar = restante.lt(disponible) ? restante : disponible
+        const { aplicaciones, aplicado } = await aplicarAFacturas(
+            t.trx,
+            { nota_credito_id: Number(nota.id) },
+            usar,
+            facturas,
+        )
+        if (aplicado.lte(0)) break
+        await new RegistrarAsiento().execute(
+            {
+                empresa_id: empresaId,
+                descripcion: `Aplicación del saldo a favor de la nota de crédito ${nota.id} a facturas ${aplicaciones
+                    .map((a) => a.factura_id)
+                    .join(', ')}`,
+                origen_tipo: 'nota_credito',
+                origen_id: Number(nota.id),
                 movimientos: [
                     { cuenta: CUENTAS.ANTICIPOS_CLIENTES, debe: aTexto(aplicado), cliente_id: clienteId },
                     { cuenta: CUENTAS.CXC_CLIENTES, haber: aTexto(aplicado), cliente_id: clienteId },

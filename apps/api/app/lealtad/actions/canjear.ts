@@ -46,7 +46,8 @@ import { bloquearClienteLealtad, saldoPuntos, salidaCanje } from '#lealtad/punto
  *   `aplicado` con `plan_temporal_id`.
  * - `descuento_factura` / `mes_gratis` con `factura_id`: nota de crédito por línea sobre la línea del
  *   plan (`facturas.nota_credito`, NCRE si la factura tiene DTE), solo dentro de `nota_ventana_meses`
- *   (422 `nota_fuera_de_plazo`). Queda `aplicado` con `nota_credito_id`.
+ *   (422 `nota_fuera_de_plazo`). Sobre una factura pagada (o por más de su saldo) la nota se emite igual
+ *   y el excedente queda como crédito del cliente en Anticipos. Queda `aplicado` con `nota_credito_id`.
  * - `descuento_factura` / `mes_gratis` sin factura: `reservado` para la próxima factura del servicio.
  * - `bien`: 422 `parametro_sin_confirmar` (`premio_bien_iva`, decisión del contador). `boletos`: fase 3.
  *
@@ -192,6 +193,8 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
                     factura_id: input.factura_id!,
                     lineas: [{ linea_id: lineaFactura.id, monto: monto.toFixed(2) }],
                     motivo: `Canje de lealtad ${canjeId}: ${premio.nombre}`,
+                    // decisión del PM: sobre una factura pagada, lo que pase el saldo queda en Anticipos
+                    excedente_a_anticipos: true,
                 },
                 t.ctx,
                 { trx: t.trx },

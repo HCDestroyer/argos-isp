@@ -20,6 +20,7 @@ import CrearPremio, { type EntradaPremio } from '#lealtad/actions/crear_premio'
 import Canjear from '#lealtad/actions/canjear'
 import RevertirCanje from '#lealtad/actions/revertir_canje'
 import AnularFactura from '#billing/actions/anular_factura'
+import RegistrarPago from '#billing/actions/registrar_pago'
 import { lineas as lineasAsiento } from '#tests/contabilidad/ayudas_contabilidad'
 import {
     afirmarPasivoLealtad,
@@ -59,6 +60,33 @@ function premio(
         { programa_id: programaId, nombre: unico('Premio'), costo_puntos: 60, ...datos },
         e.ctx,
     )
+}
+
+/** Factura de noviembre pagada; canje de Q50 de descuento sobre ella; después se emite diciembre. */
+async function canjeSobrePagada(e: Empresas) {
+    const s = await conPuntos(e, 200)
+    await generar(s.servicioId, '2026-11-01')
+    const [octubre, noviembre] = await facturasDelServicio(s.servicioId)
+    for (const f of [octubre!, noviembre!]) {
+        await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: f.total, facturas: [f.id], empresa_id: e.B },
+            e.ctx,
+        )
+    }
+    const p = await premio(e, s.programa.id, {
+        tipo: 'descuento_factura',
+        descuento_tipo: 'monto',
+        descuento_valor: '50.00',
+        costo_puntos: 80,
+    })
+    const canje = await new Canjear().execute(
+        { cliente_id: s.clienteId, servicio_id: s.servicioId, premio_id: p.id, factura_id: noviembre!.id },
+        e.ctx,
+    )
+    await generar(s.servicioId, '2026-12-01')
+    const todas = await facturasDelServicio(s.servicioId)
+    const diciembre = todas.at(-1)!
+    return { s, canje, noviembre: noviembre!, diciembre }
 }
 
 test.group('Lealtad · canjes', (group) => {
@@ -401,6 +429,45 @@ test.group('Lealtad · canjes', (group) => {
         await afirmarPasivoLealtad(assert, [e.B, e.C])
         await afirmarLibro(assert, [e.B, e.C])
     })
+
+    test('descuento sobre una factura pagada: nota de crédito completa y el excedente a Anticipos para la próxima', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const { s, canje, noviembre, diciembre } = await canjeSobrePagada(e)
+        assert.include(canje, { estado: 'aplicado', descuento: '50.00' })
+        const nota = await db.from('billing.notas_credito').where('id', canje.nota_credito_id!).firstOrFail()
+        assert.include(nota, { monto: '50.00', a_favor: '50.00' })
+        // la nota rebaja venta e IVA completos; el crédito queda en Anticipos y paga diciembre al emitirse
+        assert.includeDeepMembers(
+            await lineasAsiento('nota_credito', nota.id).then((lista) => lista.map((l) => [...l])),
+            [
+                ['4.1.01', '44.64', '0.00'],
+                ['2.1.02', '5.36', '0.00'],
+                ['2.1.01', '0.00', '50.00'],
+            ],
+        )
+        const factura = await db.from('billing.facturas').where('id', noviembre.id).firstOrFail()
+        assert.include(factura, { estado: 'pagada', pagado: '200.00' })
+        const dic = await db.from('billing.facturas').where('id', diciembre.id).firstOrFail()
+        assert.equal(dic.pagado, '50.00')
+        const aplicaciones = await db
+            .from('billing.notas_credito_aplicaciones')
+            .where('nota_credito_id', nota.id)
+        assert.lengthOf(aplicaciones, 1)
+        assert.equal(await saldoCuenta(e.B, '2.1.01', s.clienteId), '0.00')
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+    })
+
+    test('descuento sobre una factura pagada: el libro cuadra con el saldo a favor de la nota', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        await canjeSobrePagada(e)
+        await afirmarLibro(assert, [e.B, e.C])
+    }).fails(
+        'H-lealtad-nota-a-favor: los invariantes 3 y 5 del auditor aún no cuentan el saldo a favor de las notas de crédito (notas_credito.a_favor y notas_credito_aplicaciones)',
+    )
 
     test('HTTP: canje con Idempotency-Key no se duplica; cajero canjea y no revierte', async ({
         client,
