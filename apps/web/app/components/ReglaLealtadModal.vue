@@ -356,7 +356,7 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                     </p>
                     <p class="text-xs text-muted">
                         Con el programa: Q {{ programa.valor_punto }} por punto<template v-if="programa.diferimiento">
-                            y Q {{ programa.valor_pasivo_punto }} de pasivo por punto ({{ programa.canje_esperado_pct }} % de canje esperado)
+                            y Q {{ programa.valor_pasivo_punto }} de pasivo por punto ({{ formatearPorcentaje(programa.canje_esperado_pct) }} % de canje esperado)
                         </template><template v-else>
                             , sin diferimiento (no lleva asientos)
                         </template>.

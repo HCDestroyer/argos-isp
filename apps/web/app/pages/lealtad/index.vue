@@ -196,7 +196,7 @@ onMounted(cargar)
                             />
                             <DatoFicha
                                 etiqueta="Canje esperado"
-                                :valor="`${programa.canje_esperado_pct} %`"
+                                :valor="`${formatearPorcentaje(programa.canje_esperado_pct)} %`"
                             />
                             <DatoFicha
                                 etiqueta="Vencimiento"

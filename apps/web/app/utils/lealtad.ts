@@ -64,6 +64,16 @@ export function formatearPuntos(puntos: number): string {
     return `${signo}${Math.abs(puntos).toLocaleString('en-US')} pts`
 }
 
+/** `80.000000` → `80`; `12.500000` → `12.5` (el porcentaje de la API viene con 6 decimales). */
+export function formatearPorcentaje(valor: string): string {
+    try {
+        return new Decimal(valor).toString()
+    }
+    catch {
+        return valor
+    }
+}
+
 /* Programa. */
 
 function fechaOpcional(mensaje = 'Fecha inválida') {
