@@ -8,7 +8,9 @@
 */
 import db from '@adonisjs/lucid/services/db'
 import { definirRuta, type Ruta } from '#shared/rutas'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, ValidacionFallida } from '#shared/errores'
+import { alcanceDePermiso } from '#core/acl'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import { EmpresaRequerida, empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
@@ -207,11 +209,51 @@ const transitos: Ruta[] = [
         ruta: '/bancos/depositos',
         operacion: 'bancosDepositos',
         resumen: 'Depósitos de caja (en tránsito o acreditados)',
+        descripcion:
+            'Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.',
         etiqueta: 'bancos',
-        permiso: 'bancos.ver',
-        query: v.listarTransitosValidator,
+        permiso: 'cajas.ver',
+        query: v.listarDepositosValidator,
         respuesta: { status: 200, descripcion: 'Página de depósitos', esquema: pagina(Deposito) },
-        handler: (ctx, { query }) => listarDepositos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: async (ctx, { query }) => {
+            const usuario = ctx.auth.user
+            const conBancos = usuario
+                ? await alcanceDePermiso(usuario.id, 'bancos.ver', alcancesDelToken(ctx))
+                : null
+            let cajaId = query.caja_id
+            if (query.turno_id !== undefined) {
+                const turno = await db
+                    .from('ledger.cajas_turnos')
+                    .where('id', query.turno_id)
+                    .select('caja_id')
+                    .first()
+                if (!turno) throw new NoEncontrado(`El turno ${query.turno_id} no existe`)
+                if (cajaId !== undefined && cajaId !== Number(turno.caja_id)) {
+                    throw new ValidacionFallida([
+                        {
+                            field: 'turno_id',
+                            message: `El turno ${query.turno_id} no es de la caja ${cajaId}`,
+                            rule: 'turno_de_la_caja',
+                        },
+                    ])
+                }
+                cajaId = Number(turno.caja_id)
+            }
+            if (cajaId !== undefined) exigirAcceso(ctx, await existeCaja(cajaId))
+            else if (!conBancos) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'caja_id',
+                        message: 'Sin bancos.ver indica la caja (caja_id) o el turno (turno_id)',
+                        rule: 'required',
+                    },
+                ])
+            }
+            return listarDepositos(
+                { ...query, caja_id: cajaId },
+                empresasDeLaLista(ctx.empresa, query.empresas),
+            )
+        },
     }),
     definirRuta({
         metodo: 'get',

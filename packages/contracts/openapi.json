@@ -730,6 +730,7 @@
       "get": {
         "operationId": "bancosDepositos",
         "summary": "Depósitos de caja (en tránsito o acreditados)",
+        "description": "Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.",
         "tags": [
           "bancos"
         ],
@@ -786,6 +787,26 @@
                 "acreditado"
               ]
             }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los de esta caja (obligatoria sin bancos.ver: el cajero ve su caja)",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "turno_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los de este turno",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -828,7 +849,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso bancos.ver",
+            "description": "Sin el permiso cajas.ver",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -848,7 +869,7 @@
             }
           }
         },
-        "x-permiso": "bancos.ver",
+        "x-permiso": "cajas.ver",
         "x-implementado": true
       }
     },
@@ -10732,7 +10753,8 @@
                 "pagada",
                 "vencida",
                 "anulada",
-                "castigada"
+                "castigada",
+                "acreditada"
               ]
             }
           },
@@ -10755,7 +10777,8 @@
               "type": "string",
               "enum": [
                 "servicio",
-                "mora"
+                "mora",
+                "cargo"
               ]
             }
           }
@@ -39300,7 +39323,8 @@
           "pagada",
           "vencida",
           "anulada",
-          "castigada"
+          "castigada",
+          "acreditada"
         ]
       },
       "EstadoPortal": {
@@ -40030,9 +40054,10 @@
             "type": "string",
             "enum": [
               "servicio",
-              "mora"
+              "mora",
+              "cargo"
             ],
-            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura"
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)"
           },
           "factura_origen_id": {
             "type": [
@@ -40040,7 +40065,7 @@
               "null"
             ],
             "minimum": 1,
-            "description": "Factura que originó la mora"
+            "description": "Factura que originó la mora o el cargo"
           },
           "vencida_en": {
             "type": [
@@ -42417,6 +42442,13 @@
             ],
             "minimum": 1,
             "description": "Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco"
+          },
+          "proveedor_cobro_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del proveedor de cobro; null sin proveedor"
           },
           "liquidacion_id": {
             "type": [

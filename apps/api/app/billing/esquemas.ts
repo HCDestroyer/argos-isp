@@ -91,7 +91,16 @@ export const PlantillaFacturacion = definirEsquema(
 
 export const EstadoFactura = definirEsquema(
     'EstadoFactura',
-    enumerado(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada', 'castigada', 'acreditada']),
+    enumerado([
+        'por_certificar',
+        'emitida',
+        'parcial',
+        'pagada',
+        'vencida',
+        'anulada',
+        'castigada',
+        'acreditada',
+    ]),
 )
 
 export const FacturaLinea = definirEsquema(
@@ -440,6 +449,10 @@ export const Pago = definirEsquema(
                 description:
                     'Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco',
             },
+            proveedor_cobro_nombre: {
+                ...nulable(texto),
+                description: 'Nombre del proveedor de cobro; null sin proveedor',
+            },
             liquidacion_id: {
                 ...nulable(id),
                 description: 'Liquidación del proveedor que incluyó el pago; null = sin liquidar',
@@ -459,6 +472,7 @@ export const Pago = definirEsquema(
         },
         [
             'proveedor_cobro_id',
+            'proveedor_cobro_nombre',
             'liquidacion_id',
             'historico',
             'origen',

@@ -171,3 +171,4 @@ Detalle y desvíos en §18 del contrato. Todo de solo inserción (trigger y `REV
 ## Eventos
 
 Emite: `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+- `GET /bancos/depositos?caja_id=&turno_id=` (permiso `cajas.ver`): con `bancos.ver`, todos; sin él (el cajero), `caja_id` o `turno_id` obligatorio y la caja en su alcance (403; sin filtro 422).

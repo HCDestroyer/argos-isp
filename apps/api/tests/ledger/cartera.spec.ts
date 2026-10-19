@@ -408,8 +408,9 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
         ])
         // el DTE no se toca y el cargo nunca va a la cola
         await cola(e)
+        const dtesDespues = await dtesDe('factura', s.facturas[0]!.id)
         assert.deepEqual(
-            (await dtesDe('factura', s.facturas[0]!.id)).map((d) => [d.id, d.estado]),
+            dtesDespues.map((d) => [d.id, d.estado]),
             [[dte!.id, 'certificado']],
         )
         assert.lengthOf(await dtesDe('factura', Number(cargo.id)), 0)

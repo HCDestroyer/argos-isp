@@ -130,6 +130,23 @@ export const trasladarValidator = vine.compile(
     }),
 )
 
+export const listarDepositosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        estado: vine.enum(['en_transito', 'acreditado'] as const).optional(),
+        caja_id: vine.number().withoutDecimals().positive().optional().meta({
+            description: 'Solo los de esta caja (obligatoria sin bancos.ver: el cajero ve su caja)',
+        }),
+        turno_id: vine
+            .number()
+            .withoutDecimals()
+            .positive()
+            .optional()
+            .meta({ description: 'Solo los de este turno' }),
+    }),
+)
+
 export const listarTransitosValidator = vine.compile(
     vine.object({
         empresas: empresasConsulta(),
