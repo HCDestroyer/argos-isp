@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { ZONA_NEGOCIO } from '#ledger/fechas'
 import { aTexto, dec } from '#ledger/dinero'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { claveFactura, sumarDias, type PeriodoFacturable } from '#billing/periodos'
@@ -13,8 +14,9 @@ import { aplicarCanjesEmitidos, descuentosParaFactura } from '#lealtad/emision'
  *
  * - Idempotente por `clave_unica = servicio_id-periodo` (`INSERT … ON CONFLICT DO NOTHING`): si
  *   dos corridas compiten, solo una la crea y la otra devuelve `creada: false`.
- * - Líneas: el plan al precio efectivo (`costo_override` o precio del plan) y los conceptos
- *   recurrentes activos, ambos multiplicados por el factor de prorrateo del periodo. Precios con
+ * - Líneas: el plan al precio efectivo (`costo_override` o precio del plan), los conceptos
+ *   recurrentes activos y los adicionales `cobrado` vigentes en el periodo (una línea por asignación,
+ *   `servicio_adicional_id`), todos multiplicados por el factor de prorrateo del periodo. Precios con
  *   IVA incluido; el IVA se desglosa por línea (`lineaConIva`).
  * - Guarda `reglas_snapshot`: la configuración efectiva (plantilla + excepciones) y el precio con
  *   que se emitió. Vence `dias_gracia` días después del inicio del periodo.
@@ -105,6 +107,24 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
                 }),
             )
         }
+        // adicionales `cobrado` (contrato adicionales.md): una línea por asignación vigente en el periodo
+        // (alta antes de su fin y sin baja o con baja después de su primer día), a su precio con IVA
+        // incluido y el mismo prorrateo que el plan. Los `incluido` y los de `cortesia` no generan línea
+        for (const adicional of await adicionalesCobrados(t, servicio.id, periodo, fin)) {
+            const nombre = adicional.identificador
+                ? `${adicional.nombre} (${adicional.identificador})`
+                : adicional.nombre
+            lineas.push({
+                ...lineaConIva({
+                    concepto: prorrateado ? `${nombre} (prorrateo ${dias}/${diasCiclo} días)` : nombre,
+                    tipo: 'otro',
+                    cantidad: '1',
+                    gravable: true,
+                    total: dec(adicional.precio).times(factor),
+                }),
+                servicio_adicional_id: Number(adicional.id),
+            })
+        }
         const positivas = lineas.filter((linea) => dec(linea.total).gt(0))
         if (totalesDe(positivas).total.lte(0)) {
             return { factura_id: null, creada: false, motivo: 'monto_cero' }
@@ -150,4 +170,27 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
         await aplicarCanjesEmitidos(t, facturaId, lealtad.canjes)
         return { factura_id: facturaId, creada: true, motivo: null }
     }
+}
+
+/** Asignaciones `cobrado` del servicio vigentes en el periodo [inicio, fin) (fechas de Guatemala). */
+async function adicionalesCobrados(t: Transaccion, servicioId: number, inicio: string, fin: string) {
+    return (await t.trx
+        .from('core.servicios_adicionales as sa')
+        .join('core.adicionales as a', 'a.id', 'sa.adicional_id')
+        .where('sa.servicio_id', servicioId)
+        .where('sa.modalidad', 'cobrado')
+        .whereNotNull('sa.precio')
+        .whereRaw(`(sa.alta_en AT TIME ZONE '${ZONA_NEGOCIO}')::date < ?::date`, [fin])
+        .where((q) =>
+            q
+                .whereNull('sa.baja_en')
+                .orWhereRaw(`(sa.baja_en AT TIME ZONE '${ZONA_NEGOCIO}')::date > ?::date`, [inicio]),
+        )
+        .orderBy('sa.id', 'asc')
+        .select('sa.id', 'a.nombre', 'sa.identificador', 'sa.precio')) as Array<{
+        id: number
+        nombre: string
+        identificador: string | null
+        precio: string
+    }>
 }

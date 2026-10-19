@@ -47,6 +47,8 @@ export interface LineaCalculada {
      * (`billing.conceptos_cargo`); null o ausente = la de su tipo (`cuentaIngresoDeLinea`).
      */
     cuenta_codigo?: string | null
+    /** línea mensual de un adicional `cobrado` (`core.servicios_adicionales.id`) */
+    servicio_adicional_id?: number | null
 }
 
 /**
