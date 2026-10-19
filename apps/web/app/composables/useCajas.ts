@@ -3,6 +3,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 export type Caja = Schema<'Caja'>
 export type TurnoCaja = Schema<'CajaTurno'>
 export type DatosCierre = paths['/api/v1/cajas/{id}/cerrar']['post']['requestBody']['content']['application/json']
+export type DatosDeposito = paths['/api/v1/cajas/{id}/depositar']['post']['requestBody']['content']['application/json']
 
 /** Cajas y sus turnos: abrir con fondo inicial, cerrar con arqueo (contado y motivo). */
 export function useCajas() {
@@ -47,5 +48,17 @@ export function useCajas() {
         }))
     }
 
-    return { listar, turnos, abrir, cerrar, crear }
+    /**
+     * `POST /cajas/:id/depositar` (`cajas.depositar`): el efectivo del turno abierto va a fondos en
+     * tránsito (1.1.11) con su boleta y baja el esperado del cierre. 422 `deposito_excede_efectivo`,
+     * 409 `deposito_duplicado` (boleta repetida) y `sin_turno_abierto`.
+     */
+    function depositar(cajaId: number, datos: DatosDeposito, claveIdempotencia: string): Promise<Resultado<Deposito>> {
+        return resolver(api.POST('/api/v1/cajas/{id}/depositar', {
+            params: { path: { id: cajaId }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { listar, turnos, abrir, cerrar, crear, depositar }
 }

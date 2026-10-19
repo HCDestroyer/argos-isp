@@ -41,7 +41,13 @@ const DATOS_POR_METODO: Partial<Record<Pago['metodo'], readonly ('referencia' | 
     remesa: ['cuenta_bancaria_id', 'referencia'],
 }
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
-const ESTADOS_FACTURA: readonly Factura['estado'][] = ['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada']
+/** Todos los estados del contrato (el `Record` obliga a agregar los nuevos: `castigada`, `acreditada`). */
+const ESTADOS_FACTURA = Object.keys({
+    por_certificar: true, emitida: true, parcial: true, pagada: true, vencida: true, anulada: true, castigada: true, acreditada: true,
+} satisfies Record<Factura['estado'], true>)
+const TIPOS_FACTURA = Object.keys({ servicio: true, mora: true, cargo: true } satisfies Record<NonNullable<Factura['tipo']>, true>)
+/** Como `ESTADOS_PENDIENTES` de la API: solo estas tienen saldo por cobrar. */
+export const ESTADOS_PENDIENTES: readonly Factura['estado'][] = ['emitida', 'parcial', 'vencida']
 const ESTADOS_PAGO: readonly Pago['estado'][] = ['registrado', 'pendiente_verificacion', 'anulado']
 
 function usuarioDe(solicitud: SolicitudFixture): number | null {
@@ -75,6 +81,25 @@ function detalle(factura: Factura): FacturaDetalle {
     const servicio = bd.servicios.find(s => s.id === factura.servicio_id)
     const plan = bd.planes.find(p => p.id === servicio?.plan_id)
     const mora = factura.tipo === 'mora'
+    // H18: el cargo interno lleva una línea `otro` sin IVA, como `crearCargoDiferencia` (A3).
+    if (factura.tipo === 'cargo') {
+        return {
+            ...factura,
+            acreditado: factura.acreditado ?? '0.00',
+            notas_credito: notasDeFactura(factura.id),
+            lineas: [{
+                id: factura.id * 10 + 1,
+                concepto: `Diferencia de cobro devuelta: pago anulado (factura ${factura.factura_origen_id ?? ''})`,
+                tipo: 'otro',
+                cantidad: '1.000',
+                precio_unitario: factura.total,
+                gravable: false,
+                iva: '0.00',
+                total: factura.total,
+            }],
+            reglas_snapshot: { mora_tipo: 'ninguna' },
+        }
+    }
     return {
         ...factura,
         acreditado: factura.acreditado ?? '0.00',
@@ -227,7 +252,7 @@ function referenciaRepetida(cuerpo: Record<string, unknown>): RespuestaFixture |
 /** Facturas con saldo del cliente en el orden de `facturasPendientes` (vencimiento, periodo, id). */
 function pendientesDe(clienteId: number) {
     return bd.facturas
-        .filter(f => f.cliente_id === clienteId && f.estado !== 'pagada' && f.estado !== 'anulada' && f.estado !== 'por_certificar')
+        .filter(f => f.cliente_id === clienteId && ESTADOS_PENDIENTES.includes(f.estado))
         .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.periodo.localeCompare(b.periodo) || a.id - b.id)
 }
 
@@ -254,7 +279,7 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
             evaluados.push({ ...base, motivo: 'suspensión manual' })
             continue
         }
-        const vencidas = bd.facturas.filter(f => f.servicio_id === servicio.id && f.estado === 'vencida').length
+        const vencidas = bd.facturas.filter(f => f.servicio_id === servicio.id && f.estado === 'vencida' && (f.tipo ?? 'servicio') === 'servicio').length
         if (vencidas > 0 || servicio.estado === 'activo') {
             evaluados.push({ ...base, motivo: vencidas ? `${vencidas} ${vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}` : 'sin facturas vencidas' })
             continue
@@ -443,6 +468,8 @@ export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
     const cobroId = siguienteId(bd.cobros)
     const pagos: Pago[] = []
     for (const parte of partes) {
+        // Fase 4: agente o débito de un proveedor activo desde su fecha de corte va al puente 1.1.10.NN.
+        const proveedorCobro = bd.proveedoresCobro.find(p => p.empresa_id === parte.empresaId && p.metodo === metodo && p.metodo !== 'pasarela' && p.activo && p.desde <= momento.slice(0, 10))
         const pago: Pago = {
             id: siguienteId(bd.pagos),
             empresa_id: parte.empresaId,
@@ -465,6 +492,9 @@ export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
             banco_origen_nombre: banco?.nombre ?? null,
             cuenta_bancaria_id: cuenta?.id ?? null,
             cuenta_bancaria_nombre: cuenta ? nombreCuentaDestino(cuenta) : null,
+            proveedor_cobro_id: proveedorCobro?.id ?? null,
+            proveedor_cobro_nombre: proveedorCobro?.nombre ?? null,
+            liquidacion_id: null,
             version: 1,
             created_at: momento,
             updated_at: momento,
@@ -557,14 +587,19 @@ export const rutasFacturacion: RutasFixture = {
         const servicio = numeroQuery(solicitud, 'servicio_id')
         const estado = solicitud.query.get('estado')
         const periodo = solicitud.query.get('periodo')
-        if (estado && !(ESTADOS_FACTURA as readonly string[]).includes(estado)) {
+        const tipo = solicitud.query.get('tipo')
+        if (estado && !ESTADOS_FACTURA.includes(estado)) {
             return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
+        }
+        if (tipo && !TIPOS_FACTURA.includes(tipo)) {
+            return datosInvalidos([{ field: 'tipo', message: 'Tipo inválido', rule: 'enum' }])
         }
         const filas = deLaEmpresa(bd.facturas, solicitud)
             .filter(f => cliente === undefined || f.cliente_id === cliente)
             .filter(f => servicio === undefined || f.servicio_id === servicio)
             .filter(f => !estado || f.estado === estado)
             .filter(f => !periodo || f.periodo === periodo)
+            .filter(f => !tipo || (f.tipo ?? 'servicio') === tipo)
             .sort((a, b) => b.id - a.id)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),
