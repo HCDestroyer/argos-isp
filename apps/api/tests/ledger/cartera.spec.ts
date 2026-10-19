@@ -286,7 +286,11 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
             new AnularFactura().execute({ factura_id: factura!.id, motivo: 'error' }, e.ctx),
         )
         assert.equal(anular.codigo, 'factura_castigada')
-        // un pago histórico que sobra también es recuperación antes que anticipo
+        // anular una recuperación la revierte con su espejo
+        await new AnularPago().execute({ pago_id: p2.id, motivo: 'cheque rechazado' }, e.ctx)
+        assert.equal(await saldoCuenta(e.B, CUENTAS_GT.RECUPERACION_INCOBRABLES), '-100.00')
+        assert.equal(await saldoCuenta(e.B, CUENTAS.ANTICIPOS_CLIENTES, s.clienteId), '0.00')
+        // quedan 30 por recuperar: un pago histórico que sobra también es recuperación antes que anticipo
         const hist = await new RegistrarPagoHistorico().execute(
             {
                 historico: true,
@@ -305,10 +309,6 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
             [CUENTAS_GT.RECUPERACION_INCOBRABLES, '0.00', '5.00'],
         ])
         await new AnularPago().execute({ pago_id: hist.id, motivo: 'duplicado' }, e.ctx)
-        // anular una recuperación la revierte con su espejo
-        await new AnularPago().execute({ pago_id: p2.id, motivo: 'cheque rechazado' }, e.ctx)
-        assert.equal(await saldoCuenta(e.B, CUENTAS_GT.RECUPERACION_INCOBRABLES), '-100.00')
-        assert.equal(await saldoCuenta(e.B, CUENTAS.ANTICIPOS_CLIENTES, s.clienteId), '0.00')
         await afirmarLibro(assert, [e.B, e.C])
     })
 })
