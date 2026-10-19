@@ -7,6 +7,7 @@ import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
+import { versionFixture } from './version/rutas'
 import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
@@ -122,6 +123,8 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /** `GET /version` (A6): la versión instalada que ve el panel. */
+    version: Schema<'VersionInstalada'>
     /* Fase 4 · cobros y bancos (A3, §10.3 y §10.9). */
     proveedoresCobro: Schema<'ProveedorCobro'>[]
     liquidaciones: Schema<'LiquidacionCobro'>[]
@@ -210,6 +213,7 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        version: versionFixture,
         proveedoresCobro,
         liquidaciones,
         contracargosLiquidados: [],
