@@ -25,6 +25,7 @@ import {
 import { registrarTramo } from '#network/historial'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { planTemporalActivo } from '#core/planes_temporales'
+import { reconciliarIncluidos } from '#core/adicionales'
 
 export interface EntradaEditarServicio {
     id: number
@@ -73,6 +74,10 @@ type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
  *
  * Con un plan temporal activo (lealtad) el `plan_id` del servicio es el temporal: cambiarlo responde
  * 409 `plan_temporal_activo` (primero se cancela con `servicios.cancelar_plan_temporal`).
+ *
+ * Cambiar de plan reconcilia los adicionales `incluido` con los del plan nuevo
+ * (`reconciliarIncluidos`): los que el plan nuevo no trae se dan de baja, los que faltan se agregan;
+ * `cortesia` y `cobrado` se conservan (`contratos/adicionales.md`).
  */
 export default class EditarServicio extends DomainAction<EntradaEditarServicio, ServicioVista> {
     readonly nombre = 'servicios.editar'
@@ -231,6 +236,14 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             despues.ipv6_modo !== antes.ipv6_modo
         ) {
             campos.push('prefijo_v6')
+        }
+        if (campos.includes('plan')) {
+            await reconciliarIncluidos(
+                t,
+                { id, empresa_id: despues.empresa_id, cliente_id: despues.cliente_id },
+                despues.plan_id,
+                'cambio_plan',
+            )
         }
         if (campos.length > 0) {
             await registrarTramo(t.trx, id, `edicion: ${campos.join(', ')}`)

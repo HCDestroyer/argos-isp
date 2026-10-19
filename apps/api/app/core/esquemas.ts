@@ -456,6 +456,90 @@ export const CredencialesPpp = definirEsquema(
     }),
 )
 
+/*
+| Servicios adicionales (`contratos/adicionales.md`)
+*/
+
+export const Adicional = definirEsquema(
+    'Adicional',
+    objeto({
+        id,
+        empresa_id: { ...id, description: 'Empresa (NIT) del catálogo' },
+        codigo: { ...texto, description: 'Único en la empresa, en mayúsculas' },
+        nombre: texto,
+        descripcion: nulable(texto),
+        precio_sugerido: { ...nulable(Dinero), description: 'Sugerencia para asignarlo cobrado' },
+        activo: { ...booleano, description: 'Desactivado: no se asigna ni lo traen los planes' },
+        ...auditable,
+    }),
+)
+
+export const MotivoCortesia = definirEsquema(
+    'MotivoCortesia',
+    objeto({
+        id,
+        empresa_id: { ...nulable(id), description: 'null = común a todas las empresas' },
+        codigo: texto,
+        nombre: texto,
+        activo: booleano,
+        ...auditable,
+    }),
+)
+
+export const AdicionalServicio = definirEsquema(
+    'AdicionalServicio',
+    objeto({
+        id: { ...id, description: 'Id de la asignación (`asignacionId` en las rutas)' },
+        empresa_id: id,
+        servicio_id: id,
+        adicional_id: id,
+        adicional_codigo: texto,
+        adicional_nombre: texto,
+        modalidad: enumerado(['incluido', 'cortesia', 'cobrado']),
+        identificador: { ...nulable(texto), description: 'Usuario de IPTV, correo de la cuenta…' },
+        tiene_credencial: {
+            ...booleano,
+            description: 'Si hay credencial guardada; se lee con GET …/credencial (queda auditado)',
+        },
+        precio: { ...nulable(Dinero), description: 'Solo con cobrado' },
+        motivo_id: { ...nulable(id), description: 'Motivo de cortesía (solo con cortesia)' },
+        motivo_nombre: nulable(texto),
+        motivo_detalle: nulable(texto),
+        plan_id: { ...nulable(id), description: 'Plan que lo trajo (solo incluido asignado por el plan)' },
+        estado: enumerado(['activo', 'baja']),
+        alta_en: instante,
+        baja_en: nulable(instante),
+        motivo_baja: {
+            ...nulable(texto),
+            description: 'Texto de la baja, o retiro, cambio_plan, cambio_empresa',
+        },
+        ...auditable,
+    }),
+)
+
+export const AdicionalPlan = definirEsquema(
+    'AdicionalPlan',
+    objeto({
+        plan_id: id,
+        adicional_id: id,
+        empresa_id: { ...id, description: 'Empresa del adicional: solo lo reciben servicios de esa empresa' },
+        adicional_codigo: texto,
+        adicional_nombre: texto,
+        adicional_activo: booleano,
+        cantidad: { ...entero, minimum: 1, maximum: 50 },
+    }),
+)
+
+export const CredencialAdicional = definirEsquema(
+    'CredencialAdicional',
+    objeto({
+        servicio_id: id,
+        asignacion_id: id,
+        identificador: nulable(texto),
+        credencial: { type: 'string', description: 'En claro; cada consulta queda auditada' },
+    }),
+)
+
 export const AccionAuditoria = definirEsquema(
     'AccionAuditoria',
     objeto({

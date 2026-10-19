@@ -17,6 +17,7 @@ import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 import { resolverEmpresaServicio } from '#core/empresas'
+import { reconciliarIncluidos } from '#core/adicionales'
 
 export interface EntradaCrearServicio {
     cliente_id: number
@@ -76,7 +77,8 @@ export async function exigirUserPppLibre(t: Transaccion, userPpp: string) {
  *   `dhcp_fija` exige `mac` (`validarTipoConexion`).
  *
  * Asigna IPv4 y reserva prefijos IPv6 según el modo; guarda las excepciones a la plantilla
- * (validadas por A3); emite `servicio.creado` y `asignacion.cambiada`.
+ * (validadas por A3); emite `servicio.creado` y `asignacion.cambiada`. Asigna los adicionales que
+ * trae el plan para la empresa del servicio (`modalidad: incluido`, `servicio.adicional_agregado`).
  */
 export default class CrearServicio extends DomainAction<EntradaCrearServicio, ServicioVista> {
     readonly nombre = 'servicios.crear'
@@ -214,6 +216,12 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             inicio: new Date().toISOString(),
             fin: null,
         })
+        await reconciliarIncluidos(
+            t,
+            { id, empresa_id: empresaId, cliente_id: input.cliente_id },
+            input.plan_id,
+            'cambio_plan',
+        )
         refrescarAaaAlConfirmar(t, { servicioId: id })
         return servicio
     }
