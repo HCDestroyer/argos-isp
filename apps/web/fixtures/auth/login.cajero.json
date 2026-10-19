@@ -27,7 +27,9 @@
       "comprobantes.ver",
       "comprobantes.aprobar",
       "comprobantes.rechazar",
-      "fel.ver"
+      "fel.ver",
+      "lealtad.ver",
+      "lealtad.canjear"
     ],
     "alcance_global": false,
     "empresas": [

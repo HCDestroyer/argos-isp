@@ -121,7 +121,10 @@
     "horus.generar_token",
     "horus.revocar_token",
     "sso.emitir",
-    "vinculaciones.revocar"
+    "vinculaciones.revocar",
+    "lealtad.ver",
+    "lealtad.configurar",
+    "lealtad.ajustar"
   ],
   "alcance_global": true,
   "empresas": [

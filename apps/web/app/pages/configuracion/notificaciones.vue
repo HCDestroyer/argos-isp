@@ -483,7 +483,7 @@ const itemsTls = Object.entries(TLS_CORREO).map(([value, label]) => ({ label, va
                     </div>
                     <div class="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                         <USwitch
-                            v-for="(aviso, clave) in AVISOS"
+                            v-for="{ clave, aviso } in avisosDe(form.avisos)"
                             :key="clave"
                             v-model="form.avisos[clave]"
                             :disabled="bloqueado"

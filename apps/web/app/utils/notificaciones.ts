@@ -60,8 +60,14 @@ export const TLS_CORREO: Record<Configuracion['correo']['tls'], string> = {
     ninguno: 'Sin cifrar',
 }
 
-/** Tipos de aviso, con el nombre que ve el operador. */
-export const AVISOS: Record<keyof Configuracion['avisos'], { etiqueta: string, descripcion: string }> = {
+type TextoAviso = { etiqueta: string, descripcion: string }
+
+/**
+ * Textos de todos los tipos de aviso que el panel conoce, incluidos los que la API todavía no
+ * publica en `avisos` (p. ej. `lealtad`, que A6 agrega en `a6/lealtad-1`): un tipo sin texto rompe el
+ * typecheck de `AVISOS`; uno con texto que la API no manda no se muestra (`avisosDe`).
+ */
+const TEXTOS_AVISO = {
     factura: { etiqueta: 'Factura emitida', descripcion: 'Aviso de cobro nuevo' },
     vencimiento: { etiqueta: 'Factura vencida', descripcion: 'Al vencer sin pago' },
     recordatorio: { etiqueta: 'Recordatorio', descripcion: 'Antes del vencimiento' },
@@ -69,6 +75,17 @@ export const AVISOS: Record<keyof Configuracion['avisos'], { etiqueta: string, d
     pago: { etiqueta: 'Pago registrado', descripcion: 'Recibo del pago' },
     promesa: { etiqueta: 'Promesa de pago', descripcion: 'Creada, cumplida o incumplida' },
     comprobante: { etiqueta: 'Comprobante', descripcion: 'Aprobado o rechazado' },
+    lealtad: { etiqueta: 'Puntos de lealtad', descripcion: 'Puntos ganados, por vencer y referido calificado' },
+} satisfies Record<string, TextoAviso>
+
+/** Tipos de aviso, con el nombre que ve el operador. */
+export const AVISOS: Record<keyof Configuracion['avisos'], TextoAviso> = TEXTOS_AVISO
+
+/** Los avisos que trae la configuración leída, con su texto (sin interruptores de tipos que la API no tiene). */
+export function avisosDe(avisos: Record<string, boolean>): { clave: keyof Configuracion['avisos'], aviso: TextoAviso }[] {
+    return (Object.keys(AVISOS) as (keyof Configuracion['avisos'])[])
+        .filter(clave => Object.hasOwn(avisos, clave))
+        .map(clave => ({ clave, aviso: AVISOS[clave] }))
 }
 
 const conservar = (): Secreto => ({ accion: 'conservar', valor: '' })
