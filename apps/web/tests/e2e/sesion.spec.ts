@@ -78,17 +78,18 @@ test('"No soy yo / Salir" va al login completo sin los datos de la sesión', asy
 
 test('a menos de 15 min del tope avisa que guarde su trabajo', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
-    // Mueve el tope de la cookie simulada al inicio de la página nueva: escribirlo antes de recargar
-    // (en `beforeunload`) perdía la carrera con una petición en vuelo que la renovaba con el tope
-    // largo, y en el teléfono emulado del CI el aviso no salía.
-    await page.addInitScript(() => {
+    // Mueve el tope de la cookie simulada y recarga en el mismo paso (si no, una petición en vuelo
+    // la renovaría y volvería a escribirla).
+    const recarga = page.waitForEvent('load')
+    await page.evaluate(() => {
         const clave = 'argos_fixtures_cookie_sesion'
         const sesion: Record<string, unknown> = JSON.parse(sessionStorage.getItem(clave) ?? '{}')
         sesion.expiraEn = new Date(Date.now() + 5 * 60_000).toISOString()
         sesion.expiraMaxEn = new Date(Date.now() + 10 * 60_000).toISOString()
-        sessionStorage.setItem(clave, JSON.stringify(sesion))
+        window.addEventListener('beforeunload', () => sessionStorage.setItem(clave, JSON.stringify(sesion)))
+        location.reload()
     })
-    await page.reload()
+    await recarga
     await menu(page)
     await expect(page.getByText('Tu sesión terminará pronto; guarda tu trabajo').first()).toBeVisible()
 })
