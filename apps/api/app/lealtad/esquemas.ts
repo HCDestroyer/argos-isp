@@ -372,23 +372,27 @@ export const RequisitoSorteo = definirEsquema(
     }),
 )
 
-const GanadorSorteo = objeto({
-    id,
-    posicion: entero,
-    tipo: enumerado(['titular', 'suplente']),
-    participante_id: id,
-    cliente_id: id,
-    codigo_publico: texto,
-    premio_posicion: nulable(entero),
-    estado: enumerado(['por_notificar', 'notificado', 'entregado', 'no_reclamado', 'sustituido']),
-    retencion_isr: nulable(Dinero),
-    contrapartida: nulable(texto),
-    asiento_id: nulable(id),
-    egreso_id: nulable(id),
-    canje_id: nulable(id),
-    entregado_en: nulable(instante),
-    version: entero,
-})
+const GanadorSorteo = objeto(
+    {
+        id,
+        posicion: entero,
+        tipo: enumerado(['titular', 'suplente']),
+        participante_id: id,
+        cliente_id: id,
+        codigo_publico: texto,
+        premio_posicion: nulable(entero),
+        estado: enumerado(['por_notificar', 'notificado', 'entregado', 'no_reclamado', 'sustituido']),
+        retencion_isr: nulable(Dinero),
+        contrapartida: nulable(texto),
+        asiento_id: nulable(id),
+        egreso_id: nulable(id),
+        canje_id: nulable(id),
+        entregado_en: nulable(instante),
+        compra_linea_id: { ...nulable(id), description: 'Línea de la compra con factura del bien entregado' },
+        version: entero,
+    },
+    ['compra_linea_id'],
+)
 
 export const SorteoDetalle = definirEsquema(
     'SorteoDetalle',

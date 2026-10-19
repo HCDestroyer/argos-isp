@@ -436,6 +436,8 @@ export interface GanadorVista {
     asiento_id: number | null
     egreso_id: number | null
     canje_id: number | null
+    /** decisión del PM: la línea de la compra (con factura) del bien entregado */
+    compra_linea_id: number | null
     entregado_en: Date | null
     version: number
 }
@@ -463,6 +465,7 @@ export async function ganadoresDe(
             'g.asiento_id',
             'g.egreso_id',
             'g.canje_id',
+            'g.compra_linea_id',
             'g.entregado_en',
             'g.version',
         )) as Array<Record<string, unknown>>
@@ -476,6 +479,7 @@ export async function ganadoresDe(
         asiento_id: n(f.asiento_id),
         egreso_id: n(f.egreso_id),
         canje_id: n(f.canje_id),
+        compra_linea_id: n(f.compra_linea_id),
         version: Number(f.version),
     }))
 }

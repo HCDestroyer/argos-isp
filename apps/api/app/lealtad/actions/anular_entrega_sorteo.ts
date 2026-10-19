@@ -102,6 +102,7 @@ export default class AnularEntregaSorteo extends DomainAction<
                 asiento_id: null,
                 egreso_id: null,
                 canje_id: null,
+                compra_linea_id: null,
                 retencion_isr: null,
                 contrapartida: null,
                 entregado_en: null,

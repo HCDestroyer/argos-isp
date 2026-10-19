@@ -492,14 +492,17 @@ export const entregarPremioValidator = vine.compile(
         banco_id: idEntidad().nullable().optional(),
         cuenta_bancaria_id: idEntidad().nullable().optional(),
         contrapartida: vine
-            .enum(['proveedor', 'cuenta'] as const)
+            .enum(['compra', 'proveedor', 'cuenta'] as const)
             .nullable()
             .optional()
             .meta({
                 description:
-                    'Solo bien: proveedor (2.1.03) o cuenta (cuenta_codigo de activo, p. ej. inventario)',
+                    'Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra)',
             }),
         cuenta_codigo: vine.string().trim().maxLength(30).nullable().optional(),
+        compra_linea_id: idEntidad().nullable().optional().meta({
+            description: 'Con contrapartida compra: línea (bien) de una compra registrada de la empresa',
+        }),
         nota: vine.string().trim().maxLength(2000).nullable().optional(),
     }),
 )

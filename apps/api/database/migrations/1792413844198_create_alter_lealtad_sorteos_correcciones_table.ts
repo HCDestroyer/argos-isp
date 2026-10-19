@@ -8,6 +8,8 @@ import { BaseSchema } from '@adonisjs/lucid/schema'
  * - El estado del sorteo nunca retrocede (trigger). Única excepción: anular una entrega
  *   (`sorteos.anular_entrega`) reabre `premios_entregados → ejecutado` con `SET LOCAL
  *   lealtad.reabrir_entrega = 'on'` en su transacción.
+ * - Decisión del PM: `sorteos_ganadores.compra_linea_id`, la línea de la compra (con factura) del bien
+ *   entregado; una línea es el premio de un solo ganador.
  * - Riesgo de manipulación: `valor_publico_evidencia` (cómo se obtuvo el valor público en el acto); la
  *   fuente del valor queda en las bases (`bases.fuente_valor_publico`, congelada con `bases_hash`).
  *   El valor y su evidencia no cambian después de ejecutar.
@@ -16,6 +18,9 @@ export default class extends BaseSchema {
     async up() {
         this.schema.raw(`
             ALTER TABLE lealtad.sorteos ADD COLUMN valor_publico_evidencia text;
+            -- decisión del PM (19 oct): el bien comprado con factura se liga a su compra
+            ALTER TABLE lealtad.sorteos_ganadores
+                ADD COLUMN compra_linea_id bigint UNIQUE REFERENCES ledger.compras_lineas (id);
 
             CREATE FUNCTION lealtad.sorteo_estado_avanza() RETURNS trigger LANGUAGE plpgsql AS $$
             DECLARE
@@ -87,6 +92,7 @@ export default class extends BaseSchema {
             DROP TRIGGER IF EXISTS sorteos_estado_avanza ON lealtad.sorteos;
             DROP FUNCTION IF EXISTS lealtad.sorteo_estado_avanza();
             ALTER TABLE lealtad.sorteos DROP COLUMN IF EXISTS valor_publico_evidencia;
+            ALTER TABLE lealtad.sorteos_ganadores DROP COLUMN IF EXISTS compra_linea_id;
         `)
     }
 }
