@@ -29,7 +29,7 @@ import AbrirSorteo from '#lealtad/actions/abrir_sorteo'
 import CerrarCorteSorteo from '#lealtad/actions/cerrar_corte_sorteo'
 import MarcarRequisitoSorteo from '#lealtad/actions/marcar_requisito_sorteo'
 import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
-import EntregarPremioSorteo from '#lealtad/actions/entregar_premio_sorteo'
+import EntregarPremioSorteo, { esCuentaDeActivoFijo } from '#lealtad/actions/entregar_premio_sorteo'
 import CancelarSorteo from '#lealtad/actions/cancelar_sorteo'
 import CerrarActaSorteo from '#lealtad/actions/cerrar_acta_sorteo'
 import CambiarAvisoPortalSorteo from '#lealtad/actions/cambiar_aviso_portal_sorteo'
@@ -79,8 +79,11 @@ function bases(): EntradaSorteo['bases'] {
     }
 }
 
-async function escenario(e: EmpresasGt) {
-    const { programa } = await programaConReglas(e.B, e.ctx, { diferimiento: true })
+type ProgramaPrueba = Awaited<ReturnType<typeof programaConReglas>>['programa']
+
+async function escenario(e: EmpresasGt, existente?: ProgramaPrueba) {
+    let programa = existente
+    if (!programa) ({ programa } = await programaConReglas(e.B, e.ctx, { diferimiento: true }))
     const mesGratis = await new CrearPremio().execute(
         { programa_id: programa.id, tipo: 'mes_gratis', nombre: unico('Mes gratis'), costo_puntos: 500 },
         e.ctx,
@@ -470,8 +473,8 @@ test.group('Lealtad · sorteos', (group) => {
     })
 
     /** Sorteo ejecutado con sus tres titulares (efectivo, bien, servicio). */
-    async function ejecutadoCon(e: EmpresasGt, servicios = 3) {
-        const { sorteo } = await escenario(e)
+    async function ejecutadoCon(e: EmpresasGt, servicios = 3, programa?: ProgramaPrueba) {
+        const { sorteo } = await escenario(e, programa)
         await new EditarSorteo().execute({ id: sorteo.id, version: sorteo.version, bases: bases() }, e.ctx)
         await new PublicarBasesSorteo().execute({ id: sorteo.id }, e.ctx)
         await new MarcarRequisitoSorteo().execute(
@@ -1066,5 +1069,148 @@ test.group('Lealtad · sorteos', (group) => {
         )
         assert.include(xlsx.header('content-type'), 'spreadsheetml')
         assert.deepEqual(await otrasViolaciones([e.B, e.C]), [])
+    })
+
+    /** Compra con una línea bien de `cantidad` unidades a la cuenta dada; devuelve compra y línea. */
+    async function compraBien(e: EmpresasGt, cuenta: string, total: string, cantidad = 1) {
+        const compra = await new RegistrarCompra().execute(
+            {
+                proveedor_id: await proveedorDe(e),
+                tipo_documento: 'FACT',
+                serie: 'A',
+                numero: unico('R'),
+                fecha_documento: hoyGuatemala(),
+                condicion: 'credito',
+                lineas: [{ descripcion: 'Routers Wi-Fi 6', tipo: 'bien', cuenta, total, cantidad }],
+            },
+            e.ctx,
+        )
+        const linea = await db.from('ledger.compras_lineas').where('compra_id', compra.id).firstOrFail()
+        return {
+            compra,
+            lineaId: Number(linea.id),
+            base: String(linea.base),
+            cantidad: Number(linea.cantidad),
+        }
+    }
+
+    test('observación del auditor: una línea con varias unidades se entrega por unidad, prorrateada, sin pasar de su cantidad', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const { programa } = await programaConReglas(e.B, e.ctx, { diferimiento: true })
+        const primero = await ejecutadoCon(e, 3, programa)
+        const segundo = await ejecutadoCon(e, 3, programa)
+        const bien1 = primero.ganadores.find((g) => g.premio_posicion === 2)!
+        const bien2 = segundo.ganadores.find((g) => g.premio_posicion === 2)!
+        // tres routers en una línea a gastos varios: base 892.86 (1000 / 1.12)
+        const { compra, lineaId, base, cantidad } = await compraBien(e, '5.2.99', '1000.00', 3)
+        assert.deepEqual([base, cantidad], ['892.86', 3])
+        const linea = compra.lineas[0]!
+        assert.equal(linea.cantidad, 3)
+
+        const demasiadas = await errorDe(
+            new EntregarPremioSorteo().execute(
+                {
+                    sorteo_id: primero.id,
+                    ganador_id: bien1.id,
+                    contrapartida: 'compra',
+                    compra_linea_id: lineaId,
+                    unidades: 4,
+                },
+                e.ctx,
+            ),
+        )
+        assert.deepEqual([demasiadas.status, demasiadas.codigo], [422, 'compra_ya_entregada'])
+
+        await new EntregarPremioSorteo().execute(
+            {
+                sorteo_id: primero.id,
+                ganador_id: bien1.id,
+                contrapartida: 'compra',
+                compra_linea_id: lineaId,
+                unidades: 2,
+            },
+            e.ctx,
+        )
+        // dos de tres unidades: round(892.86 × 2 / 3) = 595.24, más el ISR del premio
+        assert.deepEqual(await lineas('sorteo', bien1.id), [
+            ['5.1.03', '595.24', '0.00'],
+            ['5.2.99', '0.00', '595.24'],
+            ['5.1.03', '30.00', '0.00'],
+            ['2.1.05', '0.00', '30.00'],
+        ])
+        const otraDos = await errorDe(
+            new EntregarPremioSorteo().execute(
+                {
+                    sorteo_id: segundo.id,
+                    ganador_id: bien2.id,
+                    contrapartida: 'compra',
+                    compra_linea_id: lineaId,
+                    unidades: 2,
+                },
+                e.ctx,
+            ),
+        )
+        assert.equal(otraDos.codigo, 'compra_ya_entregada')
+        assert.include(otraDos.detalle, 'quedan 1')
+        // la última unidad lleva el resto: la suma es la base exacta
+        await new EntregarPremioSorteo().execute(
+            {
+                sorteo_id: segundo.id,
+                ganador_id: bien2.id,
+                contrapartida: 'compra',
+                compra_linea_id: lineaId,
+            },
+            e.ctx,
+        )
+        const entregas = (await db
+            .from('lealtad.sorteos_ganadores')
+            .where('compra_linea_id', lineaId)
+            .orderBy('id')
+            .select('compra_unidades', 'compra_base')) as Array<{
+            compra_unidades: number
+            compra_base: string
+        }>
+        assert.deepEqual(
+            entregas.map((x) => [x.compra_unidades, x.compra_base]),
+            [
+                [2, '595.24'],
+                [1, '297.62'],
+            ],
+        )
+        assert.equal(await saldoCuenta(e.B, '5.2.99'), '0.00')
+        // anular una entrega libera sus unidades
+        await new AnularEntregaSorteo().execute(
+            { sorteo_id: segundo.id, ganador_id: bien2.id, motivo: 'otro premio' },
+            e.ctx,
+        )
+        const libre = await db.from('lealtad.sorteos_ganadores').where('id', bien2.id).firstOrFail()
+        assert.deepEqual(
+            [libre.compra_linea_id, libre.compra_unidades, libre.compra_base],
+            [null, null, null],
+        )
+        // pendiente del auditor: 16.premio_de_sorteo_mal_contabilizado compara con toda la base de la
+        // línea (cl.base); con unidades debe usar g.compra_base (aviso en .claude/integration/a3.md)
+        const todas = await verificarLibro([e.B, e.C])
+        const violaciones = todas.filter(
+            (v) => !v.invariante.startsWith('16.premio_de_sorteo_mal_contabilizado'),
+        )
+        assert.deepEqual(violaciones, [])
+    })
+
+    test('observación del auditor: un bien no va a activo fijo sin su activo, ni se entrega como premio desde ahí (422)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        // la compra rechaza la línea bien a 1.2.01.NN: el activo se da de alta con tipo activo_fijo
+        const compra = await errorDe(compraBien(e, '1.2.01.01', '336.00'))
+        assert.deepEqual([compra.status, compra.reglas], [422, ['cuenta_activo_fijo']])
+        // y la entrega rechaza una línea que haya quedado en activo fijo (defensa para lo anterior)
+        assert.isTrue(esCuentaDeActivoFijo('1.2.01.01'))
+        assert.isTrue(esCuentaDeActivoFijo('1.2.02.03'))
+        assert.isFalse(esCuentaDeActivoFijo('1.2.03'))
+        assert.isFalse(esCuentaDeActivoFijo('5.1.03'))
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

@@ -8762,6 +8762,8 @@ export interface components {
             iva: components["schemas"]["Dinero"];
             clase_activo: string | null;
             diferir_meses: number | null;
+            /** @description Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad */
+            cantidad?: number;
         };
         LineaExtracto: {
             id: number;
@@ -11715,6 +11717,10 @@ export interface components {
                 /** Format: date-time */
                 no_reclamado_en?: string | null;
                 constancia_archivo_id?: number | null;
+                /** @description Unidades de esa línea que consumió la entrega */
+                compra_unidades?: number | null;
+                /** @description Parte de la base de la línea que le tocó (base / cantidad por unidad; la última lleva el resto) */
+                compra_base?: components["schemas"]["Dinero"] | null;
                 version: number;
             }[];
             archivos?: components["schemas"]["ArchivoSorteo"][];
@@ -16706,6 +16712,8 @@ export interface operations {
                          * @example 150.00
                          */
                         total: string;
+                        /** @description Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad */
+                        cantidad?: number | null;
                         /**
                          * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
                          * @example 150.00
@@ -17061,6 +17069,8 @@ export interface operations {
                          * @example 150.00
                          */
                         total: string;
+                        /** @description Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad */
+                        cantidad?: number | null;
                         /**
                          * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
                          * @example 150.00
@@ -25889,6 +25899,8 @@ export interface operations {
                     constancia_archivo_id?: number | null;
                     /** @description Con contrapartida compra: línea (bien) de una compra registrada de la empresa */
                     compra_linea_id?: number | null;
+                    /** @description Con contrapartida compra: unidades de la línea que se entregan (1 por defecto); sin pasar de su cantidad */
+                    unidades?: number | null;
                     nota?: string | null;
                 };
             };

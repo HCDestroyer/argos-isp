@@ -8870,6 +8870,15 @@
                             "150.00"
                           ]
                         },
+                        "cantidad": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "maximum": 100000,
+                          "description": "Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad"
+                        },
                         "iva": {
                           "type": [
                             "string",
@@ -9666,6 +9675,15 @@
                           "examples": [
                             "150.00"
                           ]
+                        },
+                        "cantidad": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "maximum": 100000,
+                          "description": "Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad"
                         },
                         "iva": {
                           "type": [
@@ -25675,6 +25693,14 @@
                     ],
                     "minimum": 1,
                     "description": "Con contrapartida compra: línea (bien) de una compra registrada de la empresa"
+                  },
+                  "unidades": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con contrapartida compra: unidades de la línea que se entregan (1 por defecto); sin pasar de su cantidad"
                   },
                   "nota": {
                     "type": [
@@ -57002,6 +57028,10 @@
               "integer",
               "null"
             ]
+          },
+          "cantidad": {
+            "type": "integer",
+            "description": "Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad"
           }
         }
       },
@@ -68997,6 +69027,24 @@
                     "null"
                   ],
                   "minimum": 1
+                },
+                "compra_unidades": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Unidades de esa línea que consumió la entrega"
+                },
+                "compra_base": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Parte de la base de la línea que le tocó (base / cantidad por unidad; la última lleva el resto)"
                 },
                 "version": {
                   "type": "integer"

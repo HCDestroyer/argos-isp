@@ -52,6 +52,8 @@ export interface EntradaEntregarPremio {
     compra_linea_id?: number | null
     /** constancia firmada de la entrega (`POST /lealtad/sorteos/:id/archivos`, uso `constancia`) */
     constancia_archivo_id?: number | null
+    /** con `compra`: unidades de la línea que se entregan (1 por defecto) */
+    unidades?: number | null
     nota?: string | null
 }
 
@@ -94,6 +96,13 @@ const CONTROL_NO_PERMITIDAS = [
  * empresa o global, que no sea contracuenta ni auxiliar de clientes y que no esté bajo las cuentas
  * control (p. ej. un «Inventario de premios» que crea la empresa).
  */
+/** Propiedad, planta y equipo o su depreciación (`1.2.01.*`, `1.2.02.*`). */
+export function esCuentaDeActivoFijo(codigo: string): boolean {
+    return [CUENTAS_GT.PROPIEDAD_PLANTA_EQUIPO, CUENTAS_GT.DEPRECIACION_ACUMULADA].some(
+        (c) => codigo === c || codigo.startsWith(`${c}.`),
+    )
+}
+
 export function cuentaParaBienDePremio(c: CuentaContrapartida, empresaId: number): boolean {
     if (c.tipo !== 'activo' || !c.imputable || c.contracuenta || c.auxiliar_cliente) return false
     if (c.empresa_id !== null && Number(c.empresa_id) !== empresaId) return false
@@ -361,6 +370,7 @@ async function contabilizarBien(
                   .select(
                       'l.id',
                       'l.base',
+                      'l.cantidad',
                       'l.tipo',
                       'c.id as compra_id',
                       'c.empresa_id',
@@ -370,6 +380,7 @@ async function contabilizarBien(
                   .first()) as {
                   id: number
                   base: string
+                  cantidad: number
                   tipo: string
                   compra_id: number
                   empresa_id: number
@@ -392,24 +403,54 @@ async function contabilizarBien(
                 },
             ])
         }
-        const usada = await t.trx.from('lealtad.sorteos_ganadores').where('compra_linea_id', linea.id).first()
-        if (usada) {
+        // observación del auditor: una línea que fue a propiedad, planta y equipo es un activo fijo;
+        // un premio no la acredita (el activo se registra y se da de baja por su propia acción)
+        if (esCuentaDeActivoFijo(linea.codigo)) {
             throw new ReglaNegocio(
-                `La línea ${linea.id} de la compra ${linea.compra_id} ya es el premio del ganador ${usada.id}`,
+                `La línea ${linea.id} de la compra ${linea.compra_id} fue a la cuenta de activo fijo ${linea.codigo}: no se entrega como premio`,
+                'linea_activo_fijo',
+            )
+        }
+        // observación del auditor: cada entrega consume sus unidades de la línea, prorrateadas
+        const unidades = input.unidades ?? 1
+        const cantidad = Number(linea.cantidad)
+        await t.trx.rawQuery(`SELECT pg_advisory_xact_lock(hashtext('lealtad.compra_linea'), ?::integer)`, [
+            Number(linea.id),
+        ])
+        const previas = (await t.trx
+            .from('lealtad.sorteos_ganadores')
+            .where('compra_linea_id', linea.id)
+            .select(
+                t.trx.raw('coalesce(sum(compra_unidades), 0)::int as unidades'),
+                t.trx.raw('coalesce(sum(compra_base), 0)::text as base'),
+            )
+            .first()) as { unidades: number; base: string }
+        const usadas = Number(previas.unidades)
+        if (usadas + unidades > cantidad) {
+            throw new ReglaNegocio(
+                `La línea ${linea.id} de la compra ${linea.compra_id} tiene ${cantidad} unidad(es) y ya se entregaron ${usadas}: quedan ${cantidad - usadas}`,
                 'compra_ya_entregada',
             )
         }
+        // la parte de esta entrega: base × (usadas + unidades) / cantidad menos lo ya tomado; la
+        // última lleva el resto y la suma de las entregas es la base exacta
         const base = dec(linea.base)
-        // la línea ya fue gasto de premios en la compra: solo el ISR; si no, 5.1.03 / su cuenta por la base
-        if (linea.codigo !== CUENTAS_GT.PREMIOS_PROMOCIONES) {
+        const parte = redondear(base.times(usadas + unidades).dividedBy(cantidad)).minus(dec(previas.base))
+        // la línea ya fue gasto de premios en la compra: solo el ISR; si no, 5.1.03 / su cuenta por su parte
+        if (linea.codigo !== CUENTAS_GT.PREMIOS_PROMOCIONES && parte.gt(0)) {
             movimientos.push(
-                { cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(base) },
-                { cuenta: linea.codigo, haber: aTexto(base) },
+                { cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(parte) },
+                { cuenta: linea.codigo, haber: aTexto(parte) },
             )
         }
         if (isr.gt(0)) movimientos.push({ cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(isr) })
         isrMovimiento()
-        return { contrapartida: `compra ${linea.compra_id}`, compra_linea_id: Number(linea.id) }
+        return {
+            contrapartida: `compra ${linea.compra_id}`,
+            compra_linea_id: Number(linea.id),
+            compra_unidades: unidades,
+            compra_base: aTexto(parte),
+        }
     }
     if (input.contrapartida === 'proveedor') {
         // decisión del líder (19 oct): 2.1.03 solo se mueve con una compra (fase 5, CxP = compras)

@@ -476,6 +476,9 @@ export interface GanadorVista {
     canje_id: number | null
     /** decisión del PM: la línea de la compra (con factura) del bien entregado */
     compra_linea_id: number | null
+    /** unidades de la línea que consumió esta entrega y la parte de la base que le tocó */
+    compra_unidades: number | null
+    compra_base: string | null
     entregado_en: Date | null
     /**
      * El premio que le toca: el de su puesto (titular) o, si es un suplente que tomó el premio de un
@@ -515,6 +518,8 @@ export async function ganadoresDe(
             'g.egreso_id',
             'g.canje_id',
             'g.compra_linea_id',
+            'g.compra_unidades',
+            'g.compra_base',
             'g.entregado_en',
             'g.premio_sustitucion',
             'g.sustituye_a',
@@ -539,6 +544,7 @@ export async function ganadoresDe(
         premio_sustitucion: n(f.premio_sustitucion),
         sustituye_a: n(f.sustituye_a),
         constancia_archivo_id: n(f.constancia_archivo_id),
+        compra_unidades: n(f.compra_unidades),
         version: Number(f.version),
     }))
 }

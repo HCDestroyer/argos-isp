@@ -47,18 +47,26 @@ export const Proveedor = definirEsquema(
 
 const LineaCompra = definirEsquema(
     'LineaCompra',
-    objeto({
-        id,
-        descripcion: texto,
-        tipo: enumerado(TIPOS_LINEA_COMPRA),
-        cuenta_id: id,
-        cuenta_codigo: texto,
-        exento: booleano,
-        base: Dinero,
-        iva: Dinero,
-        clase_activo: nulable(texto),
-        diferir_meses: nulable(entero),
-    }),
+    objeto(
+        {
+            id,
+            descripcion: texto,
+            tipo: enumerado(TIPOS_LINEA_COMPRA),
+            cuenta_id: id,
+            cuenta_codigo: texto,
+            exento: booleano,
+            base: Dinero,
+            iva: Dinero,
+            clase_activo: nulable(texto),
+            diferir_meses: nulable(entero),
+            cantidad: {
+                ...entero,
+                description:
+                    'Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad',
+            },
+        },
+        ['cantidad'],
+    ),
 )
 
 const RetencionCompra = definirEsquema(
