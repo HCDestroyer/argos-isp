@@ -293,6 +293,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     programa_lealtad: { etiqueta: 'Programa de lealtad' },
     regla_lealtad: { etiqueta: 'Regla de lealtad' },
     referido_lealtad: { etiqueta: 'Referido' },
+    // Mejora de plan temporal (A1, `core.servicios_planes_temporales`): se ve en la ficha del servicio.
+    plan_temporal: { etiqueta: 'Plan temporal' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

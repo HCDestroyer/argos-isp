@@ -38,6 +38,9 @@ const pestanas = computed<TabsItem[]>(() => {
     if (puede('clientes.estado_cuenta')) {
         lista.push({ label: 'Estado de cuenta', value: 'cuenta', icon: 'i-lucide-wallet' })
     }
+    if (puede('lealtad.ver')) {
+        lista.push({ label: 'Puntos', value: 'puntos', icon: 'i-lucide-gem' })
+    }
     if (puede('bitacora.ver')) {
         lista.push({ label: 'Línea de tiempo', value: 'linea', icon: 'i-lucide-history' })
     }
@@ -387,6 +390,12 @@ onMounted(cargar)
                 v-else-if="pestana === 'cuenta'"
                 :cliente-id="cliente.id"
                 :servicios="servicios"
+            />
+
+            <ClientePuntos
+                v-else-if="pestana === 'puntos'"
+                :cliente-id="cliente.id"
+                :cliente-nombre="cliente.nombre"
             />
 
             <LineaTiempoBitacora
