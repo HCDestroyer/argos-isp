@@ -1,5 +1,6 @@
 # Proxy de un NODO PORTAL de ArgosIsp (docker-compose.nodo-portal.yml). Contrato con la API central:
-# .claude/integration/contratos/nodo-portal.md.
+# .claude/integration/contratos/nodo-portal.md (1.0.0): X-Argos-Nodo-Token, X-Argos-Cliente-Ip y
+# X-Argos-Cliente-Proto. Un token inválido o revocado da 401 nodo_portal_invalido en el central.
 #
 # - DOMINIO_PORTAL por HTTPS (Let's Encrypt) y el 80 con cualquier Host para /corte, como el
 #   principal (config/Caddyfile).
@@ -12,7 +13,10 @@
 {
 	{$PROXY_TLS_GLOBAL}
 	auto_https disable_redirects
-	servers {
+	# Confianza solo en el reenvío interno: en :80/:443 un cliente que entra por docker-proxy llega
+	# con la IP de la puerta de enlace de la red (dentro de RED_INTERNA_V4) y no debe poder fijar
+	# X-Forwarded-For.
+	servers :8081 {
 		trusted_proxies static {$RED_INTERNA_V4} {$RED_INTERNA_V6}
 		trusted_proxies_strict
 		client_ip_headers X-Forwarded-For
@@ -30,6 +34,8 @@
 		header_up Host {$NODO_CENTRAL_HOST}
 		header_up X-Argos-Nodo-Token {$NODO_PORTAL_TOKEN}
 		header_up X-Argos-Cliente-Ip {client_ip}
+		# https o http: cómo llegó el navegador al nodo (lo pone el sitio de borde y Nitro lo reenvía)
+		header_up X-Argos-Cliente-Proto {http.request.header.X-Forwarded-Proto}
 		transport http {
 			tls
 			tls_server_name {$NODO_CENTRAL_HOST}

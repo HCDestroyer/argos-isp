@@ -31,6 +31,9 @@ services:
       NUXT_API_BASE_INTERNAL: ${PORTAL_API_URL_INTERNA:-http://proxy:8081}
       NUXT_PORTAL_URL_PUBLICA: ${PORTAL_URL_PUBLICA:-https://${DOMINIO_PORTAL:?Falta DOMINIO_PORTAL en .env}}
       NUXT_PORTAL_HOSTS: ${PORTAL_HOSTS:-${DOMINIO_PORTAL}}
+      # El Caddy del nodo (red interna) es de confianza: Nitro reenvía su X-Forwarded-Proto y el
+      # :8081 lo manda al central como X-Argos-Cliente-Proto (cookie Secure; contrato nodo-portal §5)
+      NUXT_PORTAL_PROXIES_CONFIABLES: ${COMPOSE_SUBNET_V4:-172.31.0.0/24},${COMPOSE_SUBNET_V6:-fd00:a6:31::/64}
     healthcheck:
       <<: *node-healthcheck
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/',{redirect:'manual'}).then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))"]

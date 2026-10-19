@@ -18,7 +18,9 @@
 # que `argosisp revertir` vuelve a la versión y a los datos de antes de la última actualización.
 # En cada versión, que las peticiones del portal (/api/v1/portal/*) las sirve api-portal y no api.
 # Al final, un nodo portal (`instalar.sh --rol portal`) como segundo proyecto de compose en el mismo
-# runner, contra este central: solo portal y proxy, y sus peticiones llegan a api-portal del central.
+# runner, contra este central, con un token real (`argosisp nodo-portal crear`): solo portal y
+# proxy, instala la versión del central y sus peticiones llegan a api-portal; un token revocado da
+# 401 en GET /api/v1/version.
 set -Eeuo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -240,30 +242,39 @@ probar_api_portal
 
 # ---------------------------------------------------------------------------
 paso "nodo portal: instalar.sh --rol portal contra este central (segundo proyecto, puertos 8080/8443)"
-if ! token="$(cli nodo-portal crear ci-nodo --solo-token 2> /dev/null)"; then
-    # Pendiente de A5 (contratos/nodo-portal.md): sin el endpoint, un token de relleno; el central
-    # todavía no lo valida y la petición llega igual a api-portal.
-    echo "::warning::la API todavía no tiene /api/v1/internal/nodos-portal (A5): token de relleno"
-    token="ci-relleno-$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-fi
+token="$(cli nodo-portal crear ci-nodo --solo-token)" || fallar "argosisp nodo-portal crear"
+[[ "$token" =~ ^argn_[A-Za-z0-9]{43}$ ]] || fallar "el token del nodo no tiene el formato del contrato"
+# Token válido: GET /api/v1/version sin sesión (contrato nodo-portal §3)
+[ "$(api "https://api.$DOMINIO/api/v1/version" -H "X-Argos-Nodo-Token: $token" | jq -r .version)" = "$V1" ] ||
+    fallar "GET /api/v1/version con el token del nodo no dio $V1"
+# Token revocado: 401 nodo_portal_invalido
+revocado="$(cli nodo-portal crear ci-revocado --solo-token)" || fallar "argosisp nodo-portal crear (revocado)"
+cli nodo-portal revocar ci-revocado --si
+cuerpo="$(api -w '\n%{http_code}' "https://api.$DOMINIO/api/v1/version" -H "X-Argos-Nodo-Token: $revocado")"
+[ "${cuerpo##*$'\n'}" = 401 ] || fallar "un token revocado respondió ${cuerpo##*$'\n'} en /api/v1/version (se esperaba 401)"
+[ "$(jq -r .type <<< "${cuerpo%$'\n'*}")" = urn:argosisp:problema:nodo_portal_invalido ] ||
+    fallar "el 401 del token revocado no es nodo_portal_invalido"
+cli nodo-portal listar | grep -q '^ci-revocado' || fallar "argosisp nodo-portal listar no muestra ci-revocado"
+echo "    token válido 200 y revocado 401 en /api/v1/version"
 puerta="$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}')"
 sudo env ARGOSISP_FUENTE="$FUENTE" ARGOSISP_SIN_DESCARGA=1 ARGOSISP_TLS=interno \
     ARGOSISP_ESPERA_S="${ARGOSISP_ESPERA_S:-420}" ARGOSISP_REGISTRO="$REG" \
     ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443 ARGOSISP_DOMINIO_PORTAL="nodo.$DOMINIO" \
     ARGOSISP_NODO_CENTRAL_DIRECCION="$puerta:443" ARGOSISP_NODO_CENTRAL_TLS=inseguro \
     bash "$FUENTE/instalar.sh" --rol portal --central "https://api.$DOMINIO" --token "$token" \
-    --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR_NODO" --version "$V1" --si
+    --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR_NODO" --si
+[ "$(cli_nodo version)" = "$V1" ] || fallar "el nodo no instaló la versión del central ($V1)"
 [ "$(sudo stat -c %a "$DIR_NODO/.env")" = 600 ] || fallar "el .env del nodo no tiene permisos 600"
 servicios="$(cli_nodo compose ps --status running --services | sort | tr '\n' ' ')"
 [ "$servicios" = "portal proxy " ] || fallar "el nodo portal corre '$servicios' (se esperaba solo portal y proxy)"
 rid="ci-nodo-$RANDOM$RANDOM"
 codigo="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: nodo.$DOMINIO" -H "X-Request-Id: $rid" \
     http://127.0.0.1:8080/api/v1/portal/empresa)"
-[ "$codigo" -lt 500 ] || fallar "GET /api/v1/portal/empresa por el nodo respondió $codigo"
+[ "$codigo" -lt 400 ] || fallar "GET /api/v1/portal/empresa por el nodo respondió $codigo"
 servida_por_api_portal "$rid"
 echo "    el nodo llega a api-portal del central por HTTPS"
 cli_nodo estado > /dev/null
-# Nunca más nuevo que el central (o, sin la versión del central, no se actualiza a ciegas)
+# Nunca más nuevo que el central
 if cli_nodo actualizar --version "$V2" --si; then fallar "el nodo se actualizó a $V2 con el central en $V1"; fi
 [ "$(cli_nodo version)" = "$V1" ] || fallar "el nodo dejó de estar en $V1"
 
