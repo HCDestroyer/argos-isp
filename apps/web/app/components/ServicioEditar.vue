@@ -19,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const { puede } = usePermisos()
+const toast = useToast()
 const formulario = useTemplateRef('formulario')
 const estado = reactive<EntradaEdicionServicio>(entradaEdicionDesde(props.servicio))
 const enviando = ref(false)
@@ -95,6 +96,8 @@ async function enviar(evento: FormSubmitEvent<SalidaEdicionServicio>) {
     if (resultado.ok) {
         abierto.value = false
         emit('guardado', resultado.data)
+        // Tipo de plan (A1): advertencias que no bloquean, ya guardado.
+        avisarAdvertencias(toast, resultado.data.warnings, 'Servicio guardado con advertencias')
         return
     }
     const errores = erroresDeFormulario(resultado.problema)

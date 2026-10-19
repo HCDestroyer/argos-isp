@@ -135,7 +135,18 @@
     "vinculaciones.revocar",
     "lealtad.ver",
     "lealtad.configurar",
-    "lealtad.ajustar"
+    "lealtad.ajustar",
+    "servicios.agregar_adicional",
+    "servicios.editar_adicional",
+    "servicios.quitar_adicional",
+    "servicios.adicional_cortesia",
+    "servicios.ver_credencial_adicional",
+    "adicionales.ver",
+    "adicionales.crear",
+    "adicionales.editar",
+    "adicionales.desactivar",
+    "adicionales.crear_motivo",
+    "adicionales.desactivar_motivo"
   ],
   "alcance_global": true,
   "empresas": [
