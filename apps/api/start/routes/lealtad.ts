@@ -16,7 +16,10 @@ import {
     REQUISITOS_SORTEO,
     basesPublicas,
     detalleSorteo,
+    imagenPremio,
+    imagenPremioDelPortal,
     listarSorteos,
+    reporteParticipantes,
     sorteosDelPortal,
     verSorteo,
     verificacionSorteo,
@@ -60,7 +63,25 @@ import {
     RequisitoSorteo,
     SorteoDetalle,
     VerificacionSorteo,
+    ArchivoSorteo,
+    ReporteParticipantesSorteo,
 } from '#lealtad/esquemas'
+import CambiarAvisoPortalSorteo from '#lealtad/actions/cambiar_aviso_portal_sorteo'
+import SubirArchivoSorteo from '#lealtad/actions/subir_archivo_sorteo'
+import SubirImagenPremioSorteo from '#lealtad/actions/subir_imagen_premio_sorteo'
+import NotificarGanadoresSorteo from '#lealtad/actions/notificar_ganadores_sorteo'
+import MarcarNoReclamadoSorteo from '#lealtad/actions/marcar_no_reclamado_sorteo'
+import CerrarActaSorteo from '#lealtad/actions/cerrar_acta_sorteo'
+import {
+    TAMANO_MAXIMO_EVIDENCIA,
+    TAMANO_MAXIMO_IMAGEN,
+    contenidoArchivo,
+    verArchivo,
+} from '#lealtad/sorteos_archivos'
+import { exportar, TIPOS_CONTENIDO } from '#billing/reportes/exportar'
+import { readFile } from 'node:fs/promises'
+import { etagCoincide, sinCambios } from '#shared/rutas'
+import { ValidacionFallida } from '#shared/errores'
 import { listarProgramas, programaDeEmpresa } from '#lealtad/programas'
 import { listarReglas, verRegla } from '#lealtad/reglas'
 import { listarMovimientos, puntosDelCliente } from '#lealtad/puntos'
@@ -456,6 +477,47 @@ async function sorteoDeLaPeticion(ctx: HttpContext, id: number) {
     return sorteo
 }
 
+/** Archivo `campo` del multipart: 422 si falta, si son varios o si pasa de `maximo` bytes (antes de leerlo). */
+async function archivoDeLaPeticion(ctx: HttpContext, campo: string, maximo: number) {
+    const archivos = ctx.request.files(campo)
+    if (archivos.length !== 1 || !archivos[0]?.tmpPath) {
+        throw new ValidacionFallida([{ field: campo, rule: 'required', message: 'Adjunta un archivo' }])
+    }
+    const archivo = archivos[0]
+    const ruta = archivo.tmpPath!
+    if (archivo.size > maximo) {
+        throw new ValidacionFallida([
+            {
+                field: campo,
+                rule: 'tamano',
+                message: `El archivo pesa ${Math.ceil(archivo.size / 1024)} KB; el máximo es ${maximo / 1024} KB`,
+            },
+        ])
+    }
+    return { nombre: archivo.clientName ?? campo, contenido: await readFile(ruta) }
+}
+
+/** Responde un archivo del sorteo (huella verificada) con su tipo y ETag = su SHA-256. */
+async function enviarArchivo(
+    ctx: HttpContext,
+    sorteoId: number,
+    archivoId: number,
+    disposicion: 'inline' | 'attachment',
+) {
+    const archivo = await verArchivo(sorteoId, archivoId)
+    ctx.response.header('ETag', `"${archivo.sha256}"`)
+    ctx.response.header('X-Content-Type-Options', 'nosniff')
+    if (etagCoincide(ctx, archivo.sha256)) return sinCambios()
+    const { contenido } = await contenidoArchivo(sorteoId, archivoId)
+    ctx.response.header('Content-Type', archivo.tipo)
+    ctx.response.header(
+        'Content-Disposition',
+        `${disposicion}; filename="${archivo.nombre.replaceAll('"', '')}"`,
+    )
+    ctx.response.send(contenido)
+    return undefined
+}
+
 const ERRORES_SORTEO =
     ' 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.'
 
@@ -653,6 +715,189 @@ const sorteos: Ruta[] = [
             ),
     }),
     definirRuta({
+        metodo: 'put',
+        ruta: '/lealtad/sorteos/:id/aviso-portal',
+        operacion: 'lealtadAvisoPortalSorteo',
+        resumen: 'Anunciar (o no) el sorteo en el portal del cliente',
+        descripcion:
+            'Pedido del PM: false por defecto; editable hasta antes de ejecutar (después, 409), con version y audit.cambios. El portal solo lista los sorteos con aviso_portal.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.gestionar',
+        cuerpo: v.avisoPortalSorteoValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new CambiarAvisoPortalSorteo().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/archivos',
+        operacion: 'lealtadSubirArchivoSorteo',
+        resumen: 'Subir una evidencia del checklist o la constancia de una entrega',
+        descripcion:
+            'multipart/form-data con `archivo` (PDF, JPEG, PNG o WebP según su contenido, hasta 5 MB) y `uso` (evidencia o constancia). Solo inserción, con su SHA-256. Luego se cita en POST .../requisitos/:clave (archivo_id) o en la entrega (constancia_archivo_id). 422 en `archivo`.',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.marcar_requisito',
+        cuerpo: v.subirArchivoSorteoValidator,
+        multipart: { archivos: { archivo: 'PDF, JPEG, PNG o WebP, hasta 5 MB' } },
+        respuesta: { status: 201, descripcion: 'Archivo', esquema: ArchivoSorteo },
+        handler: async (ctx, { cuerpo, params }) => {
+            const sorteo = await sorteoDeLaPeticion(ctx, Number(params.id))
+            const { nombre, contenido } = await archivoDeLaPeticion(ctx, 'archivo', TAMANO_MAXIMO_EVIDENCIA)
+            return new SubirArchivoSorteo().execute(
+                { sorteo_id: sorteo.id, uso: cuerpo.uso, nombre, contenido },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos/:id/archivos/:archivoId',
+        operacion: 'lealtadArchivoSorteo',
+        resumen: 'Descargar un archivo del sorteo (evidencia, constancia, imagen o acta)',
+        descripcion:
+            'Con su tipo y ETag (SHA-256). 404 si no es del sorteo o si el archivo en disco ya no coincide con su huella.',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.ver',
+        respuesta: { status: 200, descripcion: 'Archivo', contenido: 'application/octet-stream', etag: true },
+        handler: async (ctx, { params }) => {
+            const sorteo = await sorteoDeLaPeticion(ctx, Number(params.id))
+            return enviarArchivo(ctx, sorteo.id, Number(params.archivoId), 'attachment')
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/premios/:posicion/imagen',
+        operacion: 'lealtadImagenPremioSorteo',
+        resumen: 'Subir la imagen de un premio (solo en borrador)',
+        descripcion:
+            'multipart/form-data con `imagen`: PNG, JPEG o WebP según su contenido, hasta 1 MB y de 64 a 4096 px por lado (como las imágenes de los anuncios). El portal no carga URLs externas: la imagen se sirve por el mismo origen.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.gestionar',
+        cuerpo: v.imagenPremioSorteoValidator,
+        multipart: { archivos: { imagen: 'PNG, JPEG o WebP, hasta 1 MB' } },
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: async (ctx, { params }) => {
+            const sorteo = await sorteoDeLaPeticion(ctx, Number(params.id))
+            const { nombre, contenido } = await archivoDeLaPeticion(ctx, 'imagen', TAMANO_MAXIMO_IMAGEN)
+            return new SubirImagenPremioSorteo().execute(
+                { sorteo_id: sorteo.id, posicion: Number(params.posicion), nombre, contenido },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos/:id/premios/:posicion/imagen',
+        operacion: 'lealtadVerImagenPremioSorteo',
+        resumen: 'Imagen de un premio (panel)',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.ver',
+        respuesta: { status: 200, descripcion: 'Imagen', contenido: 'image/*', etag: true },
+        handler: async (ctx, { params }) => {
+            await sorteoDeLaPeticion(ctx, Number(params.id))
+            const { sorteo, archivoId } = await imagenPremio(Number(params.id), Number(params.posicion))
+            ctx.response.header('Cache-Control', 'private, max-age=300')
+            return enviarArchivo(ctx, sorteo.id, archivoId, 'inline')
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/notificar-ganadores',
+        operacion: 'lealtadNotificarGanadoresSorteo',
+        resumen: 'Notificar a los ganadores (evento a notify) con su plazo de reclamo',
+        descripcion:
+            'ejecutado o acta_cerrada. Cada ganador con premio que sigue por_notificar pasa a notificado con reclamar_antes = ahora + bases.plazo_reclamo_dias, y sale un sorteo.ganador_notificado por ganador (notify avisa al cliente). Idempotente.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.entregar',
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { params }) =>
+            new NotificarGanadoresSorteo().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/ganadores/:ganadorId/no-reclamado',
+        operacion: 'lealtadNoReclamadoSorteo',
+        resumen: 'Dar por no reclamado un premio: pasa al siguiente suplente',
+        descripcion:
+            'Vencido el plazo de reclamo (422 plazo_reclamo_vigente antes; 422 ganador_no_notificado si no se notificó). El premio pasa al siguiente suplente en espera, que se notifica; el ganador queda sustituido (o no_reclamado si no quedan suplentes). Evento sorteo.premio_no_reclamado.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.entregar',
+        cuerpo: v.motivoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new MarcarNoReclamadoSorteo().execute(
+                { motivo: cuerpo.motivo, sorteo_id: Number(params.id), ganador_id: Number(params.ganadorId) },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/cerrar-acta',
+        operacion: 'lealtadCerrarActaSorteo',
+        resumen: 'Cerrar el acta del sorteo (PDF con su SHA-256)',
+        descripcion:
+            'ejecutado → acta_cerrada. Exige publicacion_resultados (422 requisito_pendiente) y la constancia. Genera el PDF una sola vez (resolución, checklist, hashes, semilla, valor público con su fuente y evidencia, algoritmo, ganadores con seudónimo y nombre, asistentes, constancia y publicación) y guarda su SHA-256 en acta_hash. Sin premios pendientes, pasa a premios_entregados. Evento sorteo.acta_cerrada.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.ejecutar',
+        cuerpo: v.cerrarActaSorteoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new CerrarActaSorteo().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos/:id/acta',
+        operacion: 'lealtadActaSorteo',
+        resumen: 'PDF del acta del sorteo',
+        descripcion: 'application/pdf con ETag = acta_hash. 404 si el acta aún no se cerró.',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.ver',
+        respuesta: { status: 200, descripcion: 'PDF', contenido: 'application/pdf', etag: true },
+        handler: async (ctx, { params }) => {
+            const sorteo = await sorteoDeLaPeticion(ctx, Number(params.id))
+            if (!sorteo.acta_archivo_id) throw new NoEncontrado(`El sorteo ${sorteo.id} aún no cerró su acta`)
+            return enviarArchivo(ctx, sorteo.id, sorteo.acta_archivo_id, 'inline')
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos/:id/participantes',
+        operacion: 'lealtadParticipantesSorteo',
+        resumen: 'Lista de participantes del corte (JSON, CSV o XLSX)',
+        descripcion:
+            'Desde el corte (409 antes). Orden canónico por codigo_publico con boletos y cliente; al pie, lista_hash (SHA-256 de las líneas codigo|boletos). Con formato=csv o xlsx responde el archivo.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.exportar',
+        query: v.participantesSorteoValidator,
+        respuesta: { status: 200, descripcion: 'Participantes', esquema: ReporteParticipantesSorteo },
+        handler: async (ctx, { params, query }) => {
+            const sorteo = await sorteoDeLaPeticion(ctx, Number(params.id))
+            const reporte = await reporteParticipantes(sorteo.id)
+            if (!query.formato || query.formato === 'json') return reporte
+            ctx.response.header('Content-Type', TIPOS_CONTENIDO[query.formato])
+            ctx.response.header(
+                'Content-Disposition',
+                `attachment; filename="participantes-sorteo-${sorteo.id}.${query.formato}"`,
+            )
+            ctx.response.header('Cache-Control', 'private, no-store')
+            ctx.response.send(exportar(reporte, query.formato))
+            return undefined
+        },
+    }),
+    definirRuta({
         metodo: 'get',
         ruta: '/lealtad/sorteos/:id/bases',
         operacion: 'lealtadBasesSorteo',
@@ -695,6 +940,29 @@ const sorteos: Ruta[] = [
             const ip = await ipOrigenDelCliente(ctx)
             if (ip) await limitarPorIp(ctx, 'sorteos', ip)
             return sorteosDelPortal(await clienteDeLaSesion(ctx))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/sorteos/:id/premios/:posicion/imagen',
+        operacion: 'portalImagenPremioSorteo',
+        resumen: 'Imagen de un premio de un sorteo anunciado en el portal',
+        descripcion:
+            'Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.',
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'Imagen', contenido: 'image/*', etag: true },
+        handler: async (ctx, { params }) => {
+            const clienteId = await clienteDeLaSesion(ctx)
+            const { sorteo, archivoId } = await imagenPremioDelPortal(
+                clienteId,
+                Number(params.id),
+                Number(params.posicion),
+            )
+            ctx.response.header('Cache-Control', 'private, max-age=300')
+            return enviarArchivo(ctx, sorteo.id, archivoId, 'inline')
         },
     }),
 ]

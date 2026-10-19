@@ -89,6 +89,8 @@ export const INMUTABLES: Record<string, string> = {
     'lealtad.sorteos_participantes':
         'foto del corte con seudónimo y boletos; base de lista_hash (lealtad §7.3)',
     'lealtad.sorteos_requisitos': 'marca del checklist legal; vale la última por clave (lealtad §8)',
+    'lealtad.sorteos_archivos':
+        'evidencias, imágenes de premios, acta y constancias con su SHA-256; el archivo vive en disco (lealtad §15.4)',
 }
 
 /** Solo cambian una vez: al cerrarse. Un trigger rechaza UPDATE/DELETE de la fila ya cerrada. */

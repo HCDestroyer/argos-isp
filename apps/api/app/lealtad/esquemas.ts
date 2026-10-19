@@ -20,7 +20,14 @@ import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
 import { CANALES_CANJE, ESTADOS_CANJE } from '#lealtad/canjes'
 import { ORIGENES_MOVIMIENTO, TIPOS_MOVIMIENTO } from '#lealtad/puntos'
 import { PERIODOS_TOPE, RECOMPENSAS, TIPOS_REGLA } from '#lealtad/reglas'
-import { ESTADOS_REQUISITO, ESTADOS_SORTEO, REQUISITOS_SORTEO, TIPOS_PREMIO_SORTEO } from '#lealtad/sorteos'
+import {
+    COLUMNAS_PARTICIPANTES,
+    ESTADOS_REQUISITO,
+    ESTADOS_SORTEO,
+    REQUISITOS_SORTEO,
+    TIPOS_PREMIO_SORTEO,
+} from '#lealtad/sorteos'
+import { esquemaReporte } from '#billing/reportes/definicion'
 
 /**
  * Schemas de respuesta del programa de lealtad (`contratos/lealtad.md` §11). Estrictos: todo lo
@@ -303,18 +310,26 @@ export const PaginaCanjesLealtad = definirEsquema('PaginaCanjesLealtad', pagina(
 | Sorteos (fase 3, §7 y §8)
 */
 
-const PremioSorteo = objeto({
-    id,
-    posicion: entero,
-    nombre: texto,
-    cantidad: entero,
-    imagen_url: nulable(texto),
-    valor: { ...Dinero, description: 'Valor de libre competencia' },
-    tipo: enumerado(TIPOS_PREMIO_SORTEO),
-    premio_id: { ...nulable(id), description: 'Solo servicio: premio del catálogo que se entrega' },
-    retiene_isr: booleano,
-    isr_pct: { type: 'string', description: 'Porcentaje del ISR del premio' },
-})
+const PremioSorteo = objeto(
+    {
+        id,
+        posicion: entero,
+        nombre: texto,
+        cantidad: entero,
+        imagen_url: nulable(texto),
+        valor: { ...Dinero, description: 'Valor de libre competencia' },
+        tipo: enumerado(TIPOS_PREMIO_SORTEO),
+        premio_id: { ...nulable(id), description: 'Solo servicio: premio del catálogo que se entrega' },
+        retiene_isr: booleano,
+        isr_pct: { type: 'string', description: 'Porcentaje del ISR del premio' },
+        imagen_archivo_id: {
+            ...nulable(id),
+            description:
+                'Imagen subida (POST /lealtad/sorteos/:id/premios/:posicion/imagen); imagen_url es su ruta',
+        },
+    },
+    ['imagen_archivo_id'],
+)
 
 const camposSorteo = {
     id,
@@ -351,24 +366,67 @@ const camposSorteo = {
     ejecutado_en: nulable(instante),
     cancelado_en: nulable(instante),
     premios: lista(PremioSorteo),
+    aviso_portal: {
+        ...booleano,
+        description:
+            'Se anuncia en el portal (PUT /lealtad/sorteos/:id/aviso-portal; hasta antes de ejecutar)',
+    },
+    acta_hash: {
+        ...nulable(texto),
+        description: 'SHA-256 del PDF del acta (GET /lealtad/sorteos/:id/acta.pdf)',
+    },
+    acta_archivo_id: nulable(id),
+    acta_constancia: nulable(texto),
+    acta_cerrada_en: nulable(instante),
     ...auditable,
 }
 
-export const SorteoLealtad = definirEsquema(
-    'SorteoLealtad',
-    objeto(camposSorteo, ['valor_publico_evidencia']),
-)
+/** campos de la segunda PR: opcionales en el esquema hasta que los fixtures del panel los tengan */
+const AGREGADOS_SORTEO = [
+    'valor_publico_evidencia',
+    'aviso_portal',
+    'acta_hash',
+    'acta_archivo_id',
+    'acta_constancia',
+    'acta_cerrada_en',
+]
+
+export const SorteoLealtad = definirEsquema('SorteoLealtad', objeto(camposSorteo, AGREGADOS_SORTEO))
 export const PaginaSorteosLealtad = definirEsquema('PaginaSorteosLealtad', pagina(SorteoLealtad))
 
 export const RequisitoSorteo = definirEsquema(
     'RequisitoSorteo',
+    objeto(
+        {
+            clave: enumerado(REQUISITOS_SORTEO),
+            estado: enumerado(ESTADOS_REQUISITO),
+            valor: nulable(texto),
+            evidencia: nulable(texto),
+            archivo_id: {
+                ...nulable(id),
+                description: 'Evidencia como archivo (GET .../archivos/:archivoId)',
+            },
+            nota: nulable(texto),
+            marcado_en: nulable(instante),
+        },
+        ['archivo_id'],
+    ),
+)
+
+export const ArchivoSorteo = definirEsquema(
+    'ArchivoSorteo',
     objeto({
-        clave: enumerado(REQUISITOS_SORTEO),
-        estado: enumerado(ESTADOS_REQUISITO),
-        valor: nulable(texto),
-        evidencia: nulable(texto),
-        nota: nulable(texto),
-        marcado_en: nulable(instante),
+        id,
+        sorteo_id: id,
+        empresa_id: id,
+        uso: enumerado(['evidencia', 'imagen_premio', 'acta', 'constancia']),
+        nombre: texto,
+        tipo: enumerado(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']),
+        tamano: entero,
+        sha256: texto,
+        ancho: nulable(entero),
+        alto: nulable(entero),
+        created_at: instante,
     }),
 )
 
@@ -389,9 +447,37 @@ const GanadorSorteo = objeto(
         canje_id: nulable(id),
         entregado_en: nulable(instante),
         compra_linea_id: { ...nulable(id), description: 'Línea de la compra con factura del bien entregado' },
+        premio: {
+            ...nulable(entero),
+            description:
+                'Premio que le toca: el de su puesto o, un suplente que tomó uno no reclamado, premio_sustitucion',
+        },
+        premio_sustitucion: nulable(entero),
+        sustituye_a: { ...nulable(id), description: 'Ganador cuyo premio no reclamado toma este suplente' },
+        notificado_en: nulable(instante),
+        reclamar_antes: nulable(instante),
+        no_reclamado_en: nulable(instante),
+        constancia_archivo_id: nulable(id),
+        compra_unidades: { ...nulable(entero), description: 'Unidades de esa línea que consumió la entrega' },
+        compra_base: {
+            ...nulable(Dinero),
+            description:
+                'Parte de la base de la línea que le tocó (base / cantidad por unidad; la última lleva el resto)',
+        },
         version: entero,
     },
-    ['compra_linea_id'],
+    [
+        'compra_linea_id',
+        'premio',
+        'premio_sustitucion',
+        'sustituye_a',
+        'notificado_en',
+        'reclamar_antes',
+        'no_reclamado_en',
+        'constancia_archivo_id',
+        'compra_unidades',
+        'compra_base',
+    ],
 )
 
 export const SorteoDetalle = definirEsquema(
@@ -403,8 +489,9 @@ export const SorteoDetalle = definirEsquema(
             participantes: entero,
             boletos: entero,
             ganadores: lista(GanadorSorteo),
+            archivos: lista(ArchivoSorteo),
         },
-        ['valor_publico_evidencia'],
+        [...AGREGADOS_SORTEO, 'archivos'],
     ),
 )
 
@@ -414,6 +501,8 @@ const ElegidoPublico = objeto({
     codigo: { ...texto, description: 'Seudónimo del participante' },
     premio_posicion: nulable(entero),
 })
+
+export const ReporteParticipantesSorteo = esquemaReporte('ReporteParticipantesSorteo', COLUMNAS_PARTICIPANTES)
 
 export const VerificacionSorteo = definirEsquema(
     'VerificacionSorteo',
@@ -430,6 +519,7 @@ export const VerificacionSorteo = definirEsquema(
             description: 'Fuente pública del valor declarada en las bases (congelada con bases_hash)',
         },
         valor_publico_evidencia: nulable(texto),
+        acta_hash: { ...nulable(texto), description: 'SHA-256 del acta, cuando ya se cerró' },
         lista_hash: texto,
         lista: lista(objeto({ codigo: texto, boletos: entero })),
         titulares: entero,

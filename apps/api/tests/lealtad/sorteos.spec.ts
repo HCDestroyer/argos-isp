@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import db from '@adonisjs/lucid/services/db'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
-import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import {
     errorDe,
     lineas,
@@ -29,8 +29,13 @@ import AbrirSorteo from '#lealtad/actions/abrir_sorteo'
 import CerrarCorteSorteo from '#lealtad/actions/cerrar_corte_sorteo'
 import MarcarRequisitoSorteo from '#lealtad/actions/marcar_requisito_sorteo'
 import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
-import EntregarPremioSorteo from '#lealtad/actions/entregar_premio_sorteo'
+import EntregarPremioSorteo, { esCuentaDeActivoFijo } from '#lealtad/actions/entregar_premio_sorteo'
 import CancelarSorteo from '#lealtad/actions/cancelar_sorteo'
+import CerrarActaSorteo from '#lealtad/actions/cerrar_acta_sorteo'
+import CambiarAvisoPortalSorteo from '#lealtad/actions/cambiar_aviso_portal_sorteo'
+import SubirImagenPremioSorteo from '#lealtad/actions/subir_imagen_premio_sorteo'
+import NotificarGanadoresSorteo from '#lealtad/actions/notificar_ganadores_sorteo'
+import MarcarNoReclamadoSorteo from '#lealtad/actions/marcar_no_reclamado_sorteo'
 import AnularEntregaSorteo from '#lealtad/actions/anular_entrega_sorteo'
 import RevertirCanje from '#lealtad/actions/revertir_canje'
 import AnularEgreso from '#ledger/actions/anular_egreso'
@@ -46,16 +51,12 @@ import { REQUISITOS_PARA_EJECUTAR, verificacionSorteo } from '#lealtad/sorteos'
  * de premios como gasto `5.1.03` (efectivo por egreso, bien ligado a su compra o contra un activo,
  * servicio como canje) con el ISR retenido a `2.1.05`.
  *
- * Pendiente del auditor (filtro temporal, se quita cuando lo actualice): `15.retenciones_por_pagar_distintas`
- * (fase 5) aún no suma el ISR de los premios a 2.1.05 (decisión del líder, opción a); el inv. 15 de sorteos
- * aún no admite el reverso de una entrega anulada (`.fails` «H-anular-entrega»).
+ * El ISR de los premios va a 2.1.05 (`15.retenciones_por_pagar_distintas`) y la entrega, su anulación y
+ * la compra del bien los revisa el inv. 16 del auditor.
  */
 
-/**
- * Temporales hasta que el auditor actualice sus invariantes: el ISR de los premios en 2.1.05 (decisión
- * del líder, opción a) y el bien ligado a su compra (decisión del PM 4, contrapartida `compra`).
- */
-const PENDIENTES_DEL_AUDITOR = ['15.retenciones_por_pagar_distintas', '15.premio_de_sorteo_mal_contabilizado']
+/** Nada pendiente del auditor: 15.retenciones suma el ISR de los premios y el inv. 16 conoce la compra. */
+const PENDIENTES_DEL_AUDITOR: string[] = []
 
 async function otrasViolaciones(empresas: number[]) {
     const violaciones = await verificarLibro(empresas)
@@ -78,8 +79,11 @@ function bases(): EntradaSorteo['bases'] {
     }
 }
 
-async function escenario(e: EmpresasGt) {
-    const { programa } = await programaConReglas(e.B, e.ctx, { diferimiento: true })
+type ProgramaPrueba = Awaited<ReturnType<typeof programaConReglas>>['programa']
+
+async function escenario(e: EmpresasGt, existente?: ProgramaPrueba) {
+    let programa = existente
+    if (!programa) ({ programa } = await programaConReglas(e.B, e.ctx, { diferimiento: true }))
     const mesGratis = await new CrearPremio().execute(
         { programa_id: programa.id, tipo: 'mes_gratis', nombre: unico('Mes gratis'), costo_puntos: 500 },
         e.ctx,
@@ -95,6 +99,7 @@ async function escenario(e: EmpresasGt) {
             fecha_sorteo: MANANA,
             lugar: 'Oficinas centrales',
             suplentes: 1,
+            aviso_portal: true,
             premios: [
                 { nombre: 'Q500 en efectivo', valor: '500.00', tipo: 'efectivo', retiene_isr: true },
                 { nombre: 'Router Wi-Fi 6', valor: '300.00', tipo: 'bien', retiene_isr: true },
@@ -128,6 +133,46 @@ async function lineaDeCompraBien(e: EmpresasGt): Promise<number> {
     )
     const linea = await db.from('ledger.compras_lineas').where('compra_id', compra.id).firstOrFail()
     return Number(linea.id)
+}
+
+/** Marca la publicación de resultados y cierra el acta. */
+async function cerrarActa(e: EmpresasGt, sorteoId: number) {
+    await new MarcarRequisitoSorteo().execute(
+        {
+            sorteo_id: sorteoId,
+            clave: 'publicacion_resultados',
+            estado: 'cumplido',
+            evidencia: 'Portal y redes',
+        },
+        e.ctx,
+    )
+    return new CerrarActaSorteo().execute(
+        { id: sorteoId, constancia: 'Firma del Lic. Pérez, notario' },
+        e.ctx,
+    )
+}
+
+/** PNG mínimo con su cabecera IHDR (ancho × alto); basta para la firma y las dimensiones. */
+function png(ancho: number, alto: number): Buffer {
+    const u32 = (n: number) => {
+        const b = Buffer.alloc(4)
+        b.writeUInt32BE(n)
+        return b
+    }
+    return Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        u32(13),
+        Buffer.from('IHDR', 'latin1'),
+        u32(ancho),
+        u32(alto),
+        Buffer.from([8, 6, 0, 0, 0]),
+        Buffer.alloc(4),
+    ])
+}
+
+async function verificacionDeEstado(id: number): Promise<number> {
+    const fila = await db.from('lealtad.sorteos').where('id', id).select('version').firstOrFail()
+    return Number(fila.version)
 }
 
 async function marcarTodo(e: EmpresasGt, sorteoId: number) {
@@ -325,6 +370,10 @@ test.group('Lealtad · sorteos', (group) => {
                 e.ctx,
             )
         }
+        // entregados con el sorteo aún sin acta: sigue ejecutado; al cerrar el acta pasa a premios_entregados
+        const sinActa = await db.from('lealtad.sorteos').where('id', sorteo.id).firstOrFail()
+        assert.equal(sinActa.estado, 'ejecutado')
+        await cerrarActa(e, sorteo.id)
         const final = await db.from('lealtad.sorteos').where('id', sorteo.id).firstOrFail()
         assert.equal(final.estado, 'premios_entregados')
         const entregados = await db
@@ -424,8 +473,8 @@ test.group('Lealtad · sorteos', (group) => {
     })
 
     /** Sorteo ejecutado con sus tres titulares (efectivo, bien, servicio). */
-    async function ejecutadoCon(e: EmpresasGt) {
-        const { sorteo } = await escenario(e)
+    async function ejecutadoCon(e: EmpresasGt, servicios = 3, programa?: ProgramaPrueba) {
+        const { sorteo } = await escenario(e, programa)
         await new EditarSorteo().execute({ id: sorteo.id, version: sorteo.version, bases: bases() }, e.ctx)
         await new PublicarBasesSorteo().execute({ id: sorteo.id }, e.ctx)
         await new MarcarRequisitoSorteo().execute(
@@ -433,7 +482,7 @@ test.group('Lealtad · sorteos', (group) => {
             e.ctx,
         )
         await new AbrirSorteo().execute({ id: sorteo.id }, e.ctx)
-        for (let i = 0; i < 3; i++) await servicioEn(e.B, { instalacion: '2026-10-01' })
+        for (let i = 0; i < servicios; i++) await servicioEn(e.B, { instalacion: '2026-10-01' })
         await new CerrarCorteSorteo().execute({ id: sorteo.id }, e.ctx)
         await marcarTodo(e, sorteo.id)
         return new EjecutarSorteo().execute(
@@ -524,6 +573,7 @@ test.group('Lealtad · sorteos', (group) => {
             .where('sorteo_id', sorteoId)
             .orderBy('posicion')
         const [efectivo, bien, servicio] = entregados
+        await cerrarActa(e, sorteoId)
         const sorteo = await db.from('lealtad.sorteos').where('id', sorteoId).firstOrFail()
         assert.equal(sorteo.estado, 'premios_entregados')
         const premios = await saldoCuenta(e.B, '5.1.03')
@@ -570,8 +620,9 @@ test.group('Lealtad · sorteos', (group) => {
                 ['por_notificar', null, null, null, null],
             ],
         )
+        // con el acta cerrada, anular una entrega reabre a acta_cerrada
         const reabierto = await db.from('lealtad.sorteos').where('id', sorteoId).firstOrFail()
-        assert.equal(reabierto.estado, 'ejecutado')
+        assert.equal(reabierto.estado, 'acta_cerrada')
         // queda solo la compra del router (300 a 5.1.03), que no se anula con la entrega
         assert.equal(await saldoCuenta(e.B, '5.1.03'), '300.00')
         assert.notEqual(premios, '0.00')
@@ -607,23 +658,10 @@ test.group('Lealtad · sorteos', (group) => {
             ),
         )
         assert.equal(otraVez.codigo, 'premio_no_entregado')
-        // el inv. 15 del auditor aún no admite el reverso de una entrega anulada (H-anular-entrega, abajo)
-        const violaciones = await verificarLibro([e.B, e.C])
-        assert.deepEqual(
-            violaciones.filter(
-                (v) =>
-                    ![
-                        '15.premio_de_sorteo_mal_contabilizado',
-                        '15.asiento_de_sorteo_sin_ganador',
-                        '15.asiento_de_sorteo_revertido',
-                        '15.retenciones_por_pagar_distintas',
-                    ].some((p) => v.invariante.startsWith(p)),
-            ),
-            [],
-        )
+        assert.deepEqual(await verificarLibro([e.B, e.C]), [])
     })
 
-    test('H-anular-entrega: anular y volver a entregar un premio deja el libro limpio para el auditor', async ({
+    test('anular y volver a entregar un premio deja el libro limpio para el auditor (antes H-anular-entrega)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -643,9 +681,7 @@ test.group('Lealtad · sorteos', (group) => {
             e.ctx,
         )
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'H-anular-entrega: el inv. 15 del auditor no admite el reverso de los asientos sorteo de una entrega anulada (sorteos.anular_entrega)',
-    )
+    })
 
     test('decisión del PM: un bien comprado con factura se liga a su compra; gasto 5.1.03 por la base sin IVA y la compra no se anula', async ({
         assert,
@@ -722,18 +758,453 @@ test.group('Lealtad · sorteos', (group) => {
         )
         const libre = await db.from('lealtad.sorteos_ganadores').where('id', bien.id).firstOrFail()
         assert.isNull(libre.compra_linea_id)
-        const violaciones = await verificarLibro([e.B, e.C])
-        assert.deepEqual(
-            violaciones.filter(
-                (v) =>
-                    ![
-                        '15.premio_de_sorteo_mal_contabilizado',
-                        '15.asiento_de_sorteo_sin_ganador',
-                        '15.asiento_de_sorteo_revertido',
-                        '15.retenciones_por_pagar_distintas',
-                    ].some((p) => v.invariante.startsWith(p)),
+        assert.deepEqual(await verificarLibro([e.B, e.C]), [])
+    })
+
+    test('segunda PR · evidencias como archivo, imagen del premio y aviso en el portal', async ({
+        assert,
+        client,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const { sorteo } = await escenario(e)
+        const { token } = await usuarioConRoles(['admin'])
+        const http = (r: ReturnType<typeof client.get>) =>
+            r.bearerToken(token).header('X-Empresa-Id', String(e.B))
+
+        // la imagen del premio se sube (no hay URL libre), solo en borrador, PNG/JPEG/WebP de 64 a 4096 px
+        const externa = await errorDe(
+            new EditarSorteo().execute(
+                {
+                    id: sorteo.id,
+                    version: sorteo.version,
+                    premios: [
+                        {
+                            nombre: 'Router',
+                            valor: '300.00',
+                            tipo: 'bien',
+                            imagen_url: 'https://x.test/a.png',
+                        },
+                    ],
+                },
+                e.ctx,
             ),
-            [],
         )
+        assert.deepEqual(externa.reglas, ['imagen_externa'])
+        const chica = await errorDe(
+            new SubirImagenPremioSorteo().execute(
+                { sorteo_id: sorteo.id, posicion: 2, nombre: 'r.png', contenido: png(10, 10) },
+                e.ctx,
+            ),
+        )
+        assert.deepEqual(chica.reglas, ['dimensiones'])
+        const subida = await estado(
+            http(client.post(`/api/v1/lealtad/sorteos/${sorteo.id}/premios/2/imagen`)).file(
+                'imagen',
+                png(640, 320),
+                {
+                    filename: 'router.png',
+                },
+            ),
+            200,
+        )
+        const premio = subida.body().premios.find((p: { posicion: number }) => p.posicion === 2)
+        assert.equal(premio.imagen_url, `/api/v1/lealtad/sorteos/${sorteo.id}/premios/2/imagen`)
+        const imagen = await estado(http(client.get(premio.imagen_url)), 200)
+        assert.equal(imagen.header('content-type'), 'image/png')
+        // editar los premios conserva la imagen de la misma posición
+        const actual = await new EditarSorteo().execute(
+            { id: sorteo.id, version: subida.body().version, bases: bases() },
+            e.ctx,
+        )
+        assert.isNotNull(actual.premios[1]!.imagen_archivo_id)
+
+        // aviso en el portal: false por defecto, editable con version hasta antes de ejecutar
+        assert.isTrue(actual.aviso_portal)
+        const sinAviso = await new CambiarAvisoPortalSorteo().execute(
+            { id: sorteo.id, version: actual.version, aviso_portal: false },
+            e.ctx,
+        )
+        assert.isFalse(sinAviso.aviso_portal)
+        const cambio = await db
+            .from('audit.cambios')
+            .where({ entidad_tipo: 'sorteo', entidad_id: sorteo.id, campo: 'aviso_portal' })
+            .first()
+        assert.exists(cambio)
+        await new PublicarBasesSorteo().execute({ id: sorteo.id }, e.ctx)
+
+        // evidencia como archivo: PDF por firma, con su SHA-256; un texto plano no
+        const pdf = Buffer.from('%PDF-1.4\n% resolución GD-2026-077\n%%EOF\n')
+        const archivo = await estado(
+            http(client.post(`/api/v1/lealtad/sorteos/${sorteo.id}/archivos`))
+                .field('uso', 'evidencia')
+                .file('archivo', pdf, { filename: 'resolucion.pdf' }),
+            201,
+        )
+        assert.include(archivo.body(), {
+            uso: 'evidencia',
+            tipo: 'application/pdf',
+            nombre: 'resolucion.pdf',
+        })
+        assert.match(archivo.body().sha256, /^[0-9a-f]{64}$/)
+        await estado(
+            http(client.post(`/api/v1/lealtad/sorteos/${sorteo.id}/archivos`))
+                .field('uso', 'evidencia')
+                .file('archivo', Buffer.from('hola'), { filename: 'x.txt' }),
+            422,
+        )
+        const requisitos = await new MarcarRequisitoSorteo().execute(
+            { sorteo_id: sorteo.id, clave: 'bases_diaco', estado: 'cumplido', archivo_id: archivo.body().id },
+            e.ctx,
+        )
+        const diaco = requisitos.find((r) => r.clave === 'bases_diaco')!
+        assert.equal(diaco.archivo_id, archivo.body().id)
+        assert.include(diaco.evidencia!, archivo.body().sha256)
+        const descarga = await estado(
+            http(client.get(`/api/v1/lealtad/sorteos/${sorteo.id}/archivos/${archivo.body().id}`)),
+            200,
+        )
+        assert.equal(descarga.header('content-type'), 'application/pdf')
+        await assert.rejects(() =>
+            db.from('lealtad.sorteos_archivos').where('id', archivo.body().id).update({ nombre: 'otro' }),
+        )
+
+        // el portal: con aviso_portal en false no se ve el sorteo ni la imagen; con true, sí
+        await new AbrirSorteo().execute({ id: sorteo.id }, e.ctx)
+        const cliente = await servicioEn(e.B, { instalacion: '2026-10-01' })
+        const { cookie } = await sesionDirecta(cliente.clienteId)
+        const oculto = await estado(client.get('/api/v1/portal/sorteos').header('Cookie', cookie), 200)
+        assert.isUndefined(oculto.body().find((x: { id: number }) => x.id === sorteo.id))
+        await estado(
+            client.get(`/api/v1/portal/sorteos/${sorteo.id}/premios/2/imagen`).header('Cookie', cookie),
+            404,
+        )
+        const vigente = await verificacionDeEstado(sorteo.id)
+        await new CambiarAvisoPortalSorteo().execute(
+            { id: sorteo.id, version: vigente, aviso_portal: true },
+            e.ctx,
+        )
+        const visible = await estado(client.get('/api/v1/portal/sorteos').header('Cookie', cookie), 200)
+        const mio = visible.body().find((x: { id: number }) => x.id === sorteo.id)
+        assert.equal(
+            mio.premios.find((p: { posicion: number }) => p.posicion === 2).imagen_url,
+            `/api/v1/portal/sorteos/${sorteo.id}/premios/2/imagen`,
+        )
+        const delPortal = await estado(
+            client.get(`/api/v1/portal/sorteos/${sorteo.id}/premios/2/imagen`).header('Cookie', cookie),
+            200,
+        )
+        assert.equal(delPortal.header('content-type'), 'image/png')
+        assert.deepEqual(await otrasViolaciones([e.B, e.C]), [])
+    })
+
+    test('segunda PR · notificación, suplentes y premios no reclamados', async ({ assert }) => {
+        const e = await prepararEmpresasGt()
+        const ejecutado = await ejecutadoCon(e, 4)
+        const titulares = ejecutado.ganadores.filter((g) => g.tipo === 'titular')
+        const suplente = ejecutado.ganadores.find((g) => g.tipo === 'suplente')!
+        // aviso_portal ya no cambia después de ejecutar
+        const tarde = await errorDe(
+            new CambiarAvisoPortalSorteo().execute(
+                { id: ejecutado.id, version: ejecutado.version, aviso_portal: false },
+                e.ctx,
+            ),
+        )
+        assert.equal(tarde.codigo, 'estado_sorteo')
+
+        const notificado = await new NotificarGanadoresSorteo().execute({ id: ejecutado.id }, e.ctx)
+        assert.deepEqual(
+            notificado.ganadores.map((g) => [g.tipo, g.estado]),
+            [
+                ['titular', 'notificado'],
+                ['titular', 'notificado'],
+                ['titular', 'notificado'],
+                ['suplente', 'por_notificar'],
+            ],
+        )
+        const eventos = await db
+            .from('audit.outbox')
+            .where('evento', 'sorteo.ganador_notificado')
+            .whereRaw(`(payload->>'sorteo_id')::bigint = ?`, [ejecutado.id])
+        assert.lengthOf(eventos, 3)
+        assert.include(eventos[0]!.payload, { cliente_id: titulares[0]!.cliente_id, tipo: 'titular' })
+        // idempotente
+        await new NotificarGanadoresSorteo().execute({ id: ejecutado.id }, e.ctx)
+        const otra = await db
+            .from('audit.outbox')
+            .where('evento', 'sorteo.ganador_notificado')
+            .whereRaw(`(payload->>'sorteo_id')::bigint = ?`, [ejecutado.id])
+        assert.lengthOf(otra, 3)
+
+        // el plazo aún corre: 422
+        const servicio = titulares.find((g) => g.premio_posicion === 3)!
+        const vigente = await errorDe(
+            new MarcarNoReclamadoSorteo().execute(
+                { sorteo_id: ejecutado.id, ganador_id: servicio.id, motivo: 'no contestó' },
+                e.ctx,
+            ),
+        )
+        assert.equal(vigente.codigo, 'plazo_reclamo_vigente')
+        await db.rawQuery(
+            `UPDATE lealtad.sorteos_ganadores SET reclamar_antes = now() - interval '1 day' WHERE id = ANY(?::bigint[])`,
+            [titulares.map((g) => g.id)],
+        )
+        const sustituido = await new MarcarNoReclamadoSorteo().execute(
+            { sorteo_id: ejecutado.id, ganador_id: servicio.id, motivo: 'no contestó en 30 días' },
+            e.ctx,
+        )
+        const viejo = sustituido.ganadores.find((g) => g.id === servicio.id)!
+        const nuevo = sustituido.ganadores.find((g) => g.id === suplente.id)!
+        assert.include(viejo, { estado: 'sustituido', premio: 3, premio_posicion: 3 })
+        assert.include(nuevo, {
+            estado: 'notificado',
+            tipo: 'suplente',
+            premio: 3,
+            premio_posicion: null,
+            premio_sustitucion: 3,
+            sustituye_a: servicio.id,
+        })
+        const noReclamado = await db
+            .from('audit.outbox')
+            .where('evento', 'sorteo.premio_no_reclamado')
+            .whereRaw(`(payload->>'sorteo_id')::bigint = ?`, [ejecutado.id])
+            .firstOrFail()
+        assert.include(noReclamado.payload, { suplente_id: suplente.id, premio_posicion: 3 })
+        // el resultado del sorteo no cambia: la verificación pública sigue igual
+        const verificacion = await verificacionSorteo(ejecutado.id)
+        assert.deepEqual(
+            verificacion.ganadores.map((g) => [g.tipo, g.premio_posicion]),
+            [
+                ['titular', 1],
+                ['titular', 2],
+                ['titular', 3],
+                ['suplente', null],
+            ],
+        )
+
+        // el suplente recibe el premio de servicio; sin más suplentes, el bien queda no reclamado
+        await new EntregarPremioSorteo().execute({ sorteo_id: ejecutado.id, ganador_id: suplente.id }, e.ctx)
+        const bien = titulares.find((g) => g.premio_posicion === 2)!
+        const sinSuplente = await new MarcarNoReclamadoSorteo().execute(
+            { sorteo_id: ejecutado.id, ganador_id: bien.id, motivo: 'no se presentó' },
+            e.ctx,
+        )
+        assert.equal(sinSuplente.ganadores.find((g) => g.id === bien.id)!.estado, 'no_reclamado')
+        const efectivo = titulares.find((g) => g.premio_posicion === 1)!
+        await new EntregarPremioSorteo().execute(
+            { sorteo_id: ejecutado.id, ganador_id: efectivo.id, metodo: 'caja', caja_id: e.cajas.get(e.B)! },
+            e.ctx,
+        )
+        // con todo resuelto, el acta lleva el sorteo a premios_entregados
+        const cerrado = await cerrarActa(e, ejecutado.id)
+        assert.equal(cerrado.estado, 'premios_entregados')
+        assert.deepEqual(await otrasViolaciones([e.B, e.C]), [])
+    })
+
+    test('segunda PR · acta en PDF (acta_cerrada) y exportación de participantes', async ({
+        assert,
+        client,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const ejecutado = await ejecutadoCon(e)
+        const { token } = await usuarioConRoles(['admin'])
+        const http = (r: ReturnType<typeof client.get>) =>
+            r.bearerToken(token).header('X-Empresa-Id', String(e.B))
+
+        const sinPublicar = await errorDe(
+            new CerrarActaSorteo().execute({ id: ejecutado.id, constancia: 'Firma del notario' }, e.ctx),
+        )
+        assert.equal(sinPublicar.codigo, 'requisito_pendiente')
+        const acta = await cerrarActa(e, ejecutado.id)
+        assert.equal(acta.estado, 'acta_cerrada')
+        assert.match(acta.acta_hash!, /^[0-9a-f]{64}$/)
+        assert.equal(acta.acta_constancia, 'Firma del Lic. Pérez, notario')
+        const pdf = await estado(http(client.get(`/api/v1/lealtad/sorteos/${ejecutado.id}/acta`)), 200)
+        assert.equal(pdf.header('content-type'), 'application/pdf')
+        assert.equal(pdf.header('etag'), `"${acta.acta_hash}"`)
+        const archivoActa = await db
+            .from('lealtad.sorteos_archivos')
+            .where('id', acta.acta_archivo_id!)
+            .firstOrFail()
+        assert.include(archivoActa, { uso: 'acta', tipo: 'application/pdf', sha256: acta.acta_hash })
+        const evento = await db
+            .from('audit.outbox')
+            .where('evento', 'sorteo.acta_cerrada')
+            .whereRaw(`(payload->>'sorteo_id')::bigint = ?`, [ejecutado.id])
+            .firstOrFail()
+        assert.equal(evento.payload.acta_hash, acta.acta_hash)
+        // el acta no se vuelve a cerrar ni se reemplaza
+        const otraVez = await errorDe(
+            new CerrarActaSorteo().execute({ id: ejecutado.id, constancia: 'otra firma' }, e.ctx),
+        )
+        assert.equal(otraVez.codigo, 'estado_sorteo')
+        await assert.rejects(() =>
+            db
+                .from('lealtad.sorteos')
+                .where('id', ejecutado.id)
+                .update({ acta_hash: '0'.repeat(64) }),
+        )
+        await assert.rejects(() =>
+            db.from('lealtad.sorteos').where('id', ejecutado.id).update({ estado: 'ejecutado' }),
+        )
+        const verificacion = await verificacionSorteo(ejecutado.id)
+        assert.equal(verificacion.acta_hash, acta.acta_hash)
+
+        // participantes en orden canónico con lista_hash al pie (JSON, CSV y XLSX)
+        const json = await estado(
+            http(client.get(`/api/v1/lealtad/sorteos/${ejecutado.id}/participantes`)),
+            200,
+        )
+        const codigos = json.body().filas.map((f: { codigo_publico: string }) => f.codigo_publico)
+        assert.deepEqual(codigos, [...codigos].sort())
+        assert.equal(json.body().totales.codigo_publico, `lista_hash ${ejecutado.lista_hash}`)
+        const csv = await estado(
+            http(client.get(`/api/v1/lealtad/sorteos/${ejecutado.id}/participantes`).qs({ formato: 'csv' })),
+            200,
+        )
+        assert.include(csv.header('content-type'), 'text/csv')
+        assert.include(csv.text(), `lista_hash ${ejecutado.lista_hash}`)
+        const xlsx = await estado(
+            http(client.get(`/api/v1/lealtad/sorteos/${ejecutado.id}/participantes`).qs({ formato: 'xlsx' })),
+            200,
+        )
+        assert.include(xlsx.header('content-type'), 'spreadsheetml')
+        assert.deepEqual(await otrasViolaciones([e.B, e.C]), [])
+    })
+
+    /** Compra con una línea bien de `cantidad` unidades a la cuenta dada; devuelve compra y línea. */
+    async function compraBien(e: EmpresasGt, cuenta: string, total: string, cantidad = 1) {
+        const compra = await new RegistrarCompra().execute(
+            {
+                proveedor_id: await proveedorDe(e),
+                tipo_documento: 'FACT',
+                serie: 'A',
+                numero: unico('R'),
+                fecha_documento: hoyGuatemala(),
+                condicion: 'credito',
+                lineas: [{ descripcion: 'Routers Wi-Fi 6', tipo: 'bien', cuenta, total, cantidad }],
+            },
+            e.ctx,
+        )
+        const linea = await db.from('ledger.compras_lineas').where('compra_id', compra.id).firstOrFail()
+        return {
+            compra,
+            lineaId: Number(linea.id),
+            base: String(linea.base),
+            cantidad: Number(linea.cantidad),
+        }
+    }
+
+    test('observación del auditor: una línea con varias unidades se entrega por unidad, prorrateada, sin pasar de su cantidad', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const { programa } = await programaConReglas(e.B, e.ctx, { diferimiento: true })
+        const primero = await ejecutadoCon(e, 3, programa)
+        const segundo = await ejecutadoCon(e, 3, programa)
+        const bien1 = primero.ganadores.find((g) => g.premio_posicion === 2)!
+        const bien2 = segundo.ganadores.find((g) => g.premio_posicion === 2)!
+        // tres routers en una línea a gastos varios: base 892.86 (1000 / 1.12)
+        const { compra, lineaId, base, cantidad } = await compraBien(e, '5.2.99', '1000.00', 3)
+        assert.deepEqual([base, cantidad], ['892.86', 3])
+        const linea = compra.lineas[0]!
+        assert.equal(linea.cantidad, 3)
+
+        const demasiadas = await errorDe(
+            new EntregarPremioSorteo().execute(
+                {
+                    sorteo_id: primero.id,
+                    ganador_id: bien1.id,
+                    contrapartida: 'compra',
+                    compra_linea_id: lineaId,
+                    unidades: 4,
+                },
+                e.ctx,
+            ),
+        )
+        assert.deepEqual([demasiadas.status, demasiadas.codigo], [422, 'compra_ya_entregada'])
+
+        await new EntregarPremioSorteo().execute(
+            {
+                sorteo_id: primero.id,
+                ganador_id: bien1.id,
+                contrapartida: 'compra',
+                compra_linea_id: lineaId,
+                unidades: 2,
+            },
+            e.ctx,
+        )
+        // dos de tres unidades: round(892.86 × 2 / 3) = 595.24, más el ISR del premio
+        assert.deepEqual(await lineas('sorteo', bien1.id), [
+            ['5.1.03', '595.24', '0.00'],
+            ['5.2.99', '0.00', '595.24'],
+            ['5.1.03', '30.00', '0.00'],
+            ['2.1.05', '0.00', '30.00'],
+        ])
+        const otraDos = await errorDe(
+            new EntregarPremioSorteo().execute(
+                {
+                    sorteo_id: segundo.id,
+                    ganador_id: bien2.id,
+                    contrapartida: 'compra',
+                    compra_linea_id: lineaId,
+                    unidades: 2,
+                },
+                e.ctx,
+            ),
+        )
+        assert.equal(otraDos.codigo, 'compra_ya_entregada')
+        assert.include(otraDos.detalle, 'quedan 1')
+        // la última unidad lleva el resto: la suma es la base exacta
+        await new EntregarPremioSorteo().execute(
+            {
+                sorteo_id: segundo.id,
+                ganador_id: bien2.id,
+                contrapartida: 'compra',
+                compra_linea_id: lineaId,
+            },
+            e.ctx,
+        )
+        const entregas = (await db
+            .from('lealtad.sorteos_ganadores')
+            .where('compra_linea_id', lineaId)
+            .orderBy('id')
+            .select('compra_unidades', 'compra_base')) as Array<{
+            compra_unidades: number
+            compra_base: string
+        }>
+        assert.deepEqual(
+            entregas.map((x) => [x.compra_unidades, x.compra_base]),
+            [
+                [2, '595.24'],
+                [1, '297.62'],
+            ],
+        )
+        assert.equal(await saldoCuenta(e.B, '5.2.99'), '0.00')
+        // anular una entrega libera sus unidades
+        await new AnularEntregaSorteo().execute(
+            { sorteo_id: segundo.id, ganador_id: bien2.id, motivo: 'otro premio' },
+            e.ctx,
+        )
+        const libre = await db.from('lealtad.sorteos_ganadores').where('id', bien2.id).firstOrFail()
+        assert.deepEqual(
+            [libre.compra_linea_id, libre.compra_unidades, libre.compra_base],
+            [null, null, null],
+        )
+        assert.deepEqual(await verificarLibro([e.B, e.C]), [])
+    })
+
+    test('observación del auditor: un bien no va a activo fijo sin su activo, ni se entrega como premio desde ahí (422)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        // la compra rechaza la línea bien a 1.2.01.NN: el activo se da de alta con tipo activo_fijo
+        const compra = await errorDe(compraBien(e, '1.2.01.01', '336.00'))
+        assert.deepEqual([compra.status, compra.reglas], [422, ['cuenta_activo_fijo']])
+        // y la entrega rechaza una línea que haya quedado en activo fijo (defensa para lo anterior)
+        assert.isTrue(esCuentaDeActivoFijo('1.2.01.01'))
+        assert.isTrue(esCuentaDeActivoFijo('1.2.02.03'))
+        assert.isFalse(esCuentaDeActivoFijo('1.2.03'))
+        assert.isFalse(esCuentaDeActivoFijo('5.1.03'))
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

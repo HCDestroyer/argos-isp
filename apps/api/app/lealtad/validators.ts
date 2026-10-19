@@ -380,7 +380,9 @@ const criteriosSorteo = vine
 const premioSorteo = vine.object({
     nombre: vine.string().trim().minLength(1).maxLength(200),
     cantidad: vine.number().withoutDecimals().range([1, 100]).optional(),
-    imagen_url: vine.string().trim().maxLength(1000).nullable().optional(),
+    imagen_url: vine.string().trim().maxLength(1000).nullable().optional().meta({
+        description: 'Solo null: la imagen se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen)',
+    }),
     valor: dinero(),
     tipo: vine.enum(TIPOS_PREMIO_SORTEO).meta({
         description:
@@ -417,6 +419,10 @@ const camposSorteo = {
     lugar: vine.string().trim().maxLength(300).nullable().optional(),
     suplentes: vine.number().withoutDecimals().range([0, 20]).optional(),
     premios: vine.array(premioSorteo).maxLength(50).optional(),
+    aviso_portal: vine
+        .boolean()
+        .optional()
+        .meta({ description: 'Se anuncia en el portal (false por defecto)' }),
 }
 
 export const crearSorteoValidator = vine.compile(
@@ -453,7 +459,46 @@ export const marcarRequisitoValidator = vine.compile(
             description:
                 'Obligatoria con cumplido o no_aplica: referencia o texto (archivos en la segunda PR)',
         }),
+        archivo_id: idEntidad().nullable().optional().meta({
+            description:
+                'Evidencia como archivo de este sorteo (POST /lealtad/sorteos/:id/archivos, uso evidencia)',
+        }),
         nota: vine.string().trim().maxLength(2000).nullable().optional(),
+    }),
+)
+
+export const avisoPortalSorteoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        aviso_portal: vine.boolean(),
+    }),
+)
+
+export const subirArchivoSorteoValidator = vine.compile(
+    vine.object({
+        uso: vine.enum(['evidencia', 'constancia'] as const).meta({
+            description: 'evidencia del checklist o constancia firmada de una entrega',
+        }),
+    }),
+)
+
+/** campos de texto del multipart de la imagen de un premio (solo el archivo `imagen`) */
+export const imagenPremioSorteoValidator = vine.compile(vine.object({}))
+
+export const cerrarActaSorteoValidator = vine.compile(
+    vine.object({
+        constancia: vine.string().trim().minLength(3).maxLength(2000).meta({
+            description: 'Firma o constancia del notario o del delegado',
+        }),
+    }),
+)
+
+export const participantesSorteoValidator = vine.compile(
+    vine.object({
+        formato: vine
+            .enum(['json', 'csv', 'xlsx'] as const)
+            .optional()
+            .meta({ description: 'json (por defecto), csv o xlsx (descarga, con lista_hash al pie)' }),
     }),
 )
 
@@ -500,8 +545,16 @@ export const entregarPremioValidator = vine.compile(
                     'Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra)',
             }),
         cuenta_codigo: vine.string().trim().maxLength(30).nullable().optional(),
+        constancia_archivo_id: idEntidad().nullable().optional().meta({
+            description:
+                'Constancia firmada de la entrega (POST /lealtad/sorteos/:id/archivos, uso constancia)',
+        }),
         compra_linea_id: idEntidad().nullable().optional().meta({
             description: 'Con contrapartida compra: línea (bien) de una compra registrada de la empresa',
+        }),
+        unidades: vine.number().withoutDecimals().min(1).nullable().optional().meta({
+            description:
+                'Con contrapartida compra: unidades de la línea que se entregan (1 por defecto); sin pasar de su cantidad',
         }),
         nota: vine.string().trim().maxLength(2000).nullable().optional(),
     }),

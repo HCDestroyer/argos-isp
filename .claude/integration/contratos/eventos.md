@@ -75,6 +75,9 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `sorteo.premio_entregado` | A3 (`sorteos.entregar`) | `sorteo_id`, `empresa_id`, `cliente_id`, `posicion` | A6 (opcional) |
 | `sorteo.cancelado` | A3 (`sorteos.cancelar`) | `sorteo_id`, `empresa_id`, `motivo` | A6 (opcional) |
 | `sorteo.entrega_anulada` | A3 (`sorteos.anular_entrega`, H22) | `sorteo_id`, `empresa_id`, `cliente_id`, `posicion`, `motivo` | A6 (opcional) |
+| `sorteo.ganador_notificado` | A3 (`sorteos.notificar_ganadores`, `sorteos.marcar_no_reclamado`) | `sorteo_id`, `empresa_id`, `ganador_id`, `cliente_id`, `posicion`, `tipo`, `codigo`, `premio { posicion, nombre, valor, tipo }`, `reclamar_antes` (ISO), `sustituye_a` (o null) | A6: avisa al ganador con su premio y su plazo |
+| `sorteo.premio_no_reclamado` | A3 (`sorteos.marcar_no_reclamado`) | `sorteo_id`, `empresa_id`, `ganador_id`, `cliente_id`, `posicion`, `premio_posicion`, `suplente_id` (o null), `motivo` | A6 (opcional) |
+| `sorteo.acta_cerrada` | A3 (`sorteos.cerrar_acta`) | `sorteo_id`, `empresa_id`, `acta_hash` | A6 (opcional: resultados publicados) |
 | `nota_credito.anulada` | A3 (`AnularNotaCredito`, `POST /notas-credito/:id/anular`; contrato de localización fiscal §17) | `nota_credito_id`, `empresa_id`, `factura_id`, `cliente_id`, `monto`, `motivo`. Solo cuando la SAT rechazó en definitivo la NCRE de la nota: su asiento se revierte y el monto vuelve al saldo de la factura | A6 (`notify`): aviso al equipo y a contabilidad (Telegram y correo), una vez por nota; A4 (estado de la nota) |
 | `comprobante.recibido` | A3 (`RegistrarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id: null`, `motivo: null` | A6 (`notify`): "Recibimos tu comprobante de pago" |
 | `comprobante.aprobado` | A3 (`AprobarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id` (el pago creado), `motivo: null` | A6 (`notify`): "Comprobante de pago aprobado" (el único aviso de pago del pagador) |

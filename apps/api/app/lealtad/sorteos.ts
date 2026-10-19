@@ -3,6 +3,8 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado, Problema } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { jsonCanonico, sha256Hex, type Boletos } from '#lealtad/sorteo_v1'
+import { archivosDeSorteo } from '#lealtad/sorteos_archivos'
+import { armarReporte, definirColumnas } from '#billing/reportes/definicion'
 
 /**
  * Sorteos (`contratos/lealtad.md` §7 y §8). Lectura, bases, hash canónico y checklist. Las acciones
@@ -17,9 +19,13 @@ export const ESTADOS_SORTEO = [
     'participacion_abierta',
     'corte_cerrado',
     'ejecutado',
+    'acta_cerrada',
     'premios_entregados',
     'cancelado',
 ] as const
+
+/** Estados con resultado (después de ejecutar). */
+export const ESTADOS_EJECUTADOS: readonly EstadoSorteo[] = ['ejecutado', 'acta_cerrada', 'premios_entregados']
 export type EstadoSorteo = (typeof ESTADOS_SORTEO)[number]
 
 export const TIPOS_PREMIO_SORTEO = ['efectivo', 'bien', 'servicio'] as const
@@ -79,6 +85,8 @@ export interface PremioSorteo {
     nombre: string
     cantidad: number
     imagen_url: string | null
+    /** la imagen subida (`lealtad.sorteos_archivos`, uso `imagen_premio`) */
+    imagen_archivo_id: number | null
     valor: string
     tipo: TipoPremioSorteo
     premio_id: number | null
@@ -114,6 +122,12 @@ export interface SorteoVista {
     corte_cerrado_en: Date | null
     ejecutado_en: Date | null
     cancelado_en: Date | null
+    /** el panel lo anuncia en el portal (pedido del PM); editable hasta antes de ejecutar */
+    aviso_portal: boolean
+    acta_hash: string | null
+    acta_archivo_id: number | null
+    acta_constancia: string | null
+    acta_cerrada_en: Date | null
     premios: PremioSorteo[]
     version: number
     created_at: Date
@@ -147,6 +161,11 @@ const columnas = (cliente: QueryClientContract) => [
     'corte_cerrado_en',
     'ejecutado_en',
     'cancelado_en',
+    'aviso_portal',
+    'acta_hash',
+    'acta_archivo_id',
+    'acta_constancia',
+    'acta_cerrada_en',
     'version',
     'created_at',
     'updated_at',
@@ -168,6 +187,7 @@ export async function premiosDeSorteo(
             'nombre',
             'cantidad',
             'imagen_url',
+            'imagen_archivo_id',
             'valor',
             'tipo',
             'premio_id',
@@ -180,6 +200,7 @@ export async function premiosDeSorteo(
         posicion: Number(f.posicion),
         cantidad: Number(f.cantidad),
         premio_id: n(f.premio_id),
+        imagen_archivo_id: n(f.imagen_archivo_id),
     }))
 }
 
@@ -190,6 +211,7 @@ function aVista(f: Record<string, unknown>, premios: PremioSorteo[]): SorteoVist
         empresa_id: Number(f.empresa_id),
         programa_id: n(f.programa_id),
         suplentes: Number(f.suplentes),
+        acta_archivo_id: n(f.acta_archivo_id),
         version: Number(f.version),
         premios,
     }
@@ -354,6 +376,8 @@ export interface RequisitoVigente {
     estado: EstadoRequisito
     valor: string | null
     evidencia: string | null
+    /** evidencia como archivo (`GET /lealtad/sorteos/:id/archivos/:archivoId`) */
+    archivo_id: number | null
     nota: string | null
     marcado_en: Date | null
 }
@@ -371,8 +395,21 @@ export async function requisitosVigentes(
             { column: 'clave', order: 'asc' },
             { column: 'id', order: 'desc' },
         ])
-        .select('clave', 'estado', 'valor', 'evidencia', 'nota', 'marcado_en')) as RequisitoVigente[]
-    const porClave = new Map(filas.map((f) => [f.clave, f]))
+        .select(
+            'clave',
+            'estado',
+            'valor',
+            'evidencia',
+            'archivo_id',
+            'nota',
+            'marcado_en',
+        )) as RequisitoVigente[]
+    const porClave = new Map(
+        filas.map((f) => [
+            f.clave,
+            { ...f, archivo_id: f.archivo_id === null ? null : Number(f.archivo_id) },
+        ]),
+    )
     return REQUISITOS_SORTEO.map(
         (clave) =>
             porClave.get(clave) ?? {
@@ -380,6 +417,7 @@ export async function requisitosVigentes(
                 estado: 'pendiente',
                 valor: null,
                 evidencia: null,
+                archivo_id: null,
                 nota: null,
                 marcado_en: null,
             },
@@ -438,7 +476,21 @@ export interface GanadorVista {
     canje_id: number | null
     /** decisión del PM: la línea de la compra (con factura) del bien entregado */
     compra_linea_id: number | null
+    /** unidades de la línea que consumió esta entrega y la parte de la base que le tocó */
+    compra_unidades: number | null
+    compra_base: string | null
     entregado_en: Date | null
+    /**
+     * El premio que le toca: el de su puesto (titular) o, si es un suplente que tomó el premio de un
+     * ganador que no lo reclamó, `premio_sustitucion`. null = sin premio (suplente en espera).
+     */
+    premio: number | null
+    premio_sustitucion: number | null
+    sustituye_a: number | null
+    notificado_en: Date | null
+    reclamar_antes: Date | null
+    no_reclamado_en: Date | null
+    constancia_archivo_id: number | null
     version: number
 }
 
@@ -466,7 +518,15 @@ export async function ganadoresDe(
             'g.egreso_id',
             'g.canje_id',
             'g.compra_linea_id',
+            'g.compra_unidades',
+            'g.compra_base',
             'g.entregado_en',
+            'g.premio_sustitucion',
+            'g.sustituye_a',
+            'g.notificado_en',
+            'g.reclamar_antes',
+            'g.no_reclamado_en',
+            'g.constancia_archivo_id',
             'g.version',
         )) as Array<Record<string, unknown>>
     return filas.map((f) => ({
@@ -480,6 +540,11 @@ export async function ganadoresDe(
         egreso_id: n(f.egreso_id),
         canje_id: n(f.canje_id),
         compra_linea_id: n(f.compra_linea_id),
+        premio: n(f.premio_posicion) ?? n(f.premio_sustitucion),
+        premio_sustitucion: n(f.premio_sustitucion),
+        sustituye_a: n(f.sustituye_a),
+        constancia_archivo_id: n(f.constancia_archivo_id),
+        compra_unidades: n(f.compra_unidades),
         version: Number(f.version),
     }))
 }
@@ -498,13 +563,14 @@ export async function detalleSorteo(id: number, cliente: QueryClientContract = d
         participantes: Number(participantes.n),
         boletos: Number(participantes.boletos),
         ganadores: await ganadoresDe(id, cliente),
+        archivos: await archivosDeSorteo(id, cliente),
     }
 }
 
 /** Datos públicos para recalcular el resultado (§7.3, punto 7): solo después de ejecutar. */
 export async function verificacionSorteo(id: number) {
     const sorteo = await verSorteo(id)
-    if (!['ejecutado', 'premios_entregados'].includes(sorteo.estado)) {
+    if (!ESTADOS_EJECUTADOS.includes(sorteo.estado)) {
         throw new NoEncontrado(`El sorteo ${id} aún no se ejecutó`)
     }
     const lista = await listaDelCorte(db.connection(), id)
@@ -523,6 +589,7 @@ export async function verificacionSorteo(id: number) {
         lista: lista.map((p) => ({ codigo: p.codigo, boletos: p.boletos })),
         titulares: titularesDe(sorteo),
         suplentes: sorteo.suplentes,
+        acta_hash: sorteo.acta_hash,
         ganadores: ganadores.map((g) => ({
             posicion: g.posicion,
             tipo: g.tipo,
@@ -566,8 +633,11 @@ export async function sorteosDelPortal(clienteId: number) {
             'participacion_abierta',
             'corte_cerrado',
             'ejecutado',
+            'acta_cerrada',
             'premios_entregados',
         ])
+        // el panel decide si se anuncia en el portal (pedido del PM)
+        .where('aviso_portal', true)
         // vigentes: los que aún no se sortean y los ejecutados de los últimos 30 días (resultado)
         .whereRaw(`fecha_sorteo >= now() - interval '30 days'`)
         .orderBy('fecha_sorteo', 'asc')
@@ -585,9 +655,7 @@ export async function sorteosDelPortal(clienteId: number) {
             .where({ sorteo_id: s.id, cliente_id: clienteId })
             .select('codigo_publico', 'boletos')
             .first()) as { codigo_publico: string; boletos: number } | null
-        const elegidos = ['ejecutado', 'premios_entregados'].includes(s.estado)
-            ? await ganadoresDe(s.id)
-            : null
+        const elegidos = ESTADOS_EJECUTADOS.includes(s.estado) ? await ganadoresDe(s.id) : null
         const ganadores = elegidos
             ? elegidos.map((g) => ({
                   posicion: g.posicion,
@@ -611,7 +679,10 @@ export async function sorteosDelPortal(clienteId: number) {
                 posicion: p.posicion,
                 nombre: p.nombre,
                 cantidad: p.cantidad,
-                imagen_url: p.imagen_url,
+                // por el portal (mismo origen): el walled garden no carga URLs externas
+                imagen_url: p.imagen_archivo_id
+                    ? `/api/v1/portal/sorteos/${s.id}/premios/${p.posicion}/imagen`
+                    : null,
                 valor: p.valor,
             })),
             bases_hash: s.bases_hash,
@@ -622,4 +693,87 @@ export async function sorteosDelPortal(clienteId: number) {
         })
     }
     return salida
+}
+
+export const COLUMNAS_PARTICIPANTES = definirColumnas([
+    { clave: 'orden', titulo: 'Orden', tipo: 'entero' },
+    { clave: 'codigo_publico', titulo: 'Código público', tipo: 'texto' },
+    { clave: 'boletos', titulo: 'Boletos', tipo: 'entero' },
+    { clave: 'cliente_id', titulo: 'Cliente (id)', tipo: 'id' },
+    { clave: 'cliente', titulo: 'Cliente', tipo: 'texto' },
+    { clave: 'servicio_id', titulo: 'Servicio (id)', tipo: 'id', nulable: true },
+])
+
+/**
+ * Lista del corte para la autoridad y la contabilidad (§7.3, punto 3): en orden canónico
+ * (`codigo_publico`), con el cliente; al pie, en la columna del código, `lista_hash` (SHA-256 de las
+ * líneas `codigo|boletos\n`): cualquiera lo recalcula con las dos primeras columnas.
+ */
+export async function reporteParticipantes(id: number) {
+    const sorteo = await verSorteo(id)
+    if (!sorteo.lista_hash) throw new EstadoSorteoInvalido(sorteo.id, sorteo.estado, 'exportar participantes')
+    const filas = (await db
+        .from('lealtad.sorteos_participantes as p')
+        .join('core.clientes as c', 'c.id', 'p.cliente_id')
+        .where('p.sorteo_id', id)
+        .orderBy('p.codigo_publico', 'asc')
+        .select(
+            'p.orden',
+            'p.codigo_publico',
+            'p.boletos',
+            'p.cliente_id',
+            'c.nombre as cliente',
+            'p.servicio_id',
+        )) as Array<Record<string, string | number | null>>
+    return armarReporte({
+        reporte: `participantes-sorteo-${id}`,
+        titulo: `Participantes del sorteo ${sorteo.nombre}`,
+        columnas: COLUMNAS_PARTICIPANTES,
+        filas: filas.map((f) => ({
+            ...f,
+            orden: Number(f.orden),
+            boletos: Number(f.boletos),
+            cliente_id: Number(f.cliente_id),
+            servicio_id: f.servicio_id === null ? null : Number(f.servicio_id),
+        })),
+        filtros: { sorteo_id: id },
+        totales: {
+            orden: null,
+            codigo_publico: `lista_hash ${sorteo.lista_hash}`,
+            cliente_id: null,
+            servicio_id: null,
+        },
+    })
+}
+
+/**
+ * Imagen de un premio para el portal: solo de un sorteo que el panel anuncia (`aviso_portal`), publicado
+ * y no cancelado, de una empresa donde el cliente tiene un servicio vigente; si no, 404.
+ */
+export async function imagenPremioDelPortal(clienteId: number, sorteoId: number, posicion: number) {
+    const sorteo = await verSorteo(sorteoId)
+    const empresa = (await db
+        .from('core.servicios')
+        .where({ cliente_id: clienteId, empresa_id: sorteo.empresa_id })
+        .whereNot('estado', 'retirado')
+        .select('id')
+        .first()) as { id: number } | null
+    const premio = sorteo.premios.find((p) => p.posicion === posicion)
+    if (
+        !empresa ||
+        !sorteo.aviso_portal ||
+        ['borrador', 'cancelado'].includes(sorteo.estado) ||
+        !premio?.imagen_archivo_id
+    ) {
+        throw new NoEncontrado('La imagen no existe')
+    }
+    return { sorteo, archivoId: premio.imagen_archivo_id }
+}
+
+/** Imagen de un premio para el panel (404 si no tiene). */
+export async function imagenPremio(sorteoId: number, posicion: number) {
+    const sorteo = await verSorteo(sorteoId)
+    const premio = sorteo.premios.find((p) => p.posicion === posicion)
+    if (!premio?.imagen_archivo_id) throw new NoEncontrado('El premio no tiene imagen')
+    return { sorteo, archivoId: premio.imagen_archivo_id }
 }

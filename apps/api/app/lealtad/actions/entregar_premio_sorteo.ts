@@ -13,6 +13,8 @@ import { bloquearCliente } from '#billing/cobros'
 import { verPremio } from '#lealtad/premios'
 import { camposAuditables, verCanje } from '#lealtad/canjes'
 import { detalleSorteo, exigirEstado, ganadoresDe, verSorteo } from '#lealtad/sorteos'
+import { verArchivo } from '#lealtad/sorteos_archivos'
+import { cerrarSiTodoResuelto } from '#lealtad/sorteos_entrega'
 
 /**
  * `sorteos.entregar` (`POST /lealtad/sorteos/:id/ganadores/:g/entregar`, permiso `sorteos.entregar`):
@@ -48,6 +50,10 @@ export interface EntradaEntregarPremio {
     cuenta_codigo?: string | null
     /** con `compra`: la línea de la compra registrada con la que se compró el bien (decisión del PM) */
     compra_linea_id?: number | null
+    /** constancia firmada de la entrega (`POST /lealtad/sorteos/:id/archivos`, uso `constancia`) */
+    constancia_archivo_id?: number | null
+    /** con `compra`: unidades de la línea que se entregan (1 por defecto) */
+    unidades?: number | null
     nota?: string | null
 }
 
@@ -90,6 +96,13 @@ const CONTROL_NO_PERMITIDAS = [
  * empresa o global, que no sea contracuenta ni auxiliar de clientes y que no esté bajo las cuentas
  * control (p. ej. un «Inventario de premios» que crea la empresa).
  */
+/** Propiedad, planta y equipo o su depreciación (`1.2.01.*`, `1.2.02.*`). */
+export function esCuentaDeActivoFijo(codigo: string): boolean {
+    return [CUENTAS_GT.PROPIEDAD_PLANTA_EQUIPO, CUENTAS_GT.DEPRECIACION_ACUMULADA].some(
+        (c) => codigo === c || codigo.startsWith(`${c}.`),
+    )
+}
+
 export function cuentaParaBienDePremio(c: CuentaContrapartida, empresaId: number): boolean {
     if (c.tipo !== 'activo' || !c.imputable || c.contracuenta || c.auxiliar_cliente) return false
     if (c.empresa_id !== null && Number(c.empresa_id) !== empresaId) return false
@@ -133,14 +146,14 @@ export default class EntregarPremioSorteo extends DomainAction<
         const sorteo = await verSorteo(input.sorteo_id, t.trx, true)
         exigirAccesoEmpresa(t.ctx, sorteo.empresa_id)
         t.fijarEmpresa(sorteo.empresa_id)
-        exigirEstado(sorteo, ['ejecutado'], 'entregar premios')
+        exigirEstado(sorteo, ['ejecutado', 'acta_cerrada'], 'entregar premios')
         const todos = await ganadoresDe(sorteo.id, t.trx)
         const ganador = todos.find((g) => g.id === input.ganador_id)
         if (!ganador) throw new NoEncontrado(`El ganador ${input.ganador_id} no es del sorteo ${sorteo.id}`)
-        if (ganador.tipo !== 'titular') {
+        if (ganador.premio === null) {
             throw new ReglaNegocio(
-                'Solo se entrega el premio de un titular (los suplentes, en la segunda PR)',
-                'no_titular',
+                'Solo se entrega el premio de un titular o de un suplente que tomó el de un ganador que no lo reclamó',
+                'sin_premio',
             )
         }
         if (!['por_notificar', 'notificado'].includes(ganador.estado)) {
@@ -149,7 +162,21 @@ export default class EntregarPremioSorteo extends DomainAction<
                 'premio_entregado',
             )
         }
-        const premio = sorteo.premios.find((p) => p.posicion === ganador.premio_posicion)!
+        const premio = sorteo.premios.find((p) => p.posicion === ganador.premio)!
+        let constanciaId: number | null = null
+        if (input.constancia_archivo_id) {
+            const archivo = await verArchivo(sorteo.id, input.constancia_archivo_id, t.trx).catch(() => null)
+            if (!archivo || archivo.uso !== 'constancia') {
+                throw new ValidacionFallida([
+                    {
+                        field: 'constancia_archivo_id',
+                        message: 'La constancia debe ser un archivo de uso constancia subido a este sorteo',
+                        rule: 'archivo',
+                    },
+                ])
+            }
+            constanciaId = archivo.id
+        }
         const valor = dec(premio.valor)
         const isr: Dec = premio.retiene_isr ? redondear(valor.times(premio.isr_pct).dividedBy(100)) : CERO
         const descripcion = `Premio ${premio.posicion} del sorteo ${sorteo.id} (${premio.nombre}) al ganador ${ganador.posicion} (${ganador.codigo_publico})`
@@ -282,6 +309,7 @@ export default class EntregarPremioSorteo extends DomainAction<
                 estado: 'entregado',
                 retencion_isr: aTexto(isr),
                 nota: input.nota?.trim() || null,
+                constancia_archivo_id: constanciaId,
                 entregado_en: t.trx.knexRawQuery('now()'),
                 entregado_por: usuarioDelActor(t.ctx.actor),
                 version: t.trx.knexRawQuery('version + 1'),
@@ -292,23 +320,8 @@ export default class EntregarPremioSorteo extends DomainAction<
             { estado: ganador.estado },
             { estado: 'entregado', retencion_isr: aTexto(isr), ...cambios },
         )
-        const despues = await ganadoresDe(sorteo.id, t.trx)
-        const pendientes = despues.filter((g) => g.tipo === 'titular' && g.estado !== 'entregado')
-        if (pendientes.length === 0) {
-            await t.trx
-                .from('lealtad.sorteos')
-                .where('id', sorteo.id)
-                .update({
-                    estado: 'premios_entregados',
-                    version: t.trx.knexRawQuery('version + 1'),
-                    updated_at: t.trx.knexRawQuery('now()'),
-                } as Record<string, unknown>)
-            await t.registrarCambios(
-                { tipo: 'sorteo', id: sorteo.id },
-                { estado: 'ejecutado' },
-                { estado: 'premios_entregados' },
-            )
-        }
+        // con el acta cerrada y ningún premio pendiente, el sorteo queda `premios_entregados`
+        await cerrarSiTodoResuelto(t, sorteo, await ganadoresDe(sorteo.id, t.trx))
         t.fijarEntidad('sorteo', sorteo.id)
         await t.emit('sorteo.premio_entregado', {
             sorteo_id: sorteo.id,
@@ -357,6 +370,7 @@ async function contabilizarBien(
                   .select(
                       'l.id',
                       'l.base',
+                      'l.cantidad',
                       'l.tipo',
                       'c.id as compra_id',
                       'c.empresa_id',
@@ -366,6 +380,7 @@ async function contabilizarBien(
                   .first()) as {
                   id: number
                   base: string
+                  cantidad: number
                   tipo: string
                   compra_id: number
                   empresa_id: number
@@ -388,24 +403,54 @@ async function contabilizarBien(
                 },
             ])
         }
-        const usada = await t.trx.from('lealtad.sorteos_ganadores').where('compra_linea_id', linea.id).first()
-        if (usada) {
+        // observación del auditor: una línea que fue a propiedad, planta y equipo es un activo fijo;
+        // un premio no la acredita (el activo se registra y se da de baja por su propia acción)
+        if (esCuentaDeActivoFijo(linea.codigo)) {
             throw new ReglaNegocio(
-                `La línea ${linea.id} de la compra ${linea.compra_id} ya es el premio del ganador ${usada.id}`,
+                `La línea ${linea.id} de la compra ${linea.compra_id} fue a la cuenta de activo fijo ${linea.codigo}: no se entrega como premio`,
+                'linea_activo_fijo',
+            )
+        }
+        // observación del auditor: cada entrega consume sus unidades de la línea, prorrateadas
+        const unidades = input.unidades ?? 1
+        const cantidad = Number(linea.cantidad)
+        await t.trx.rawQuery(`SELECT pg_advisory_xact_lock(hashtext('lealtad.compra_linea'), ?::integer)`, [
+            Number(linea.id),
+        ])
+        const previas = (await t.trx
+            .from('lealtad.sorteos_ganadores')
+            .where('compra_linea_id', linea.id)
+            .select(
+                t.trx.raw('coalesce(sum(compra_unidades), 0)::int as unidades'),
+                t.trx.raw('coalesce(sum(compra_base), 0)::text as base'),
+            )
+            .first()) as { unidades: number; base: string }
+        const usadas = Number(previas.unidades)
+        if (usadas + unidades > cantidad) {
+            throw new ReglaNegocio(
+                `La línea ${linea.id} de la compra ${linea.compra_id} tiene ${cantidad} unidad(es) y ya se entregaron ${usadas}: quedan ${cantidad - usadas}`,
                 'compra_ya_entregada',
             )
         }
+        // la parte de esta entrega: base × (usadas + unidades) / cantidad menos lo ya tomado; la
+        // última lleva el resto y la suma de las entregas es la base exacta
         const base = dec(linea.base)
-        // la línea ya fue gasto de premios en la compra: solo el ISR; si no, 5.1.03 / su cuenta por la base
-        if (linea.codigo !== CUENTAS_GT.PREMIOS_PROMOCIONES) {
+        const parte = redondear(base.times(usadas + unidades).dividedBy(cantidad)).minus(dec(previas.base))
+        // la línea ya fue gasto de premios en la compra: solo el ISR; si no, 5.1.03 / su cuenta por su parte
+        if (linea.codigo !== CUENTAS_GT.PREMIOS_PROMOCIONES && parte.gt(0)) {
             movimientos.push(
-                { cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(base) },
-                { cuenta: linea.codigo, haber: aTexto(base) },
+                { cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(parte) },
+                { cuenta: linea.codigo, haber: aTexto(parte) },
             )
         }
         if (isr.gt(0)) movimientos.push({ cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(isr) })
         isrMovimiento()
-        return { contrapartida: `compra ${linea.compra_id}`, compra_linea_id: Number(linea.id) }
+        return {
+            contrapartida: `compra ${linea.compra_id}`,
+            compra_linea_id: Number(linea.id),
+            compra_unidades: unidades,
+            compra_base: aTexto(parte),
+        }
     }
     if (input.contrapartida === 'proveedor') {
         // decisión del líder (19 oct): 2.1.03 solo se mueve con una compra (fase 5, CxP = compras)

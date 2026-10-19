@@ -3317,6 +3317,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lealtad/sorteos/{id}/acta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF del acta del sorteo
+         * @description application/pdf con ETag = acta_hash. 404 si el acta aún no se cerró.
+         */
+        get: operations["lealtadActaSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/archivos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subir una evidencia del checklist o la constancia de una entrega
+         * @description multipart/form-data con `archivo` (PDF, JPEG, PNG o WebP según su contenido, hasta 5 MB) y `uso` (evidencia o constancia). Solo inserción, con su SHA-256. Luego se cita en POST .../requisitos/:clave (archivo_id) o en la entrega (constancia_archivo_id). 422 en `archivo`.
+         */
+        post: operations["lealtadSubirArchivoSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/archivos/{archivoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Descargar un archivo del sorteo (evidencia, constancia, imagen o acta)
+         * @description Con su tipo y ETag (SHA-256). 404 si no es del sorteo o si el archivo en disco ya no coincide con su huella.
+         */
+        get: operations["lealtadArchivoSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/aviso-portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Anunciar (o no) el sorteo en el portal del cliente
+         * @description Pedido del PM: false por defecto; editable hasta antes de ejecutar (después, 409), con version y audit.cambios. El portal solo lista los sorteos con aviso_portal. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        put: operations["lealtadAvisoPortalSorteo"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lealtad/sorteos/{id}/bases": {
         parameters: {
             query?: never;
@@ -3351,6 +3431,26 @@ export interface paths {
          * @description Con motivo. Evento sorteo.cancelado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
          */
         post: operations["lealtadCancelarSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/cerrar-acta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar el acta del sorteo (PDF con su SHA-256)
+         * @description ejecutado → acta_cerrada. Exige publicacion_resultados (422 requisito_pendiente) y la constancia. Genera el PDF una sola vez (resolución, checklist, hashes, semilla, valor público con su fuente y evidencia, algoritmo, ganadores con seudónimo y nombre, asistentes, constancia y publicación) y guarda su SHA-256 en acta_hash. Sin premios pendientes, pasa a premios_entregados. Evento sorteo.acta_cerrada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadCerrarActaSorteo"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3431,6 +3531,87 @@ export interface paths {
          * @description Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: 5.1.03 / 2.1.03 (proveedor) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
          */
         post: operations["lealtadEntregarPremioSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/no-reclamado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dar por no reclamado un premio: pasa al siguiente suplente
+         * @description Vencido el plazo de reclamo (422 plazo_reclamo_vigente antes; 422 ganador_no_notificado si no se notificó). El premio pasa al siguiente suplente en espera, que se notifica; el ganador queda sustituido (o no_reclamado si no quedan suplentes). Evento sorteo.premio_no_reclamado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadNoReclamadoSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/notificar-ganadores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Notificar a los ganadores (evento a notify) con su plazo de reclamo
+         * @description ejecutado o acta_cerrada. Cada ganador con premio que sigue por_notificar pasa a notificado con reclamar_antes = ahora + bases.plazo_reclamo_dias, y sale un sorteo.ganador_notificado por ganador (notify avisa al cliente). Idempotente. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadNotificarGanadoresSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/participantes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista de participantes del corte (JSON, CSV o XLSX)
+         * @description Desde el corte (409 antes). Orden canónico por codigo_publico con boletos y cliente; al pie, lista_hash (SHA-256 de las líneas codigo|boletos). Con formato=csv o xlsx responde el archivo. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        get: operations["lealtadParticipantesSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/premios/{posicion}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Imagen de un premio (panel) */
+        get: operations["lealtadVerImagenPremioSorteo"];
+        put?: never;
+        /**
+         * Subir la imagen de un premio (solo en borrador)
+         * @description multipart/form-data con `imagen`: PNG, JPEG o WebP según su contenido, hasta 1 MB y de 64 a 4096 px por lado (como las imágenes de los anuncios). El portal no carga URLs externas: la imagen se sirve por el mismo origen. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadImagenPremioSorteo"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5202,6 +5383,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/sorteos/{id}/premios/{posicion}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Imagen de un premio de un sorteo anunciado en el portal
+         * @description Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.
+         */
+        get: operations["portalImagenPremioSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/sorteos/{id}/publico": {
         parameters: {
             query?: never;
@@ -6845,6 +7046,22 @@ export interface components {
             en: string;
             nota: string | null;
         };
+        ArchivoSorteo: {
+            id: number;
+            sorteo_id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            uso: "evidencia" | "imagen_premio" | "acta" | "constancia";
+            nombre: string;
+            /** @enum {string} */
+            tipo: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+            tamano: number;
+            sha256: string;
+            ancho: number | null;
+            alto: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         Asiento: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
             empresa_id?: number;
@@ -6975,7 +7192,7 @@ export interface components {
         BasesSorteoPublicas: {
             sorteo_id: number;
             /** @enum {string} */
-            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "premios_entregados" | "cancelado";
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
             bases_hash: string;
             compromiso: string;
             /** @description Documento cuyo SHA-256 del JSON canónico es bases_hash */
@@ -8902,6 +9119,8 @@ export interface components {
             iva: components["schemas"]["Dinero"];
             clase_activo: string | null;
             diferir_meses: number | null;
+            /** @description Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad */
+            cantidad?: number;
         };
         LineaExtracto: {
             id: number;
@@ -10195,7 +10414,7 @@ export interface components {
             nombre: string;
             descripcion: string | null;
             /** @enum {string} */
-            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "premios_entregados" | "cancelado";
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
             regla_participacion: string | null;
             /** Format: date */
             inscripcion_desde: string | null;
@@ -10233,7 +10452,7 @@ export interface components {
             nombre: string;
             descripcion: string | null;
             /** @enum {string} */
-            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "premios_entregados" | "cancelado";
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
             /** Format: date */
             inscripcion_desde: string | null;
             /** Format: date-time */
@@ -11206,6 +11425,37 @@ export interface components {
             /** Format: date-time */
             generado_en: string;
         };
+        ReporteParticipantesSorteo: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                orden: number;
+                codigo_publico: string;
+                boletos: number;
+                cliente_id: number;
+                cliente: string;
+                servicio_id: number | null;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                orden: number | null;
+                codigo_publico: number | null;
+                boletos: number | null;
+                cliente_id: number | null;
+                cliente: number | null;
+                servicio_id: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ReportePromesas: {
             reporte: string;
             titulo: string;
@@ -11255,6 +11505,8 @@ export interface components {
             estado: "cumplido" | "no_aplica" | "pendiente";
             valor: string | null;
             evidencia: string | null;
+            /** @description Evidencia como archivo (GET .../archivos/:archivoId) */
+            archivo_id?: number | null;
             nota: string | null;
             /** Format: date-time */
             marcado_en: string | null;
@@ -11908,7 +12160,7 @@ export interface components {
             nombre: string;
             descripcion: string | null;
             /** @enum {string} */
-            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "premios_entregados" | "cancelado";
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
             /** @description Bases (§7.2): mecanica, regla_participacion, plazo_reclamo_dias… */
             bases: {
                 [key: string]: unknown;
@@ -11962,7 +12214,17 @@ export interface components {
                 retiene_isr: boolean;
                 /** @description Porcentaje del ISR del premio */
                 isr_pct: string;
+                /** @description Imagen subida (POST /lealtad/sorteos/:id/premios/:posicion/imagen); imagen_url es su ruta */
+                imagen_archivo_id?: number | null;
             }[];
+            /** @description Se anuncia en el portal (PUT /lealtad/sorteos/:id/aviso-portal; hasta antes de ejecutar) */
+            aviso_portal?: boolean;
+            /** @description SHA-256 del PDF del acta (GET /lealtad/sorteos/:id/acta.pdf) */
+            acta_hash?: string | null;
+            acta_archivo_id?: number | null;
+            acta_constancia?: string | null;
+            /** Format: date-time */
+            acta_cerrada_en?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -11992,8 +12254,25 @@ export interface components {
                 entregado_en: string | null;
                 /** @description Línea de la compra con factura del bien entregado */
                 compra_linea_id?: number | null;
+                /** @description Premio que le toca: el de su puesto o, un suplente que tomó uno no reclamado, premio_sustitucion */
+                premio?: number | null;
+                premio_sustitucion?: number | null;
+                /** @description Ganador cuyo premio no reclamado toma este suplente */
+                sustituye_a?: number | null;
+                /** Format: date-time */
+                notificado_en?: string | null;
+                /** Format: date-time */
+                reclamar_antes?: string | null;
+                /** Format: date-time */
+                no_reclamado_en?: string | null;
+                constancia_archivo_id?: number | null;
+                /** @description Unidades de esa línea que consumió la entrega */
+                compra_unidades?: number | null;
+                /** @description Parte de la base de la línea que le tocó (base / cantidad por unidad; la última lleva el resto) */
+                compra_base?: components["schemas"]["Dinero"] | null;
                 version: number;
             }[];
+            archivos?: components["schemas"]["ArchivoSorteo"][];
         };
         SorteoLealtad: {
             id: number;
@@ -12002,7 +12281,7 @@ export interface components {
             nombre: string;
             descripcion: string | null;
             /** @enum {string} */
-            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "premios_entregados" | "cancelado";
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
             /** @description Bases (§7.2): mecanica, regla_participacion, plazo_reclamo_dias… */
             bases: {
                 [key: string]: unknown;
@@ -12056,7 +12335,17 @@ export interface components {
                 retiene_isr: boolean;
                 /** @description Porcentaje del ISR del premio */
                 isr_pct: string;
+                /** @description Imagen subida (POST /lealtad/sorteos/:id/premios/:posicion/imagen); imagen_url es su ruta */
+                imagen_archivo_id?: number | null;
             }[];
+            /** @description Se anuncia en el portal (PUT /lealtad/sorteos/:id/aviso-portal; hasta antes de ejecutar) */
+            aviso_portal?: boolean;
+            /** @description SHA-256 del PDF del acta (GET /lealtad/sorteos/:id/acta.pdf) */
+            acta_hash?: string | null;
+            acta_archivo_id?: number | null;
+            acta_constancia?: string | null;
+            /** Format: date-time */
+            acta_cerrada_en?: string | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -12230,6 +12519,8 @@ export interface components {
             /** @description Fuente pública del valor declarada en las bases (congelada con bases_hash) */
             fuente_valor_publico: string | null;
             valor_publico_evidencia: string | null;
+            /** @description SHA-256 del acta, cuando ya se cerró */
+            acta_hash: string | null;
             lista_hash: string;
             lista: {
                 codigo: string;
@@ -17569,6 +17860,8 @@ export interface operations {
                          * @example 150.00
                          */
                         total: string;
+                        /** @description Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad */
+                        cantidad?: number | null;
                         /**
                          * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
                          * @example 150.00
@@ -17924,6 +18217,8 @@ export interface operations {
                          * @example 150.00
                          */
                         total: string;
+                        /** @description Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad */
+                        cantidad?: number | null;
                         /**
                          * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
                          * @example 150.00
@@ -25643,7 +25938,7 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
-                estado?: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "premios_entregados" | "cancelado";
+                estado?: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
             };
             header?: never;
             path?: never;
@@ -25734,6 +26029,7 @@ export interface operations {
                     premios?: {
                         nombre: string;
                         cantidad?: number;
+                        /** @description Solo null: la imagen se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen) */
                         imagen_url?: string | null;
                         /**
                          * @description Monto con hasta 2 decimales, como string
@@ -25751,6 +26047,8 @@ export interface operations {
                         /** @description Porcentaje del ISR del premio (10 por defecto) */
                         isr_pct?: string | null;
                     }[];
+                    /** @description Se anuncia en el portal (false por defecto) */
+                    aviso_portal?: boolean;
                 };
             };
         };
@@ -25896,6 +26194,7 @@ export interface operations {
                     premios?: {
                         nombre: string;
                         cantidad?: number;
+                        /** @description Solo null: la imagen se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen) */
                         imagen_url?: string | null;
                         /**
                          * @description Monto con hasta 2 decimales, como string
@@ -25913,6 +26212,8 @@ export interface operations {
                         /** @description Porcentaje del ISR del premio (10 por defecto) */
                         isr_pct?: string | null;
                     }[];
+                    /** @description Se anuncia en el portal (false por defecto) */
+                    aviso_portal?: boolean;
                 };
             };
         };
@@ -26043,6 +26344,267 @@ export interface operations {
             };
         };
     };
+    lealtadActaSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadSubirArchivoSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * @description evidencia del checklist o constancia firmada de una entrega
+                     * @enum {string}
+                     */
+                    uso: "evidencia" | "constancia";
+                    /**
+                     * Format: binary
+                     * @description PDF, JPEG, PNG o WebP, hasta 5 MB
+                     */
+                    archivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Archivo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivoSorteo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.marcar_requisito; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadArchivoSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                archivoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadAvisoPortalSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    aviso_portal: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     lealtadBasesSorteo: {
         parameters: {
             query?: never;
@@ -26113,6 +26675,83 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCerrarActaSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Firma o constancia del notario o del delegado */
+                    constancia: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ejecutar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -26404,8 +27043,12 @@ export interface operations {
                     /** @description Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra) */
                     contrapartida?: ("compra" | "proveedor" | "cuenta") | null;
                     cuenta_codigo?: string | null;
+                    /** @description Constancia firmada de la entrega (POST /lealtad/sorteos/:id/archivos, uso constancia) */
+                    constancia_archivo_id?: number | null;
                     /** @description Con contrapartida compra: línea (bien) de una compra registrada de la empresa */
                     compra_linea_id?: number | null;
+                    /** @description Con contrapartida compra: unidades de la línea que se entregan (1 por defecto); sin pasar de su cantidad */
+                    unidades?: number | null;
                     nota?: string | null;
                 };
             };
@@ -26449,6 +27092,340 @@ export interface operations {
             };
             /** @description Petición idempotente en curso */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadNoReclamadoSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                ganadorId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadNotificarGanadoresSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadParticipantesSorteo: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga, con lista_hash al pie) */
+                formato?: "json" | "csv" | "xlsx";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Participantes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteParticipantesSorteo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.exportar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerImagenPremioSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                posicion: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadImagenPremioSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                posicion: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description PNG, JPEG o WebP, hasta 1 MB
+                     */
+                    imagen: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -26559,6 +27536,8 @@ export interface operations {
                     valor?: string | null;
                     /** @description Obligatoria con cumplido o no_aplica: referencia o texto (archivos en la segunda PR) */
                     evidencia?: string | null;
+                    /** @description Evidencia como archivo de este sorteo (POST /lealtad/sorteos/:id/archivos, uso evidencia) */
+                    archivo_id?: number | null;
                     nota?: string | null;
                 };
             };
@@ -32569,6 +33548,63 @@ export interface operations {
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalImagenPremioSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                posicion: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
