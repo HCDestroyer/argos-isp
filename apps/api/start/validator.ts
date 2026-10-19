@@ -7,6 +7,8 @@
 |
 */
 import vine, { SimpleMessagesProvider } from '@vinejs/vine'
+// antes de compilar cualquier validador: `.meta()` no vuelve nullable un campo obligatorio
+import '#shared/vine_meta'
 
 vine.messagesProvider = new SimpleMessagesProvider({
     required: 'El campo {{ field }} es obligatorio',

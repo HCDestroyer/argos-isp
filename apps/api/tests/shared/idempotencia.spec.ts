@@ -4,6 +4,7 @@ import router from '@adonisjs/core/services/router'
 import { middleware } from '#start/kernel'
 import { NoImplementado } from '#shared/errores'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { generarTokenNodo } from '#portal/nodo_portal'
 
 /**
  * Rutas solo de prueba para el middleware de idempotencia (se registran antes de que el
@@ -176,6 +177,39 @@ test.group('Idempotency-Key', (group) => {
             assert.match(fila.alcance, /^(sesion|ip):[0-9a-f]{40}$/)
         }
         assert.isFalse(JSON.stringify(filas.map((f) => f.alcance)).includes('198.51.100'))
+    })
+
+    test('detrás de un nodo portal la clave se acota por la IP del cliente, no la del nodo', async ({
+        client,
+        assert,
+    }) => {
+        const { valor: token, hash } = generarTokenNodo()
+        await db.table('core.nodos_portal').insert({ nombre: unico('nodo').toLowerCase(), hash })
+        const clave = unico('clave-nodo')
+        const enviar = (ipCliente: string, tokenNodo = token) =>
+            client
+                .post('/__pruebas/idempotente-publica')
+                .header('Idempotency-Key', clave)
+                .header('X-Argos-Nodo-Token', tokenNodo)
+                .header('X-Argos-Cliente-Ip', ipCliente)
+                .json({ servicio_id: 1 })
+
+        // dos clientes distintos detrás del mismo nodo (misma IP de socket), misma clave y cuerpo
+        const a = await estado(enviar('198.51.100.91'), 201)
+        const b = await estado(enviar('198.51.100.92'), 201)
+        assert.isUndefined(b.header('idempotent-replayed'))
+        assert.notEqual(a.body().ejecucion, b.body().ejecucion)
+        // el mismo cliente sí recibe su respuesta guardada
+        const repetida = await estado(enviar('198.51.100.91'), 201)
+        assert.equal(repetida.header('idempotent-replayed'), 'true')
+        assert.deepEqual(repetida.body(), a.body())
+        assert.equal(ejecuciones, 2)
+        assert.lengthOf(await db.from('core.idempotency_keys').where('clave', clave), 2)
+
+        // un token de nodo inventado no se usa para elegir el alcance: 401 antes de ejecutar
+        const falso = await estado(enviar('198.51.100.91', 'argn_inventado-no-existe-0000000000000000'), 401)
+        assert.include(falso.body().type, 'nodo_portal_invalido')
+        assert.equal(ejecuciones, 2)
     })
 
     test('autenticado: el alcance queda null y manda el actor', async ({ client, assert }) => {
