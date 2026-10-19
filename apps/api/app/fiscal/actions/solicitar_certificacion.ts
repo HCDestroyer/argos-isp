@@ -121,6 +121,15 @@ export default class SolicitarCertificacion extends DomainAction<
             if (input.automatico) return omitir('anulada')
             throw new Conflicto(`La factura ${factura.id} está anulada`, 'factura_anulada', 'Factura anulada')
         }
+        // H21: un documento de Q0 (mes gratis, descuento del 100 %, cargo sin costo) no es venta: nunca un DTE de Q0.00
+        if (dec(factura.total).isZero()) {
+            if (input.automatico) return omitir('en_cero')
+            throw new Conflicto(
+                `La factura ${factura.id} es de Q0.00: no se certifica`,
+                'factura_en_cero',
+                'Factura en cero',
+            )
+        }
 
         const config = await configuracionFel(empresaId, t.trx)
         if (config.modo === 'desactivada' || !config.proveedor) {
