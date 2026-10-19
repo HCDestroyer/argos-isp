@@ -22285,7 +22285,8 @@
                 "banco",
                 "provision",
                 "castigo",
-                "lealtad"
+                "lealtad",
+                "sorteo"
               ]
             }
           },
@@ -40864,7 +40865,8 @@
               "banco",
               "provision",
               "castigo",
-              "lealtad"
+              "lealtad",
+              "sorteo"
             ]
           },
           "origen_id": {

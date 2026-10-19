@@ -121,6 +121,7 @@ export const Asiento = definirEsquema(
                 'provision',
                 'castigo',
                 'lealtad',
+                'sorteo',
             ]),
             origen_id: nulable(id),
             reversa_de: {
