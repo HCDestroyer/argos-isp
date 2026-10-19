@@ -19,6 +19,12 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     banco: { etiqueta: 'Partida del extracto', icono: 'i-lucide-file-spreadsheet' },
     provision: { etiqueta: 'Estimación de incobrables', icono: 'i-lucide-shield-alert' },
     castigo: { etiqueta: 'Castigo de cartera', icono: 'i-lucide-file-x' },
+    compra: { etiqueta: 'Compra', icono: 'i-lucide-shopping-cart' },
+    pago_proveedor: { etiqueta: 'Pago a proveedor', icono: 'i-lucide-hand-coins' },
+    depreciacion: { etiqueta: 'Depreciación', icono: 'i-lucide-trending-down' },
+    baja_activo: { etiqueta: 'Baja de activo', icono: 'i-lucide-package-x' },
+    diferido: { etiqueta: 'Diferido', icono: 'i-lucide-calendar-range' },
+    alta_activo: { etiqueta: 'Alta de activo', icono: 'i-lucide-package-plus' },
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
 }
 

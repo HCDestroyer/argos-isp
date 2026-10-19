@@ -43,6 +43,9 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.pagos_proveedores': 'pago a proveedor (§3.4)',
     'ledger.pagos_proveedores_anulaciones': 'anulación de pago a proveedor (§3.4)',
     'ledger.constancias_retencion': 'constancia de retención (§3.4)',
+    // fase 5 (A3): retención emitida por impuesto y aplicación de un pago a proveedor (§3.4)
+    'ledger.compras_retenciones': 'retención emitida en una compra, por impuesto (§3.4)',
+    'ledger.pagos_proveedores_aplicaciones': 'aplicación de un pago a proveedor a una compra (§3.4)',
     // §3.7 y §10.4–§10.5 cierres y bloqueos
     'ledger.bloqueos': 'bloqueo; el vigente es la última fila (§3.7)',
     'ledger.bloqueos_excepciones': 'excepción de bloqueo; revocar = fila nueva (§10.4)',
@@ -74,6 +77,8 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.activos_cuotas': 'cuota de depreciación (§10.10)',
     'ledger.diferimientos': 'diferimiento (§10.10)',
     'ledger.diferimientos_cuotas': 'cuota de diferimiento (§10.10)',
+    // fase 5 (A3): diferimiento cancelado al anular su compra antes de amortizarlo (§10.10)
+    'ledger.diferimientos_cancelaciones': 'cancelación de un diferimiento (§10.10)',
     // programa de lealtad, fase 1 (`contratos/lealtad.md` §3): el auxiliar de puntos
     'lealtad.movimientos': 'auxiliar de puntos: lotes y salidas; corregir = reverso (lealtad §3)',
     'lealtad.consumos': 'qué lote paga cada salida de puntos (lealtad §3)',
@@ -106,6 +111,13 @@ export const MUTABLES: Record<string, string> = {
         'catálogo de premios con version y audit.cambios; existencias por canje (lealtad §3, fase 2)',
     'lealtad.canjes':
         'estado del canje por acción, con version y audit.cambios; los puntos van en movimientos (lealtad §3, fase 2)',
+    // servicios adicionales (`contratos/adicionales.md`, A1): no son dinero ni libro; la factura de
+    // los `cobrado` la hace A3 en billing
+    'core.adicionales': 'catálogo por empresa con version y audit.cambios; se desactiva, no se borra',
+    'core.motivos_cortesia': 'catálogo de motivos con version y audit.cambios; se desactiva, no se borra',
+    'core.servicios_adicionales':
+        'asignación a un servicio con version y audit.cambios; la baja es estado + baja_en, nunca DELETE',
+    'network.planes_adicionales': 'configuración del plan (lista reemplazable) con el diff en audit.cambios',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */

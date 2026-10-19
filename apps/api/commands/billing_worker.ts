@@ -17,7 +17,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * `lealtad:vencer`.
  *
  * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas`, `conciliar`, `sellar`,
- * `integridad`, `lealtad:antiguedad` o `lealtad:vencer`) y termina:
+ * `integridad`, `depreciar`, `diferir`, `lealtad:antiguedad` o `lealtad:vencer`) y termina:
  * útil en el laboratorio y en scripts.
  */
 export default class BillingWorker extends BaseCommand {
@@ -32,7 +32,7 @@ export default class BillingWorker extends BaseCommand {
 
     @flags.string({
         description:
-            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad, lealtad:antiguedad, lealtad:vencer) y termina',
+            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad, depreciar, diferir, lealtad:antiguedad, lealtad:vencer) y termina',
     })
     declare unaVez?: string
 

@@ -44,8 +44,12 @@ const OPCIONALES_PENDIENTES: Record<string, string[]> = {
         'referido_empresa_id',
         'codigos_referido',
     ],
-    // lealtad (2026-10-18): plan temporal vigente
-    Servicio: ['plan_temporal'],
+    // lealtad (2026-10-18): plan temporal vigente; tipo de plan (2026-10-19): `plan_tipo`.
+    // `warnings` solo viene al crear o editar (no es pendiente: es opcional de verdad)
+    Servicio: ['plan_temporal', 'plan_tipo', 'warnings'],
+    // tipo de plan (2026-10-19)
+    Plan: ['tipo', 'warnings'],
+    PlanEfectivo: ['tipo'],
 }
 
 test.group('OpenAPI estricto · núcleo', () => {

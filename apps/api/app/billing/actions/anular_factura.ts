@@ -10,6 +10,7 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { hoyGuatemala } from '#ledger/fechas'
 import { ERROR_DOCUMENTO_ANULADO, dteVigente, finPlazoAnulacion, type DteFila } from '#fiscal/fel/dte'
 import { AnulacionFueraDePlazo, DteEnProceso } from '#fiscal/fel/errores'
+import { diferimientoDeFactura } from '#ledger/diferidos'
 
 /** Bloquea el DTE sin esperar: si el worker lo está enviando, 409 `dte_en_proceso`. */
 async function bloquearDte(t: Transaccion, dteId: number): Promise<void> {
@@ -65,6 +66,16 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
             .select('cliente_id')
             .first()
         if (!previa) throw new NoEncontrado(`La factura ${input.factura_id} no existe`)
+        // fase 5 (§10.10): el ingreso de una factura diferida está en 2.1.12; anularla o acreditarla
+        // dejaría el diferimiento sin ingreso que devolver (confirmar con contador cómo revertirlo)
+        const diferida = await diferimientoDeFactura(t.trx, input.factura_id)
+        if (diferida) {
+            throw new Conflicto(
+                `La factura ${input.factura_id} tiene su ingreso diferido (diferimiento ${diferida.id})`,
+                'factura_diferida',
+                'Factura diferida',
+            )
+        }
         await bloquearCliente(t.trx, previa.cliente_id)
 
         const facturas = (await t.trx

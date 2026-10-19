@@ -1001,6 +1001,17 @@ Reparto de §10 por fase (la tabla de fases está en `PLAN.md`):
 | 42  | Recuperación de cuentas incobrables               | Lo cobrado después de un castigo se parte en la proporción IVA / monto del castigo (H17): la base es ingreso `4.2.03` (no operativo) y el IVA vuelve a `2.1.11`. ¿Se certifica un DTE por lo recuperado (y se reclasifica a `2.1.02`) o pasa directo a débito? ¿Va contra la estimación `1.1.12` cuando el castigo la usó? | Base a `4.2.03`, IVA a `2.1.11` sin DTE | §18 |
 | 43  | Aviso acreditado por completo                     | Un aviso cubierto entero por notas internas sin ningún cobro queda `acreditada`: no es venta y no se certifica (H16). ¿Hace falta algún documento? | Sin DTE | §18 |
 | 44  | Diferencia devuelta con DTE                       | Anular el pago que cerró una diferencia cuando la factura ya tiene DTE deja el DTE como está y devuelve la diferencia como cargo interno no fiscal `CxC / 5.3.05` (H18). ¿Hace falta una NDEB por esos centavos? | Cargo interno sin IVA ni DTE | §18 |
+| 45  | Momento de la retención emitida                  | Si la retención de IVA/ISR al proveedor se causa al registrar la factura o al pagarla | Al registrar la compra | inv. A.1, A.2; A3 (fase 5) |
+| 46  | Retenciones que se sugieren                      | Agente de IVA a todo proveedor general no agente desde `ret_iva_minimo`; 5 % del total a pequeño contribuyente desde `ret_iva_pequeno_desde`; ISR 7 % al régimen opcional sin mínimo; nada a no residentes ni FESP sin pedirlo | Así | inv. A.1, A.2; A3 (fase 5) |
+| 47  | Documentos de proveedores                        | FESP solo a `sin_documento`; un no residente solo con RECIBO (sin IVA ni crédito: ¿IVA de servicios del exterior?); DUA con crédito | Así | inv. A.1; A3 (fase 5) |
+| 48  | Constancia recibida después del pago             | La constancia del cliente se registra con el pago; una que llega días después no tiene acción propia | Con el pago | inv. A.1; A3 (fase 5) |
+| 49  | Anticipos a proveedores                          | Un pago a proveedor no pasa del saldo de sus compras | Sin anticipos (422 `pago_excede_saldo`) | A3 (fase 5) |
+| 50  | Mes de la baja de un activo                      | Si el mes de la baja se deprecia | No se deprecia | inv. A.2 (art. 28); A3 (fase 5) |
+| 51  | IVA en la venta de activos fijos                 | La baja por venta registra el precio sin IVA en un banco; el IVA de la venta no se calcula | Facturar aparte | inv. A.1; A3 (fase 5) |
+| 52  | Activos del inventario inicial                   | Contrapartida (saldos de apertura, capital o utilidades) y depreciación acumulada al darlos de alta | 2.9.01 por defecto | inv. B.1; A3 (fase 5) |
+| 53  | Factura con ingreso diferido                     | Cómo se anula o se acredita una factura cuyo ingreso está en 2.1.12 (hoy 409 `factura_diferida`) | Impedido | odoo §9; A3 (fase 5) |
+| 54  | Equipo de red en comodato (CPE)                  | Si el CPE en casa del cliente se activa y deprecia como equipo de red (10 %) | Como activo de la clase `equipo_red` | inv. A.2; A3 (fase 5) |
+| 55  | Retención de IVA sobre lo recuperado de un castigo | Una constancia de IVA del cliente en el pago que recupera un aviso castigado sin DTE se rechaza (422 `retencion_sin_documento_fiscal`, H19): no hay DTE que la respalde. Emitir un DTE por lo recuperado (y reclasificar su IVA de `2.1.11` a `2.1.02`) haría válida la retención | Rechazada (abierto) | §19 (H19) |
 
 ## 16. Desvíos aprobados en la implementación (A3, fase 2)
 
@@ -1068,3 +1079,43 @@ Rama `a3/fase4-bancos`. Lo que sigue cumple §10.3 y §10.9; cada punto marcado 
 
 **Auditor.** El auditor amplió en `auditor/fase4` los invariantes que suponían el mundo anterior (`4.*`, `5.*`, `9.origen…`, `12.*`) y agregó los `13.*` de cobros, bancos y cartera; las pruebas de A3 corren `afirmarLibro` completo, sin descartar ninguno. Pendiente del auditor (decisión g): `5.factura_pagado_inconsistente` todavía suma los castigos a `pagado` y `3.anticipos_distintos_de_excedentes` no descuenta la recuperación; sus invariantes nuevos (`5.factura_pagado_sin_castigo`, `5.factura_castigada_inconsistente`, `13.recuperacion_de_castigada`) ya pasan.
 - **Paquete `gt-2026.2`** (decisión g): `gt-2026.1` sin cambios (su checksum es el publicado) más `4.2.03 Recuperación de cuentas incobrables`. La migración de la fase 2 instala explícitamente 2026.1 y una migración nueva actualiza cada empresa instalada a la última versión (solo agrega la cuenta); una empresa nueva nace en 2026.2.
+
+## 19. Implementación de la fase 5 (compras, proveedores, activos y diferidos, A3): aprobada por el líder
+
+Rama `a3/fase5-compras` (sobre `a3/fase4-bancos`). Cumple §3.3, §3.4, §3.5, §6, §10.8 (auxiliar y antigüedad de proveedores) y §10.10 (activos y diferidos). Los **desvíos** (a) a (g) quedaron aprobados por el líder; lo que el informe no verifica va en las filas 45 a 55 de §15.
+
+**Compras.**
+
+- **Desvío (a, aprobado) · asiento de la compra desde un egreso.** Origen `compra` (no `reclasificacion`): `reclasificacion` es la de `2.1.11` (§10.1) y el auditor la valida como tal (`12.reclasificacion_mal_formada`). La partida de la cuenta del egreso queda aparte de la de cada línea (no se netea) para conservar la etiqueta de base; en el caso común el efecto neto es `1.1.04 / Gasto` por el IVA. Anulada la compra, el egreso se puede volver a registrar.
+- **Desvío (b, aprobado) · columnas nuevas.** `ledger.compras.base_importaciones` (`total = bienes + servicios + importaciones + exento + iva`), `fecha` (fecha contable = max(fecha del documento, inicio de `periodo_iva`)), `ledger.compras_lineas.exento` y `diferir_meses`, y la tabla `ledger.compras_retenciones` (una fila por impuesto de retención con base, tasa y monto). No hay `compras.asiento_id`: el asiento se encuentra por origen, como el de los egresos (la fila es inmutable y el asiento nace después).
+- **Desvío (c, aprobado) · libro de compras.** `GET /libros/compras` (vista previa, `libros.ver`) lista las compras por `periodo_iva` y cada **anulación** en el mes de su reverso con los valores en negativo; así el crédito del libro de cada mes = movimiento de `1.1.04` de los asientos de compras de ese mes (`GET /libros/compras/cuadre`). La emisión con folio queda para la fase de libros. Los reversos de compras copian las etiquetas con el signo contrario (`RevertirAsiento.invertir_etiquetas`; los demás reversos siguen sin etiquetas).
+- NCRE del proveedor: solo al crédito, contra una compra vigente del mismo proveedor y sin pasar de su saldo (422 `ncre_excede_saldo`); toma su crédito fiscal y no lleva retenciones. Una compra con NCRE, pagos o constancia no se anula (409).
+- El pago al contado crea su egreso con la categoría de la cuenta de la primera línea (o `otros`) y `compra_id`; `egresos.anular` lo rechaza (409 `egreso_de_compra`) y la vista del egreso muestra el asiento de la compra.
+
+**Retenciones y constancias.**
+
+- **Desvío (d, aprobado) · retención recibida.** `POST /pagos` acepta `retenciones[] { codigo, numero, fecha?, monto }`; `monto` sigue siendo lo que entra a caja o banco y el pago aplica `monto + Σ constancias` (`billing.pagos.monto`) con la parte retenida en la columna nueva `billing.pagos.retenido`. Un pago con constancias es de una empresa (422 `retencion_en_cobro_repartido`) y no va a un proveedor de cobro (422 `retencion_con_proveedor_cobro`). El esperado del turno, los depósitos y el reporte de cierres cuentan `monto − retenido`.
+- **Desvío (e, aprobado) · número de constancia.** Único por (empresa, impuesto, número) solo entre las **emitidas** (índice parcial); entre las recibidas lo valida la acción sobre los pagos vigentes (409 `constancia_duplicada`): la constancia de un pago anulado se puede volver a usar.
+- Constancia emitida: `POST /compras/:id/constancias` registra el número de la constancia por una retención de la compra (una por retención, sin asiento).
+
+**Pagos a proveedores.** `ledger.pagos_proveedores` guarda la cuenta del libro (`cuenta_id`) además del medio; las aplicaciones van en `ledger.pagos_proveedores_aplicaciones` (el `compras[]` del contrato). No paga de más (fila 49).
+
+**Activos y diferidos.**
+
+- **Desvío (f, aprobado) · origen `alta_activo`** para `POST /activos` (inventario inicial o aporte: `1.2.01 / 1.2.02 (inicial) + 2.9.01·3.1.01·3.3.01`): `ajuste` con `origen_id` lo usa el auditor para los saldos iniciales importados. Columna `ledger.activos.depreciacion_inicial` para activos que llegan depreciados.
+- **Desvío (g, aprobado) · cuotas bajo pedido además del cron.** Los crons diarios `depreciar` (02:30) y `diferir` (02:40) del `billing:worker` (con su lock) procesan todo lo pendiente hasta el mes anterior; `POST /activos/depreciar` y `POST /diferimientos/amortizar` hacen lo mismo a mano (no estaban en §11.1). El asiento de una cuota va al último día de su mes, o a hoy si ese mes ya está cerrado (hasta que lleguen los bloqueos por tipo y `fecha_documento`, fase 6).
+- Cuotas con origen `depreciacion` / `diferido` y `origen_id` = el activo o el diferimiento; cada cuota guarda su `asiento_id` (único activo + mes, diferimiento + mes).
+- Baja: `venta` (precio sin IVA a una cuenta bancaria, fila 51) o `retiro`; anular una compra sin cuotas deja una baja `anulacion` sin asiento y cancela sus diferimientos (`ledger.diferimientos_cancelaciones`, tabla nueva; revierte el asiento inicial si lo hubo).
+- Diferidos: línea de compra con `diferir_meses` (va directo a `1.1.13`) o `POST /diferimientos` sobre una línea ya registrada de factura (base sin IVA a `2.1.12`) o de compra. Una factura con ingreso diferido no se anula ni se acredita (409 `factura_diferida`, fila 53).
+
+**Permisos** (A1): `activos.ver`, `activos.registrar`, `activos.dar_de_baja` agregados en `permisos.ts` (entran a `contabilidad` con los fiscales; `lectura` recibe `activos.ver`).
+
+**Hallazgos del auditor (decisiones del líder).**
+
+- **H19 · retención de IVA sin documento fiscal.** Una constancia de IVA recibida en un pago que recupera (total o parcialmente) un aviso castigado sin DTE responde 422 `retencion_sin_documento_fiscal` (`exigirDocumentoDeRetencionIva` de `#ledger/retenciones`, con lo recuperado de cada parte del pago; todo el pago se rechaza). Con DTE (el castigo no tocó el IVA) y las de ISR, sin cambio. Queda abierto para el contador (fila 55 de §15).
+- **H20 · baja retroactiva.** `activos.dar_de_baja` con fecha anterior a cuotas ya registradas revierte las cuotas vigentes del mes de la baja en adelante, cada una con su reverso (`RevertirAsiento`, origen `depreciacion`) en la fecha de su asiento; si alguna cae en un periodo cerrado, 422 `periodo_cerrado` con un `errors[]` por mes y nada cambia. La fila de la cuota queda (insert-only) y deja de ser vigente cuando su asiento tiene reverso; la acumulada de la baja = inicial + cuotas vigentes.
+- **Un lock por activo** (`LOCK_ACTIVO`): depreciación, baja y anulación de la compra; y uno por diferimiento (`LOCK_DIFERIDO`): amortización y anulación de la compra. Con el lock, la depreciación y la amortización vuelven a mirar si el activo ya tiene baja o el diferimiento ya se canceló. El lock de compras pasa a su propio espacio (`LOCK_COMPRA = 3020`; 3012 lo usaba también `cartera.provisionar`).
+- **Pago a proveedor anterior a la compra**: 422 `pago_anterior_a_compra` (un `errors[]` por compra) si la fecha del pago es anterior a la fecha contable de una compra a la que aplicaría.
+- **Pendiente del auditor (H20)**: `15.cuota_posterior_a_la_baja` y `15.baja_de_activo_mal_contabilizada` cuentan también las cuotas revertidas; con `AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = q.asiento_id)` en las cuotas que suman, el escenario de H20 queda limpio (`tests/ledger/hallazgos_fase5.spec.ts` lo comprueba invariante por invariante).
+
+**Invariantes**: el auditor integró los cuatro reemplazos y los 16 nuevos de la fase 5 como `15.*` en `tests/contabilidad/verificar_libro.ts`; las pruebas de la fase 5 terminan en `afirmarLibro`.

@@ -617,6 +617,88 @@ export const PortalPagoEnLinea = definirEsquema(
     }),
 )
 
+/*
+|--------------------------------------------------------------------------
+| Anuncios (contrato `anuncios.md`)
+|--------------------------------------------------------------------------
+*/
+
+const LUGAR_ANUNCIO = enumerado(['portal_inicio', 'pagina_corte'])
+
+const BotonAnuncio = nulable(
+    objeto({
+        texto: texto,
+        url: { ...texto, description: '`http(s)://…` o ruta del portal que empieza con `/`' },
+    }),
+)
+
+export const Anuncio = definirEsquema(
+    'Anuncio',
+    objeto({
+        id,
+        empresa_id: id,
+        titulo: texto,
+        texto: { ...texto, description: 'Texto plano, sin HTML' },
+        imagen: nulable(
+            objeto({
+                url: { ...texto, description: '`/api/v1/anuncios/:id/imagen?v=…` (con sesión del panel)' },
+                tipo: enumerado(['image/png', 'image/jpeg', 'image/webp']),
+                ancho: entero,
+                alto: entero,
+                alt: nulable(texto),
+            }),
+        ),
+        boton: BotonAnuncio,
+        inicio: nulable(instante),
+        fin: nulable(instante),
+        audiencia: enumerado(['todos', 'suspendidos', 'con_puntos', 'al_dia']),
+        lugares: lista(LUGAR_ANUNCIO),
+        orden: entero,
+        estado: enumerado(['borrador', 'publicado', 'archivado']),
+        vigente: { ...booleano, description: 'Publicado y dentro de su vigencia ahora mismo' },
+        publicado_en: nulable(instante),
+        archivado_en: nulable(instante),
+        creado_por: nulable(id),
+        version: { type: 'integer', minimum: 1, description: 'Control optimista: envíala al editar' },
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+/** Lo que el portal pinta: sin estado, audiencia ni datos internos. */
+export const PortalAnuncio = definirEsquema(
+    'PortalAnuncio',
+    objeto({
+        id,
+        empresa_id: id,
+        titulo: texto,
+        texto: { ...texto, description: 'Texto plano: mostrar como texto, nunca como HTML' },
+        imagen: nulable(
+            objeto({
+                url: { ...texto, description: '`/api/v1/portal/anuncios/:id/imagen?v=…` (mismo origen)' },
+                ancho: entero,
+                alto: entero,
+                alt: texto,
+            }),
+        ),
+        boton: BotonAnuncio,
+    }),
+)
+
+export const MetricasAnuncio = definirEsquema(
+    'MetricasAnuncio',
+    objeto({
+        anuncio_id: id,
+        vistas: {
+            ...entero,
+            description: 'Visitantes distintos que lo vieron (uno por sesión del navegador)',
+        },
+        clics: { ...entero, description: 'Visitantes distintos que tocaron su botón' },
+        por_lugar: lista(objeto({ lugar: LUGAR_ANUNCIO, vistas: entero, clics: entero })),
+        por_dia: lista(objeto({ dia: fecha, vistas: entero, clics: entero })),
+    }),
+)
+
 /** Nodo portal remoto (`contratos/nodo-portal.md`). Nunca expone el token ni su hash. */
 export const NodoPortal = definirEsquema(
     'NodoPortal',

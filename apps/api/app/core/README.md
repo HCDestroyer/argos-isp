@@ -124,6 +124,23 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 - `core.servicios`: `id`, `cliente_id`, `plan_id`, `plantilla_facturacion_id`, `costo_override` (numeric(14,2), null = precio del plan), `fecha_instalacion` (date), `estado` (`activo`/`limitado`/`suspendido`/`retirado`).
 - `network.planes`: `precio` (numeric(14,2)), `bajada_limitada_kbps`, `subida_limitada_kbps` (> 0).
 
+## Servicios adicionales (`adicionales.ts`; contrato `.claude/integration/contratos/adicionales.md`)
+
+Streaming, IPTV y similares asignados a un servicio: `incluido` (en el plan), `cortesia` (con motivo) o `cobrado` (con precio; la línea de la factura es de A3).
+
+| Acción | Permiso | Eventos |
+| --- | --- | --- |
+| `CrearAdicional`, `EditarAdicional`, `DesactivarAdicional` (`/adicionales`) | `adicionales.crear`, `.editar`, `.desactivar` (admin) | — (diff en `audit.cambios`, entidad `adicional`) |
+| `CrearMotivoCortesia`, `DesactivarMotivoCortesia` (`/adicionales/motivos`) | `adicionales.crear_motivo`, `.desactivar_motivo` (admin) | — |
+| `AgregarAdicionalServicio` (`POST /servicios/:id/adicionales`) | `servicios.agregar_adicional` (+ `servicios.adicional_cortesia` para cortesía) | `servicio.adicional_agregado` |
+| `EditarAdicionalServicio` (`PUT …/:asignacionId`, con `version`) | `servicios.editar_adicional` (+ cortesía) | `servicio.adicional_cambiado` |
+| `QuitarAdicionalServicio` (`POST …/:asignacionId/quitar`, con `version`) | `servicios.quitar_adicional` | `servicio.adicional_quitado` |
+| `VerCredencialAdicional` (`GET …/:asignacionId/credencial`) | `servicios.ver_credencial_adicional` (auditada) | — |
+| `DefinirAdicionalesPlan` (`PUT /planes/:id/adicionales`, `app/network/actions`) | `planes.editar` | — (sube la `version` del plan) |
+
+- `servicios.crear` agrega los incluidos del plan; `servicios.editar` con otro plan los reconcilia (`reconciliarIncluidos`: conserva los que el plan nuevo también trae, da de baja el resto y agrega los que faltan; `cortesia` y `cobrado` se quedan); un plan temporal no los toca; `servicios.retirar` da de baja todos; `servicios.cambiar_empresa` responde 422 `servicio_con_adicionales` con cortesías o cobrados vigentes y re-deriva los incluidos.
+- La credencial va cifrada v1 (`#shared/cifrado`) y como `***` en auditoría; las vistas solo traen `tiene_credencial`.
+
 ## Lealtad: planes temporales y referidos (`planes_temporales.ts`, `referidos.ts`, `jobs.ts`; contrato `.claude/integration/contratos/lealtad.md` §3, §5 y §16)
 
 | Acción | Permiso | Eventos |
@@ -172,7 +189,7 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 - Contrato: `.claude/integration/contratos/eventos.md`. `node ace eventos:relay` publica `audit.outbox` (pendientes, en orden de `id`, por lotes) en el stream `argos:eventos` (`EVENTOS_STREAM`; en pruebas `<COLAS_PREFIJO>:argos:eventos`) y marca `publicado_en`. Un solo relay activo (lock en Redis con dueño y renovación).
 - `EjecutorGrupo` (genérico para A1, A3 y A6): `XREADGROUP` + `XACK`, `XAUTOCLAIM` tras 60 s si un consumidor lanzó. Interfaz `ConsumidorEventos` / `EventoEntrante` (reexportada en `app/notify/consumidor.ts`).
 - Grupo `aaa-cache` (`consumidor_aaa.ts`): `servicio.*` y `asignacion.cambiada` reescriben `aaa:user:<user_ppp>`. Corre dentro de `eventos:relay`. El grupo `notify` corre dentro de `node ace notify:worker`.
-- Eventos que emite el núcleo: `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`. Consume: los anteriores (grupo `aaa-cache`).
+- Eventos que emite el núcleo: `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.adicional_agregado`, `servicio.adicional_cambiado`, `servicio.adicional_quitado`. Consume: los cuatro primeros (grupo `aaa-cache`; los de adicionales no cambian RADIUS).
 - Dependencias con otros módulos: llama `EvaluarEstadoServicio` de A3 (solo al cambiar excepciones que afectan el corte) y lee `configuracionDeServicio` de `app/billing/configuracion.ts`. Pedidos y avisos en `.claude/integration/a1.md`.
 
 ## Seguridad de la API (semana 3)

@@ -32,6 +32,9 @@ await setup({
     server: false,
     build: true,
     env: CON_URL_PUBLICA,
+    // `setup()` registra su propio `beforeAll` con este límite (120 s por defecto), que pisa el
+    // `hookTimeout` de vitest.servidor.config.ts: con la máquina cargada la compilación pasó de 120 s.
+    setupTimeout: 240_000,
 })
 
 afterAll(() => api.cerrar())

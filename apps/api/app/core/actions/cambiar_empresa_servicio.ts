@@ -6,6 +6,7 @@ import type { EstadoServicio } from '#shared/eventos'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { exigirEmpresaActiva } from '#core/empresas'
 import { saldoPendienteServicio } from '#billing/facturas'
+import { reconciliarIncluidos, tieneAdicionalesPropios } from '#core/adicionales'
 
 export interface EntradaCambiarEmpresaServicio {
     id: number
@@ -24,6 +25,9 @@ export interface EntradaCambiarEmpresaServicio {
  *   activa (422 en `empresa_id`). Retirado: 422 `servicio_retirado`. Control por `version` (409).
  * - Misma empresa: no hace nada. Si cambia, diff en `audit.cambios` y `servicio.config_cambiada`
  *   con `campos: ['empresa']` y `empresa_anterior_id` (no afecta la red).
+ * - Adicionales (`contratos/adicionales.md`): el catálogo es por empresa. Con `cortesia` o `cobrado`
+ *   vigentes responde 422 `servicio_con_adicionales` (se quitan antes); los `incluido` se dan de
+ *   baja y se asignan los que el plan trae en la empresa nueva.
  */
 export default class CambiarEmpresaServicio extends DomainAction<
     EntradaCambiarEmpresaServicio,
@@ -59,6 +63,13 @@ export default class CambiarEmpresaServicio extends DomainAction<
             )
         }
 
+        if (await tieneAdicionalesPropios(t, input.id)) {
+            throw new ReglaNegocio(
+                'El servicio tiene adicionales de cortesía o cobrados de su empresa: quítalos antes de cambiarlo de empresa',
+                'servicio_con_adicionales',
+            )
+        }
+
         const antes = await verServicio(input.id, t.trx)
         await t.trx
             .from('core.servicios')
@@ -77,6 +88,12 @@ export default class CambiarEmpresaServicio extends DomainAction<
             campos: ['empresa'],
             empresa_anterior_id: anterior,
         })
+        await reconciliarIncluidos(
+            t,
+            { id: input.id, empresa_id: input.empresa_id, cliente_id: despues.cliente_id },
+            despues.plan_id,
+            'cambio_empresa',
+        )
         return despues
     }
 }

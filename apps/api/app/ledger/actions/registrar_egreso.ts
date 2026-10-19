@@ -1,12 +1,11 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { resolverEmpresaActiva } from '#core/empresas'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
-import { CUENTAS, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
-import { verEgreso, type EgresoVista, type MetodoEgreso } from '#ledger/egresos'
+import type { ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import { resolverOrigenEgreso, verEgreso, type EgresoVista, type MetodoEgreso } from '#ledger/egresos'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 
 /**
@@ -98,7 +97,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
         }
         if (errores.length > 0) throw new ValidacionFallida(errores)
 
-        const origen = await this.origen(t, input)
+        const origen = await resolverOrigenEgreso(t.trx, t.ctx, input)
         // el egreso es de la empresa de su caja, banco o cuenta bancaria
         exigirAccesoEmpresa(t.ctx, origen.empresa_id)
         t.fijarEmpresa(origen.empresa_id)
@@ -144,124 +143,5 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
             { trx: t.trx },
         )
         return verEgreso(egresoId, t.trx)
-    }
-
-    private async origen(t: Transaccion, input: EntradaRegistrarEgreso) {
-        const vacio = { caja_id: null, turno_id: null, banco_id: null, cuenta_bancaria_id: null }
-        if (input.metodo === 'caja') {
-            const caja = (await t.trx
-                .from('ledger.cajas')
-                .where('id', input.caja_id!)
-                .select('id', 'empresa_id', 'nombre', 'cuenta_id', 'activa')
-                .first()) as {
-                id: number
-                empresa_id: number
-                nombre: string
-                cuenta_id: number
-                activa: boolean
-            } | null
-            if (!caja || !caja.activa) {
-                throw new ValidacionFallida([
-                    {
-                        field: 'caja_id',
-                        message: `La caja ${input.caja_id} no existe o está inactiva`,
-                        rule: 'caja',
-                    },
-                ])
-            }
-            // FOR SHARE como los cobros: si el turno se está cerrando, este egreso espera.
-            const turno = await t.trx
-                .from('ledger.cajas_turnos')
-                .where('caja_id', caja.id)
-                .whereNull('cerrado_en')
-                .forShare()
-                .select('id')
-                .first()
-            return {
-                ...vacio,
-                empresa_id: Number(caja.empresa_id),
-                caja_id: caja.id,
-                turno_id: (turno?.id as number | undefined) ?? null,
-                cuenta_id: caja.cuenta_id,
-                nombre: caja.nombre,
-            }
-        }
-        if (input.metodo === 'banco') {
-            // sin banco_id: el banco principal de la empresa activa
-            const empresaActiva = input.banco_id ? null : await resolverEmpresaActiva(t.ctx, t.trx)
-            const banco = (await t.trx
-                .from('ledger.bancos as b')
-                .join('ledger.cuentas as cu', 'cu.id', 'b.cuenta_id')
-                .if(
-                    input.banco_id,
-                    (q) => q.where('b.id', input.banco_id!),
-                    (q) =>
-                        q.where('cu.codigo', CUENTAS.BANCO_PRINCIPAL).where('b.empresa_id', empresaActiva!),
-                )
-                .select('b.id', 'b.empresa_id', 'b.nombre', 'b.cuenta_id')
-                .first()) as { id: number; empresa_id: number; nombre: string; cuenta_id: number } | null
-            if (!banco) {
-                throw new ValidacionFallida([
-                    {
-                        field: 'banco_id',
-                        message: input.banco_id
-                            ? `El banco ${input.banco_id} no existe`
-                            : `La empresa ${empresaActiva} no tiene banco principal en el libro: indica banco_id o usa una cuenta bancaria`,
-                        rule: 'exists',
-                    },
-                ])
-            }
-            return {
-                ...vacio,
-                empresa_id: Number(banco.empresa_id),
-                banco_id: banco.id,
-                cuenta_id: banco.cuenta_id,
-                nombre: banco.nombre,
-            }
-        }
-        const cuenta = (await t.trx
-            .from('billing.cuentas_bancarias as cb')
-            .join('billing.bancos as b', 'b.id', 'cb.banco_id')
-            .where('cb.id', input.cuenta_bancaria_id!)
-            .select(
-                'cb.id',
-                'cb.empresa_id',
-                'cb.alias',
-                'cb.cuenta_id',
-                'cb.activa',
-                'cb.moneda',
-                'b.nombre as banco',
-            )
-            .first()) as {
-            id: number
-            empresa_id: number
-            alias: string
-            cuenta_id: number
-            activa: boolean
-            moneda: string
-            banco: string
-        } | null
-        if (!cuenta) {
-            throw new ValidacionFallida([
-                {
-                    field: 'cuenta_bancaria_id',
-                    message: `La cuenta bancaria ${input.cuenta_bancaria_id} no existe`,
-                    rule: 'exists',
-                },
-            ])
-        }
-        if (!cuenta.activa || cuenta.moneda !== 'GTQ') {
-            throw new ReglaNegocio(
-                `La cuenta bancaria ${cuenta.id} está inactiva o no es en quetzales`,
-                'cuenta_bancaria_no_disponible',
-            )
-        }
-        return {
-            ...vacio,
-            empresa_id: Number(cuenta.empresa_id),
-            cuenta_bancaria_id: cuenta.id,
-            cuenta_id: cuenta.cuenta_id,
-            nombre: `${cuenta.banco} · ${cuenta.alias}`,
-        }
     }
 }
