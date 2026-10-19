@@ -1,0 +1,14 @@
+# Parches automáticos de ArgosIsp (docs/runbooks/actualizacion.md). Lo arranca el timer, que viene
+# APAGADO: `argosisp auto activar`. Con --auto solo aplica parches (MAYOR.MENOR iguales); un cambio
+# menor o mayor queda anotado en el registro y espera a `argosisp actualizar` a mano.
+[Unit]
+Description=ArgosIsp: aplicar parches publicados en el canal estable
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/argosisp actualizar --auto
+# Respaldo + descarga + migraciones + verificación (y reversión si falla)
+TimeoutStartSec=2h
+Nice=10
