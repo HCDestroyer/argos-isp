@@ -368,6 +368,19 @@ con un token inventado o revocado responde 401 `nodo_portal_invalido`. `GET /ver
 
 Tabla `core.nodos_portal` (solo el sha256 del token; `nombre` único). Pruebas: `tests/portal/nodo_portal.spec.ts`.
 
+### Bonificaciones (decisión del PM: nunca una factura de Q0)
+
+Un periodo en cero (mes gratis, descuento del 100 %, canje, cargo sin costo) es una fila de
+`billing.bonificaciones` (A3), no una factura. Lectura propia en `bonificaciones.ts`, filtrada por el
+cliente de la sesión, sin montos, líneas, asiento ni el motivo interno (`motivo_id`, `motivo_texto`):
+
+- `GET /portal/bonificaciones` (paginada, `PortalBonificacion`: empresa, servicio, periodo, concepto
+  sin «· periodo …», origen).
+- `GET /portal/cuenta`: cada sección de `empresas[]` trae `bonificaciones` del mes actual y los dos
+  anteriores (estado de cuenta).
+
+El portal las muestra como «Mes bonificado: <concepto>», sin monto a pagar ni PDF. Pruebas:
+`tests/portal/bonificaciones.spec.ts`.
 ### Adicionales y tipo de plan en la cuenta (contrato `contratos/adicionales.md`)
 
 `GET /portal/cuenta` trae en cada servicio `plan_tipo` (`residencial`, `empresarial`, `dedicado`) y
