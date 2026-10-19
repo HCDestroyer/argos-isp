@@ -140,6 +140,8 @@ export default class RegistrarDesdeExtracto extends DomainAction<
                     `Extracto ${linea.cuenta_nombre}: ${linea.descripcion}${linea.referencia ? ` · ref. ${linea.referencia}` : ''}`,
                 origen_tipo: 'banco',
                 origen_id: linea.id,
+                // partida del extracto: con la fecha cerrada o bloqueada va al primer día abierto (§10.4)
+                trasladar_si_bloqueado: true,
                 movimientos,
             },
             t.ctx,

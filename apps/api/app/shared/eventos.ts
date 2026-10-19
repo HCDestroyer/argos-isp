@@ -359,6 +359,30 @@ export interface CatalogoEventos {
         esperado: string
         obtenido: string
     }
+    /**
+     * Cambió el bloqueo `tipo` del libro de la empresa (contrato de localización fiscal §10.4):
+     * `hasta` es el vigente nuevo (null = sin bloqueo de ese tipo) y `anterior` el que había.
+     */
+    'libro.bloqueo_cambiado': {
+        empresa_id: number
+        tipo: 'global' | 'ventas' | 'compras' | 'impuestos' | 'duro'
+        hasta: string | null
+        anterior: string | null
+    }
+    /**
+     * Un cron (`proceso`: `facturas.generar`, `facturas.vencer_pendientes`) no pudo contabilizar
+     * `documentos` porque `fecha` cae bajo el bloqueo `tipo` (hasta `hasta`). Quedan pendientes y
+     * se reintentan en la siguiente corrida. Uno por corrida, empresa y tipo.
+     */
+    'libro.proceso_bloqueado': {
+        empresa_id: number
+        proceso: string
+        tipo: 'global' | 'ventas' | 'compras' | 'impuestos' | 'duro'
+        hasta: string | null
+        fecha: string
+        documentos: number
+        ejemplos: number[]
+    }
 
     // notify (A6)
     'notificacion.enviada': {
@@ -673,6 +697,8 @@ export const EVENTOS = [
     'comprobante.rechazado',
     'caja.cerrada',
     'libro.integridad_rota',
+    'libro.bloqueo_cambiado',
+    'libro.proceso_bloqueado',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
     'fiscal.localizacion_instalada',

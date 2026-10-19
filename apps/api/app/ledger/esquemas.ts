@@ -137,6 +137,16 @@ export const Asiento = definirEsquema(
                 description: 'Asiento que este revierte (correcciones por reverso)',
             },
             revertido_por: { ...nulable(id), description: 'Asiento de reverso de este, si ya se revirtió' },
+            fecha_documento: {
+                ...nulable(fecha),
+                description:
+                    'Fecha real de un asiento automático que se registró en el primer día abierto porque la suya estaba cerrada o bloqueada (§10.4); null si no se trasladó',
+            },
+            excepcion_id: {
+                ...nulable(id),
+                description:
+                    'Excepción de bloqueo por la que entró el asiento (§10.4); null si no hizo falta',
+            },
             diario: {
                 ...nulable(texto),
                 description: 'Código del diario (VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta>)',
@@ -163,7 +173,17 @@ export const Asiento = definirEsquema(
             created_at: instante,
             movimientos: lista(Movimiento),
         },
-        ['revertido_por', 'revertible', 'motivo_no_revertible', 'empresa_id', 'diario', 'numero', 'partida'],
+        [
+            'revertido_por',
+            'revertible',
+            'motivo_no_revertible',
+            'empresa_id',
+            'diario',
+            'numero',
+            'partida',
+            'fecha_documento',
+            'excepcion_id',
+        ],
     ),
 )
 

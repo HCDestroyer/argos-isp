@@ -4,12 +4,18 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos, type Dec, type Monto } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
-import { periodoCerrado } from '#ledger/cierres'
+import {
+    PeriodoBloqueado,
+    bloqueoVigente,
+    cuentasTocanImpuesto,
+    impedimentoConExcepcion,
+    primerDiaAbierto,
+} from '#ledger/bloqueos'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
 import { CUADRICULAS_GT } from '#fiscal/l10n/gt/impuestos'
-import { diarioDeAsiento, numerarAsiento } from '#ledger/diarios'
+import { diarioDeAsiento, numerarAsiento, type DiarioAsiento } from '#ledger/diarios'
 
 /**
  * `registrarAsiento`: única puerta de entrada al libro. Toda acción que mueve dinero (facturas,
@@ -23,6 +29,14 @@ import { diarioDeAsiento, numerarAsiento } from '#ledger/diarios'
  * Numeración (§10.7 de localización fiscal): en la misma transacción el asiento recibe su diario
  * (derivado del origen y de las cuentas que toca, o el de `diario`) y el siguiente número de ese
  * diario en el año de su fecha (`ledger.asientos_numeros`, sin huecos: ver `#ledger/diarios`).
+ *
+ * Bloqueos (§9.2, §10.4; `#ledger/bloqueos`): antes de escribir, `ledger.bloqueo_de` con el diario,
+ * el origen y si toca impuestos. Mes cerrado → 422 `periodo_cerrado`; bloqueo duro → 409
+ * `bloqueo_duro`; otro bloqueo → la excepción vigente del usuario para ese tipo (queda en
+ * `excepcion_id`) o 422 `periodo_bloqueado` (`errors[0].rule` = el tipo). Los asientos automáticos
+ * (`trasladar_si_bloqueado`) no fallan: van al primer día abierto y guardan su fecha real en
+ * `fecha_documento`. Al terminar se dispara el trigger diferido `asientos_bloqueo`, así un error
+ * de la base sale de esta acción y no del commit.
  */
 
 export const ORIGENES_ASIENTO = [
@@ -88,6 +102,13 @@ export interface EntradaAsiento {
     reversa_de?: number | null
     /** código del diario (`VEN`, `CAJ-3`…); por defecto se deriva del origen y las cuentas */
     diario?: string | null
+    /**
+     * Asiento automático (reclasificación de 2.1.11, liquidación de cobros, depreciación,
+     * diferidos, conciliación…): si `fecha` está cerrada o bloqueada, el asiento va al primer día
+     * abierto y `fecha` queda en `fecha_documento` (§10.4). Sin esta marca, una fecha bloqueada
+     * responde 422/409.
+     */
+    trasladar_si_bloqueado?: boolean
     movimientos: LineaAsiento[]
 }
 
@@ -112,6 +133,10 @@ export interface AsientoRegistrado {
     origen_tipo: OrigenAsiento
     origen_id: number | null
     reversa_de: number | null
+    /** fecha real de un asiento automático trasladado al primer día abierto; null si no se trasladó */
+    fecha_documento: string | null
+    /** excepción de bloqueo por la que entró (§10.4); null si no hizo falta */
+    excepcion_id: number | null
     /** diario y número guardados al registrar (`ledger.asientos_numeros`) */
     diario: string
     numero: number
@@ -146,7 +171,7 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
     readonly nombre = 'libro.registrar_asiento'
 
     protected async handle(input: EntradaAsiento, t: Transaccion): Promise<AsientoRegistrado> {
-        const fecha = input.fecha ? fechaValida(input.fecha) : hoyGuatemala()
+        const fechaPedida = input.fecha ? fechaValida(input.fecha) : hoyGuatemala()
         const descripcion = input.descripcion?.trim()
         if (!descripcion) {
             throw new ValidacionFallida([{ field: 'descripcion', message: 'La descripción es obligatoria' }])
@@ -167,7 +192,21 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
 
         const lineas = await this.normalizarLineas(t.trx, input.movimientos ?? [], empresaId)
         const total = this.validarCuadre(lineas)
-        await this.verificarPeriodoAbierto(t.trx, fecha, empresaId)
+        const diario = await diarioDeAsiento(
+            t.trx,
+            empresaId,
+            input.origen_tipo,
+            lineas.map((l) => l.cuenta.id),
+            input.diario,
+        )
+        const { fecha, fechaDocumento, excepcionId } = await this.fechaPermitida(t, {
+            fecha: fechaPedida,
+            empresaId,
+            diario,
+            origen: input.origen_tipo,
+            lineas,
+            trasladar: input.trasladar_si_bloqueado === true,
+        })
 
         // Deferred al insertar (el asiento existe antes que sus movimientos) …
         await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_cuadre, ledger.movimientos_cuadre DEFERRED')
@@ -182,6 +221,8 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
                 origen_tipo: input.origen_tipo,
                 origen_id: origenId,
                 reversa_de: input.reversa_de ?? null,
+                fecha_documento: fechaDocumento,
+                excepcion_id: excepcionId,
                 created_by: usuarioDelActor(t.ctx.actor),
             })
             .returning(['id', 'created_by'])) as Array<{ id: number; created_by: number | null }>
@@ -227,14 +268,10 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
 
         t.fijarEntidad('asiento', asiento!.id)
 
-        const diario = await diarioDeAsiento(
-            t.trx,
-            empresaId,
-            input.origen_tipo,
-            lineas.map((l) => l.cuenta.id),
-            input.diario,
-        )
         const numero = await numerarAsiento(t.trx, asiento!.id, empresaId, fecha, diario)
+        // bloqueos por diario e impuesto (trigger diferido): se verifican aquí, no en el commit
+        await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_bloqueo IMMEDIATE')
+        await t.trx.rawQuery('SET CONSTRAINTS ledger.asientos_bloqueo DEFERRED')
 
         const porId = new Map(lineas.map((l) => [l.cuenta.id, l.cuenta]))
         return {
@@ -245,6 +282,8 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
             origen_tipo: input.origen_tipo,
             origen_id: origenId,
             reversa_de: input.reversa_de ?? null,
+            fecha_documento: fechaDocumento,
+            excepcion_id: excepcionId,
             diario: diario.codigo,
             numero,
             created_by: asiento!.created_by,
@@ -489,14 +528,48 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         })
     }
 
-    private async verificarPeriodoAbierto(trx: TransactionClientContract, fecha: string, empresaId: number) {
-        const periodo = inicioDeMes(fecha)
-        // misma regla que los triggers: hay un cierre del mes (de esta empresa) sin reapertura
-        if (await periodoCerrado(trx, fecha, empresaId)) {
+    /**
+     * Fecha con la que se escribe el asiento: la pedida si nada la impide, con la excepción vigente
+     * del usuario si hace falta una, o el primer día abierto si es automático.
+     */
+    private async fechaPermitida(
+        t: Transaccion,
+        d: {
+            fecha: string
+            empresaId: number
+            diario: DiarioAsiento
+            origen: string
+            lineas: LineaNormalizada[]
+            trasladar: boolean
+        },
+    ): Promise<{ fecha: string; fechaDocumento: string | null; excepcionId: number | null }> {
+        const usuarioId = usuarioDelActor(t.ctx.actor)
+        const conImpuesto =
+            d.lineas.some((l) => l.impuesto_codigo !== null) ||
+            (await cuentasTocanImpuesto(
+                t.trx,
+                d.lineas.map((l) => l.cuenta.id),
+            ))
+        const consulta = {
+            fecha: d.fecha,
+            empresaId: d.empresaId,
+            diarioId: d.diario.id,
+            origen: d.origen,
+            conImpuesto,
+            usuarioId,
+        }
+        const { tipo, excepcionId } = await impedimentoConExcepcion(t.trx, consulta)
+        if (tipo === null) return { fecha: d.fecha, fechaDocumento: null, excepcionId }
+        if (d.trasladar) {
+            const fecha = await primerDiaAbierto(t.trx, consulta)
+            return { fecha, fechaDocumento: d.fecha, excepcionId: null }
+        }
+        if (tipo === 'cerrado') {
             throw new ReglaNegocio(
-                `Periodo ${periodo.slice(0, 7)} cerrado: no se registran asientos con fecha ${fecha}`,
+                `Periodo ${inicioDeMes(d.fecha).slice(0, 7)} cerrado: no se registran asientos con fecha ${d.fecha}`,
                 'periodo_cerrado',
             )
         }
+        throw new PeriodoBloqueado(tipo, d.fecha, await bloqueoVigente(t.trx, d.empresaId, tipo), d.empresaId)
     }
 }

@@ -307,6 +307,27 @@ export const FacturaDetalle = definirEsquema('FacturaDetalle', {
     ],
 })
 
+const BloqueoCorrida = objeto({
+    empresa_id: id,
+    tipo: enumerado(['global', 'ventas', 'compras', 'impuestos', 'duro']),
+    hasta: { ...nulable(fecha), description: 'Bloqueo vigente de ese tipo' },
+    fecha: { ...fecha, description: 'Fecha contable que quedó bajo el bloqueo' },
+    documentos: { type: 'integer', description: 'Servicios o facturas que no se contabilizaron' },
+    ejemplos: { ...lista(id), description: 'Los primeros 20 ids' },
+})
+
+const camposBloqueo = {
+    bloqueados: {
+        type: 'integer',
+        description:
+            'Documentos que no se contabilizaron por un bloqueo del libro; se reintentan en la siguiente corrida',
+    },
+    bloqueos: {
+        ...lista(BloqueoCorrida),
+        description: 'Detalle por empresa y tipo de bloqueo (también va en libro.proceso_bloqueado)',
+    },
+}
+
 export const ResultadoGeneracion = definirEsquema(
     'ResultadoGeneracion',
     objeto(
@@ -315,8 +336,9 @@ export const ResultadoGeneracion = definirEsquema(
             omitidas: { type: 'integer', description: 'Ya tenían factura del periodo' },
             facturas: lista(id),
             errores: { type: 'integer', description: 'Servicios que no se pudieron facturar (ver log)' },
+            ...camposBloqueo,
         },
-        ['errores'],
+        ['errores', 'bloqueados', 'bloqueos'],
     ),
 )
 
@@ -326,6 +348,7 @@ export const ResultadoVencimiento = definirEsquema(
         vencidas: { type: 'integer', description: 'Facturas que pasaron a vencida' },
         moras: { type: 'integer', description: 'Recargos de mora creados' },
         errores: { type: 'integer', description: 'Facturas que no se pudieron procesar (ver log)' },
+        ...camposBloqueo,
     }),
 )
 

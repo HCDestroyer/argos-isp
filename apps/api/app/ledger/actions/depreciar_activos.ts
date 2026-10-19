@@ -112,7 +112,8 @@ export default class DepreciarActivos extends DomainAction<EntradaDepreciar, Res
                 const asiento = await new RegistrarAsiento().execute(
                     {
                         empresa_id: empresaId,
-                        fecha: await fechaDeCuota(t.trx, mes, empresaId),
+                        fecha: fechaDeCuota(mes),
+                        trasladar_si_bloqueado: true,
                         descripcion: `Depreciación ${mes.slice(0, 7)} del activo ${activo.id} · ${activo.descripcion}`,
                         origen_tipo: 'depreciacion',
                         origen_id: Number(activo.id),

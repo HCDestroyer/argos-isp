@@ -131,7 +131,14 @@ test.group('billing · generarFacturas', () => {
         assert.equal(await saldoTexto(clienteId), '225.00')
 
         const segunda = await generar(servicioId, '2026-10-15')
-        assert.deepEqual(segunda, { generadas: 0, omitidas: 2, facturas: [], errores: 0 })
+        assert.deepEqual(segunda, {
+            generadas: 0,
+            omitidas: 2,
+            facturas: [],
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        })
         assert.lengthOf(await facturasDe(servicioId), 2)
         assert.equal(await saldoTexto(clienteId), '225.00')
         await afirmarLibroCuadrado(assert)
