@@ -1,0 +1,81 @@
+# Proxy de un NODO PORTAL de ArgosIsp (docker-compose.nodo-portal.yml). Contrato con la API central:
+# .claude/integration/contratos/nodo-portal.md (1.0.0): X-Argos-Nodo-Token, X-Argos-Cliente-Ip y
+# X-Argos-Cliente-Proto. Un token inválido o revocado da 401 nodo_portal_invalido en el central.
+#
+# - DOMINIO_PORTAL por HTTPS (Let's Encrypt) y el 80 con cualquier Host para /corte, como el
+#   principal (config/Caddyfile).
+# - :8081, solo para la red interna de compose: el portal (Nitro) reenvía ahí /api/v1/portal/** y
+#   este proxy lo manda por HTTPS a la API central con el token del nodo y la IP real del cliente.
+# - IP real: en :80/:443 el cliente no es de confianza y Caddy pone su IP de socket en
+#   X-Forwarded-For; Nitro agrega la del proxy. En :8081 se confía solo en la red interna
+#   (trusted_proxies, de derecha a izquierda) y {client_ip} es la del cliente.
+
+{
+	{$PROXY_TLS_GLOBAL}
+	auto_https disable_redirects
+	# Confianza solo en el reenvío interno: en :80/:443 un cliente que entra por docker-proxy llega
+	# con la IP de la puerta de enlace de la red (dentro de RED_INTERNA_V4) y no debe poder fijar
+	# X-Forwarded-For.
+	servers :8081 {
+		trusted_proxies static {$RED_INTERNA_V4} {$RED_INTERNA_V6}
+		trusted_proxies_strict
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+(portal) {
+	reverse_proxy portal:3001 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+(central) {
+	reverse_proxy {$NODO_CENTRAL_DIRECCION} {
+		header_up Host {$NODO_CENTRAL_HOST}
+		header_up X-Argos-Nodo-Token {$NODO_PORTAL_TOKEN}
+		header_up X-Argos-Cliente-Ip {client_ip}
+		# https o http: cómo llegó el navegador al nodo (lo pone el sitio de borde y Nitro lo reenvía)
+		header_up X-Argos-Cliente-Proto {http.request.header.X-Forwarded-Proto}
+		transport http {
+			tls
+			tls_server_name {$NODO_CENTRAL_HOST}
+			{$NODO_CENTRAL_TLS_EXTRA}
+		}
+	}
+}
+
+{$DOMINIO_PORTAL} {
+	header Strict-Transport-Security "max-age={$PORTAL_HSTS_MAX_AGE:300}"
+	import portal
+}
+
+http:// {
+	@portalSeguro {
+		host {$DOMINIO_PORTAL}
+		path /entrar /entrar/* /cuenta /cuenta/*
+	}
+	redir @portalSeguro https://{host}{uri} 308
+
+	import portal
+}
+
+:8081 {
+	# Solo el portal (red interna) y `argosisp` dentro del contenedor (127.0.0.1)
+	@fuera not remote_ip {$RED_INTERNA_V4} {$RED_INTERNA_V6} 127.0.0.1/8
+	respond @fuera 403
+
+	@central {
+		path /api/v1/portal/*
+	}
+	@version {
+		method GET
+		path /api/v1/version
+	}
+	handle @central {
+		import central
+	}
+	handle @version {
+		import central
+	}
+	respond 404
+}

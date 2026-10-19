@@ -143,6 +143,8 @@ const TITULOS_FEL: Record<string, string> = {
     nota_sin_ncre_rechazada: 'La NCRE de esta nota no fue rechazada',
     tipo_dte_no_permitido: 'Ese DTE no corresponde al régimen',
     factura_anulada: 'La factura está anulada',
+    factura_castigada: 'La factura está castigada',
+    factura_acreditada: 'La factura está acreditada: no es una venta',
     factura_con_ndeb: 'Primero anula la mora (NDEB)',
     factura_con_pagos: 'La factura tiene pagos',
     factura_sin_saldo: 'La factura no tiene saldo',
@@ -162,6 +164,7 @@ const SUGERENCIAS_FEL: Record<string, string> = {
     ncre_sin_certificar: 'Certifica las NCRE pendientes o anula las rechazadas antes de cerrar el mes.',
     integridad_rota: 'Revisa la integridad del libro: nadie debe cerrar un mes con la cadena rota.',
     conflicto_version: 'Recarga la configuración y vuelve a guardar.',
+    factura_acreditada: 'Se cubrió entera con notas de crédito internas sin ningún cobro: no se certifica.',
 }
 
 /**
