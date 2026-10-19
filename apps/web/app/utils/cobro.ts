@@ -11,9 +11,16 @@ export function hoyGuatemala(ahora: Date = new Date()): string {
     return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_HORARIA, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora)
 }
 
-/** Lo que falta pagar de una factura (`total - pagado`). */
-export function saldoFactura(factura: Factura): Decimal {
-    return new Decimal(factura.total).minus(factura.pagado)
+/**
+ * Lo que falta pagar de una factura (`total - pagado`). Una factura `pagada` o `acreditada` no debe
+ * nada aunque `pagado < total`: con una diferencia de cobro cerrada como gasto (decisión B, A3)
+ * `pagado` es solo el dinero cobrado y la diferencia no entra ahí. Manda el estado.
+ */
+export function saldoFactura(factura: { total: string, pagado: string, estado?: Factura['estado'] }): Decimal {
+    if (factura.estado === 'pagada' || factura.estado === 'acreditada') {
+        return new Decimal(0)
+    }
+    return Decimal.max(0, new Decimal(factura.total).minus(factura.pagado))
 }
 
 /** Vencida: la API ya la marcó, o su `vence_en` es anterior a hoy en Guatemala. */
