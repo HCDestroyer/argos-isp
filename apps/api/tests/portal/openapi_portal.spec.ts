@@ -32,6 +32,7 @@ const SOLO_SESION = [
     'portalCanjes',
     'portalCanjear',
     'portalImagenPremioSorteo',
+    'portalBonificaciones',
 ]
 
 type Operacion = {

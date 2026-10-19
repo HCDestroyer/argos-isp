@@ -157,6 +157,7 @@ const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
         fecha_deposito: dia(0),
     }),
     portalComprobantes: () => undefined,
+    portalBonificaciones: () => undefined,
     portalIniciarPago: () => ({}),
     portalPagoEnLinea: () => undefined,
     portalEmpresa: () => undefined,

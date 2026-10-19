@@ -53,6 +53,31 @@ function pendiente(datos: Partial<Schema<'PortalFacturaPendiente'>> & { id: numb
 }
 
 /**
+ * Bonificaciones (decisión del PM: nunca una factura de Q0), como las devuelve
+ * `GET /portal/bonificaciones`: sin montos ni motivo interno. La más reciente primero.
+ */
+export const BONIFICACIONES_FIXTURE: Schema<'PortalBonificacion'>[] = [
+    {
+        id: 88,
+        empresa: MARCA_FIXTURE,
+        servicio_id: 41,
+        periodo: '2026-11-01',
+        concepto: 'Servicio de internet Hogar 20 Mbps',
+        origen: 'canje',
+        created_at: '2026-11-01T06:00:00.000Z',
+    },
+    {
+        id: 61,
+        empresa: MARCA_FIXTURE,
+        servicio_id: 41,
+        periodo: '2026-07-01',
+        concepto: 'Instalación',
+        origen: 'cargo_sin_costo',
+        created_at: '2026-07-03T15:30:00.000Z',
+    },
+]
+
+/**
  * Adicionales activos del servicio 41: incluido con su usuario, de cortesía y cobrado aparte. El
  * servicio está suspendido, así que vienen bloqueados (contrato `adicionales.md`).
  */
@@ -92,6 +117,7 @@ export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
                 pendiente({ id: 1160, vence_en: '2026-09-25', estado: 'parcial', total: '30.00', saldo: '25.00' }),
                 pendiente({ id: 1203, vence_en: '2026-10-10' }),
             ],
+            bonificaciones: [],
         },
     ],
 }
@@ -132,6 +158,8 @@ export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
             facturas_pendientes: [
                 pendiente({ id: 1203, vence_en: '2099-10-10', estado: 'emitida', vencida: false }),
             ],
+            // Noviembre lo canjeó por puntos: mes bonificado, sin nada que pagar.
+            bonificaciones: [BONIFICACIONES_FIXTURE[0]!],
         },
         {
             empresa: MARCA_SUR_FIXTURE,
@@ -141,6 +169,7 @@ export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
                 pendiente({ id: 2201, servicio_id: 57, vence_en: '2026-09-05', total: '199.00', saldo: '199.00' }),
                 pendiente({ id: 2250, servicio_id: 57, vence_en: '2026-10-05', total: '199.00', saldo: '199.00' }),
             ],
+            bonificaciones: [],
         },
     ],
 }

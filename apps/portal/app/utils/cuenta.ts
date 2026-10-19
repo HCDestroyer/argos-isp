@@ -107,3 +107,20 @@ export function etiquetaPdf(factura: Pick<Schema<'PortalFactura'>, 'documento'>)
 export function conceptoFactura(factura: Pick<Schema<'PortalFactura'>, 'tipo' | 'periodo'>): string {
     return factura.tipo === 'mora' ? 'Recargo por mora' : `Servicio de ${formatearPeriodo(factura.periodo)}`
 }
+
+/** «Mes bonificado: <concepto>» (decisión del PM: un periodo en cero no es una factura de Q0). */
+export function textoBonificacion(bonificacion: Pick<Schema<'PortalBonificacion'>, 'concepto'>): string {
+    return `Mes bonificado: ${bonificacion.concepto}`
+}
+
+const ORIGENES_BONIFICACION: Record<Schema<'PortalBonificacion'>['origen'], string> = {
+    mes_gratis: 'Mes gratis',
+    descuento_100: 'Promoción',
+    canje: 'Canje de puntos',
+    cargo_sin_costo: 'Sin costo',
+}
+
+/** Por qué no se paga, en palabras del cliente (nunca el motivo interno: la API no lo manda). */
+export function origenBonificacion(origen: Schema<'PortalBonificacion'>['origen']): string {
+    return ORIGENES_BONIFICACION[origen]
+}

@@ -162,6 +162,8 @@ import { avisosSorteoValidator } from '#portal/validators'
 import { avisosDeSorteo, sorteoPublico } from '#portal/sorteos'
 import { verificacionSorteo } from '#lealtad/sorteos'
 import { VerificacionSorteo } from '#lealtad/esquemas'
+import { PortalBonificacion } from '#portal/esquemas'
+import { bonificacionesPortal } from '#portal/bonificaciones'
 
 /** Responde un PDF en línea (se abre en el navegador; el usuario lo guarda si quiere). */
 function enviarPdf(ctx: HttpContext, documento: DocumentoPdf): void {
@@ -381,6 +383,27 @@ const autenticadas: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Página de facturas', esquema: pagina(PortalFactura) },
         handler: async (ctx, { query }) =>
             facturasPortal(await clienteDeLaSesionLimitada(ctx, 'facturas'), query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/bonificaciones',
+        operacion: 'portalBonificaciones',
+        resumen: 'Periodos bonificados del cliente de la sesión (mes gratis, canje, cargo sin costo)',
+        descripcion:
+            'Decisión del PM: un periodo en cero no es una factura de Q0 sino una bonificación (A3). Sin ' +
+            `montos, documento ni motivo interno: el portal la muestra como «Mes bonificado». ${SOBRE_LA_SESION}`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        query: paginaPortalValidator,
+        limitada: true,
+        respuesta: {
+            status: 200,
+            descripcion: 'Página de bonificaciones',
+            esquema: pagina(PortalBonificacion),
+        },
+        handler: async (ctx, { query }) =>
+            bonificacionesPortal(await clienteDeLaSesionLimitada(ctx, 'bonificaciones'), query),
     }),
     definirRuta({
         metodo: 'get',
