@@ -1,0 +1,504 @@
+# ArgosIsp · compose de PRODUCCIÓN (A6, distribución). Solo imágenes publicadas: el servidor nunca
+# compila. Lo instala `instalar.sh` y lo maneja `argosisp` (docs/runbooks/instalacion.md):
+#
+#   /opt/argosisp/.env                       configuración y secretos (600, lo escribe instalar.sh)
+#   /opt/argosisp/versiones/<versión>/       este archivo como docker-compose.yml + config/ + argosisp
+#   /opt/argosisp/actual -> versiones/<v>    la versión en uso
+#
+#   argosisp compose ps                      = docker compose -p argosisp --env-file /opt/argosisp/.env
+#                                              -f /opt/argosisp/actual/docker-compose.yml ps
+#
+# Las rutas relativas (./config/...) son de la carpeta de la versión: cada versión trae su
+# configuración y revertir vuelve también a la anterior. Los datos viven en volúmenes del proyecto
+# `argosisp` (no cambian entre versiones) y los respaldos en BACKUP_HOST_DIR.
+#
+# Diferencias con infra/docker-compose.yml (desarrollo y laboratorio): sin `build`, sin Mailpit
+# (SMTP desde el panel), nada publicado salvo el proxy (80 y 443) y FreeRADIUS (1812/1813 UDP);
+# RADIUS, aaa y coa siempre (no es un perfil); el portal va detrás del proxy con HTTPS.
+
+name: argosisp
+
+# start_interval (Docker Engine 25+): chequeos cada 2 s mientras arranca, para que `argosisp`
+# sepa pronto si la versión quedó sana.
+x-node-healthcheck: &node-healthcheck
+  interval: 10s
+  timeout: 3s
+  retries: 6
+  start_period: 60s
+  start_interval: 2s
+
+x-proceso-vivo: &proceso-vivo
+  interval: 30s
+  timeout: 3s
+  retries: 3
+  start_period: 30s
+  start_interval: 2s
+
+x-imagen-api: &imagen-api ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-api:${ARGOSISP_VERSION:?Falta ARGOSISP_VERSION en .env}
+
+x-api-env: &api-env
+  NODE_ENV: production
+  TZ: UTC
+  HOST: 0.0.0.0
+  PORT: '3333'
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  APP_KEY: ${APP_KEY:?Falta APP_KEY en .env}
+  APP_URL: https://${DOMINIO_API:?Falta DOMINIO_API en .env}
+  API_PUBLIC_URL: https://${DOMINIO_API}
+  PANEL_URL_PUBLICA: https://${DOMINIO_PANEL:?Falta DOMINIO_PANEL en .env}
+  PORTAL_URL_PUBLICA: ${PORTAL_URL_PUBLICA:-https://${DOMINIO_PORTAL:?Falta DOMINIO_PORTAL en .env}}
+  NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-https://${DOMINIO_PORTAL}}
+  CORS_ORIGINS: https://${DOMINIO_PANEL}
+  HORUS_PERMITIR_HTTP: 'false'
+  DB_HOST: postgres
+  DB_PORT: '5432'
+  DB_USER: ${DB_APP_USER:-argosisp_api}
+  DB_PASSWORD: ${DB_APP_PASSWORD:?Falta DB_APP_PASSWORD en .env}
+  DB_DATABASE: argosisp
+  REDIS_HOST: redis
+  REDIS_PORT: '6379'
+  # Correo y Telegram se configuran en el panel (Configuración → Notificaciones). Estas variables
+  # solo siembran la configuración global la primera vez (infra/.env.example, "Notificaciones").
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-}
+  SMTP_SECURE: ${SMTP_SECURE:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  MAIL_FROM: ${MAIL_FROM:-}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_API_ROOT: ${TELEGRAM_API_ROOT:-}
+  TELEGRAM_BOT_NOMBRE: ${TELEGRAM_BOT_NOMBRE:-}
+  TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+  TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-https://${DOMINIO_API}/api/v1/telegram/webhook}
+  TELEGRAM_CODIGO_VIGENCIA_S: ${TELEGRAM_CODIGO_VIGENCIA_S:-900}
+  TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
+  NOTIFY_CORREO_CONTABILIDAD: ${NOTIFY_CORREO_CONTABILIDAD:-}
+  NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}
+  NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
+  NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
+  INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:?Falta AAA_INTERNAL_TOKEN en .env}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  AAA_PPP_KEY: ${AAA_PPP_KEY:?Falta AAA_PPP_KEY en .env}
+  # El portal (detrás del proxy) reenvía /api/v1/portal/**: se confía en el X-Forwarded-For que
+  # llega desde la red de compose (subred fija de abajo).
+  PORTAL_PROXIES_CONFIABLES: ${PORTAL_PROXIES_CONFIABLES:-172.30.0.0/24,fd00:a6:30::/64}
+  PORTAL_CABECERA_IP: x-forwarded-for
+  # El portal se sirve por HTTPS (proxy): cookie de sesión siempre Secure.
+  PORTAL_COOKIE_SEGURA: siempre
+  SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+  SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+  PASARELA_PROVEEDOR: ${PASARELA_PROVEEDOR:-}
+  PASARELA_FALSA_SECRETO: ${PASARELA_FALSA_SECRETO:-}
+  PASARELA_URL_PUBLICA: ${PASARELA_URL_PUBLICA:-https://${DOMINIO_API}}
+  PASARELA_RETORNO_ORIGENES: ${PASARELA_RETORNO_ORIGENES:-https://${DOMINIO_PORTAL},http://${DOMINIO_PORTAL}}
+  COMPROBANTES_DIR: /comprobantes
+
+x-proceso-fondo: &proceso-fondo
+  image: *imagen-api
+  restart: unless-stopped
+  environment: *api-env
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: argosisp
+      POSTGRES_USER: argosisp
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD en .env}
+      TZ: UTC
+      DB_OWNER_USER: ${DB_OWNER_USER:-argosisp_owner}
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?Falta DB_OWNER_PASSWORD en .env}
+      DB_APP_USER: ${DB_APP_USER:-argosisp_api}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./config/postgres/10-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./config/postgres/20-usuarios.sh:/docker-entrypoint-initdb.d/20-usuarios.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U argosisp -d argosisp]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7.4.11-alpine
+    restart: unless-stopped
+    # Sin TTL ni expulsión (CLAUDE.md, regla 5; BullMQ exige noeviction). AOF para colas y streams.
+    command: [redis-server, --appendonly, 'yes', --appendfsync, everysec, --maxmemory, '0', --maxmemory-policy, noeviction]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Deja a nombre del uid 1000 (node en las imágenes de Node, respaldo en la de backup) las carpetas
+  # que escriben los contenedores sin root: comprobantes, respaldos y clientes de FreeRADIUS.
+  permisos:
+    image: *imagen-api
+    user: '0:0'
+    entrypoint: []
+    command:
+      - sh
+      - -c
+      - >-
+        chown -R 1000:1000 /comprobantes /backups /radius-clientes &&
+        chmod -R u=rwX,g=rX,o= /comprobantes /backups /radius-clientes
+    volumes:
+      - comprobantes:/comprobantes
+      - ${BACKUP_HOST_DIR:-/opt/argosisp/respaldos}:/backups
+      - radius-clientes:/radius-clientes
+    restart: 'no'
+
+  # Respaldo diario (infra/backups): pg_dump y tar de los comprobantes a BACKUP_HOST_DIR, retención,
+  # cifrado con age y copia con rclone opcionales. `argosisp actualizar` lo usa antes de cada cambio.
+  backup:
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-backup:${ARGOSISP_VERSION}
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGUSER: argosisp
+      PGPASSWORD: ${DB_PASSWORD}
+      DB_OWNER_USER: ${DB_OWNER_USER:-argosisp_owner}
+      BACKUP_BASE: argosisp
+      BACKUP_HORA: ${BACKUP_HORA:-03:13}
+      BACKUP_RETENCION_DIAS: ${BACKUP_RETENCION_DIAS:-14}
+      BACKUP_AGE_RECIPIENTS: ${BACKUP_AGE_RECIPIENTS:-}
+      BACKUP_AGE_IDENTITY: ${BACKUP_AGE_IDENTITY:-/config/age.key}
+      BACKUP_RCLONE_DESTINO: ${BACKUP_RCLONE_DESTINO:-}
+      RCLONE_CONFIG: /config/rclone.conf
+      COMPROBANTES_DIR: /comprobantes
+    volumes:
+      - ${BACKUP_HOST_DIR:-/opt/argosisp/respaldos}:/backups
+      - comprobantes:/comprobantes
+      - ${BACKUP_CONFIG_DIR:-/opt/argosisp/respaldos-config}:/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      permisos:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD-SHELL, "! grep -q '^error' /backups/.estado 2>/dev/null"]
+      interval: 5m
+      timeout: 5s
+      retries: 1
+      start_period: 1m
+
+  # Migraciones y seed idempotente (ACL y admin inicial SEED_ADMIN_*), con el dueño de la base.
+  migrate:
+    image: *imagen-api
+    command: [sh, -c, 'node ace.js migration:run --force && node ace.js db:seed']
+    environment:
+      <<: *api-env
+      DB_USER: ${DB_OWNER_USER:-argosisp_owner}
+      DB_PASSWORD: ${DB_OWNER_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    image: *imagen-api
+    restart: unless-stopped
+    environment: *api-env
+    volumes:
+      - comprobantes:/comprobantes
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      permisos:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+
+  relay:
+    <<: *proceso-fondo
+    command: [node, ace.js, eventos:relay]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js eventos:relay'"]
+
+  billing-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, billing:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js billing:worker'"]
+
+  fiscal-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, fiscal:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js fiscal:worker'"]
+
+  sesiones-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, sesiones:worker]
+    environment:
+      <<: *api-env
+      AAA_INTERIM_SEGUNDOS: ${AAA_INTERIM_SEGUNDOS:-300}
+      SESIONES_COLGADAS_INTERVALOS: ${SESIONES_COLGADAS_INTERVALOS:-3}
+      SESIONES_COLGADAS_CADA_MS: ${SESIONES_COLGADAS_CADA_MS:-300000}
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js sesiones:worker'"]
+
+  aaa-vigia:
+    <<: *proceso-fondo
+    command: [node, ace.js, aaa:vigilar]
+    environment:
+      <<: *api-env
+      AAA_SALUD_NODOS: ${AAA_SALUD_NODOS:-aaa=http://aaa:3100}
+      AAA_CAIDO_TRAS_MS: ${AAA_CAIDO_TRAS_MS:-60000}
+      AAA_SALUD_CADA_MS: ${AAA_SALUD_CADA_MS:-5000}
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js aaa:vigilar'"]
+
+  routeros-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, routeros:worker]
+    environment:
+      <<: *api-env
+      ROUTEROS_TIMEOUT_MS: ${ROUTEROS_TIMEOUT_MS:-5000}
+      ROUTEROS_REINTENTOS: ${ROUTEROS_REINTENTOS:-3}
+      ROUTEROS_ESPERA_MS: ${ROUTEROS_ESPERA_MS:-500}
+      ROUTEROS_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      ROUTEROS_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
+      ROUTEROS_INTERFAZ_CLIENTES: ${ROUTEROS_INTERFAZ_CLIENTES:-}
+      ROUTEROS_DHCP_SERVIDOR: ${ROUTEROS_DHCP_SERVIDOR:-all}
+      ROUTEROS_RECONCILIAR_CADA_MS: ${ROUTEROS_RECONCILIAR_CADA_MS:-900000}
+      ROUTEROS_RECUPERAR_CADA_MS: ${ROUTEROS_RECUPERAR_CADA_MS:-30000}
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js routeros:worker'"]
+
+  worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, notify:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js notify:worker'"]
+
+  horus-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, horus:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js horus:worker'"]
+
+  web:
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-web:${ARGOSISP_VERSION}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '3000'
+      NUXT_PUBLIC_API_BASE: https://${DOMINIO_API}
+      NUXT_API_BASE_INTERNAL: http://api:3333
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/',{redirect:'manual'}).then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))"]
+
+  portal:
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-portal:${ARGOSISP_VERSION}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '3001'
+      NUXT_PUBLIC_API_BASE: ''
+      NUXT_API_BASE_INTERNAL: http://api:3333
+      # Destino de los 302 a /corte del portal cautivo
+      NUXT_PORTAL_URL_PUBLICA: ${PORTAL_URL_PUBLICA:-https://${DOMINIO_PORTAL}}
+      NUXT_PORTAL_HOSTS: ${PORTAL_HOSTS:-${DOMINIO_PORTAL}}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/',{redirect:'manual'}).then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))"]
+
+  aaa:
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-aaa:${ARGOSISP_VERSION}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: UTC
+      HOST: 0.0.0.0
+      PORT: '3100'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      AAA_RESPALDO: api
+      AAA_API_URL: http://api:3333/api/v1/
+      API_INTERNAL_URL: http://api:3333/api/v1/
+      AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN}
+      AAA_PPP_KEY: ${AAA_PPP_KEY}
+      AAA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      AAA_SUSPENDIDO_GRUPO: ${AAA_SUSPENDIDO_GRUPO:-suspendido}
+      AAA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
+      AAA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
+      AAA_INTERIM_SEGUNDOS: ${AAA_INTERIM_SEGUNDOS:-300}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # Generador de clientes de FreeRADIUS (`argosisp radius-clientes`): lee network.routers
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_USER: ${DB_APP_USER:-argosisp_api}
+      DB_PASSWORD: ${DB_APP_PASSWORD}
+      DB_DATABASE: argosisp
+      AAA_CLIENTS_DIR: /radius-clientes
+    volumes:
+      - aaa-datos:/var/lib/argosisp-aaa
+      - radius-clientes:/radius-clientes
+    depends_on:
+      redis:
+        condition: service_healthy
+      permisos:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3100/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+
+  coa:
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-coa:${ARGOSISP_VERSION}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: UTC
+      HOST: 0.0.0.0
+      PORT: '3200'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_USER: ${DB_APP_USER:-argosisp_api}
+      DB_PASSWORD: ${DB_APP_PASSWORD}
+      DB_DATABASE: argosisp
+      AAA_PPP_KEY: ${AAA_PPP_KEY}
+      COA_NAS_PORT: '3799'
+      COA_TIMEOUT_MS: ${COA_TIMEOUT_MS:-2000}
+      COA_REINTENTOS: ${COA_REINTENTOS:-3}
+      COA_ORIGEN_IP: ${COA_ORIGEN_IP:-}
+      COA_SUSPENDIDO_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+      COA_SUSPENDIDO_ADDRESS_LIST: ${AAA_SUSPENDIDO_ADDRESS_LIST:-suspendidos}
+      COA_SUSPENDIDO_FILTER_ID: ${AAA_SUSPENDIDO_FILTER_ID:-argos-corte.in}
+      COA_SUSPENDER_CON_IPV6: ${COA_SUSPENDER_CON_IPV6:-coa}
+      AAA_REDIS_PREFIJO: ${AAA_REDIS_PREFIJO:-aaa:user:}
+      API_INTERNAL_URL: http://api:3333/api/v1/
+      AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN}
+      COA_API_TIMEOUT_MS: ${COA_API_TIMEOUT_MS:-2000}
+      COA_API_REINTENTOS: ${COA_API_REINTENTOS:-3}
+      COA_API_ESPERA_MS: ${COA_API_ESPERA_MS:-500}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      <<: *node-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3200/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+
+  freeradius:
+    image: freeradius/freeradius-server:3.2.10
+    restart: unless-stopped
+    command: [-l, stdout]
+    environment:
+      TZ: UTC
+      AAA_URL: http://aaa:3100
+      RADIUS_LOCAL_SECRET: ${RADIUS_LOCAL_SECRET:?Falta RADIUS_LOCAL_SECRET en .env}
+    volumes:
+      - ./config/freeradius/mods-enabled:/etc/freeradius/mods-enabled:ro
+      - ./config/freeradius/sites-enabled:/etc/freeradius/sites-enabled:ro
+      - ./config/freeradius/clients.conf:/etc/freeradius/clients.conf:ro
+      # router-<id>.conf que genera `argosisp radius-clientes` desde network.routers
+      - radius-clientes:/etc/freeradius/clients.d:ro
+    ports:
+      # Los MikroTik llegan por la LAN o el túnel WireGuard: RADIUS_BIND_IP = esa IP del servidor.
+      - ${RADIUS_BIND_IP:-0.0.0.0}:1812:1812/udp
+      - ${RADIUS_BIND_IP:-0.0.0.0}:1813:1813/udp
+    depends_on:
+      aaa:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - echo 'Message-Authenticator = 0x00' | radclient -q -c 1 -r 1 -t 2 127.0.0.1:1812 status "$$RADIUS_LOCAL_SECRET"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # Proxy con TLS (Let's Encrypt) para la API, el panel y el portal, y HTTP del portal de corte
+  # (dst-nat de TCP/80 de los suspendidos). config/proxy/Caddyfile.
+  proxy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      DOMINIO_API: ${DOMINIO_API}
+      DOMINIO_PANEL: ${DOMINIO_PANEL}
+      DOMINIO_PORTAL: ${DOMINIO_PORTAL}
+      # `email <correo>` (Let's Encrypt avisa vencimientos) o `local_certs` (CA interna: pruebas)
+      PROXY_TLS_GLOBAL: ${PROXY_TLS_GLOBAL:-}
+      PORTAL_HSTS_MAX_AGE: ${PORTAL_HSTS_MAX_AGE:-300}
+    volumes:
+      - ./config/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    ports:
+      - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTP_PORT:-80}:80
+      - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTPS_PORT:-443}:443
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+      portal:
+        condition: service_started
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:2019/config/']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+networks:
+  default:
+    enable_ipv6: ${COMPOSE_IPV6:-false}
+    ipam:
+      config:
+        - subnet: ${COMPOSE_SUBNET_V4:-172.30.0.0/24}
+        - subnet: ${COMPOSE_SUBNET_V6:-fd00:a6:30::/64}
+
+volumes:
+  pgdata:
+  redisdata:
+  caddydata:
+  caddyconfig:
+  aaa-datos:
+  comprobantes:
+  radius-clientes:

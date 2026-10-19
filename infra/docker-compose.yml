@@ -204,6 +204,10 @@ services:
       context: ..
       dockerfile: infra/backups/Dockerfile
     restart: unless-stopped
+    # La imagen corre como `respaldo` (uid 1000). En desarrollo y en el ensayo, BACKUP_HOST_DIR es una
+    # carpeta del host con otro dueño: root, como antes. Producción usa el de la imagen
+    # (infra/produccion/docker-compose.produccion.yml, servicio `permisos`).
+    user: ${BACKUP_USUARIO:-0:0}
     environment:
       TZ: UTC
       PGHOST: postgres

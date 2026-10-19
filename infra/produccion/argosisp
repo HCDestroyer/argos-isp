@@ -1,0 +1,575 @@
+#!/usr/bin/env bash
+# argosisp — administra una instalación de producción de ArgosIsp (A6, distribución).
+# Lo instala instalar.sh en /usr/local/bin/argosisp (enlace a /opt/argosisp/actual/argosisp).
+# Runbooks: docs/runbooks/instalacion.md y docs/runbooks/actualizacion.md.
+#
+#   argosisp estado                       versión instalada, última publicada y salud de los servicios
+#   argosisp version                      versión instalada
+#   argosisp actualizar [--version X.Y.Z] [--si] [--auto]
+#                                         respaldo → imágenes → migraciones → verificación; si algo
+#                                         falla, vuelve a la versión anterior (imágenes y respaldo)
+#   argosisp revertir [--si]              vuelve a la versión anterior a la última actualización y
+#                                         restaura el respaldo que se tomó antes de ella
+#   argosisp respaldar                    respaldo ahora (el mismo del respaldo diario)
+#   argosisp levantar                     levanta la versión instalada y espera a que esté sana
+#   argosisp auto activar|desactivar|estado
+#                                         parches automáticos (timer de systemd, apagado por defecto)
+#   argosisp radius-clientes              regenera los clientes de FreeRADIUS desde network.routers
+#   argosisp logs [servicio...]           últimos registros (docker compose logs -f)
+#   argosisp compose <args...>            docker compose del proyecto con la versión instalada
+#
+# --si responde que sí a las confirmaciones (cambio mayor incluido). --auto (timer) solo aplica
+# parches: un cambio menor o mayor queda en el registro y espera a que alguien lo confirme.
+#
+# Variables (para pruebas, CI o servidores sin internet; en uso normal no hace falta ninguna):
+#   ARGOSISP_DIR          carpeta de la instalación (/opt/argosisp)
+#   ARGOSISP_REPO         repositorio de las versiones en GitHub (HCDestroyer/argos-isp)
+#   ARGOSISP_FUENTE       carpeta local con `estable` (la versión del canal) y los
+#                         argosisp-<v>.tar.gz(.sha256) de empaquetar.sh, en lugar de GitHub Releases
+#   ARGOSISP_SIN_DESCARGA 1 = no hacer `docker compose pull` (imágenes ya cargadas, CI)
+#   ARGOSISP_ESPERA_S     segundos para que todo quede sano (600)
+#   ARGOSISP_AUTO_NIVEL   parche (por defecto) o menor: hasta dónde llega --auto
+set -Eeuo pipefail
+
+ARGOSISP_DIR="${ARGOSISP_DIR:-/opt/argosisp}"
+ENV_FILE="$ARGOSISP_DIR/.env"
+PROYECTO=argosisp
+REPO="${ARGOSISP_REPO:-HCDestroyer/argos-isp}"
+FUENTE="${ARGOSISP_FUENTE:-}"
+ESPERA_S="${ARGOSISP_ESPERA_S:-600}"
+ESTADO_DIR="$ARGOSISP_DIR/estado"
+REGISTROS_DIR="$ARGOSISP_DIR/registros"
+# Servicios de una sola vez (terminan con 0) y servicios de datos (no se detienen al actualizar)
+UNA_VEZ=" permisos migrate "
+DATOS=" postgres redis backup permisos "
+# Versiones que se conservan en versiones/ (además de la actual y la anterior)
+CONSERVAR_VERSIONES=3
+
+# ---------------------------------------------------------------------------
+# Utilidades
+# ---------------------------------------------------------------------------
+log() { printf '%s argosisp: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
+morir() { log "ERROR: $*"; exit 1; }
+uso() { sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+
+es_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+
+# comparar_versiones A B → imprime -1, 0 o 1
+comparar_versiones() {
+    local -a a b
+    IFS=. read -r -a a <<< "$1"
+    IFS=. read -r -a b <<< "$2"
+    local i
+    for i in 0 1 2; do
+        if ((10#${a[i]} < 10#${b[i]})); then echo -1; return; fi
+        if ((10#${a[i]} > 10#${b[i]})); then echo 1; return; fi
+    done
+    echo 0
+}
+
+# tipo_cambio DE A → mayor, menor o parche
+tipo_cambio() {
+    local -a a b
+    IFS=. read -r -a a <<< "$1"
+    IFS=. read -r -a b <<< "$2"
+    if [ "${a[0]}" != "${b[0]}" ]; then echo mayor
+    elif [ "${a[1]}" != "${b[1]}" ]; then echo menor
+    else echo parche; fi
+}
+
+# Valor de una clave del .env (sin comillas envolventes)
+leer_env() {
+    local linea
+    linea="$(grep -E "^$1=" "$ENV_FILE" | tail -n 1 || true)"
+    linea="${linea#*=}"
+    linea="${linea%\"}"
+    linea="${linea#\"}"
+    printf '%s' "$linea"
+}
+
+# Reemplaza (o agrega) una clave del .env sin perder los permisos 600
+fijar_env() {
+    local clave="$1" valor="$2" tmp
+    tmp="$(mktemp "$ARGOSISP_DIR/.env.XXXXXX")"
+    chmod 600 "$tmp"
+    grep -vE "^$clave=" "$ENV_FILE" > "$tmp" || true
+    printf '%s=%s\n' "$clave" "$valor" >> "$tmp"
+    mv -f "$tmp" "$ENV_FILE"
+}
+
+# /dev/tty existe aunque no haya terminal (cron, systemd, setsid): hay que poder abrirla
+hay_terminal() { { : < /dev/tty; } 2> /dev/null; }
+
+confirmar() {
+    local pregunta="$1" esperado="${2:-s}" respuesta=""
+    hay_terminal || return 1
+    printf '%s ' "$pregunta" > /dev/tty
+    read -r respuesta < /dev/tty || return 1
+    [ "$respuesta" = "$esperado" ] || { [ "$esperado" = s ] && [ "$respuesta" = S ]; }
+}
+
+requiere_instalacion() {
+    [ -f "$ENV_FILE" ] || morir "no hay instalación en $ARGOSISP_DIR (falta .env). Instala con instalar.sh"
+    command -v docker > /dev/null || morir "falta docker"
+}
+
+bloquear() {
+    mkdir -p "$ESTADO_DIR"
+    exec 9> "$ARGOSISP_DIR/.bloqueo"
+    flock -n 9 || morir "otra operación de argosisp está en curso"
+}
+
+# Registro de la operación en registros/<operación>-<marca>.log (además de la terminal)
+registrar() {
+    mkdir -p "$REGISTROS_DIR"
+    local archivo
+    archivo="$REGISTROS_DIR/$1-$(date -u +%Y%m%dT%H%M%SZ).log"
+    exec > >(tee -a "$archivo") 2>&1
+    log "registro en $archivo"
+    find "$REGISTROS_DIR" -maxdepth 1 -name '*.log' -mtime +90 -delete 2> /dev/null || true
+}
+
+version_instalada() { leer_env ARGOSISP_VERSION; }
+
+compose_de() { printf '%s/versiones/%s/docker-compose.yml' "$ARGOSISP_DIR" "$1"; }
+
+# dc_v <versión> <args de docker compose...>
+dc_v() {
+    local version="$1"
+    shift
+    docker compose -p "$PROYECTO" --env-file "$ENV_FILE" -f "$(compose_de "$version")" "$@"
+}
+
+dc() { dc_v "$(version_instalada)" "$@"; }
+
+servicios_app() {
+    local s
+    for s in $(dc_v "$1" config --services); do
+        case "$DATOS" in *" $s "*) ;; *) printf '%s\n' "$s" ;; esac
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Versiones publicadas
+# ---------------------------------------------------------------------------
+ultima_version() {
+    local v
+    if [ -n "$FUENTE" ]; then
+        v="$(tr -d '[:space:]' < "$FUENTE/estable")"
+    else
+        v="$(curl -fsSL --retry 3 -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/$REPO/releases/latest" | jq -r '.tag_name // empty')"
+        v="${v#v}"
+    fi
+    es_semver "$v" || morir "no pude leer la última versión del canal estable (leí '$v')"
+    printf '%s' "$v"
+}
+
+# Descarga y verifica el paquete de una versión en versiones/<v> (no hace nada si ya está)
+descargar_version() {
+    local v="$1" destino="$ARGOSISP_DIR/versiones/$1" tmp paquete="argosisp-$1.tar.gz"
+    [ -f "$destino/docker-compose.yml" ] && return 0
+    tmp="$(mktemp -d)"
+    log "descargando el paquete de $v"
+    if [ -n "$FUENTE" ]; then
+        cp "$FUENTE/$paquete" "$FUENTE/$paquete.sha256" "$tmp/" || { rm -rf "$tmp"; morir "no está el paquete de $v en $FUENTE"; }
+    else
+        local base="https://github.com/$REPO/releases/download/v$v"
+        if ! curl -fsSL --retry 3 -o "$tmp/$paquete" "$base/$paquete" ||
+            ! curl -fsSL --retry 3 -o "$tmp/$paquete.sha256" "$base/$paquete.sha256"; then
+            rm -rf "$tmp"
+            morir "la versión $v no tiene paquete publicado todavía (¿la publicación sigue en curso?)"
+        fi
+    fi
+    (cd "$tmp" && sha256sum -c --quiet "$paquete.sha256") || { rm -rf "$tmp"; morir "la suma del paquete de $v no coincide"; }
+    tar -xzf "$tmp/$paquete" -C "$tmp"
+    [ "$(cat "$tmp/argosisp-$v/VERSION")" = "$v" ] || { rm -rf "$tmp"; morir "el paquete no es de la versión $v"; }
+    mkdir -p "$ARGOSISP_DIR/versiones"
+    rm -rf "$destino"
+    mv "$tmp/argosisp-$v" "$destino"
+    rm -rf "$tmp"
+}
+
+# Deja <versión> como la instalada: .env y el enlace `actual`
+cambiar_a() {
+    fijar_env ARGOSISP_VERSION "$1"
+    ln -sfn "versiones/$1" "$ARGOSISP_DIR/actual.nuevo"
+    mv -Tf "$ARGOSISP_DIR/actual.nuevo" "$ARGOSISP_DIR/actual"
+}
+
+limpiar_versiones() {
+    local actual anterior v n=0
+    actual="$(version_instalada)"
+    anterior="$(leer_estado anterior 2> /dev/null || true)"
+    [ -d "$ARGOSISP_DIR/versiones" ] || return 0
+    for v in $(find "$ARGOSISP_DIR/versiones" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -rV); do
+        [ "$v" = "$actual" ] || [ "$v" = "$anterior" ] && continue
+        n=$((n + 1))
+        if [ "$n" -gt "$CONSERVAR_VERSIONES" ]; then
+            log "borrando versiones/$v"
+            rm -rf "${ARGOSISP_DIR:?}/versiones/$v"
+        fi
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Salud
+# ---------------------------------------------------------------------------
+# Una línea por contenedor: servicio estado salud código reinicios fin inicio
+inspeccionar() {
+    [ $# -gt 0 ] || return 0
+    docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.State.ExitCode}} {{.RestartCount}} {{.State.FinishedAt}} {{.State.StartedAt}}' "$@"
+}
+
+# esperar_sano <versión> <instante UTC en que empezó el `up`>
+# Espera a que todos los servicios de <versión> estén sanos (o terminados con 0 los de una vez).
+# Falla en cuanto uno queda unhealthy, termina con error después del arranque o se reinicia 3 veces
+# (un contenedor detenido antes del `up`, o que compose detiene para recrearlo, es solo pendiente).
+esperar_sano() {
+    local v="$1" t0="$2" limite=$((SECONDS + ESPERA_S)) pendientes linea
+    local -a ids
+    while :; do
+        pendientes=""
+        mapfile -t ids < <(dc_v "$v" ps -a -q 2> /dev/null || true)
+        [ "${#ids[@]}" -gt 0 ] || pendientes=" (sin contenedores todavía)"
+        while read -r linea; do
+            [ -n "$linea" ] || continue
+            local servicio estado salud codigo reinicios fin inicio reciente=false
+            read -r servicio estado salud codigo reinicios fin inicio <<< "$linea"
+            [ "$salud" = "-" ] && salud=""
+            # Por segundos: Docker recorta los ceros finales de los nanosegundos
+            [[ "${fin:0:19}" < "${t0:0:19}" ]] || reciente=true
+            # Detenido y arrancado por última vez antes de este `up`: es de la corrida anterior (p. ej.
+            # la versión rota que se está revirtiendo) y compose lo va a recrear. Sus reinicios,
+            # código y salud no son de esta versión.
+            if [ "$estado" != running ] && [[ "${inicio:0:19}" < "${t0:0:19}" ]]; then
+                pendientes="$pendientes $servicio"
+                continue
+            fi
+            case "$UNA_VEZ" in
+                *" $servicio "*)
+                    if [ "$estado" = exited ] && $reciente; then
+                        [ "$codigo" = 0 ] || { log "$servicio terminó con $codigo"; return 1; }
+                    else
+                        pendientes="$pendientes $servicio"
+                    fi
+                    continue ;;
+            esac
+            # El respaldo diario no es parte de la aplicación: su healthcheck mira el último
+            # respaldo (cada 5 min). Basta con que esté corriendo.
+            if [ "$servicio" = backup ]; then
+                [ "$estado" = running ] || pendientes="$pendientes $servicio"
+                continue
+            fi
+            # Un contenedor que compose detiene para recrearlo sale con 0, 137 o 143: eso no es falla.
+            local fallo=false
+            if [ "$estado" = exited ] && $reciente; then
+                case "$codigo" in 0 | 137 | 143) ;; *) fallo=true ;; esac
+            fi
+            # La salud de un contenedor detenido es la de su última corrida (p. ej. el de la versión
+            # anterior que compose detuvo para recrearlo): solo cuenta mientras corre.
+            if $fallo || { [ "$salud" = unhealthy ] && [ "$estado" = running ]; } || { [ "$reinicios" -ge 3 ] && [ "$estado" != running ]; }; then
+                log "$servicio no arrancó (estado $estado, salud ${salud:-sin healthcheck}, código $codigo, reinicios $reinicios)"
+                return 1
+            fi
+            if [ "$estado" != running ] || { [ -n "$salud" ] && [ "$salud" != healthy ]; }; then
+                pendientes="$pendientes $servicio"
+            fi
+        done < <(inspeccionar "${ids[@]}")
+        [ -z "$pendientes" ] && return 0
+        if [ "$SECONDS" -ge "$limite" ]; then
+            log "después de ${ESPERA_S}s siguen sin quedar sanos:$pendientes"
+            return 1
+        fi
+        sleep 3
+    done
+}
+
+# La API responde /health y es de la versión esperada
+verificar_version() {
+    local v="$1" corriendo
+    dc_v "$v" exec -T api node -e "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" ||
+        { log "la API no responde /health"; return 1; }
+    corriendo="$(dc_v "$v" exec -T api printenv ARGOSISP_VERSION | tr -d '[:space:]')"
+    [ "$corriendo" = "$v" ] || { log "la API corre la versión '$corriendo' y se esperaba $v"; return 1; }
+}
+
+# `up -d` en segundo plano mientras se vigila la salud: compose espera indefinidamente a una
+# dependencia que se reinicia en bucle (service_healthy), y así la falla se ve en segundos.
+levantar_version() {
+    local v="$1" t0 pid salida
+    log "levantando $v"
+    t0="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
+    salida="$(mktemp)"
+    timeout "$ESPERA_S" docker compose -p "$PROYECTO" --env-file "$ENV_FILE" -f "$(compose_de "$v")" \
+        up -d --remove-orphans > "$salida" 2>&1 &
+    pid=$!
+    if ! esperar_sano "$v" "$t0"; then
+        kill "$pid" 2> /dev/null || true
+        wait "$pid" 2> /dev/null || true
+        sed 's/^/  | /' "$salida" >&2
+        rm -f "$salida"
+        return 1
+    fi
+    if ! wait "$pid"; then
+        sed 's/^/  | /' "$salida" >&2
+        rm -f "$salida"
+        log "docker compose up falló"
+        return 1
+    fi
+    rm -f "$salida"
+    verificar_version "$v"
+}
+
+detener_app() {
+    local v="$1"
+    [ -f "$(compose_de "$v")" ] || return 0
+    log "deteniendo la aplicación ($v); Postgres y Redis siguen arriba"
+    # shellcheck disable=SC2046
+    dc_v "$v" stop $(servicios_app "$v") || true
+}
+
+# ---------------------------------------------------------------------------
+# Respaldos (infra/backups/respaldar.sh y restaurar.sh dentro de la imagen de backup)
+# ---------------------------------------------------------------------------
+dir_respaldos() {
+    local d
+    d="$(leer_env BACKUP_HOST_DIR)"
+    printf '%s' "${d:-$ARGOSISP_DIR/respaldos}"
+}
+
+# Respaldo previo a una actualización: en respaldos/actualizaciones, sin cifrar ni copiar al remoto
+# (es para revertir en este mismo servidor, que ya tiene la base en claro; el diario sigue igual).
+# Imprime el nombre del archivo.
+respaldo_previo() {
+    local v="$1" archivo f
+    log "respaldo previo a la actualización"
+    dc_v "$v" up -d --wait postgres > /dev/null
+    dc_v "$v" run --rm -T -e BACKUP_DIR=/backups/actualizaciones -e BACKUP_AGE_RECIPIENTS= \
+        -e BACKUP_RCLONE_DESTINO= backup respaldar.sh >&2 || return 1
+    # argosisp-<AAAAMMDDTHHMMSSZ>.dump: el último en orden alfabético es el más nuevo
+    archivo=""
+    for f in "$(dir_respaldos)"/actualizaciones/argosisp-*.dump; do
+        [ -f "$f" ] && archivo="${f##*/}"
+    done
+    [ -n "$archivo" ] || return 1
+    printf '%s' "actualizaciones/$archivo"
+}
+
+restaurar_respaldo() {
+    local v="$1" archivo="$2"
+    log "restaurando el respaldo $archivo con la imagen de $v"
+    dc_v "$v" up -d --wait postgres redis > /dev/null
+    dc_v "$v" run --rm -T backup restaurar.sh "/backups/$archivo" --base argosisp --reemplazar \
+        --comprobantes-dir /comprobantes
+}
+
+# estado/ultima-actualizacion: anterior=, respaldo=, version=, fecha=
+leer_estado() {
+    local f="$ESTADO_DIR/ultima-actualizacion"
+    [ -f "$f" ] || return 1
+    grep -E "^$1=" "$f" | tail -n 1 | cut -d= -f2-
+}
+
+# ---------------------------------------------------------------------------
+# Comandos
+# ---------------------------------------------------------------------------
+cmd_version() {
+    requiere_instalacion
+    version_instalada
+    echo
+}
+
+cmd_estado() {
+    requiere_instalacion
+    local v ultima
+    v="$(version_instalada)"
+    ultima="$(ultima_version 2> /dev/null || echo '¿?')"
+    echo "Versión instalada: $v"
+    echo "Última en estable: $ultima"
+    if es_semver "$ultima" && [ "$(comparar_versiones "$v" "$ultima")" = -1 ]; then
+        echo "Hay una versión nueva ($(tipo_cambio "$v" "$ultima")): argosisp actualizar"
+    fi
+    echo "Parches automáticos: $(estado_auto)"
+    if leer_estado version > /dev/null 2>&1; then
+        echo "Última actualización: $(leer_estado anterior) → $(leer_estado version) el $(leer_estado fecha)"
+    fi
+    echo
+    dc ps
+}
+
+cmd_levantar() {
+    requiere_instalacion
+    bloquear
+    levantar_version "$(version_instalada)" || morir "la versión $(version_instalada) no quedó sana (argosisp logs)"
+    log "ArgosIsp $(version_instalada) arriba y sano"
+}
+
+cmd_respaldar() {
+    requiere_instalacion
+    dc exec -T backup respaldar.sh
+}
+
+cmd_actualizar() {
+    local objetivo="" si=false auto=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --version) objetivo="${2:-}"; shift 2 ;;
+            --si) si=true; shift ;;
+            --auto) auto=true; shift ;;
+            -h | --help) uso 0 ;;
+            *) morir "opción desconocida: $1" ;;
+        esac
+    done
+    requiere_instalacion
+    bloquear
+    registrar actualizar
+
+    local instalada tipo respaldo
+    instalada="$(version_instalada)"
+    es_semver "$instalada" || morir "ARGOSISP_VERSION del .env no es una versión: '$instalada'"
+    [ -n "$objetivo" ] || objetivo="$(ultima_version)"
+    objetivo="${objetivo#v}"
+    es_semver "$objetivo" || morir "versión inválida: $objetivo"
+
+    case "$(comparar_versiones "$instalada" "$objetivo")" in
+        0) log "ArgosIsp ya está en $instalada"; return 0 ;;
+        1) morir "$objetivo es anterior a la instalada ($instalada). Para volver atrás: argosisp revertir" ;;
+    esac
+    tipo="$(tipo_cambio "$instalada" "$objetivo")"
+    log "actualización $instalada → $objetivo (cambio $tipo)"
+
+    if $auto; then
+        local nivel="${ARGOSISP_AUTO_NIVEL:-parche}"
+        if [ "$tipo" = mayor ] || { [ "$tipo" = menor ] && [ "$nivel" != menor ]; }; then
+            log "hay una versión $tipo ($objetivo): las automáticas solo aplican parches. Confírmala con: argosisp actualizar"
+            return 0
+        fi
+    elif ! $si; then
+        if [ "$tipo" = mayor ]; then
+            echo "Cambio MAYOR: puede traer cambios incompatibles. Lee las notas antes de seguir:"
+            echo "  https://github.com/$REPO/releases/tag/v$objetivo"
+            confirmar "Escribe la versión ($objetivo) para confirmar:" "$objetivo" ||
+                morir "actualización cancelada (para un cambio mayor sin preguntar: --si)"
+        elif hay_terminal; then
+            confirmar "¿Actualizar ArgosIsp de $instalada a $objetivo? [s/N]" || morir "actualización cancelada"
+        fi
+    fi
+
+    # 1. Paquete e imágenes de la nueva versión, antes de detener nada
+    descargar_version "$objetivo"
+    dc_v "$objetivo" config --quiet || morir "el compose de $objetivo no es válido con este .env"
+    if [ "${ARGOSISP_SIN_DESCARGA:-0}" != 1 ]; then
+        log "descargando imágenes de $objetivo"
+        dc_v "$objetivo" pull --quiet || morir "no se pudieron descargar las imágenes de $objetivo (nada cambió)"
+    fi
+
+    # 2. Aplicación detenida y respaldo
+    detener_app "$instalada"
+    if ! respaldo="$(respaldo_previo "$instalada")"; then
+        log "el respaldo falló: no se actualiza; vuelvo a levantar $instalada"
+        levantar_version "$instalada" || true
+        morir "actualización cancelada: no se pudo respaldar"
+    fi
+    log "respaldo: $respaldo"
+    printf 'anterior=%s\nversion=%s\nrespaldo=%s\nfecha=%s\n' "$instalada" "$objetivo" "$respaldo" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ESTADO_DIR/en-curso"
+
+    # 3. Nueva versión: migraciones (servicio migrate) y verificación de salud
+    cambiar_a "$objetivo"
+    if levantar_version "$objetivo"; then
+        mv -f "$ESTADO_DIR/en-curso" "$ESTADO_DIR/ultima-actualizacion"
+        limpiar_versiones
+        log "ArgosIsp actualizado a $objetivo"
+        return 0
+    fi
+
+    # 4. Falló: vuelta a la versión anterior con el respaldo
+    log "la versión $objetivo no quedó sana: revirtiendo a $instalada"
+    dc_v "$objetivo" logs --no-color --tail 40 migrate api 2> /dev/null | sed 's/^/  | /' >&2 || true
+    revertir_a "$objetivo" "$instalada" "$respaldo"
+    rm -f "$ESTADO_DIR/en-curso"
+    morir "la actualización a $objetivo falló; ArgosIsp volvió a $instalada con el respaldo $respaldo"
+}
+
+# revertir_a <versión que falla> <versión anterior> <respaldo>
+revertir_a() {
+    local mala="$1" buena="$2" respaldo="$3"
+    detener_app "$mala"
+    cambiar_a "$buena"
+    restaurar_respaldo "$buena" "$respaldo" || morir "NO SE PUDO RESTAURAR $respaldo. ArgosIsp está detenido en $buena; runbook: docs/runbooks/actualizacion.md"
+    levantar_version "$buena" || morir "LA VERSIÓN $buena NO QUEDÓ SANA después de restaurar. Runbook: docs/runbooks/actualizacion.md"
+    log "ArgosIsp de vuelta en $buena"
+}
+
+cmd_revertir() {
+    local si=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --si) si=true; shift ;;
+            -h | --help) uso 0 ;;
+            *) morir "opción desconocida: $1" ;;
+        esac
+    done
+    requiere_instalacion
+    bloquear
+    registrar revertir
+    local actual anterior respaldo version
+    actual="$(version_instalada)"
+    anterior="$(leer_estado anterior)" || morir "no hay una actualización registrada que revertir"
+    version="$(leer_estado version)"
+    respaldo="$(leer_estado respaldo)"
+    [ "$version" = "$actual" ] || morir "la última actualización registrada es a $version y la instalada es $actual: no reviertas a ciegas (runbook)"
+    [ -f "$(dir_respaldos)/$respaldo" ] || morir "no está el respaldo $respaldo en $(dir_respaldos)"
+    [ -f "$(compose_de "$anterior")" ] || descargar_version "$anterior"
+    echo "Revertir vuelve a $anterior y RESTAURA LA BASE al respaldo $respaldo (tomado el $(leer_estado fecha))."
+    echo "Todo lo registrado después (pagos, facturas, cambios) se pierde: respáldalo antes si lo necesitas."
+    $si || confirmar "Escribe 'revertir' para confirmar:" revertir || morir "cancelado"
+    revertir_a "$actual" "$anterior" "$respaldo"
+    mv -f "$ESTADO_DIR/ultima-actualizacion" "$ESTADO_DIR/revertida-$(date -u +%Y%m%dT%H%M%SZ)"
+}
+
+estado_auto() {
+    if command -v systemctl > /dev/null && systemctl is-enabled argosisp-actualizar.timer > /dev/null 2>&1; then
+        echo "activados (argosisp-actualizar.timer)"
+    else
+        echo "apagados"
+    fi
+}
+
+cmd_auto() {
+    command -v systemctl > /dev/null || morir "este servidor no tiene systemd"
+    case "${1:-estado}" in
+        activar) systemctl enable --now argosisp-actualizar.timer; log "parches automáticos activados" ;;
+        desactivar) systemctl disable --now argosisp-actualizar.timer; log "parches automáticos apagados" ;;
+        estado) estado_auto ;;
+        *) uso ;;
+    esac
+}
+
+cmd_radius_clientes() {
+    requiere_instalacion
+    dc exec -T aaa node dist/clientes/cli.js
+    dc restart freeradius
+}
+
+principal() {
+    local comando="${1:-}"
+    [ $# -gt 0 ] && shift
+    case "$comando" in
+        estado) cmd_estado ;;
+        version | --version) cmd_version ;;
+        actualizar) cmd_actualizar "$@" ;;
+        revertir) cmd_revertir "$@" ;;
+        respaldar) cmd_respaldar ;;
+        levantar) cmd_levantar ;;
+        auto) cmd_auto "$@" ;;
+        radius-clientes) cmd_radius_clientes ;;
+        logs) requiere_instalacion; dc logs -f --tail 100 "$@" ;;
+        compose) requiere_instalacion; dc "$@" ;;
+        '' | -h | --help | ayuda) uso 0 ;;
+        *) log "comando desconocido: $comando"; uso ;;
+    esac
+}
+
+principal "$@"

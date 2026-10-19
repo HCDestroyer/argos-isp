@@ -1,0 +1,68 @@
+# Proxy de producción de ArgosIsp (servicio `proxy` de docker-compose.produccion.yml).
+# Une infra/proxy/Caddyfile (API y panel) e infra/proxy/Caddyfile.portal (portal por HTTPS y /corte
+# por HTTP). Detalle de cada regla en infra/proxy/README.md.
+#
+# - HTTPS automático con Let's Encrypt para DOMINIO_API, DOMINIO_PANEL y DOMINIO_PORTAL (los tres
+#   deben resolver a este servidor y el 443 ser alcanzable desde internet; el reto TLS-ALPN va por 443
+#   y el HTTP-01 por 80).
+# - El 80 sirve el portal con cualquier Host: el MikroTik hace dst-nat de TCP/80 de los suspendidos a
+#   este servidor y la página de corte no puede ir por HTTPS. En los dominios del panel y la API, el
+#   80 redirige a HTTPS; en el del portal, solo /entrar y /cuenta.
+# - IP real del cliente: Caddy recibe la conexión con la IP de origen y la pone en X-Forwarded-For;
+#   la API confía en la red de compose (PORTAL_PROXIES_CONFIABLES).
+
+{
+	# `email <correo>` (avisos de Let's Encrypt) o `local_certs` (CA interna, pruebas en CI)
+	{$PROXY_TLS_GLOBAL}
+	# Sin la redirección automática HTTP → HTTPS: /corte debe responder por HTTP.
+	auto_https disable_redirects
+	storage_clean_interval {$PROXY_LIMPIEZA_ALMACEN:24h}
+}
+
+(portal) {
+	reverse_proxy portal:3001 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+{$DOMINIO_API} {
+	# Webhook de la pasarela: la firma HMAC va sobre el cuerpo CRUDO (sin encode, sin buffer).
+	@webhook path /api/v1/pasarela/webhook/*
+	handle @webhook {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy api:3333 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy api:3333
+	}
+}
+
+{$DOMINIO_PANEL} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+{$DOMINIO_PORTAL} {
+	# Empezar corto (300) y subir a 31536000 cuando el certificado funcione (infra/proxy/README.md).
+	header Strict-Transport-Security "max-age={$PORTAL_HSTS_MAX_AGE:300}"
+	import portal
+}
+
+http:// {
+	@panelOApi host {$DOMINIO_API} {$DOMINIO_PANEL}
+	redir @panelOApi https://{host}{uri} 308
+
+	@portalSeguro {
+		host {$DOMINIO_PORTAL}
+		path /entrar /entrar/* /cuenta /cuenta/*
+	}
+	redir @portalSeguro https://{host}{uri} 308
+
+	import portal
+}
