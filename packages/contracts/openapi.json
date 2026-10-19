@@ -16449,6 +16449,220 @@
         "x-implementado": true
       }
     },
+    "/api/v1/internal/nodos-portal": {
+      "get": {
+        "operationId": "internoNodosPortalListar",
+        "summary": "Listar nodos portal (CLI)",
+        "description": "Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4.",
+        "tags": [
+          "interno"
+        ],
+        "security": [
+          {
+            "interno": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de nodos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/NodoPortalInterno"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "internoNodosPortalCrear",
+        "summary": "Dar de alta un nodo portal desde el CLI (el token se muestra una sola vez)",
+        "description": "Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4. 409 `nodo_portal_existe` si el nombre ya se usó.",
+        "tags": [
+          "interno"
+        ],
+        "security": [
+          {
+            "interno": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Nodo creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodoPortalInternoCreado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/internal/nodos-portal/{nombre}/revocar": {
+      "post": {
+        "operationId": "internoNodosPortalRevocar",
+        "summary": "Revocar un nodo portal por nombre (CLI)",
+        "description": "Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4.",
+        "tags": [
+          "interno"
+        ],
+        "security": [
+          {
+            "interno": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nodo revocado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodoPortalInternoRevocado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/ip/{ip}": {
       "get": {
         "operationId": "ipResolver",
@@ -20325,6 +20539,260 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/nodos-portal": {
+      "get": {
+        "operationId": "nodosPortalListar",
+        "summary": "Listar nodos portal remotos",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de nodos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/NodoPortal"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso nodos_portal.administrar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "nodos_portal.administrar",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "nodosPortalCrear",
+        "summary": "Dar de alta un nodo portal remoto (el token se muestra una sola vez)",
+        "description": "El token `argn_…` va en `X-Argos-Nodo-Token`. Solo sirve en `/api/v1/portal/**` y `GET /version`; con él la API toma la IP del cliente de `X-Argos-Cliente-Ip`. Mismas acciones que `POST /internal/nodos-portal` (CLI). 409 `nodo_portal_existe` si el nombre ya se usó.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Nodo creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodoPortalCreado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso nodos_portal.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "nodos_portal.administrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/nodos-portal/{id}/revocar": {
+      "post": {
+        "operationId": "nodosPortalRevocar",
+        "summary": "Revocar el token de un nodo portal (401 desde su siguiente petición)",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nodo revocado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodoPortal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso nodos_portal.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "nodos_portal.administrar",
         "x-implementado": true
       }
     },
@@ -30361,6 +30829,7 @@
                         "libros.emitir",
                         "libros.habilitar",
                         "libros.ver",
+                        "nodos_portal.administrar",
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
@@ -30631,6 +31100,7 @@
                         "libros.emitir",
                         "libros.habilitar",
                         "libros.ver",
+                        "nodos_portal.administrar",
                         "notificaciones.configurar",
                         "notificaciones.editar",
                         "notificaciones.probar",
@@ -35778,6 +36248,7 @@
                             "libros.emitir",
                             "libros.habilitar",
                             "libros.ver",
+                            "nodos_portal.administrar",
                             "notificaciones.configurar",
                             "notificaciones.editar",
                             "notificaciones.probar",
@@ -36607,7 +37078,7 @@
       "get": {
         "operationId": "versionInstalada",
         "summary": "Versión instalada de ArgosIsp y qué cambió en ella",
-        "description": "Cualquier usuario con sesión (sin permiso del ACL, como `/me`). `cambios` es la sección de la versión en CHANGELOG.md (Markdown); `notas_url`, la página de GitHub Releases.",
+        "description": "Cualquier usuario con sesión (sin permiso del ACL, como `/me`) o un nodo portal con su `X-Argos-Nodo-Token`. `cambios` es la sección de la versión en CHANGELOG.md (Markdown); `notas_url`, la página de GitHub Releases.",
         "tags": [
           "sistema"
         ],
@@ -36617,6 +37088,9 @@
           },
           {
             "panel": []
+          },
+          {
+            "nodo_portal": []
           }
         ],
         "responses": {
@@ -37012,6 +37486,12 @@
         "in": "cookie",
         "name": "argos_sesion",
         "description": "Sesión del panel: cookie HttpOnly que pone POST /api/v1/auth/sesion. Solo cuenta sin `Authorization`. POST, PUT y DELETE exigen `X-CSRF-Token` (el `csrf` del login o de GET /me) y un `Origin` permitido; si no, 403 `csrf_invalido`"
+      },
+      "nodo_portal": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Argos-Nodo-Token",
+        "description": "Token `argn_…` de un nodo portal remoto (contrato nodo-portal.md). En `/portal/*` hace que la API crea `X-Argos-Cliente-Ip`; sin él esa cabecera se ignora"
       },
       "interno": {
         "type": "http",
@@ -45490,6 +45970,148 @@
           "monto": {
             "$ref": "#/components/schemas/Dinero",
             "description": "debe − haber en la cuenta"
+          }
+        }
+      },
+      "NodoPortal": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "ultimo_uso",
+          "ultima_ip",
+          "revocado_en",
+          "creado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Identificador del nodo (`^[a-z0-9][a-z0-9-]{0,62}$`)"
+          },
+          "ultimo_uso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Última petición del nodo (se actualiza cada minuto)"
+          },
+          "ultima_ip": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IP desde la que llamó el nodo la última vez"
+          },
+          "revocado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NodoPortalCreado": {
+        "type": "object",
+        "required": [
+          "token",
+          "datos"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "pattern": "^argn_[A-Za-z0-9]{43}$",
+            "description": "Se muestra una sola vez; va en NODO_PORTAL_TOKEN del nodo (cabecera X-Argos-Nodo-Token)"
+          },
+          "datos": {
+            "$ref": "#/components/schemas/NodoPortal"
+          }
+        }
+      },
+      "NodoPortalInterno": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "creado_en",
+          "ultimo_uso_en",
+          "revocado_en"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ultimo_uso_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revocado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "NodoPortalInternoCreado": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "token",
+          "creado_en"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^argn_[A-Za-z0-9]{43}$",
+            "description": "Se muestra una sola vez"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NodoPortalInternoRevocado": {
+        "type": "object",
+        "required": [
+          "nombre",
+          "revocado_en"
+        ],
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "revocado_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

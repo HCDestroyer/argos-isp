@@ -6,12 +6,16 @@
  * con la IP de origen en `X-Forwarded-For` (ver `server/utils/reenvioApi.ts`). Cookies y
  * `Set-Cookie` viajan sin cambios.
  *
+ * Nodo portal remoto (`NUXT_NODO_PORTAL_TOKEN`): la API está en otro servidor, por HTTPS; en vez
+ * de `X-Forwarded-For` se manda el token del nodo y la IP del cliente ya resuelta
+ * (`cabecerasReenvio`, contrato `nodo-portal.md`).
+ *
  * Si la API no responde (caída o más de `TIEMPO_MAXIMO_API_MS`), el navegador recibe un
  * problem+json 502/504 en español en lugar del error genérico de h3: la página muestra el error
  * con "Reintentar" (`problemaApiNoDisponible`).
  */
 export default defineEventHandler(async (event) => {
-    const { apiBaseInternal } = useRuntimeConfig(event)
+    const { apiBaseInternal, nodoPortalToken, portal } = useRuntimeConfig(event)
     const destino = destinoReenvio(event.path, apiBaseInternal)
     if (!destino) {
         throw createError({ statusCode: 404, statusMessage: 'Not Found' })
@@ -28,15 +32,35 @@ export default defineEventHandler(async (event) => {
         }
     }
 
-    const xff = cadenaReenvio(getRequestHeader(event, 'x-forwarded-for'), getRequestIP(event))
-    const headers: Record<string, string> = {
-        'x-canal': 'portal',
-        'x-forwarded-proto': getRequestProtocol(event, { xForwardedProto: false }),
-        'x-forwarded-host': host,
+    // Lo que el navegador mande como cabeceras del nodo (o como cadena de proxies, con token) no
+    // llega a la API: las pone solo este servidor.
+    const entrantes = event.node.req.headers
+    const xffEntrante = getRequestHeader(event, 'x-forwarded-for')
+    const xfProtoEntrante = getRequestHeader(event, 'x-forwarded-proto')
+    delete entrantes['x-argos-nodo-token']
+    delete entrantes['x-argos-cliente-ip']
+    delete entrantes['x-argos-cliente-proto']
+    const token = String(nodoPortalToken ?? '').trim()
+    if (token) {
+        delete entrantes['x-forwarded-for']
+        delete entrantes['x-forwarded-proto']
+        if (!apiAdmiteToken(apiBaseInternal)) {
+            console.error('[nodo portal] NUXT_API_BASE_INTERNAL debe ser https:// para mandar el token del nodo')
+            const problema = problemaApiNoDisponible(new Error('api sin https'))
+            setResponseStatus(event, problema.status)
+            setResponseHeaders(event, { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' })
+            return problema
+        }
     }
-    if (xff) {
-        headers['x-forwarded-for'] = xff
-    }
+    const headers = cabecerasReenvio({
+        token,
+        proxiesConfiables: String(portal?.proxiesConfiables ?? ''),
+        ipSocket: getRequestIP(event),
+        protoSocket: getRequestProtocol(event, { xForwardedProto: false }),
+        xff: xffEntrante,
+        xfProto: xfProtoEntrante,
+        host,
+    })
 
     try {
         return await proxyRequest(event, destino, {
