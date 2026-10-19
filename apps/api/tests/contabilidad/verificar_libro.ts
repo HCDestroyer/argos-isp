@@ -841,7 +841,7 @@ async function verificarLibroCon(
             AND coalesce(lin.monto, 0) <> coalesce(mov.monto, 0)`,
     )
     await revisar(
-        '9.factura_en_cero (Q0: pagada, sin CxC ni DTE, motivo si es sin costo; asiento 5.1.01 / ingreso por el bruto)',
+        '9.factura_en_cero (Q0: pagada, sin CxC ni DTE venga de donde venga; sin costo: el motivo de su empresa)',
         `SELECT f.id, f.estado, f.total::text, f.motivo_sin_costo_id,
                 (SELECT count(*) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                    JOIN ledger.cuentas c ON c.id = m.cuenta_id
@@ -851,14 +851,15 @@ async function verificarLibroCon(
            FROM billing.facturas f
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.total = 0 AND f.estado <> 'anulada'
             AND EXISTS (SELECT 1 FROM billing.facturas_lineas l WHERE l.factura_id = f.id)
-            AND (f.estado NOT IN ('pagada', 'por_certificar')
+            AND (f.estado <> 'pagada'
                  OR EXISTS (SELECT 1 FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                               JOIN ledger.cuentas c ON c.id = m.cuenta_id
                              WHERE a.origen_tipo IN ('factura', 'mora') AND a.origen_id = f.id AND c.codigo = '${CXC}')
+                 -- H21 (decisión del líder): ninguna factura de Q0 va a DTE, venga de donde venga
+                 OR EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_id = f.id AND d.estado <> 'rechazado'
+                              AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END)
                  OR (f.motivo_sin_costo_id IS NOT NULL
-                     AND (EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_id = f.id AND d.estado <> 'rechazado'
-                                    AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END)
-                          OR f.estado <> 'pagada'
+                     AND (f.estado <> 'pagada'
                           OR NOT EXISTS (SELECT 1 FROM billing.motivos_sin_costo ms
                                           WHERE ms.id = f.motivo_sin_costo_id AND ms.empresa_id = f.empresa_id))))`,
     )
