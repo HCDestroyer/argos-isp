@@ -86,6 +86,7 @@ import { vinculacionesDeUsuario } from '#core/sso'
 import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
+import adicionales from '#start/routes/adicionales'
 import CrearEmpresa from '#core/actions/crear_empresa'
 import EditarEmpresaGrupo from '#core/actions/editar_empresa'
 import DesactivarEmpresa from '#core/actions/desactivar_empresa'
@@ -1375,6 +1376,7 @@ export default [
     ...empresas,
     ...clientes,
     ...servicios,
+    ...adicionales,
     ...bitacora,
     ...ip,
     ...integraciones,
