@@ -4,7 +4,8 @@ import type { FormError, FormSubmitEvent, SelectItem } from '@nuxt/ui'
 
 /**
  * Alta y edición de un sorteo en borrador (`POST /lealtad/sorteos`, `PUT /lealtad/sorteos/:id`,
- * `sorteos.gestionar`): bases (§7.2), fechas, criterios del corte y premios con imagen y tipo. Todo
+ * `sorteos.gestionar`): bases (§7.2), fechas, criterios del corte y premios por tipo. La imagen de un
+ * premio no es una URL (el portal no carga direcciones externas): se sube desde la ficha, en borrador. Todo
  * se puede dejar a medias en borrador; al publicar, la API exige las bases completas (422
  * `bases_incompletas`). Desde la publicación nada de esto cambia.
  */
@@ -435,18 +436,6 @@ async function enviar(evento: FormSubmitEvent<SalidaSorteo>) {
                                         @update:model-value="premio.premio_id = typeof $event === 'number' ? $event : null"
                                     />
                                 </UFormField>
-                                <UFormField
-                                    label="Imagen"
-                                    :name="`premios.${indice}.imagen_url`"
-                                    help="Dirección de la imagen: https o una ruta que empiece con /."
-                                    class="sm:col-span-2"
-                                >
-                                    <UInput
-                                        v-model="premio.imagen_url"
-                                        placeholder="/sorteos/premio.svg"
-                                        class="w-full"
-                                    />
-                                </UFormField>
                                 <UFormField :name="`premios.${indice}.retiene_isr`">
                                     <USwitch
                                         v-model="premio.retiene_isr"
@@ -466,21 +455,11 @@ async function enviar(evento: FormSubmitEvent<SalidaSorteo>) {
                                     />
                                 </UFormField>
                             </div>
-                            <div class="flex size-24 items-center justify-center overflow-hidden rounded-lg border border-default bg-elevated sm:size-28">
-                                <img
-                                    v-if="premio.imagen_url"
-                                    :src="premio.imagen_url"
-                                    :alt="premio.nombre || `Premio ${indice + 1}`"
-                                    class="size-full object-cover"
-                                >
-                                <UIcon
-                                    v-else
-                                    :name="TIPOS_PREMIO_SORTEO[premio.tipo].icono"
-                                    class="size-8 text-dimmed"
-                                />
-                            </div>
                         </div>
                     </div>
+                    <p class="text-xs text-muted">
+                        La imagen de cada premio se sube desde la ficha del sorteo mientras está en borrador (PNG, JPEG o WebP, hasta 1 MB).
+                    </p>
                     <UButton
                         label="Agregar premio"
                         icon="i-lucide-plus"

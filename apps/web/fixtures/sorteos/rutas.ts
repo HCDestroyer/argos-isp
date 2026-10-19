@@ -11,7 +11,9 @@ import { bytesDeHex, hashListaSorteo, jsonCanonicoSorteo, semillaFinalSorteo, sh
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { bancosLibro } from '../libro/datos'
-import type { ParticipanteSorteo, SorteoPrivado } from './datos'
+import { errorImagenPremio, leerImagenPremio } from '~/utils/imagenPremio'
+import { IMAGEN_DE_ARCHIVO, type ParticipanteSorteo, type SorteoPrivado } from './datos'
+import { bytesBase64, IMAGENES_SEMILLA } from './imagenes'
 
 type Sorteo = Schema<'SorteoDetalle'>
 type Premio = Sorteo['premios'][number]
@@ -112,6 +114,14 @@ async function sortearFixture(s: Sorteo, valorPublico: string, evidencia: string
             egreso_id: null,
             canje_id: null,
             entregado_en: null,
+            compra_linea_id: null,
+            premio: tipo === 'titular' ? premiosPorPuesto[i] ?? null : null,
+            premio_sustitucion: null,
+            sustituye_a: null,
+            notificado_en: null,
+            reclamar_antes: null,
+            no_reclamado_en: null,
+            constancia_archivo_id: null,
             version: 1,
         }
     })
@@ -241,6 +251,9 @@ function premiosDe(cuerpo: unknown, empresaId: number, errores: Errores): Premio
         if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 100) {
             errores.push({ field: `premios.${i}.cantidad`, message: 'Cantidad de 1 a 100', rule: 'range' })
         }
+        if (texto(p.imagen_url)) {
+            errores.push({ field: `premios.${i}.imagen_url`, message: 'La imagen del premio se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen): el portal no carga URLs externas', rule: 'imagen_externa' })
+        }
         const isr = typeof p.isr_pct === 'string' && p.isr_pct.trim() ? p.isr_pct.trim() : '10.00'
         if (!PORCENTAJE.test(isr)) {
             errores.push({ field: `premios.${i}.isr_pct`, message: 'Porcentaje inválido', rule: 'regex' })
@@ -251,7 +264,8 @@ function premiosDe(cuerpo: unknown, empresaId: number, errores: Errores): Premio
             posicion: i + 1,
             nombre: nombre ?? '',
             cantidad,
-            imagen_url: texto(p.imagen_url),
+            imagen_url: null,
+            imagen_archivo_id: null,
             valor: MONTO.test(valor) ? new Decimal(valor).toFixed(2) : '0.00',
             tipo: tipo ?? 'efectivo',
             premio_id: tipo === 'servicio' ? premioId : null,
@@ -273,6 +287,9 @@ function camposDe(cuerpo: Record<string, unknown>, previo: Sorteo | null, empres
     }
     if (cuerpo.descripcion !== undefined) {
         campos.descripcion = texto(cuerpo.descripcion)
+    }
+    if (typeof cuerpo.aviso_portal === 'boolean') {
+        campos.aviso_portal = cuerpo.aviso_portal
     }
     if (cuerpo.bases !== undefined) {
         campos.bases = typeof cuerpo.bases === 'object' && cuerpo.bases !== null ? { ...cuerpo.bases as Record<string, unknown> } : {}
@@ -497,6 +514,11 @@ export const rutasSorteos: RutasFixture = {
             corte_cerrado_en: null,
             ejecutado_en: null,
             cancelado_en: null,
+            aviso_portal: false,
+            acta_hash: null,
+            acta_archivo_id: null,
+            acta_constancia: null,
+            acta_cerrada_en: null,
             premios: [],
             version: 1,
             created_at: momento,
@@ -505,6 +527,7 @@ export const rutasSorteos: RutasFixture = {
             participantes: 0,
             boletos: 0,
             ganadores: [],
+            archivos: [],
             ...campos,
         }
         bd.sorteos.push(sorteo)
@@ -528,6 +551,12 @@ export const rutasSorteos: RutasFixture = {
         const campos = camposDe(cuerpo, s, s.empresa_id, errores)
         if (errores.length) {
             return invalido(errores)
+        }
+        if (campos.premios) {
+            campos.premios = campos.premios.map((p) => {
+                const previa = s.premios.find(x => x.posicion === p.posicion)
+                return previa?.imagen_archivo_id ? { ...p, imagen_url: previa.imagen_url, imagen_archivo_id: previa.imagen_archivo_id } : p
+            })
         }
         avanzar(s, campos)
         registrarAccion(solicitud, 'sorteos.editar', { tipo: 'sorteo', id: s.id }, cuerpo)
@@ -690,7 +719,7 @@ export const rutasSorteos: RutasFixture = {
         if (!esSorteo(s)) {
             return s
         }
-        if (s.estado !== 'ejecutado') {
+        if (s.estado !== 'ejecutado' && s.estado !== 'acta_cerrada') {
             return estadoInvalido(s, 'entregar premios')
         }
         const ganador = s.ganadores.find(g => g.id === idDe(solicitud, 'ganadorId'))
@@ -746,11 +775,76 @@ export const rutasSorteos: RutasFixture = {
             Object.assign(cambios, { canje_id: 770000 + ganador.id, contrapartida: 'canje' })
         }
         Object.assign(ganador, cambios, { estado: 'entregado', retencion_isr: isr.toFixed(2), entregado_en: ahora(), version: ganador.version + 1 })
+        // Segunda PR: solo con el acta cerrada y nada pendiente pasa a premios_entregados.
         const pendientes = s.ganadores.filter(g => g.tipo === 'titular' && g.estado !== 'entregado')
-        avanzar(s, pendientes.length === 0 ? { estado: 'premios_entregados' } : {})
+        avanzar(s, pendientes.length === 0 && s.estado === 'acta_cerrada' ? { estado: 'premios_entregados' } : {})
         registrarAccion(solicitud, 'sorteos.entregar', { tipo: 'sorteo', id: s.id }, { ganador_id: ganador.id, ...cuerpo })
         return { status: 200, cuerpo: s }
     })),
+
+    /** Pedido del PM: `aviso_portal` (falso por defecto), hasta antes de ejecutar, con `version`. */
+    'PUT /api/v1/lealtad/sorteos/:id/aviso-portal': conPermiso('sorteos.gestionar', (solicitud) => {
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        if (typeof cuerpo.aviso_portal !== 'boolean' || typeof cuerpo.version !== 'number') {
+            return invalido([{ field: typeof cuerpo.version !== 'number' ? 'version' : 'aviso_portal', message: 'Obligatorio', rule: 'required' }])
+        }
+        if (cuerpo.version !== s.version) {
+            return versionCambiada()
+        }
+        if (!['borrador', 'bases_publicadas', 'participacion_abierta', 'corte_cerrado'].includes(s.estado)) {
+            return estadoInvalido(s, 'cambiar el aviso en el portal')
+        }
+        if (s.aviso_portal !== cuerpo.aviso_portal) {
+            avanzar(s, { aviso_portal: cuerpo.aviso_portal })
+        }
+        registrarAccion(solicitud, 'sorteos.cambiar_aviso_portal', { tipo: 'sorteo', id: s.id }, cuerpo)
+        return { status: 200, cuerpo: s }
+    }),
+
+    /** Imagen de un premio (multipart `imagen`), solo en borrador: PNG, JPEG o WebP por su contenido. */
+    'POST /api/v1/lealtad/sorteos/:id/premios/:posicion/imagen': conPermiso('sorteos.gestionar', async (solicitud) => {
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        if (s.estado !== 'borrador') {
+            return estadoInvalido(s, 'cambiar la imagen de un premio')
+        }
+        const premio = s.premios.find(p => p.posicion === idDe(solicitud, 'posicion'))
+        if (!premio) {
+            return noEncontrado('el premio')
+        }
+        const archivo = cuerpoObjeto(solicitud).imagen
+        const bytes = archivo instanceof Blob ? new Uint8Array(await archivo.arrayBuffer()) : new Uint8Array()
+        const error = errorImagenPremio(bytes)
+        if (error) {
+            return invalido([{ field: 'imagen', message: error, rule: bytes.length === 0 ? 'required' : error.startsWith('La imagen pesa') ? 'tamano' : error.startsWith('La imagen mide') ? 'dimensiones' : 'tipo' }])
+        }
+        const archivoId = Math.max(9500, ...Object.keys(bd.imagenesSorteos).map(Number), ...s.premios.map(p => p.imagen_archivo_id ?? 0)) + 1
+        bd.imagenesSorteos[archivoId] = { bytes, tipo: leerImagenPremio(bytes)?.tipo ?? 'image/png' }
+        Object.assign(premio, { imagen_archivo_id: archivoId, imagen_url: `/api/v1/lealtad/sorteos/${s.id}/premios/${premio.posicion}/imagen` })
+        s.updated_at = ahora()
+        registrarAccion(solicitud, 'sorteos.subir_imagen_premio', { tipo: 'sorteo', id: s.id }, { posicion: premio.posicion, archivo: archivoId })
+        return { status: 200, cuerpo: s }
+    }),
+
+    'GET /api/v1/lealtad/sorteos/:id/premios/:posicion/imagen': conPermiso('sorteos.ver', (solicitud) => {
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        const archivoId = s.premios.find(p => p.posicion === idDe(solicitud, 'posicion'))?.imagen_archivo_id
+        const subida = archivoId ? bd.imagenesSorteos[archivoId] : undefined
+        const semilla = archivoId ? IMAGEN_DE_ARCHIVO[archivoId] : undefined
+        if (subida) {
+            return { status: 200, cuerpo: subida.bytes, contentType: subida.tipo }
+        }
+        return semilla ? { status: 200, cuerpo: bytesBase64(IMAGENES_SEMILLA[semilla]), contentType: 'image/webp' } : noEncontrado('la imagen del premio')
+    }),
 
     /** H22 (`sorteos.anular_entrega`, permiso `sorteos.entregar`): deshace la entrega toda junta. */
     'POST /api/v1/lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega': conPermiso('sorteos.entregar', conIdempotencia(async (solicitud) => {
@@ -763,7 +857,7 @@ export const rutasSorteos: RutasFixture = {
         if (!esSorteo(s)) {
             return s
         }
-        if (s.estado !== 'ejecutado' && s.estado !== 'premios_entregados') {
+        if (s.estado !== 'ejecutado' && s.estado !== 'acta_cerrada' && s.estado !== 'premios_entregados') {
             return estadoInvalido(s, 'anular la entrega de un premio')
         }
         const ganador = s.ganadores.find(g => g.id === idDe(solicitud, 'ganadorId'))
@@ -773,8 +867,9 @@ export const rutasSorteos: RutasFixture = {
         if (ganador.estado !== 'entregado') {
             return regla('premio_no_entregado', `El premio del ganador ${ganador.id} no está entregado`)
         }
-        Object.assign(ganador, { estado: 'por_notificar', retencion_isr: null, contrapartida: null, asiento_id: null, egreso_id: null, canje_id: null, compra_linea_id: null, entregado_en: null, version: ganador.version + 1 })
-        avanzar(s, s.estado === 'premios_entregados' ? { estado: 'ejecutado' } : {})
+        Object.assign(ganador, { estado: 'por_notificar', retencion_isr: null, contrapartida: null, asiento_id: null, egreso_id: null, canje_id: null, compra_linea_id: null, constancia_archivo_id: null, entregado_en: null, version: ganador.version + 1 })
+        // Reabre al estado del que venía: con el acta cerrada, acta_cerrada.
+        avanzar(s, s.estado === 'premios_entregados' ? { estado: s.acta_hash ? 'acta_cerrada' : 'ejecutado' } : {})
         registrarAccion(solicitud, 'sorteos.anular_entrega', { tipo: 'sorteo', id: s.id }, { ganador_id: ganador.id, motivo })
         return { status: 200, cuerpo: s }
     })),
@@ -783,7 +878,7 @@ export const rutasSorteos: RutasFixture = {
     'GET /api/v1/lealtad/sorteos/:id/verificacion': async (solicitud) => {
         await prepararSorteos()
         const s = bd.sorteos.find(x => x.id === idDe(solicitud))
-        if (!s || !['ejecutado', 'premios_entregados'].includes(s.estado)) {
+        if (!s || !['ejecutado', 'acta_cerrada', 'premios_entregados'].includes(s.estado)) {
             return noEncontrado('la verificación del sorteo')
         }
         const verificacion: Schema<'VerificacionSorteo'> = {
@@ -796,6 +891,7 @@ export const rutasSorteos: RutasFixture = {
             valor_publico: s.valor_publico ?? '',
             fuente_valor_publico: typeof s.bases.fuente_valor_publico === 'string' ? s.bases.fuente_valor_publico : null,
             valor_publico_evidencia: s.valor_publico_evidencia ?? null,
+            acta_hash: s.acta_hash ?? null,
             lista_hash: s.lista_hash ?? '',
             lista: privadoDe(s.id).participantes.map(p => ({ codigo: p.codigo, boletos: p.boletos })),
             titulares: s.premios.reduce((suma, p) => suma + p.cantidad, 0),

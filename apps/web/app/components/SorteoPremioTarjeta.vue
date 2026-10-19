@@ -1,23 +1,52 @@
 <script setup lang="ts">
 /**
  * Un premio del sorteo: imagen (o el icono de su tipo), tipo, valor de libre competencia, cuántos
- * hay, el ISR y cómo se entrega. Si la imagen no carga se muestra el icono, nunca un hueco roto.
+ * hay, el ISR y cómo se entrega. La imagen es un archivo subido que la API sirve con la sesión
+ * (`GET .../premios/:posicion/imagen`): se pide como `Blob` y se muestra con una URL de objeto que se
+ * libera al salir. Si no carga se muestra el icono, nunca un hueco roto.
  */
 const props = withDefaults(defineProps<{
+    sorteoId: number
     premio: PremioSorteo
     /** Nombre del premio del catálogo (tipo servicio), si se conoce. */
     catalogo?: string | null
+    /** Botón «Subir imagen» (`sorteos.gestionar`, solo en borrador). */
+    puedeSubirImagen?: boolean
 }>(), {
     catalogo: null,
+    puedeSubirImagen: false,
 })
 
+const emit = defineEmits<{
+    subirImagen: [premio: PremioSorteo]
+}>()
+
+const { puede } = usePermisos()
 const tipo = computed(() => TIPOS_PREMIO_SORTEO[props.premio.tipo])
 const isr = computed(() => isrPremio(props.premio))
-const imagenRota = ref(false)
+const url = ref<string | null>(null)
 
-watch(() => props.premio.imagen_url, () => {
-    imagenRota.value = false
-})
+function liberar() {
+    if (url.value) {
+        URL.revokeObjectURL(url.value)
+        url.value = null
+    }
+}
+
+async function cargarImagen() {
+    liberar()
+    if (!puede('sorteos.ver') || (!props.premio.imagen_archivo_id && !props.premio.imagen_url)) {
+        return
+    }
+    const resultado = await useSorteos().imagenPremio(props.sorteoId, props.premio.posicion)
+    if (resultado.ok) {
+        url.value = URL.createObjectURL(resultado.data)
+    }
+}
+
+watch(() => [props.sorteoId, props.premio.posicion, props.premio.imagen_archivo_id, props.premio.imagen_url], () => void cargarImagen())
+onMounted(cargarImagen)
+onBeforeUnmount(liberar)
 </script>
 
 <template>
@@ -28,13 +57,12 @@ watch(() => props.premio.imagen_url, () => {
     >
         <div class="relative aspect-[8/5] w-full bg-elevated">
             <img
-                v-if="premio.imagen_url && !imagenRota"
-                :src="premio.imagen_url"
+                v-if="url"
+                :src="url"
                 :alt="premio.nombre"
                 class="size-full object-cover"
-                loading="lazy"
                 data-prueba="premio-imagen"
-                @error="imagenRota = true"
+                @error="liberar"
             >
             <div
                 v-else
@@ -87,6 +115,18 @@ watch(() => props.premio.imagen_url, () => {
             <p class="mt-auto text-xs text-muted">
                 {{ tipo.entrega }}
             </p>
+            <UButton
+                v-if="puedeSubirImagen"
+                :label="premio.imagen_archivo_id ? 'Cambiar imagen' : 'Subir imagen'"
+                icon="i-lucide-image-up"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                class="self-start"
+                :aria-label="`${premio.imagen_archivo_id ? 'Cambiar' : 'Subir'} la imagen del premio ${premio.posicion}`"
+                data-prueba="subir-imagen-premio"
+                @click="emit('subirImagen', premio)"
+            />
         </div>
     </article>
 </template>

@@ -30,11 +30,12 @@ export const ESTADOS_SORTEO: Record<EstadoSorteoApi, { etiqueta: string, color: 
     participacion_abierta: { etiqueta: 'Participación abierta', color: 'primary', icono: 'i-lucide-ticket' },
     corte_cerrado: { etiqueta: 'Corte cerrado', color: 'warning', icono: 'i-lucide-list-checks' },
     ejecutado: { etiqueta: 'Ejecutado', color: 'success', icono: 'i-lucide-trophy' },
+    acta_cerrada: { etiqueta: 'Acta cerrada', color: 'success', icono: 'i-lucide-file-signature' },
     premios_entregados: { etiqueta: 'Premios entregados', color: 'success', icono: 'i-lucide-gift' },
     cancelado: { etiqueta: 'Cancelado', color: 'neutral', icono: 'i-lucide-ban' },
 }
 
-/** Un estado que la API agregue después (`acta_cerrada`, segunda PR) se muestra por su nombre. */
+/** Un estado que la API agregue después se muestra por su nombre. */
 export function estadoSorteoVisual(estado: string): { etiqueta: string, color: Color, icono: string } {
     if (Object.hasOwn(ESTADOS_SORTEO, estado)) {
         return ESTADOS_SORTEO[estado as EstadoSorteoApi]
@@ -44,7 +45,13 @@ export function estadoSorteoVisual(estado: string): { etiqueta: string, color: C
 }
 
 /** Los pasos del sorteo en orden (sin `cancelado`), para el avance de la ficha. */
-export const PASOS_SORTEO: readonly EstadoSorteoApi[] = ['borrador', 'bases_publicadas', 'participacion_abierta', 'corte_cerrado', 'ejecutado', 'premios_entregados']
+export const PASOS_SORTEO: readonly EstadoSorteoApi[] = ['borrador', 'bases_publicadas', 'participacion_abierta', 'corte_cerrado', 'ejecutado', 'acta_cerrada', 'premios_entregados']
+
+/** Ya hay resultado (ganadores): ejecutado, con el acta cerrada o con todo entregado. */
+export const ESTADOS_CON_RESULTADO: readonly EstadoSorteoApi[] = ['ejecutado', 'acta_cerrada', 'premios_entregados']
+
+/** Hasta antes de ejecutar se puede anunciar (o dejar de anunciar) en el portal (`PUT .../aviso-portal`). */
+export const ESTADOS_AVISO_PORTAL: readonly EstadoSorteoApi[] = ['borrador', 'bases_publicadas', 'participacion_abierta', 'corte_cerrado']
 
 export type AccionSorteo = 'editar' | 'publicar_bases' | 'abrir' | 'cerrar_corte' | 'ejecutar' | 'cancelar'
 
@@ -186,7 +193,7 @@ export function requisitosFaltantes(requisitos: readonly Requisito[], paso: 'abr
 
 export const TIPOS_PREMIO_SORTEO: Record<Premio['tipo'], { etiqueta: string, icono: string, entrega: string }> = {
     efectivo: { etiqueta: 'Efectivo', icono: 'i-lucide-banknote', entrega: 'Egreso de caja o banco por el valor menos el ISR retenido.' },
-    bien: { etiqueta: 'Bien', icono: 'i-lucide-package', entrega: 'Gasto 5.1.03 contra Proveedores (2.1.03) o una cuenta de activo.' },
+    bien: { etiqueta: 'Bien', icono: 'i-lucide-package', entrega: 'Gasto 5.1.03 con la línea de su compra registrada o contra una cuenta de activo.' },
     servicio: { etiqueta: 'Servicio', icono: 'i-lucide-wifi', entrega: 'Descuento o mes gratis del catálogo, reservado para la próxima factura.' },
 }
 
@@ -259,7 +266,6 @@ const textoBases = (maximo: number) => z.string().trim().max(maximo, `Hasta ${ma
 const esquemaPremio = z.object({
     nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(200, 'Hasta 200 caracteres'),
     cantidad: z.number({ message: 'Cantidad inválida' }).int('Sin decimales').min(1, 'Al menos 1').max(100, 'Hasta 100'),
-    imagen_url: z.string().trim().max(1000, 'Hasta 1000 caracteres').refine(v => v === '' || /^(https?:\/\/|\/)/.test(v), 'Una dirección http(s) o una ruta que empiece con /'),
     valor: z.string().trim().regex(MONTO, 'Monto con hasta 2 decimales, sin comas').refine(v => !MONTO.test(v) || new Decimal(v).gt(0), 'Mayor que 0'),
     tipo: z.enum(['efectivo', 'bien', 'servicio']),
     premio_id: z.number().int().positive().nullable(),
@@ -292,7 +298,7 @@ export type SalidaSorteo = z.output<typeof esquemaSorteo>
 export type EntradaPremioSorteo = EntradaSorteo['premios'][number]
 
 export function entradaPremioVacia(): EntradaPremioSorteo {
-    return { nombre: '', cantidad: 1, imagen_url: '', valor: '', tipo: 'efectivo', premio_id: null, retiene_isr: true, isr_pct: '10' }
+    return { nombre: '', cantidad: 1, valor: '', tipo: 'efectivo', premio_id: null, retiene_isr: true, isr_pct: '10' }
 }
 
 export function entradaSorteoVacia(): EntradaSorteo {
@@ -343,7 +349,6 @@ export function entradaDeSorteo(sorteo: Sorteo): EntradaSorteo {
         premios: sorteo.premios.map(p => ({
             nombre: p.nombre,
             cantidad: p.cantidad,
-            imagen_url: p.imagen_url ?? '',
             valor: p.valor,
             tipo: p.tipo,
             premio_id: p.premio_id,
@@ -387,7 +392,6 @@ export function cuerpoSorteo(datos: SalidaSorteo): CuerpoSorteo {
         premios: datos.premios.map(p => ({
             nombre: p.nombre,
             cantidad: p.cantidad,
-            imagen_url: p.imagen_url || null,
             valor: new Decimal(p.valor).toFixed(2),
             tipo: p.tipo,
             premio_id: p.tipo === 'servicio' ? p.premio_id : null,

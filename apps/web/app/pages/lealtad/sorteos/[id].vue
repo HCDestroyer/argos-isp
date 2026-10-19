@@ -68,9 +68,44 @@ const puedeCerrarCorte = computed(() => puede('sorteos.publicar') && acciones.va
 const puedeEjecutar = computed(() => puede('sorteos.ejecutar') && acciones.value.includes('ejecutar'))
 const puedeCancelar = computed(() => puede('sorteos.publicar') && acciones.value.includes('cancelar'))
 const puedeMarcar = computed(() => puede('sorteos.marcar_requisito') && estado.value !== 'cancelado')
-const puedeEntregar = computed(() => puede('sorteos.entregar') && estado.value === 'ejecutado')
-const puedeAnularEntrega = computed(() => puede('sorteos.entregar') && (estado.value === 'ejecutado' || estado.value === 'premios_entregados'))
-const ejecutado = computed(() => estado.value === 'ejecutado' || estado.value === 'premios_entregados')
+const puedeEntregar = computed(() => puede('sorteos.entregar') && (estado.value === 'ejecutado' || estado.value === 'acta_cerrada'))
+const puedeAnularEntrega = computed(() => puede('sorteos.entregar') && ESTADOS_CON_RESULTADO.includes(estado.value))
+const ejecutado = computed(() => ESTADOS_CON_RESULTADO.includes(estado.value))
+const puedeSubirImagen = computed(() => puede('sorteos.gestionar') && estado.value === 'borrador')
+const puedeCambiarAviso = computed(() => puede('sorteos.gestionar') && ESTADOS_AVISO_PORTAL.includes(estado.value))
+
+/* Imagen de un premio (solo en borrador). */
+const premioImagen = shallowRef<PremioSorteo | null>(null)
+const subiendoImagen = computed({
+    get: () => premioImagen.value !== null,
+    set: (valor: boolean) => {
+        if (!valor) {
+            premioImagen.value = null
+        }
+    },
+})
+
+/* Aviso en el portal: interruptor con `version`; con 409 se recarga y se avisa. */
+const cambiandoAviso = ref(false)
+const problemaAviso = ref<Problem | null>(null)
+
+async function cambiarAviso(valor: boolean) {
+    if (!sorteo.value) {
+        return
+    }
+    cambiandoAviso.value = true
+    problemaAviso.value = null
+    const resultado = await useSorteos().cambiarAvisoPortal(sorteo.value.id, sorteo.value.version, valor)
+    cambiandoAviso.value = false
+    if (resultado.ok) {
+        alAvanzar(resultado.data, valor ? 'El sorteo se anuncia en el portal' : 'El sorteo ya no se anuncia en el portal')
+        return
+    }
+    problemaAviso.value = resultado.problema
+    if (resultado.problema.status === 409) {
+        void cargar()
+    }
+}
 
 /** Lo que falta del checklist para el siguiente paso (abrir o ejecutar). */
 const faltantes = computed<RequisitoSorteo['clave'][]>(() => {
@@ -143,6 +178,10 @@ function alAvanzar(nuevo: SorteoDetalle, titulo: string, descripcion?: string) {
     sorteo.value = nuevo
     problemaAccion.value = null
     toast.add({ title: titulo, description: descripcion, icon: 'i-lucide-circle-check', color: 'success' })
+}
+
+function alSubirImagen(nuevo: SorteoDetalle) {
+    alAvanzar(nuevo, 'Imagen del premio subida')
 }
 
 function alEjecutar(nuevo: SorteoDetalle) {
@@ -314,6 +353,47 @@ onMounted(() => {
 
             <SorteoPasos :sorteo="sorteo" />
 
+            <div
+                v-if="sorteo.estado !== 'cancelado'"
+                class="flex flex-col gap-2 rounded-lg border border-default p-3 sm:flex-row sm:items-center sm:justify-between"
+                data-prueba="sorteo-aviso-portal"
+            >
+                <USwitch
+                    v-if="puedeCambiarAviso"
+                    :model-value="sorteo.aviso_portal ?? false"
+                    :disabled="cambiandoAviso"
+                    :loading="cambiandoAviso"
+                    label="Anunciar en el portal del cliente"
+                    description="Los clientes ven el sorteo, sus premios y sus boletos en el portal. Se puede cambiar hasta antes de ejecutar."
+                    data-prueba="interruptor-aviso-portal"
+                    @update:model-value="cambiarAviso"
+                />
+                <!-- Sin permiso o ya ejecutado: solo se informa (un interruptor deshabilitado no se lee bien). -->
+                <div
+                    v-else
+                    class="flex flex-wrap items-center gap-2 text-sm"
+                    data-prueba="aviso-portal-estado"
+                >
+                    <span class="font-medium text-highlighted">Portal del cliente</span>
+                    <UBadge
+                        :label="sorteo.aviso_portal ? 'Se anuncia' : 'No se anuncia'"
+                        :icon="sorteo.aviso_portal ? 'i-lucide-megaphone' : 'i-lucide-eye-off'"
+                        :color="sorteo.aviso_portal ? 'primary' : 'neutral'"
+                        variant="subtle"
+                        size="sm"
+                    />
+                    <span
+                        v-if="ESTADOS_CON_RESULTADO.includes(sorteo.estado)"
+                        class="text-muted"
+                    >Ya no se puede cambiar: el sorteo se ejecutó.</span>
+                </div>
+            </div>
+            <ProblemaAlerta
+                v-if="problemaAviso"
+                :problema="problemaAviso"
+                data-prueba="aviso-portal-problema"
+            />
+
             <ProblemaAlerta
                 v-if="problemaAccion"
                 :problema="problemaAccion"
@@ -351,8 +431,11 @@ onMounted(() => {
                     <SorteoPremioTarjeta
                         v-for="premio in sorteo.premios"
                         :key="premio.id"
+                        :sorteo-id="sorteo.id"
                         :premio="premio"
                         :catalogo="nombreCatalogo(premio)"
+                        :puede-subir-imagen="puedeSubirImagen"
+                        @subir-imagen="premioImagen = $event"
                     />
                 </div>
             </UPageCard>
@@ -552,6 +635,13 @@ onMounted(() => {
                 :empresa-id="sorteo.empresa_id"
                 :lineas-usadas="lineasEntregadas"
                 @hecho="alEntregar"
+            />
+            <SorteoImagenPremioModal
+                v-if="puedeSubirImagen"
+                v-model:open="subiendoImagen"
+                :sorteo-id="sorteo.id"
+                :premio="premioImagen"
+                @hecho="alSubirImagen"
             />
             <SorteoAnularEntregaModal
                 v-if="puedeAnularEntrega"

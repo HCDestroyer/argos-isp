@@ -184,6 +184,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'UsuarioEmpresasModal.vue': { permisos: ['usuarios.asignar_empresas'], desde: ['pages/usuarios/index.vue'] },
     'SorteoFormulario.vue': { permisos: ['sorteos.gestionar'], desde: ['pages/lealtad/sorteos/index.vue', 'pages/lealtad/sorteos/[id].vue'] },
     'SorteoEjecutarModal.vue': { permisos: ['sorteos.ejecutar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
+    'SorteoImagenPremioModal.vue': { permisos: ['sorteos.gestionar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
     'SorteoAnularEntregaModal.vue': { permisos: ['sorteos.entregar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
     'SorteoEntregarModal.vue': { permisos: ['sorteos.entregar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
     'SorteoMarcarRequisitoModal.vue': { permisos: ['sorteos.marcar_requisito'], desde: ['pages/lealtad/sorteos/[id].vue'] },

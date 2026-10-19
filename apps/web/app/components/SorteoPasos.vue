@@ -4,7 +4,7 @@
  * marca hasta dónde llegó.
  */
 const props = defineProps<{
-    sorteo: Pick<SorteoDetalle, 'estado' | 'created_at' | 'publicado_en' | 'corte_cerrado_en' | 'ejecutado_en' | 'cancelado_en' | 'ganadores'>
+    sorteo: Pick<SorteoDetalle, 'estado' | 'created_at' | 'publicado_en' | 'corte_cerrado_en' | 'ejecutado_en' | 'cancelado_en' | 'ganadores' | 'acta_cerrada_en'>
 }>()
 
 interface Paso {
@@ -25,6 +25,7 @@ const pasos = computed<Paso[]>(() => {
         participacion_abierta: null,
         corte_cerrado: s.corte_cerrado_en,
         ejecutado: s.ejecutado_en,
+        acta_cerrada: s.acta_cerrada_en ?? null,
         premios_entregados: s.estado === 'premios_entregados' ? entregado : null,
     }
     // Cancelado: el último paso alcanzado es el último con fecha (o el borrador).

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { bytesBase64, IMAGENES_SEMILLA } from '../../fixtures/sorteos/imagenes'
 import { entrar, ir } from './ayudas'
 
 /**
@@ -86,7 +87,6 @@ test('crear un sorteo en borrador con premios por tipo e imagen, y publicar sus 
     const premio = formulario.locator('[data-premio-formulario="1"]')
     await premio.getByLabel('Nombre').fill('Bicicleta de montaña')
     await premio.getByLabel('Valor (libre competencia)').fill('2500')
-    await premio.getByLabel('Imagen').fill('/sorteos/bicicleta.svg')
     await premio.getByRole('combobox', { name: 'Tipo' }).click()
     await page.getByRole('option', { name: 'Bien' }).click()
     await formulario.getByRole('button', { name: 'Crear borrador' }).click()
@@ -95,7 +95,22 @@ test('crear un sorteo en borrador con premios por tipo e imagen, y publicar sus 
     await expect(page.locator('[data-prueba="sorteo-estado"]')).toHaveText('Borrador')
     const tarjeta = page.locator('[data-premio="1"]')
     await expect(tarjeta.locator('[data-prueba="premio-tipo"]')).toHaveText('Bien')
-    await expect(tarjeta.locator('[data-prueba="premio-imagen"]')).toHaveAttribute('src', '/sorteos/bicicleta.svg')
+    await expect(tarjeta.locator('[data-prueba="premio-sin-imagen"]')).toBeVisible()
+
+    // La imagen se sube (el portal no carga URLs externas) y la ficha la pide con la sesión.
+    await tarjeta.locator('[data-prueba="subir-imagen-premio"]').click()
+    const imagen = page.getByRole('dialog', { name: 'Imagen del premio' })
+    await imagen.locator('input[type="file"]').setInputFiles({ name: 'bicicleta.webp', mimeType: 'image/webp', buffer: Buffer.from(bytesBase64(IMAGENES_SEMILLA.bicicleta)) })
+    await expect(imagen.locator('[data-prueba="imagen-premio-vista"]')).toBeVisible()
+    await imagen.getByRole('button', { name: 'Subir imagen' }).click()
+    await expect(imagen).toHaveCount(0)
+    await expect(tarjeta.locator('[data-prueba="premio-imagen"]')).toHaveAttribute('src', /^blob:/)
+
+    // Anunciar en el portal (falso por defecto).
+    const aviso = page.locator('[data-prueba="interruptor-aviso-portal"]')
+    await expect(aviso).toHaveAttribute('aria-checked', 'false')
+    await aviso.click()
+    await expect(aviso).toHaveAttribute('aria-checked', 'true')
 
     await page.locator('[data-prueba="publicar-bases"]').click()
     await page.getByRole('dialog', { name: 'Publicar bases' }).getByRole('button', { name: 'Publicar bases' }).click()

@@ -1,4 +1,5 @@
 import type { Schema } from '@argosisp/contracts'
+import { IMAGENES_SEMILLA } from './imagenes'
 
 /**
  * Sorteos de los fixtures (A3, `contratos/lealtad.md` §7 y §15.3), uno por paso, de ArgosNet salvo
@@ -66,8 +67,30 @@ const BASES_COMPLETAS = {
     resolucion_gobernacion: null,
 }
 
+/** Archivo sembrado de cada imagen de premio (`imagen_archivo_id`): su id → la imagen de `imagenes.ts`. */
+export const IMAGEN_DE_ARCHIVO: Record<number, keyof typeof IMAGENES_SEMILLA> = {}
+const ARCHIVO_IMAGEN_INICIAL = 9100
+
+/**
+ * Las imágenes se suben (`POST .../premios/:posicion/imagen`, `a3/sorteos-2`): en la semilla se marca la
+ * imagen con su nombre (`/sorteos/bicicleta.svg`) y aquí queda como la deja la API, con su archivo y la
+ * ruta del panel en `imagen_url`.
+ */
+function conImagenSubida(sorteoId: number, premios: Premio[]): Premio[] {
+    return premios.map((p) => {
+        const nombre = /^\/sorteos\/([a-z-]+)\.svg$/.exec(p.imagen_url ?? '')?.[1]
+        if (!nombre || !Object.hasOwn(IMAGENES_SEMILLA, nombre)) {
+            return { ...p, imagen_url: null, imagen_archivo_id: null }
+        }
+        const archivo = ARCHIVO_IMAGEN_INICIAL + p.id
+        IMAGEN_DE_ARCHIVO[archivo] = nombre as keyof typeof IMAGENES_SEMILLA
+        return { ...p, imagen_url: `/api/v1/lealtad/sorteos/${sorteoId}/premios/${p.posicion}/imagen`, imagen_archivo_id: archivo }
+    })
+}
+
 function sorteo(id: number, datos: Partial<Sorteo> & Pick<Sorteo, 'nombre' | 'estado' | 'premios'>): Sorteo {
     const creado = '2026-09-01T15:00:00.000Z'
+    const { premios, ...resto } = datos
     return {
         id,
         empresa_id: 1,
@@ -92,6 +115,11 @@ function sorteo(id: number, datos: Partial<Sorteo> & Pick<Sorteo, 'nombre' | 'es
         corte_cerrado_en: null,
         ejecutado_en: null,
         cancelado_en: null,
+        aviso_portal: false,
+        acta_hash: null,
+        acta_archivo_id: null,
+        acta_constancia: null,
+        acta_cerrada_en: null,
         version: 1,
         created_at: creado,
         updated_at: creado,
@@ -99,7 +127,9 @@ function sorteo(id: number, datos: Partial<Sorteo> & Pick<Sorteo, 'nombre' | 'es
         participantes: 0,
         boletos: 0,
         ganadores: [],
-        ...datos,
+        archivos: [],
+        ...resto,
+        premios: conImagenSubida(id, premios),
     }
 }
 
@@ -153,6 +183,7 @@ export const sorteos: Sorteo[] = [
     sorteo(SORTEO_ABIERTO_ID, {
         nombre: 'Clientes al día · octubre',
         estado: 'participacion_abierta',
+        aviso_portal: true,
         criterios: { boletos_por_servicio: 1, admite_canje: true },
         publicado_en: '2026-09-02T15:00:00.000Z',
         requisitos: checklist({ bases_diaco: REQUISITOS_EJECUCION.bases_diaco }, '2026-09-02T16:00:00.000Z'),

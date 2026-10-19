@@ -132,7 +132,8 @@ describe('sorteos · pasos contra los fixtures', () => {
         const entrada = entradaDeSorteo(actual.data)
         entrada.publicacion_resultados = 'En el portal y en Facebook, el mismo día'
         const editado = await useSorteos().editar(SORTEO_BORRADOR_ID, cuerpoEdicionSorteo(actual.data, esquemaSorteo.parse(entrada)))
-        expect(editado.ok && [editado.data.version, editado.data.premios.map(p => p.imagen_url)]).toEqual([2, [null, '/sorteos/televisor.svg']])
+        // La imagen subida se queda con el premio de la misma posición (no es una URL que mande el panel).
+        expect(editado.ok && [editado.data.version, editado.data.premios.map(p => p.imagen_url)]).toEqual([2, [null, `/api/v1/lealtad/sorteos/${SORTEO_BORRADOR_ID}/premios/2/imagen`]])
         const publicado = await useSorteos().publicarBases(SORTEO_BORRADOR_ID, nuevaClaveIdempotencia())
         expect(publicado.ok && publicado.data.estado).toBe('bases_publicadas')
         expect(publicado.ok && [publicado.data.bases_hash, publicado.data.compromiso].every(h => /^[0-9a-f]{64}$/.test(h ?? ''))).toBe(true)
@@ -194,7 +195,7 @@ describe('sorteos · pasos contra los fixtures', () => {
         expect(ganadorPagado).toMatchObject({ estado: 'entregado', retencion_isr: '75.00', contrapartida: 'caja' })
         expect(pagado.ok && pagado.data.estado).toBe('ejecutado')
         const canje = await useSorteos().entregar(SORTEO_CORTE_ID, servicio.id, {}, nuevaClaveIdempotencia())
-        expect(canje.ok && [canje.data.estado, canje.data.ganadores.find(g => g.id === servicio.id)?.contrapartida]).toEqual(['premios_entregados', 'canje'])
+        expect(canje.ok && [canje.data.estado, canje.data.ganadores.find(g => g.id === servicio.id)?.contrapartida]).toEqual(['ejecutado', 'canje'])
     })
 
     it('la verificación es 404 antes de ejecutar y el sorteo sembrado ya ejecutado se reproduce', async () => {
