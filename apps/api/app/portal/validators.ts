@@ -291,3 +291,10 @@ export const canjearPuntosValidator = vine.compile(
         servicio_id: idEntidad(),
     }),
 )
+
+/** `GET /portal/avisos-sorteo`: en qué lugar del portal (decide cómo se identifica al cliente). */
+export const avisosSorteoValidator = vine.compile(
+    vine.object({
+        lugar: vine.enum(['portal_inicio', 'pagina_corte'] as const),
+    }),
+)

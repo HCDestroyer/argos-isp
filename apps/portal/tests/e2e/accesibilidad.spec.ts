@@ -109,6 +109,21 @@ for (const tema of ['light', 'dark'] as const) {
             await revisar(page, 'puntos: confirmar canje')
         })
 
+        test('sorteos: aviso en /corte, página pública y sección de la cuenta sin violaciones de axe', async ({ page }) => {
+            await page.goto('/corte?sorteos=1&anuncios=1')
+            await page.getByTestId('aviso-sorteo').first().waitFor({ timeout: 90_000 })
+            await revisar(page, 'corte con aviso de sorteo')
+            await page.goto('/sorteos/27')
+            await page.getByTestId('verificacion').waitFor()
+            await revisar(page, 'sorteo público')
+            const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+            expect(ancho).toBeLessThanOrEqual(0)
+            await entrar(page, null)
+            await page.getByTestId('aviso-sorteo-boletos').first().click()
+            await page.getByTestId('sorteo-27').waitFor()
+            await revisar(page, 'cuenta: sorteos')
+        })
+
         for (const cuenta of [null, 'dos_empresas'] as const) {
             const nombre = cuenta ? 'dos empresas' : 'una empresa'
             test(`/cuenta con ${nombre} sin violaciones de axe`, async ({ page }) => {

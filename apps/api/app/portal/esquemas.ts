@@ -17,6 +17,7 @@ import { METODOS_PAGO } from '#shared/eventos'
 import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
 import { ESTADOS_CANJE } from '#lealtad/canjes'
 import { ORIGENES_MOVIMIENTO, TIPOS_MOVIMIENTO } from '#lealtad/puntos'
+import { ESTADOS_SORTEO } from '#lealtad/sorteos'
 
 /**
  * Schemas del portal del cliente (A5). Desde la IP solo se muestra información mínima:
@@ -837,5 +838,72 @@ export const PortalCanje = definirEsquema(
         descuento: { ...nulable(Dinero), description: 'Q descontados; null mientras está reservado' },
         aplicado_en: nulable(instante),
         created_at: instante,
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Sorteos en el portal (contrato `lealtad.md` §7 y §12)
+|--------------------------------------------------------------------------
+*/
+
+export const PortalAvisoSorteo = definirEsquema(
+    'PortalAvisoSorteo',
+    objeto({
+        id,
+        empresa_id: id,
+        nombre: texto,
+        estado: {
+            ...enumerado(['bases_publicadas', 'participacion_abierta']),
+            description: 'Abierto al público',
+        },
+        corte_en: { ...nulable(instante), description: 'Hasta cuándo se ganan boletos' },
+        fecha_sorteo: nulable(instante),
+        premio_principal: { ...nulable(texto), description: 'Nombre del primer premio' },
+        premios: { ...entero, description: 'Cuántos premios en total (suma de cantidades)' },
+    }),
+)
+
+const GanadorPublico = objeto({
+    posicion: entero,
+    tipo: enumerado(['titular', 'suplente']),
+    codigo: { ...texto, description: 'Seudónimo del participante, nunca su nombre' },
+    premio_posicion: nulable(entero),
+})
+
+export const PortalSorteoPublico = definirEsquema(
+    'PortalSorteoPublico',
+    objeto({
+        id,
+        empresa: PortalMarcaEmpresa,
+        nombre: texto,
+        descripcion: nulable(texto),
+        estado: enumerado(ESTADOS_SORTEO),
+        inscripcion_desde: nulable(fecha),
+        corte_en: nulable(instante),
+        fecha_sorteo: nulable(instante),
+        lugar: nulable(texto),
+        premios: lista(
+            objeto({
+                posicion: entero,
+                nombre: texto,
+                cantidad: entero,
+                valor: Dinero,
+                imagen_url: nulable(texto),
+            }),
+        ),
+        bases: objeto({
+            mecanica: nulable(texto),
+            regla_participacion: nulable(texto),
+            plazo_reclamo_dias: nulable(entero),
+            no_reclamados: nulable(texto),
+            publicacion_resultados: nulable(texto),
+            resolucion_gobernacion: nulable(texto),
+        }),
+        bases_hash: { ...texto, description: 'SHA-256 del JSON canónico de las bases y los premios' },
+        compromiso: { ...nulable(texto), description: 'SHA-256 de la semilla, publicado con las bases' },
+        motivo_cancelacion: nulable(texto),
+        verificable: { ...booleano, description: 'Ya se ejecutó: hay datos para recalcular el resultado' },
+        ganadores: { ...nulable(lista(GanadorPublico)), description: 'Solo después de ejecutar' },
     }),
 )

@@ -28,6 +28,12 @@ import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
 import { ANUNCIOS_FIXTURE } from './anuncios'
 import { CANJES_FIXTURE, PREMIOS_FIXTURE, PUNTOS_FIXTURE } from './puntos'
 import {
+    AVISO_SORTEO_FIXTURE,
+    SORTEO_ABIERTO_FIXTURE,
+    SORTEO_EJECUTADO_FIXTURE,
+    SORTEOS_PUBLICOS_FIXTURE,
+} from './sorteos'
+import {
     condicionesConPagoPrevioFixture,
     condicionesConPromesaFixture,
     condicionesFixture,
@@ -422,6 +428,43 @@ function premiosActuales(): Schema<'PortalPremio'>[] {
     })
 }
 
+/**
+ * Sorteos: `fijarSorteosFixture(true)` en pruebas o `?sorteos=1` en la URL (desarrollo; se recuerda
+ * en la pestaña). Por defecto ninguno publicado: ni aviso en el carrusel ni sorteos en la cuenta.
+ * La página pública de un sorteo responde siempre (es pública, como en la API).
+ */
+const CLAVE_SORTEOS = 'argos:fixture:sorteos'
+const sorteos: { activos: boolean | null } = { activos: null }
+
+export function fijarSorteosFixture(activos: boolean | null): void {
+    sorteos.activos = activos
+}
+
+function sorteosActivos(): boolean {
+    if (sorteos.activos !== null) {
+        return sorteos.activos
+    }
+    if (typeof window === 'undefined') {
+        return false
+    }
+    let pedido = new URL(window.location.href).searchParams.get('sorteos')
+    try {
+        if (pedido) {
+            sessionStorage.setItem(CLAVE_SORTEOS, pedido)
+        }
+        else {
+            pedido = sessionStorage.getItem(CLAVE_SORTEOS)
+        }
+    }
+    catch {
+        // Sin almacenamiento: solo cuenta la URL.
+    }
+    return pedido === '1'
+}
+
+// Se lee al cargar, como `?puntos=`: debe recordarse aunque la consulta llegue después de entrar.
+sorteosActivos()
+
 const rutasBase: RutasFixture = {
     'GET /api/v1/portal/anuncios': () => ({
         status: 200,
@@ -485,6 +528,21 @@ const rutasBase: RutasFixture = {
             created_at: ahora,
         })
         return { status: 201, cuerpo: canje }
+    },
+    'GET /api/v1/portal/avisos-sorteo': ({ query }) => {
+        // en el inicio hace falta la sesión; en la página de corte basta la IP
+        const identificado = query.get('lugar') === 'pagina_corte' || sesion.abierta
+        return { status: 200, cuerpo: { data: sorteosActivos() && identificado ? [AVISO_SORTEO_FIXTURE] : [] } }
+    },
+    'GET /api/v1/portal/sorteos': conSesion(() => ({
+        status: 200,
+        cuerpo: sorteosActivos() ? [SORTEO_ABIERTO_FIXTURE, SORTEO_EJECUTADO_FIXTURE] : [],
+    })),
+    'GET /api/v1/portal/sorteos/:id/publico': ({ params }) => {
+        const sorteo = SORTEOS_PUBLICOS_FIXTURE[Number(params.id)]
+        return sorteo
+            ? { status: 200, cuerpo: sorteo }
+            : problema(404, 'no_encontrado', 'No encontrado', 'El sorteo no existe o aún no publica sus bases')
     },
     'GET /api/v1/portal/quien-soy': () => {
         consultasEstado = 0

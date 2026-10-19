@@ -384,6 +384,19 @@ sobre `lealtad.*` de A3, sin motivos internos ni valores contables:
 
 Pruebas: `tests/portal/puntos.spec.ts`.
 
+### Sorteos (contrato `contratos/lealtad.md` §7 y §12)
+
+La lista con boletos, seudónimo y ganadores es `GET /portal/sorteos` (A3). Aquí, en `sorteos.ts`:
+
+- `GET /portal/avisos-sorteo?lugar=`: sorteos próximos que el panel ya abrió al público (bases
+  publicadas o participación abierta, fecha futura) para el carrusel del inicio (sesión) y de la
+  página de corte (IP), con el mismo criterio de identificación que los anuncios. Sin imágenes.
+- `GET /portal/sorteos/:id/publico` y `/verificacion`: página pública (sin sesión) de bases,
+  premios, compromiso y ganadores por seudónimo; datos para recalcular el resultado. Bajo `/portal`
+  para que pasen por el proxy del portal y por un nodo remoto.
+
+Pruebas: `tests/portal/sorteos.spec.ts`.
+
 ## Eventos
 
 No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos

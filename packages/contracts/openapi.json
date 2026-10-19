@@ -34940,6 +34940,74 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/avisos-sorteo": {
+      "get": {
+        "operationId": "portalAvisosSorteo",
+        "summary": "Sorteos próximos ya abiertos al público, para el carrusel del portal",
+        "description": "Con bases publicadas o participación abierta y fecha de sorteo futura (los activa el panel al publicar sus bases). `lugar=pagina_corte`: los de la empresa del servicio de la IP (o, sin él, los del cliente de la sesión); `lugar=portal_inicio`: los de las empresas del cliente de la sesión. Sin cliente identificado, lista vacía. Sin imágenes ni datos de nadie. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "lugar",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "portal_inicio",
+                "pagina_corte"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Avisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalAvisoSorteo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/bancos": {
       "get": {
         "operationId": "portalBancos",
@@ -37083,6 +37151,114 @@
           },
           "401": {
             "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/sorteos/{id}/publico": {
+      "get": {
+        "operationId": "portalSorteoPublico",
+        "summary": "Página pública de un sorteo: bases, premios, compromiso y ganadores por seudónimo",
+        "description": "Sin sesión, desde que publica sus bases (antes o inexistente, 404). Los ganadores salen por seudónimo después de ejecutar. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSorteoPublico"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/sorteos/{id}/verificacion": {
+      "get": {
+        "operationId": "portalSorteoVerificacion",
+        "summary": "Datos para recalcular el resultado de un sorteo (los de `GET /lealtad/sorteos/:id/verificacion`)",
+        "description": "Sin sesión, después de ejecutar (antes, 404). Lista por seudónimo. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verificación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificacionSorteo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -60633,6 +60809,66 @@
           }
         }
       },
+      "PortalAvisoSorteo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "estado",
+          "corte_en",
+          "fecha_sorteo",
+          "premio_principal",
+          "premios"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "bases_publicadas",
+              "participacion_abierta"
+            ],
+            "description": "Abierto al público"
+          },
+          "corte_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hasta cuándo se ganan boletos"
+          },
+          "fecha_sorteo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "premio_principal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del primer premio"
+          },
+          "premios": {
+            "type": "integer",
+            "description": "Cuántos premios en total (suma de cantidades)"
+          }
+        }
+      },
       "PortalBanco": {
         "type": "object",
         "required": [
@@ -62373,6 +62609,225 @@
                 "codigo": {
                   "type": "string",
                   "description": "Seudónimo del participante"
+                },
+                "premio_posicion": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "Solo después de ejecutar"
+          }
+        }
+      },
+      "PortalSorteoPublico": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa",
+          "nombre",
+          "descripcion",
+          "estado",
+          "inscripcion_desde",
+          "corte_en",
+          "fecha_sorteo",
+          "lugar",
+          "premios",
+          "bases",
+          "bases_hash",
+          "compromiso",
+          "motivo_cancelacion",
+          "verificable",
+          "ganadores"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "bases_publicadas",
+              "participacion_abierta",
+              "corte_cerrado",
+              "ejecutado",
+              "premios_entregados",
+              "cancelado"
+            ]
+          },
+          "inscripcion_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "corte_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fecha_sorteo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lugar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "premios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "posicion",
+                "nombre",
+                "cantidad",
+                "valor",
+                "imagen_url"
+              ],
+              "properties": {
+                "posicion": {
+                  "type": "integer"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "integer"
+                },
+                "valor": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "imagen_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "bases": {
+            "type": "object",
+            "required": [
+              "mecanica",
+              "regla_participacion",
+              "plazo_reclamo_dias",
+              "no_reclamados",
+              "publicacion_resultados",
+              "resolucion_gobernacion"
+            ],
+            "properties": {
+              "mecanica": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "regla_participacion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plazo_reclamo_dias": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "no_reclamados": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "publicacion_resultados": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "resolucion_gobernacion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "bases_hash": {
+            "type": "string",
+            "description": "SHA-256 del JSON canónico de las bases y los premios"
+          },
+          "compromiso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 de la semilla, publicado con las bases"
+          },
+          "motivo_cancelacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verificable": {
+            "type": "boolean",
+            "description": "Ya se ejecutó: hay datos para recalcular el resultado"
+          },
+          "ganadores": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "required": [
+                "posicion",
+                "tipo",
+                "codigo",
+                "premio_posicion"
+              ],
+              "properties": {
+                "posicion": {
+                  "type": "integer"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "titular",
+                    "suplente"
+                  ]
+                },
+                "codigo": {
+                  "type": "string",
+                  "description": "Seudónimo del participante, nunca su nombre"
                 },
                 "premio_posicion": {
                   "type": [

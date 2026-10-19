@@ -3,7 +3,7 @@
  * secciones (escritorio) salen de esta misma lista. Son enlaces reales con la sección en la URL:
  * "Atrás" del teléfono vuelve a la sección anterior y se pueden compartir o recargar.
  */
-export type SeccionCuenta = 'inicio' | 'pagar' | 'facturas' | 'puntos' | 'cuenta'
+export type SeccionCuenta = 'inicio' | 'pagar' | 'facturas' | 'puntos' | 'sorteos' | 'cuenta'
 
 export interface ItemNavegacion {
     seccion: SeccionCuenta
@@ -26,10 +26,15 @@ export function seccionesVisibles(conPuntos: boolean): readonly ItemNavegacion[]
     return conPuntos ? SECCIONES_CUENTA : SECCIONES_CUENTA.filter(item => item.seccion !== 'puntos')
 }
 
+/** Secciones a las que se llega por un enlace (el aviso de un sorteo), sin lugar en la barra. */
+const SECCIONES_SIN_BARRA: readonly SeccionCuenta[] = ['sorteos']
+
 /** `?seccion=` de la ruta → sección; cualquier otra cosa → inicio. */
 export function seccionDeLaRuta(valor: unknown): SeccionCuenta {
     const texto = Array.isArray(valor) ? valor[0] : valor
-    return SECCIONES_CUENTA.find(item => item.seccion === texto)?.seccion ?? 'inicio'
+    return SECCIONES_CUENTA.find(item => item.seccion === texto)?.seccion
+        ?? SECCIONES_SIN_BARRA.find(seccion => seccion === texto)
+        ?? 'inicio'
 }
 
 /** Sección activa de la barra: solo en `/cuenta` (en `/corte` ninguna está marcada). */

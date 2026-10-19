@@ -157,6 +157,11 @@ import Canjear from '#lealtad/actions/canjear'
 import { PortalCanje, PortalPremio, PortalPuntosEmpresa } from '#portal/esquemas'
 import { canjearPuntosValidator } from '#portal/validators'
 import { canjePortal, canjesPortal, exigirPremioDelPortal, premiosPortal, puntosPortal } from '#portal/puntos'
+import { PortalAvisoSorteo, PortalSorteoPublico } from '#portal/esquemas'
+import { avisosSorteoValidator } from '#portal/validators'
+import { avisosDeSorteo, sorteoPublico } from '#portal/sorteos'
+import { verificacionSorteo } from '#lealtad/sorteos'
+import { VerificacionSorteo } from '#lealtad/esquemas'
 
 /** Responde un PDF en línea (se abre en el navegador; el usuario lo guarda si quiere). */
 function enviarPdf(ctx: HttpContext, documento: DocumentoPdf): void {
@@ -1572,6 +1577,79 @@ const puntosPortalRutas: Ruta[] = [
     }),
 ]
 
+/**
+ * Sorteos (contrato `lealtad.md` §7 y §12). La lista con boletos y seudónimo del cliente es
+ * `GET /portal/sorteos` (A3); aquí, el aviso de los próximos (carrusel del inicio y de la página de
+ * corte) y la página pública de bases, resultado y verificación, que también pasa por el proxy del
+ * portal (y por un nodo portal remoto) porque está bajo `/portal`.
+ */
+const sorteosPortalRutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/avisos-sorteo',
+        operacion: 'portalAvisosSorteo',
+        resumen: 'Sorteos próximos ya abiertos al público, para el carrusel del portal',
+        descripcion:
+            'Con bases publicadas o participación abierta y fecha de sorteo futura (los activa el panel al ' +
+            'publicar sus bases). `lugar=pagina_corte`: los de la empresa del servicio de la IP (o, sin él, los ' +
+            'del cliente de la sesión); `lugar=portal_inicio`: los de las empresas del cliente de la sesión. ' +
+            `Sin cliente identificado, lista vacía. Sin imágenes ni datos de nadie. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        query: avisosSorteoValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Avisos',
+            esquema: objeto({ data: lista(PortalAvisoSorteo) }),
+        },
+        antes: async (ctx) => {
+            await ipDelCliente(ctx, 'avisos-sorteo')
+        },
+        handler: async (ctx, { query }) => {
+            const ip = (await ipOrigenDelCliente(ctx))!
+            const { clienteId, empresaId } = await clienteDeLosAnuncios(ctx, ip, query.lugar)
+            return { data: await avisosDeSorteo(clienteId, empresaId) }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/sorteos/:id/publico',
+        operacion: 'portalSorteoPublico',
+        resumen: 'Página pública de un sorteo: bases, premios, compromiso y ganadores por seudónimo',
+        descripcion:
+            'Sin sesión, desde que publica sus bases (antes o inexistente, 404). Los ganadores salen por ' +
+            `seudónimo después de ejecutar. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: PortalSorteoPublico },
+        handler: async (ctx, { params }) => {
+            await ipDelCliente(ctx, 'sorteo-publico')
+            return sorteoPublico(Number(params.id))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/sorteos/:id/verificacion',
+        operacion: 'portalSorteoVerificacion',
+        resumen:
+            'Datos para recalcular el resultado de un sorteo (los de `GET /lealtad/sorteos/:id/verificacion`)',
+        descripcion: `Sin sesión, después de ejecutar (antes, 404). Lista por seudónimo. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Verificación', esquema: VerificacionSorteo },
+        handler: async (ctx, { params }) => {
+            await ipDelCliente(ctx, 'sorteo-verificacion')
+            return verificacionSorteo(Number(params.id))
+        },
+    }),
+]
+
 const portal: Ruta[] = [
     ...publicas,
     ...autenticadas,
@@ -1586,6 +1664,7 @@ const portal: Ruta[] = [
     ...nodosPortal,
     ...nodosPortalInternos,
     ...puntosPortalRutas,
+    ...sorteosPortalRutas,
 ]
 
 export default portal

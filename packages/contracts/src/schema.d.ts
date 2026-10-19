@@ -4627,6 +4627,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/avisos-sorteo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sorteos próximos ya abiertos al público, para el carrusel del portal
+         * @description Con bases publicadas o participación abierta y fecha de sorteo futura (los activa el panel al publicar sus bases). `lugar=pagina_corte`: los de la empresa del servicio de la IP (o, sin él, los del cliente de la sesión); `lugar=portal_inicio`: los de las empresas del cliente de la sesión. Sin cliente identificado, lista vacía. Sin imágenes ni datos de nadie. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalAvisosSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/bancos": {
         parameters: {
             query?: never;
@@ -5151,6 +5171,46 @@ export interface paths {
          * @description Sesión del portal (401 sin ella). Publicados y no cancelados, con fecha de sorteo desde hace 30 días: premios, regla de participación, sus boletos, su seudónimo y, al terminar, el resultado. Nunca nombres de otros clientes.
          */
         get: operations["portalSorteos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos/{id}/publico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Página pública de un sorteo: bases, premios, compromiso y ganadores por seudónimo
+         * @description Sin sesión, desde que publica sus bases (antes o inexistente, 404). Los ganadores salen por seudónimo después de ejecutar. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalSorteoPublico"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos/{id}/verificacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datos para recalcular el resultado de un sorteo (los de `GET /lealtad/sorteos/:id/verificacion`)
+         * @description Sin sesión, después de ejecutar (antes, 404). Lista por seudónimo. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalSorteoVerificacion"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9658,6 +9718,27 @@ export interface components {
                 url: string;
             } | null;
         };
+        PortalAvisoSorteo: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            /**
+             * @description Abierto al público
+             * @enum {string}
+             */
+            estado: "bases_publicadas" | "participacion_abierta";
+            /**
+             * Format: date-time
+             * @description Hasta cuándo se ganan boletos
+             */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            /** @description Nombre del primer premio */
+            premio_principal: string | null;
+            /** @description Cuántos premios en total (suma de cantidades) */
+            premios: number;
+        };
         PortalBanco: {
             id: number;
             nombre: string;
@@ -10112,6 +10193,52 @@ export interface components {
                 /** @enum {string} */
                 tipo: "titular" | "suplente";
                 /** @description Seudónimo del participante */
+                codigo: string;
+                premio_posicion: number | null;
+            }[] | null;
+        };
+        PortalSorteoPublico: {
+            id: number;
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            nombre: string;
+            descripcion: string | null;
+            /** @enum {string} */
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "premios_entregados" | "cancelado";
+            /** Format: date */
+            inscripcion_desde: string | null;
+            /** Format: date-time */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            lugar: string | null;
+            premios: {
+                posicion: number;
+                nombre: string;
+                cantidad: number;
+                valor: components["schemas"]["Dinero"];
+                imagen_url: string | null;
+            }[];
+            bases: {
+                mecanica: string | null;
+                regla_participacion: string | null;
+                plazo_reclamo_dias: number | null;
+                no_reclamados: string | null;
+                publicacion_resultados: string | null;
+                resolucion_gobernacion: string | null;
+            };
+            /** @description SHA-256 del JSON canónico de las bases y los premios */
+            bases_hash: string;
+            /** @description SHA-256 de la semilla, publicado con las bases */
+            compromiso: string | null;
+            motivo_cancelacion: string | null;
+            /** @description Ya se ejecutó: hay datos para recalcular el resultado */
+            verificable: boolean;
+            /** @description Solo después de ejecutar */
+            ganadores: {
+                posicion: number;
+                /** @enum {string} */
+                tipo: "titular" | "suplente";
+                /** @description Seudónimo del participante, nunca su nombre */
                 codigo: string;
                 premio_posicion: number | null;
             }[] | null;
@@ -30900,6 +31027,48 @@ export interface operations {
             };
         };
     };
+    portalAvisosSorteo: {
+        parameters: {
+            query: {
+                lugar: "portal_inicio" | "pagina_corte";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Avisos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalAvisoSorteo"][];
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalBancos: {
         parameters: {
             query?: never;
@@ -32289,6 +32458,86 @@ export interface operations {
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSorteoPublico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSorteoPublico"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSorteoVerificacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verificación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificacionSorteo"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
