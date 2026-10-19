@@ -155,12 +155,23 @@ describe('POST /aaa/authorize en modo degradado', () => {
         caido.disconnect()
     })
 
+    /**
+     * Respaldo a la API con dos plazos: holgado mientras responde (con la máquina cargada una
+     * respuesta local puede pasar de 150 ms y el paso "normal" fallaba con 503) y corto cuando está
+     * colgada, para que el modo degradado siga respondiendo dentro del presupuesto de rlm_rest.
+     */
+    function fuenteApi(): FuenteApi {
+        const holgada = new FuenteApi({ url: api.url, token: 't', timeoutMs: 5000 })
+        const corta = new FuenteApi({ url: api.url, token: 't', timeoutMs: 150 })
+        return new Proxy(holgada, { get: (_destino, clave) => Reflect.get(api.colgada ? corta : holgada, clave) })
+    }
+
     function crear(modoDegradado: ModoDegradado = 'aceptar', redis: Redis = redisActual) {
         return crearApp({
             resolutor: new ResolutorServicios({
                 redis,
                 prefijo,
-                respaldo: new FuenteApi({ url: api.url, token: 't', timeoutMs: 150 }),
+                respaldo: fuenteApi(),
                 log: { warn: () => {} },
                 ultimoConocido,
                 modoDegradado,
