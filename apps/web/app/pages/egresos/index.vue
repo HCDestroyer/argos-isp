@@ -36,7 +36,7 @@ const estado = ref<EstadoEgreso | typeof TODOS>(esClave(ESTADOS, route.query.est
 
 const categorias = shallowRef<CategoriaEgresoApi[]>([])
 const problemaCategorias = ref<Problem | null>(null)
-const nombreCategoria = (clave: CategoriaEgreso) => categorias.value.find(c => c.clave === clave)?.nombre ?? CATEGORIAS_EGRESO[clave]
+const nombreCategoria = (clave: CategoriaEgreso) => categorias.value.find(c => c.clave === clave)?.nombre ?? CATEGORIAS_EGRESO[clave] ?? clave
 
 const itemsCategoria = computed<SelectItem[]>(() => [
     { label: 'Todas las categorías', value: TODOS },

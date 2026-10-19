@@ -20,6 +20,7 @@ import { rutasCartera } from './cartera/rutas'
 import { rutasCobros } from './cobros/rutas'
 import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasLealtad } from './lealtad/rutas'
+import { rutasSorteos } from './sorteos/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasComprobantes } from './comprobantes/rutas'
 import { rutasDocumentos } from './documentos/rutas'
@@ -448,6 +449,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasCartera,
     // Antes que los reportes genéricos (GET /reportes/:reporte).
     ...rutasLealtad,
+    ...rutasSorteos,
     ...rutasEmpresas,
     ...rutasFiscal,
     ...rutasNotificaciones,

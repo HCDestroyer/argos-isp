@@ -137,7 +137,14 @@
       "vinculaciones.revocar",
       "lealtad.ver",
       "lealtad.configurar",
-      "lealtad.ajustar"
+      "lealtad.ajustar",
+      "sorteos.ver",
+      "sorteos.gestionar",
+      "sorteos.publicar",
+      "sorteos.marcar_requisito",
+      "sorteos.exportar",
+      "sorteos.ejecutar",
+      "sorteos.entregar"
     ],
     "alcance_global": true,
     "empresas": [

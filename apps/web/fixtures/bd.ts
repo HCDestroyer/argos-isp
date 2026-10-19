@@ -10,6 +10,7 @@ import { comprobantes } from './comprobantes/datos'
 import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
+import { premiosLealtad, sorteos, sorteosPrivados, type SorteoPrivado } from './sorteos/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -141,6 +142,10 @@ interface BaseFixtures {
     movimientosPuntos: Schema<'MovimientoPuntos'>[]
     lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
     referidosLealtad: Schema<'ReferidoLealtad'>[]
+    /* Lealtad, fases 2 y 3: catálogo de premios y sorteos (A3, `contratos/lealtad.md` §7 y §15.3). */
+    premiosLealtad: Schema<'PremioLealtad'>[]
+    sorteos: Schema<'SorteoDetalle'>[]
+    sorteosPrivados: SorteoPrivado[]
     /** Saldo de 2.1.10 por empresa cuando no es el de los lotes (para probar el aviso de `cuadra: false`). */
     pasivoLibroLealtad: Record<number, string>
     /** Localización fiscal por empresa (A3, fase 2). */
@@ -217,6 +222,9 @@ function inicial(): BaseFixtures {
         lotesPuntos,
         referidosLealtad,
         pasivoLibroLealtad: {},
+        premiosLealtad,
+        sorteos,
+        sorteosPrivados,
     })
     sembrarNotasCredito(datos)
     sembrarFel(datos)
