@@ -3,7 +3,7 @@ import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
-import { procesarPago } from '../facturacion/rutas'
+import { ESTADOS_PENDIENTES, procesarPago } from '../facturacion/rutas'
 import { archivosComprobante } from './datos'
 
 type Comprobante = Schema<'Comprobante'>
@@ -41,7 +41,7 @@ function resumenDe(filtradas: readonly Comprobante[], sinEstado: readonly Compro
 /** Como `pendientesDelServicio` de `AprobarComprobante`: facturas con saldo del servicio, la más antigua primero. */
 function pendientesDelServicio(servicioId: number): number[] {
     return bd.facturas
-        .filter(f => f.servicio_id === servicioId && f.estado !== 'pagada' && f.estado !== 'anulada' && f.estado !== 'por_certificar')
+        .filter(f => f.servicio_id === servicioId && ESTADOS_PENDIENTES.includes(f.estado))
         .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.periodo.localeCompare(b.periodo) || a.id - b.id)
         .map(f => f.id)
 }

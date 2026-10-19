@@ -14,3 +14,16 @@ export const ESTADOS_FACTURA: Record<EstadoFactura, { etiqueta: string, color: N
     vencida: { etiqueta: 'Vencida', color: 'error', icono: 'i-lucide-alarm-clock' },
     anulada: { etiqueta: 'Anulada', color: 'neutral', icono: 'i-lucide-ban' },
 }
+
+/**
+ * Cómo se muestra un estado de factura, aunque la API mande uno que el panel todavía no conoce (por
+ * ejemplo, si el castigo de cartera pasa a tener estado propio, §18 desvío g): se muestra tal cual
+ * lo dice la API, en gris, en lugar de romper la pantalla.
+ */
+export function estadoFacturaVisual(estado: string): { etiqueta: string, color: NonNullable<BadgeProps['color']>, icono: string } {
+    if (Object.hasOwn(ESTADOS_FACTURA, estado)) {
+        return ESTADOS_FACTURA[estado as EstadoFactura]
+    }
+    const texto = estado.replace(/_/g, ' ')
+    return { etiqueta: texto.charAt(0).toUpperCase() + texto.slice(1), color: 'neutral', icono: 'i-lucide-file-question' }
+}

@@ -13,13 +13,16 @@ const props = withDefaults(defineProps<{
     documentoId: number
     /** `dte_id` de la factura o la nota: el DTE vigente (o el último rechazado); `null` = sin DTE; sin él se busca por documento. */
     dteId?: number | null
-    /** La factura admite pedir su certificación (no anulada). */
+    /** La factura admite pedir su certificación (no anulada ni acreditada). */
     certificable?: boolean
+    /** Sin DTE, por qué no se certifica (acreditada, H16): reemplaza el "Sin DTE" y oculta Certificar. */
+    sinCertificar?: string | null
     /** Cambia cuando el documento cambió (versión, estado FEL): se relee el DTE. */
     refrescar?: string | number | null
 }>(), {
     dteId: undefined,
     certificable: false,
+    sinCertificar: null,
     refrescar: null,
 })
 
@@ -163,10 +166,10 @@ onBeforeUnmount(detener)
                 class="text-sm text-muted"
                 data-prueba="dte-sin"
             >
-                {{ tipo === 'factura' ? 'Sin DTE: esta factura no se ha certificado.' : 'Nota interna: sin NCRE (el documento no tenía DTE certificado).' }}
+                {{ sinCertificar ?? (tipo === 'factura' ? 'Sin DTE: esta factura no se ha certificado.' : 'Nota interna: sin NCRE (el documento no tenía DTE certificado).') }}
             </p>
             <UButton
-                v-if="tipo === 'factura' && certificable && puede('fel.certificar')"
+                v-if="tipo === 'factura' && certificable && !sinCertificar && puede('fel.certificar')"
                 label="Certificar"
                 icon="i-lucide-badge-check"
                 color="neutral"

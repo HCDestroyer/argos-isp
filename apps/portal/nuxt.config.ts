@@ -44,6 +44,11 @@ export default defineNuxtConfig({
         // El navegador nunca la ve: llama a /api/v1/portal/** en este mismo origen y Nitro reenvía
         // (server/api/v1/portal/[...ruta].ts) con X-Forwarded-For.
         apiBaseInternal: 'http://localhost:3333',
+        // NUXT_NODO_PORTAL_TOKEN: token `argn_…` de un nodo portal remoto que llama a la API central sin
+        // proxy de salida (contrato nodo-portal.md). Vacío = como siempre (portal junto a la API, o nodo
+        // con el Caddy del instalador, que pone él el token). Con token, la API debe ir por HTTPS y este
+        // servidor manda X-Argos-Nodo-Token y la IP del cliente en X-Argos-Cliente-Ip.
+        nodoPortalToken: '',
         // Portal cautivo (server/middleware/portal-cautivo.ts). Peticiones con otro Host (dst-nat del
         // MikroTik) y las rutas de detección de los sistemas operativos se redirigen a /corte.
         portal: {
@@ -51,6 +56,9 @@ export default defineNuxtConfig({
             urlPublica: '',
             // NUXT_PORTAL_HOSTS: otros nombres o IPs del portal, separados por coma (p. ej. 192.0.2.20)
             hosts: '',
+            // NUXT_PORTAL_PROXIES_CONFIABLES: IPs/CIDR del proxy local delante de este servidor (Caddy).
+            // De ellos se cree X-Forwarded-Proto (y, con token de nodo, X-Forwarded-For). Vacío = el socket.
+            proxiesConfiables: '',
         },
         public: {
             // NUXT_PUBLIC_API_BASE vacío (recomendado) = mismo origen, a través del proxy de Nitro.

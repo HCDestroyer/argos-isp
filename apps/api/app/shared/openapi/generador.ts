@@ -70,6 +70,14 @@ export function generarOpenApi(rutas: Ruta[], info: InfoOpenApi): EsquemaJson {
                         '`Authorization`. POST, PUT y DELETE exigen `X-CSRF-Token` (el `csrf` del login o de ' +
                         'GET /me) y un `Origin` permitido; si no, 403 `csrf_invalido`',
                 },
+                nodo_portal: {
+                    type: 'apiKey',
+                    in: 'header',
+                    name: 'X-Argos-Nodo-Token',
+                    description:
+                        'Token `argn_…` de un nodo portal remoto (contrato nodo-portal.md). En `/portal/*` hace que ' +
+                        'la API crea `X-Argos-Cliente-Ip`; sin él esa cabecera se ignora',
+                },
                 interno: {
                     type: 'http',
                     scheme: 'bearer',
@@ -106,6 +114,9 @@ function validarRegistro(rutas: Ruta[]) {
         const seguridad = ruta.seguridad ?? 'sesion'
         if (ruta.permiso !== null && !esPermiso(ruta.permiso)) {
             throw new Error(`${ruta.operacion}: el permiso ${ruta.permiso} no está en app/core/permisos.ts`)
+        }
+        if (ruta.nodoPortal && (seguridad !== 'sesion' || ruta.permiso !== null)) {
+            throw new Error(`${ruta.operacion}: nodoPortal solo en rutas con sesión y sin permiso`)
         }
         if (seguridad !== 'sesion' && ruta.permiso !== null) {
             throw new Error(`${ruta.operacion}: solo las rutas con sesión llevan permiso`)
@@ -252,7 +263,13 @@ function operacion(ruta: Ruta): EsquemaJson {
         summary: ruta.resumen,
         ...(ruta.descripcion ? { description: ruta.descripcion } : {}),
         tags: [ruta.etiqueta],
-        ...(seguridad === 'sesion' ? { security: [{ bearer: [] }, { panel: [] }] } : {}),
+        ...(seguridad === 'sesion'
+            ? {
+                  security: ruta.nodoPortal
+                      ? [{ bearer: [] }, { panel: [] }, { nodo_portal: [] }]
+                      : [{ bearer: [] }, { panel: [] }],
+              }
+            : {}),
         ...(seguridad === 'interno' ? { security: [{ interno: [] }] } : {}),
         ...(seguridad === 'portal' ? { security: [{ portal: [] }] } : {}),
         ...(parametros.length > 0 ? { parameters: parametros } : {}),
