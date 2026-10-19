@@ -10,6 +10,7 @@ import AnuncioMetricas from '~/components/AnuncioMetricas.vue'
 import AnuncioTarjeta from '~/components/AnuncioTarjeta.vue'
 import PaginaAnuncio from '~/pages/anuncios/[id].vue'
 import PaginaAnuncios from '~/pages/anuncios/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 type Me = Schema<'Me'>
 
@@ -136,7 +137,7 @@ describe('anuncios del portal (A5)', () => {
     describe('pantallas', () => {
         it('lista: estado, «Se ve ahora», el vencido explicado y «Nuevo anuncio» solo con empresa elegida', async () => {
             const vista = await mountSuspended(enApp(PaginaAnuncios), { route: '/anuncios' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-anuncios"]').text()).toContain('Duplica tu velocidad en noviembre'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-anuncios"]').text()).toContain('Duplica tu velocidad en noviembre'))
             const texto = vista.find('[data-prueba="tabla-anuncios"]').text()
             expect(texto).toContain('Se ve ahora')
             expect(texto).toContain('Fibra del Sur llega a tu colonia')
@@ -146,7 +147,7 @@ describe('anuncios del portal (A5)', () => {
 
             useEmpresaActiva().elegir(1)
             const conEmpresa = await mountSuspended(enApp(PaginaAnuncios), { route: '/anuncios' })
-            await vi.waitFor(() => expect(conEmpresa.find('[data-prueba="tabla-anuncios"]').text()).toContain('Duplica tu velocidad'))
+            await esperar(() => expect(conEmpresa.find('[data-prueba="tabla-anuncios"]').text()).toContain('Duplica tu velocidad'))
             expect(conEmpresa.find('[data-prueba="tabla-anuncios"]').text()).not.toContain('Fibra del Sur llega')
             expect(conEmpresa.find('[data-prueba="nuevo-anuncio"]').attributes('disabled')).toBeUndefined()
             conEmpresa.unmount()
@@ -155,19 +156,19 @@ describe('anuncios del portal (A5)', () => {
         it('si la lista falla: el error con Reintentar y ninguna fila', async () => {
             simularFalla('GET /api/v1/anuncios', 500)
             const vista = await mountSuspended(enApp(PaginaAnuncios), { route: '/anuncios' })
-            await vi.waitFor(() => expect(vista.text()).toContain('Reintentar'))
+            await esperar(() => expect(vista.text()).toContain('Reintentar'))
             expect(vista.find('[data-prueba="tabla-anuncios"]').exists()).toBe(false)
             vista.unmount()
         })
 
         it('ficha: vista previa con la imagen, métricas y acciones; lectura no ve acciones', async () => {
             const vista = await mountSuspended(enApp(PaginaAnuncio), { route: '/anuncios/1' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="metrica-vistas"]').text()).toContain('128'))
+            await esperar(() => expect(vista.find('[data-prueba="metrica-vistas"]').text()).toContain('128'))
             expect(vista.find('[data-prueba="anuncio-estado"]').text()).toBe('Publicado')
             expect(vista.find('[data-prueba="anuncio-vigente"]').exists()).toBe(true)
             expect(vista.find('[data-prueba="metrica-tasa"]').text()).toContain('13.3 %')
             expect(vista.find('[data-prueba="metricas-por-lugar"]').text()).toContain('Página de corte')
-            await vi.waitFor(() => expect(vista.find('[data-prueba="anuncio-tarjeta-imagen"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-prueba="anuncio-tarjeta-imagen"]').exists()).toBe(true))
             expect(vista.find('[data-prueba="anuncio-tarjeta-imagen"]').attributes('alt')).toBe('Router con las luces encendidas sobre una mesa')
             expect(vista.find('[data-prueba="anuncio-tarjeta-texto"]').text()).toContain('Solo para clientes al día.')
             expect(vista.find('[data-prueba="archivar-anuncio"]').exists()).toBe(true)
@@ -176,7 +177,7 @@ describe('anuncios del portal (A5)', () => {
 
             useUsuarioActual().value = LECTURA
             const lectura = await mountSuspended(enApp(PaginaAnuncio), { route: '/anuncios/1' })
-            await vi.waitFor(() => expect(lectura.find('[data-prueba="metrica-vistas"]').text()).toContain('128'))
+            await esperar(() => expect(lectura.find('[data-prueba="metrica-vistas"]').text()).toContain('128'))
             expect(lectura.find('[data-prueba="archivar-anuncio"]').exists()).toBe(false)
             expect(lectura.find('[data-prueba="editar-anuncio"]').exists()).toBe(false)
             lectura.unmount()
@@ -184,14 +185,14 @@ describe('anuncios del portal (A5)', () => {
 
         it('archivado vencido: avisa que no se edita y Publicar muestra el 422 con su título', async () => {
             const vista = await mountSuspended(enApp(PaginaAnuncio), { route: '/anuncios/3' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="anuncio-estado"]').text()).toBe('Archivado'))
+            await esperar(() => expect(vista.find('[data-prueba="anuncio-estado"]').text()).toBe('Archivado'))
             expect(vista.text()).toContain('Archivado: no se ve ni se edita')
             expect(vista.find('[data-prueba="editar-anuncio"]').attributes('disabled')).toBeDefined()
             await vista.find('[data-prueba="publicar-anuncio"]').trigger('click')
-            await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
+            await esperar(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
             const confirmar = [...document.body.querySelectorAll('[role="dialog"] button')].find(b => b.textContent?.trim() === 'Publicar') as HTMLElement | undefined
             confirmar?.click()
-            await vi.waitFor(() => expect(document.body.textContent).toContain('El anuncio ya venció'))
+            await esperar(() => expect(document.body.textContent).toContain('El anuncio ya venció'))
             expect(document.body.textContent).toContain('Cambia o quita la fecha de fin')
             vista.unmount()
         })
@@ -199,12 +200,12 @@ describe('anuncios del portal (A5)', () => {
         it('métricas: si fallan, Reintentar y ninguna cifra; sin eventos, lo dice', async () => {
             simularFalla('GET /api/v1/anuncios/:id/metricas', 500)
             const falla = await mountSuspended(AnuncioMetricas, { props: { anuncioId: 1 } })
-            await vi.waitFor(() => expect(falla.text()).toContain('Reintentar'))
+            await esperar(() => expect(falla.text()).toContain('Reintentar'))
             expect(falla.find('[data-prueba="metrica-vistas"]').exists()).toBe(false)
             falla.unmount()
             reiniciarFixtures()
             const vacia = await mountSuspended(AnuncioMetricas, { props: { anuncioId: 2 } })
-            await vi.waitFor(() => expect(vacia.text()).toContain('Todavía nadie lo ha visto'))
+            await esperar(() => expect(vacia.text()).toContain('Todavía nadie lo ha visto'))
             vacia.unmount()
         })
 
@@ -220,13 +221,13 @@ describe('anuncios del portal (A5)', () => {
             useEmpresaActiva().elegir(1)
             const guardado = vi.fn()
             const vista = await mountSuspended(enApp(AnuncioFormulario, { open: true, onGuardado: guardado }))
-            await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="anuncio-titulo"]')).not.toBeNull())
+            await esperar(() => expect(document.body.querySelector('[data-prueba="anuncio-titulo"]')).not.toBeNull())
             const titulo = document.body.querySelector('[data-prueba="anuncio-titulo"]') as HTMLInputElement
             titulo.value = 'Velocidad doble'
             titulo.dispatchEvent(new Event('input'))
-            await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="anuncio-vista-previa"]')?.textContent).toContain('Velocidad doble'))
+            await esperar(() => expect(document.body.querySelector('[data-prueba="anuncio-vista-previa"]')?.textContent).toContain('Velocidad doble'))
             ;(document.body.querySelector('[data-prueba="guardar-anuncio"]') as HTMLButtonElement).click()
-            await vi.waitFor(() => expect(guardado).toHaveBeenCalled())
+            await esperar(() => expect(guardado).toHaveBeenCalled())
             expect(guardado.mock.calls[0]?.[0]).toMatchObject({ titulo: 'Velocidad doble', estado: 'borrador', empresa_id: 1 })
             expect(guardado.mock.calls[0]?.[1]).toBe(true)
             vista.unmount()
