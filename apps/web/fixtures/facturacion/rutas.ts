@@ -2,6 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
+import { aplicarBloqueoPorEstado } from '../adicionales/rutas'
 import {
     ahora,
     conIdempotencia,
@@ -268,6 +269,7 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
         const momento = ahora()
         const activo = { ...servicio, estado: 'activo' as const, version: servicio.version + 1, updated_at: momento }
         bd.servicios[indice] = activo
+        aplicarBloqueoPorEstado(servicio.id, servicio.estado, 'activo', 'sin facturas vencidas')
         for (const sesion of bd.sesiones) {
             if (sesion.servicio_id === servicio.id && sesion.fin === null) {
                 sesion.fin = momento
