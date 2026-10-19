@@ -195,6 +195,7 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
                 'gravable',
                 'iva',
                 'total',
+                'servicio_adicional_id',
             )) as LineaCalculada[]
         const snapshot = {
             ...(f.reglas_snapshot ?? {}),

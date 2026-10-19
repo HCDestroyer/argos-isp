@@ -37,6 +37,8 @@ export interface LineaCalculada {
     gravable: boolean
     iva: string
     total: string
+    /** línea mensual de un adicional `cobrado` (`core.servicios_adicionales.id`) */
+    servicio_adicional_id?: number | null
 }
 
 /**
