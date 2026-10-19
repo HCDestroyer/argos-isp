@@ -7,6 +7,7 @@ import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libr
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { errorDe, lineas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
+import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import { programaConReglas } from '#tests/lealtad/ayudas_lealtad'
 import { hoyGuatemala } from '#ledger/fechas'
 import AnularEgreso from '#ledger/actions/anular_egreso'
@@ -107,17 +108,24 @@ async function ejecutado(e: EmpresasGt, valorPublico = '90210') {
     )
 }
 
-function datosDeEntrega(e: EmpresasGt, sorteo: Ejecutado, premioPosicion: number) {
+async function datosDeEntrega(e: EmpresasGt, sorteo: Ejecutado, premioPosicion: number) {
     const premio = sorteo.premios.find((p) => p.posicion === premioPosicion)!
     if (premio.tipo === 'efectivo') return { metodo: 'caja' as const, caja_id: e.cajas.get(e.B)! }
-    if (premio.tipo === 'bien') return { contrapartida: 'proveedor' as const }
+    if (premio.tipo === 'bien') {
+        const proveedor = await proveedorEn(e.B, e.ctx)
+        return { contrapartida: 'proveedor' as const, proveedor_id: Number(proveedor.id) }
+    }
     return {}
 }
 
 async function entregarTodo(e: EmpresasGt, sorteo: Ejecutado) {
     for (const g of sorteo.ganadores.filter((x) => x.tipo === 'titular')) {
         await new EntregarPremioSorteo().execute(
-            { sorteo_id: sorteo.id, ganador_id: g.id, ...datosDeEntrega(e, sorteo, g.premio_posicion!) },
+            {
+                sorteo_id: sorteo.id,
+                ganador_id: g.id,
+                ...(await datosDeEntrega(e, sorteo, g.premio_posicion!)),
+            },
             e.ctx,
         )
     }
