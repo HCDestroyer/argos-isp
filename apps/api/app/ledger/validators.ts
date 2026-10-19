@@ -90,6 +90,7 @@ export const diarioValidator = vine.compile(
                 'cierre_caja',
                 'ajuste',
                 'reclasificacion',
+                'lealtad',
             ] as const)
             .optional(),
         origen_id: idEntidad()
