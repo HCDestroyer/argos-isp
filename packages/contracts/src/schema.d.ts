@@ -167,7 +167,7 @@ export interface paths {
         };
         /**
          * Depósitos de caja (en tránsito o acreditados)
-         * @description Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.
+         * @description Permiso bancos.ver o cajas.ver. Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.
          */
         get: operations["bancosDepositos"];
         put?: never;
@@ -1259,7 +1259,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar egresos */
+        /**
+         * Listar egresos
+         * @description Permiso egresos.ver o cajas.ver. Con egresos.ver, los de sus empresas y su alcance (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero, para el esperado provisional de /caja), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.
+         */
         get: operations["egresosListar"];
         put?: never;
         /**
@@ -10274,15 +10277,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Sin el permiso cajas.ver */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Datos inválidos */
             422: {
                 headers: {
@@ -14722,7 +14716,10 @@ export interface operations {
                 categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
                 estado?: "registrado" | "anulado";
+                /** @description Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja) */
                 caja_id?: number;
+                /** @description Solo los de este turno de caja (alternativa a caja_id sin egresos.ver) */
+                turno_id?: number;
                 cuenta_bancaria_id?: number;
             };
             header?: never;
@@ -14745,15 +14742,6 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso egresos.ver */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };

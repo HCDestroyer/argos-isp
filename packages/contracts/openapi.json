@@ -736,7 +736,7 @@
       "get": {
         "operationId": "bancosDepositos",
         "summary": "Depósitos de caja (en tránsito o acreditados)",
-        "description": "Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.",
+        "description": "Permiso bancos.ver o cajas.ver. Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.",
         "tags": [
           "bancos"
         ],
@@ -854,16 +854,6 @@
               }
             }
           },
-          "403": {
-            "description": "Sin el permiso cajas.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -875,7 +865,6 @@
             }
           }
         },
-        "x-permiso": "cajas.ver",
         "x-implementado": true
       }
     },
@@ -9013,6 +9002,7 @@
       "get": {
         "operationId": "egresosListar",
         "summary": "Listar egresos",
+        "description": "Permiso egresos.ver o cajas.ver. Con egresos.ver, los de sus empresas y su alcance (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero, para el esperado provisional de /caja), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.",
         "tags": [
           "egresos"
         ],
@@ -9123,6 +9113,17 @@
             "name": "caja_id",
             "in": "query",
             "required": false,
+            "description": "Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "turno_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los de este turno de caja (alternativa a caja_id sin egresos.ver)",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -9177,16 +9178,6 @@
               }
             }
           },
-          "403": {
-            "description": "Sin el permiso egresos.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -9198,7 +9189,6 @@
             }
           }
         },
-        "x-permiso": "egresos.ver",
         "x-implementado": true
       },
       "post": {
