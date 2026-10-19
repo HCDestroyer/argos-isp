@@ -17,10 +17,13 @@ const monitoreo: Ruta[] = [
         operacion: 'versionInstalada',
         resumen: 'Versión instalada de ArgosIsp y qué cambió en ella',
         descripcion:
-            'Cualquier usuario con sesión (sin permiso del ACL, como `/me`). `cambios` es la sección ' +
+            'Cualquier usuario con sesión (sin permiso del ACL, como `/me`) o un nodo portal con su ' +
+            '`X-Argos-Nodo-Token`. `cambios` es la sección ' +
             'de la versión en CHANGELOG.md (Markdown); `notas_url`, la página de GitHub Releases.',
         etiqueta: 'sistema',
         permiso: null,
+        // el nodo portal compara versiones con su token (`argosisp actualizar`, contrato nodo-portal.md)
+        nodoPortal: true,
         respuesta: { status: 200, descripcion: 'Versión instalada', esquema: VersionInstalada },
         handler: () => versionInstalada(),
     }),
