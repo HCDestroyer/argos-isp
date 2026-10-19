@@ -41,6 +41,8 @@ export const CUENTAS_GT = {
     INGRESOS_PUNTOS: '4.1.06',
     DIFERENCIAL_CAMBIARIO: '4.2.01',
     GANANCIA_VENTA_ACTIVOS: '4.2.02',
+    /** gt-2026.2 (fase 4, decisión g del líder): lo cobrado después de un castigo */
+    RECUPERACION_INCOBRABLES: '4.2.03',
     PREMIOS_PROMOCIONES: '5.1.03',
     DEPRECIACIONES: '5.3.01',
     CUENTAS_INCOBRABLES: '5.3.02',
@@ -204,3 +206,16 @@ export const CUENTAS_PAQUETE_GT: readonly DefinicionCuentaPaquete[] = [...PLAN_C
 
 /** Solo las que agrega GT sobre el plan base. */
 export const CUENTAS_AGREGADAS_GT = AGREGADAS
+
+/**
+ * gt-2026.2 (fase 4, decisión (g) del líder, contrato §18): `4.2.03 Recuperación de cuentas
+ * incobrables`, el ingreso de lo que un cliente paga después de un castigo. La versión 2026.1 no
+ * cambia (su checksum es el publicado).
+ */
+export const CUENTAS_PAQUETE_GT_2026_2: readonly DefinicionCuentaPaquete[] = [
+    ...CUENTAS_PAQUETE_GT,
+    {
+        ...hoja(C.RECUPERACION_INCOBRABLES, 'Recuperación de cuentas incobrables', 'ingreso', '4.2'),
+        categoria_flujo: categoriaFlujoGt(C.RECUPERACION_INCOBRABLES),
+    },
+]

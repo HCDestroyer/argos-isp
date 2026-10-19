@@ -21,6 +21,10 @@ const SEMILLAS = process.env.AUDITOR_SEMILLA ? [Number(process.env.AUDITOR_SEMIL
 const SEMILLAS_FEL = process.env.AUDITOR_SEMILLA
     ? [Number(process.env.AUDITOR_SEMILLA)]
     : [20261017, 777, 4242, 31337, 90210, 271828]
+/** Con FEL y la fase 4 (cobros, bancos y cartera): las tres de siempre y tres nuevas. */
+const SEMILLAS_FASE4 = process.env.AUDITOR_SEMILLA
+    ? [Number(process.env.AUDITOR_SEMILLA)]
+    : [20261017, 777, 4242, 1618, 3141, 8128]
 const PASOS = 50
 /** Con FEL hacen falta más pasos para llegar a certificar, anular y acreditar lo certificado. */
 const PASOS_FEL = 120
@@ -30,15 +34,17 @@ const INCLUIR_HALLAZGOS = process.env.AUDITOR_HALLAZGOS === '1'
 test.group('Auditor contable · escenarios generativos', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    for (const [semilla, fel] of [
-        ...SEMILLAS.map((x) => [x, false] as const),
-        ...SEMILLAS_FEL.map((x) => [x, true] as const),
+    for (const [semilla, fel, fase4] of [
+        ...SEMILLAS.map((x) => [x, false, false] as const),
+        ...SEMILLAS_FEL.map((x) => [x, true, false] as const),
+        ...SEMILLAS_FASE4.map((x) => [x, true, true] as const),
     ]) {
-        test(`semilla ${semilla}${fel ? ' con FEL' : ''}: ${fel ? PASOS_FEL : PASOS} pasos sin romper ningún invariante`, async ({
+        test(`semilla ${semilla}${fase4 ? ' con FEL y fase 4' : fel ? ' con FEL' : ''}: ${fel ? PASOS_FEL : PASOS} pasos sin romper ningún invariante`, async ({
             assert,
         }) => {
             const pasos = fel ? PASOS_FEL : PASOS
             const escenario = new EscenarioGenerativo(semilla, {
+                fase4,
                 fel,
                 incluirHallazgosAbiertos: INCLUIR_HALLAZGOS,
             })
@@ -47,7 +53,7 @@ test.group('Auditor contable · escenarios generativos', (group) => {
             if (process.env.AUDITOR_TRAZA) {
                 for (const p of resultado.pasos) {
                     console.log(
-                        `[${semilla}${fel ? ' fel' : ''}] ${p.n}. ${p.accion}: ${p.detalle}${p.rechazo ? ` → ${p.rechazo}` : ''}`,
+                        `[${semilla}${fase4 ? ' f4' : fel ? ' fel' : ''}] ${p.n}. ${p.accion}: ${p.detalle}${p.rechazo ? ` → ${p.rechazo}` : ''}`,
                     )
                 }
             }
@@ -57,7 +63,7 @@ test.group('Auditor contable · escenarios generativos', (group) => {
             const mensaje = resultado.hallazgos
                 .map(
                     (h) =>
-                        `── semilla ${semilla}${fel ? ' (FEL)' : ''}, paso ${h.paso}: ${h.violacion.invariante}\n` +
+                        `── semilla ${semilla}${fase4 ? ' (FEL + fase 4)' : fel ? ' (FEL)' : ''}, paso ${h.paso}: ${h.violacion.invariante}\n` +
                         `${JSON.stringify(h.violacion.detalle, null, 2)}\n` +
                         `secuencia hasta el paso ${h.paso}:\n  ${h.secuencia.join('\n  ')}`,
                 )

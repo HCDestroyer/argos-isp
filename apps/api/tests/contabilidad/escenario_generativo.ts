@@ -29,6 +29,18 @@ import { configuracionFel } from '#fiscal/fel/configuracion'
 import { controlFelFalso } from '#fiscal/fel/falso'
 import { procesarColaFel } from '#fiscal/fel/cola'
 import { configurarModo, datosNit, empresasFel } from '#tests/fiscal/ayudas_fel'
+import { cuentaBancariaPrueba } from '#tests/billing/ayudas_billing'
+import CerrarDiferenciaPago from '#billing/actions/cerrar_diferencia_pago'
+import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
+import LiquidarCobros from '#ledger/actions/liquidar_cobros'
+import DepositarCaja from '#ledger/actions/depositar_caja'
+import TrasladarFondos from '#ledger/actions/trasladar_fondos'
+import ImportarExtracto from '#ledger/actions/importar_extracto'
+import ConciliarLinea from '#ledger/actions/conciliar_linea'
+import AnularConciliacion from '#ledger/actions/anular_conciliacion'
+import RegistrarDesdeExtracto from '#ledger/actions/registrar_desde_extracto'
+import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
+import CastigarCartera from '#ledger/actions/castigar_cartera'
 import { Azar, centavosDe, texto } from '#tests/contabilidad/semilla'
 import {
     prepararEmpresas,
@@ -136,7 +148,34 @@ const PESOS_FEL = {
     pagar_aviso_y_anular: 4,
 } as const
 
-type Accion = keyof typeof PESOS | keyof typeof PESOS_FEL
+/**
+ * Operaciones de la fase 4 (cobros, bancos y cartera), solo con `{ fase4: true }` (que implica FEL):
+ * cada empresa con su proveedor de cobro (pasarela falsa, desde hoy) y dos cuentas bancarias.
+ */
+const PESOS_FASE4 = {
+    pagar_pasarela: 8,
+    liquidar: 5,
+    contracargo: 3,
+    depositar: 5,
+    trasladar: 3,
+    extracto: 5,
+    conciliar: 8,
+    anular_conciliacion: 2,
+    cerrar_diferencia: 3,
+    provisionar: 2,
+    castigar: 3,
+} as const
+
+type Accion = keyof typeof PESOS | keyof typeof PESOS_FEL | keyof typeof PESOS_FASE4
+
+interface PorExtracto {
+    tipo: 'deposito' | 'traslado' | 'liquidacion'
+    id: number
+    empresaId: number
+    cuentaId: number
+    monto: string
+    referencia: string
+}
 
 /** Estados desde los que un DTE ya es un hecho fiscal: solo `facturas.anular` (y su cola) lo mueve. */
 const DTE_FISCAL = ['certificado', 'anulacion_pendiente', 'anulado']
@@ -159,15 +198,28 @@ export class EscenarioGenerativo {
     private readonly incluirHallazgosAbiertos: boolean
     private readonly pesos: Record<Accion, number>
     private dtes = new Map<number, string>()
+    private readonly fase4: boolean
+    private proveedores = new Map<number, number>()
+    private segundas = new Map<number, number>()
+    private porExtracto: PorExtracto[] = []
+    private lineasDoc = new Map<number, { tipo: string; id: number }>()
+    private saldosExtracto = new Map<number, bigint>()
 
     constructor(
         readonly semilla: number,
-        opciones: { fel?: boolean; incluirHallazgosAbiertos?: boolean } = {},
+        opciones: { fel?: boolean; fase4?: boolean; incluirHallazgosAbiertos?: boolean } = {},
     ) {
         this.azar = new Azar(semilla)
-        this.fel = opciones.fel ?? false
+        this.fase4 = opciones.fase4 ?? false
+        this.fel = (opciones.fel ?? false) || this.fase4
         this.incluirHallazgosAbiertos = opciones.incluirHallazgosAbiertos ?? false
-        this.pesos = (this.fel ? { ...PESOS, ...PESOS_FEL } : PESOS) as Record<Accion, number>
+        this.pesos = (
+            this.fase4
+                ? { ...PESOS, ...PESOS_FEL, ...PESOS_FASE4 }
+                : this.fel
+                  ? { ...PESOS, ...PESOS_FEL }
+                  : PESOS
+        ) as Record<Accion, number>
     }
 
     async preparar() {
@@ -232,6 +284,7 @@ export class EscenarioGenerativo {
                 this.cierres.set(`${empresaId}|${periodo}`, { cerrado: false, foto: null, cambiado: false })
             }
         }
+        if (this.fase4) await this.prepararFase4()
         this.foto = await fotoLibro(this.empresas, this.marcas.acciones, this.marcas.outbox)
         if (this.fel) this.dtes = await this.estadosDte()
     }
@@ -335,6 +388,8 @@ export class EscenarioGenerativo {
                    FROM billing.facturas f JOIN fiscal.fel_configuracion c ON c.empresa_id = f.empresa_id
                   WHERE f.empresa_id = ANY(?::bigint[]) AND f.aviso_cobro AND f.estado = 'pagada'
                     AND c.modo <> 'desactivada' AND NOT c.contingencia_activa
+                    -- desvío (g) de la fase 4: cubierta por un castigo, no por un cobro; no se certifica
+                    AND NOT EXISTS (SELECT 1 FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id)
                     AND NOT EXISTS (
                             SELECT 1 FROM fiscal.dte d
                              WHERE d.documento_id = f.id
@@ -766,8 +821,16 @@ export class EscenarioGenerativo {
             .whereNotExists((q) => q.from('ledger.egresos_anulaciones as x').whereRaw('x.egreso_id = e.id'))
             .select(db.raw('coalesce(sum(e.monto), 0)::text as total'))
             .firstOrFail()
+        const depositado = (await db
+            .from('ledger.depositos')
+            .where('turno_id', turno.id)
+            .select(db.raw('coalesce(sum(monto), 0)::text as total'))
+            .firstOrFail()) as { total: string }
         const esperado =
-            centavosDe(turno.fondo_inicial) + centavosDe(cobrado.total) - centavosDe(egresado.total)
+            centavosDe(turno.fondo_inicial) +
+            centavosDe(cobrado.total) -
+            centavosDe(egresado.total) -
+            centavosDe(depositado.total)
         const diferencia = this.azar.moneda(0.3) ? 0n : this.azar.centavos(-2500, 2500)
         const contado = esperado + diferencia < 0n ? 0n : esperado + diferencia
         const cerrado = await new CerrarCaja().execute(
@@ -1093,5 +1156,367 @@ export class EscenarioGenerativo {
             await new AnularPago().execute({ pago_id: p.id, motivo: 'auditoría: aviso anulado' }, this.ctx)
         }
         return `${detalle}; anula el pago ${despues ? 'después' : 'antes'} de certificar`
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Pasos de la fase 4 (cobros, bancos y cartera; §10.3 y §10.9)
+    |--------------------------------------------------------------------------
+    */
+
+    /** Proveedor de cobro de la pasarela falsa (desde hoy) y una segunda cuenta bancaria por empresa. */
+    private async prepararFase4() {
+        for (const empresaId of this.empresas) {
+            const p = await new CrearProveedorCobro().execute(
+                {
+                    empresa_id: empresaId,
+                    metodo: 'pasarela',
+                    pasarela: 'falsa',
+                    nombre: 'Pasarela del auditor',
+                    cuenta_bancaria_id: this.e.cuentas.get(empresaId)!,
+                },
+                this.ctx,
+            )
+            this.proveedores.set(empresaId, Number(p.id))
+            const otra = await cuentaBancariaPrueba('Banrural', empresaId)
+            this.segundas.set(empresaId, Number(otra.id))
+        }
+    }
+
+    private async cuentaLibro(cuentaBancariaId: number): Promise<number> {
+        const fila = (await db
+            .from('billing.cuentas_bancarias')
+            .where('id', cuentaBancariaId)
+            .select('cuenta_id')
+            .firstOrFail()) as { cuenta_id: number }
+        return Number(fila.cuenta_id)
+    }
+
+    /** Liquidación de la pasarela: algunos pagos sin liquidar y todos los contracargos pendientes. */
+    private async liquidar() {
+        const empresaId = this.azar.elegir(this.empresas)
+        const proveedorId = this.proveedores.get(empresaId)!
+        const { rows: pagos } = (await db.rawQuery(
+            `SELECT p.id, p.monto::text FROM billing.pagos p
+              WHERE p.proveedor_cobro_id = ? AND p.estado = 'registrado'
+                AND NOT EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro')
+              ORDER BY p.id`,
+            [proveedorId],
+        )) as { rows: Array<{ id: number; monto: string }> }
+        const { rows: contra } = (await db.rawQuery(
+            `SELECT p.id, p.monto::text FROM billing.pagos p
+              WHERE p.proveedor_cobro_id = ? AND p.estado = 'anulado'
+                AND EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro')
+                AND NOT EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'contracargo')
+              ORDER BY p.id`,
+            [proveedorId],
+        )) as { rows: Array<{ id: number; monto: string }> }
+        const elegidos = pagos.filter(() => this.azar.moneda(0.7))
+        if (elegidos.length === 0 && pagos.length > 0) elegidos.push(pagos[0]!)
+        const bruto =
+            elegidos.reduce((s, p) => s + centavosDe(p.monto), 0n) -
+            contra.reduce((s, p) => s + centavosDe(p.monto), 0n)
+        if (bruto <= 0n) return `empresa ${empresaId}: nada que liquidar (bruto ${texto(bruto)})`
+        const comision = this.azar.centavos(0, Number(bruto / 20n))
+        const l = await new LiquidarCobros().execute(
+            {
+                proveedor_cobro_id: proveedorId,
+                referencia: this.nuevaReferencia('LIQ'),
+                bruto: texto(bruto),
+                comision: texto(comision),
+                pagos: elegidos.map((p) => Number(p.id)),
+                contracargos: contra.map((p) => Number(p.id)),
+            },
+            this.ctx,
+        )
+        this.porExtracto.push({
+            tipo: 'liquidacion',
+            id: Number(l.id),
+            empresaId,
+            cuentaId: Number(l.cuenta_id),
+            monto: texto(bruto - comision),
+            referencia: l.referencia,
+        })
+        return `liquidación ${l.id} de la empresa ${empresaId}: ${elegidos.length} pagos, ${contra.length} contracargos, bruto ${texto(bruto)}, comisión ${texto(comision)}`
+    }
+
+    /** Contracargo: se anula un pago de pasarela ya liquidado (1.1.10.NN queda negativo hasta la próxima). */
+    private async contracargo() {
+        const { rows } = (await db.rawQuery(
+            `SELECT p.id, p.monto::text FROM billing.pagos p
+              WHERE p.empresa_id = ANY(?::bigint[]) AND p.estado = 'registrado' AND p.proveedor_cobro_id IS NOT NULL
+                AND EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro')
+              ORDER BY p.id`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number; monto: string }> }
+        if (rows.length === 0) return 'sin pagos liquidados'
+        const p = this.azar.elegir(rows)
+        await new AnularPago().execute({ pago_id: Number(p.id), motivo: 'auditoría: contracargo' }, this.ctx)
+        return `contracargo: anula el pago liquidado ${p.id} (${p.monto})`
+    }
+
+    /** Depósito de una parte del efectivo del turno abierto. */
+    private async depositar() {
+        const empresaId = this.azar.elegir(this.empresas)
+        const cajaId = this.e.cajas.get(empresaId)!
+        const { rows } = (await db.rawQuery(
+            `SELECT t.id, (t.fondo_inicial
+                    + coalesce((SELECT sum(p.monto) FROM billing.pagos p WHERE p.turno_id = t.id AND p.estado = 'registrado'), 0)
+                    - coalesce((SELECT sum(e.monto) FROM ledger.egresos e WHERE e.turno_id = t.id
+                                 AND NOT EXISTS (SELECT 1 FROM ledger.egresos_anulaciones x WHERE x.egreso_id = e.id)), 0)
+                    - coalesce((SELECT sum(d.monto) FROM ledger.depositos d WHERE d.turno_id = t.id), 0))::text AS efectivo
+               FROM ledger.cajas_turnos t WHERE t.caja_id = ? AND t.cerrado_en IS NULL`,
+            [cajaId],
+        )) as { rows: Array<{ efectivo: string }> }
+        const efectivo = centavosDe(rows[0]?.efectivo ?? '0')
+        if (efectivo < 100n) return `caja de la empresa ${empresaId} sin efectivo para depositar`
+        const monto = this.azar.centavos(100, Number(efectivo))
+        const cuenta = this.azar.moneda() ? this.e.cuentas.get(empresaId)! : this.segundas.get(empresaId)!
+        const boleta = this.nuevaReferencia('BOL')
+        const d = await new DepositarCaja().execute(
+            { caja_id: cajaId, monto: texto(monto), boleta, cuenta_bancaria_id: cuenta },
+            this.ctx,
+        )
+        this.porExtracto.push({
+            tipo: 'deposito',
+            id: Number(d.id),
+            empresaId,
+            cuentaId: await this.cuentaLibro(cuenta),
+            monto: texto(monto),
+            referencia: boleta,
+        })
+        return `depósito ${d.id} de ${texto(monto)} de la caja de la empresa ${empresaId} (efectivo ${texto(efectivo)})`
+    }
+
+    /** Traslado entre las dos cuentas bancarias de la empresa. */
+    private async trasladar() {
+        const empresaId = this.azar.elegir(this.empresas)
+        const [a, b] = this.azar.moneda()
+            ? [this.e.cuentas.get(empresaId)!, this.segundas.get(empresaId)!]
+            : [this.segundas.get(empresaId)!, this.e.cuentas.get(empresaId)!]
+        const monto = this.azar.centavos(100, 20000)
+        const referencia = this.nuevaReferencia('TR')
+        const t = await new TrasladarFondos().execute(
+            {
+                monto: texto(monto),
+                referencia,
+                origen: { cuenta_bancaria_id: a },
+                destino: { cuenta_bancaria_id: b },
+            },
+            this.ctx,
+        )
+        this.porExtracto.push({
+            tipo: 'traslado',
+            id: Number(t.id),
+            empresaId,
+            cuentaId: await this.cuentaLibro(b),
+            monto: texto(monto),
+            referencia,
+        })
+        return `traslado ${t.id} de ${texto(monto)} en la empresa ${empresaId}`
+    }
+
+    /**
+     * Extracto de una cuenta: las llegadas que le tocan (depósitos, traslados, liquidaciones),
+     * a veces una comisión y un interés sin documento. Encadena con el anterior de la cuenta.
+     */
+    private async extracto() {
+        const empresaId = this.azar.elegir(this.empresas)
+        const cuentaBancaria = this.azar.moneda()
+            ? this.e.cuentas.get(empresaId)!
+            : this.segundas.get(empresaId)!
+        const cuentaId = await this.cuentaLibro(cuentaBancaria)
+        const llegan = this.porExtracto.filter((x) => x.cuentaId === cuentaId && this.azar.moneda(0.8))
+        const hoy = DateTime.now().setZone('America/Guatemala').toISODate()!
+        const lineas: Array<{
+            fecha: string
+            descripcion: string
+            referencia: string | null
+            monto: string
+        }> = llegan.map((x) => ({
+            fecha: hoy,
+            descripcion: `ABONO ${x.tipo.toUpperCase()}`,
+            referencia: x.referencia,
+            monto: x.monto,
+        }))
+        if (this.azar.moneda(0.6)) {
+            lineas.push({
+                fecha: hoy,
+                descripcion: 'COMISION MANEJO CUENTA',
+                referencia: this.nuevaReferencia('COM'),
+                monto: texto(-this.azar.centavos(100, 2500)),
+            })
+        }
+        if (this.azar.moneda(0.3)) {
+            lineas.push({
+                fecha: hoy,
+                descripcion: 'INTERESES',
+                referencia: this.nuevaReferencia('INT'),
+                monto: texto(this.azar.centavos(1, 900)),
+            })
+        }
+        if (lineas.length === 0) return `cuenta ${cuentaId}: nada para el extracto`
+        const inicial = this.saldosExtracto.get(cuentaId) ?? 0n
+        const final = inicial + lineas.reduce((s, l) => s + centavosDe(l.monto), 0n)
+        const ext = await new ImportarExtracto().execute(
+            {
+                cuenta_bancaria_id: cuentaBancaria,
+                desde: hoy,
+                hasta: hoy,
+                saldo_inicial: texto(inicial),
+                saldo_final: texto(final),
+                archivo: `${this.nuevaReferencia('EXT')}.csv`,
+                lineas,
+            },
+            this.ctx,
+        )
+        this.saldosExtracto.set(cuentaId, final)
+        const filas = (await db
+            .from('ledger.extractos_lineas')
+            .where('extracto_id', ext.id)
+            .orderBy('orden')
+            .select('id')) as Array<{ id: number }>
+        filas.forEach((f, i) => {
+            const doc = llegan[i]
+            this.lineasDoc.set(
+                Number(f.id),
+                doc ? { tipo: doc.tipo, id: doc.id } : { tipo: 'suelta', id: Number(f.id) },
+            )
+        })
+        this.porExtracto = this.porExtracto.filter((x) => !llegan.includes(x))
+        return `extracto ${ext.id} de la cuenta ${cuentaId} (empresa ${empresaId}): ${lineas.length} líneas, ${texto(inicial)} → ${texto(final)}`
+    }
+
+    /** Movimiento del libro, en la cuenta de la línea, que la línea ya tiene (para volver a conciliar). */
+    private async movimientoDe(lineaId: number, doc: { tipo: string; id: number }): Promise<number | null> {
+        const origen =
+            doc.tipo === 'liquidacion' ? 'liquidacion_cobro' : doc.tipo === 'suelta' ? 'banco' : doc.tipo
+        const { rows } = (await db.rawQuery(
+            `SELECT m.id FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.extractos_lineas el ON el.id = ? AND el.cuenta_id = m.cuenta_id
+              WHERE a.origen_tipo = ? AND a.origen_id = ? AND a.reversa_de IS NULL AND m.debe - m.haber = el.monto
+              ORDER BY m.id DESC LIMIT 1`,
+            [lineaId, origen, doc.id],
+        )) as { rows: Array<{ id: number }> }
+        return rows[0] ? Number(rows[0].id) : null
+    }
+
+    /** Concilia una línea libre con lo que le corresponde (o la registra si no tiene documento). */
+    private async conciliar() {
+        const { rows } = (await db.rawQuery(
+            `SELECT el.id FROM ledger.extractos_lineas el
+              WHERE el.empresa_id = ANY(?::bigint[])
+                AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones c WHERE c.linea_id = el.id
+                                 AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones x WHERE x.conciliacion_id = c.id))
+              ORDER BY el.id`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number }> }
+        if (rows.length === 0) return 'sin líneas por conciliar'
+        const lineaId = Number(this.azar.elegir(rows).id)
+        const doc = this.lineasDoc.get(lineaId)
+        if (!doc) return `línea ${lineaId} sin documento conocido`
+        const acreditado =
+            doc.tipo === 'deposito' || doc.tipo === 'traslado'
+                ? await db
+                      .from('ledger.transitos_acreditados')
+                      .where({ tipo: doc.tipo, documento_id: doc.id })
+                      .first()
+                : null
+        const registrada =
+            doc.tipo === 'suelta'
+                ? await db.from('ledger.asientos').where({ origen_tipo: 'banco', origen_id: lineaId }).first()
+                : null
+        if ((doc.tipo === 'deposito' || doc.tipo === 'traslado') && !acreditado) {
+            await new ConciliarLinea().execute(
+                {
+                    linea_id: lineaId,
+                    ...(doc.tipo === 'deposito' ? { depositos: [doc.id] } : { traslados: [doc.id] }),
+                },
+                this.ctx,
+            )
+            return `concilia la línea ${lineaId} con la llegada del ${doc.tipo} ${doc.id}`
+        }
+        if (doc.tipo === 'suelta' && !registrada) {
+            const linea = (await db.from('ledger.extractos_lineas').where('id', lineaId).firstOrFail()) as {
+                monto: string
+            }
+            await new RegistrarDesdeExtracto().execute(
+                { linea_id: lineaId, ...(centavosDe(linea.monto) > 0n ? { cuenta: '4.1.03' } : {}) },
+                this.ctx,
+            )
+            return `registra y concilia la línea suelta ${lineaId} (${linea.monto})`
+        }
+        const movimiento = await this.movimientoDe(lineaId, doc)
+        if (!movimiento) return `línea ${lineaId}: sin movimiento para ${doc.tipo} ${doc.id}`
+        await new ConciliarLinea().execute({ linea_id: lineaId, movimientos: [movimiento] }, this.ctx)
+        return `concilia la línea ${lineaId} con el movimiento ${movimiento} (${doc.tipo} ${doc.id})`
+    }
+
+    /** Deshace una conciliación vigente (nunca toca el libro). */
+    private async anular_conciliacion() {
+        const { rows } = (await db.rawQuery(
+            `SELECT min(c.id) AS id FROM ledger.conciliaciones c
+              WHERE c.empresa_id = ANY(?::bigint[])
+                AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones x WHERE x.conciliacion_id = c.id)
+              GROUP BY c.grupo ORDER BY 1`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number }> }
+        if (rows.length === 0) return 'sin conciliaciones'
+        const c = this.azar.elegir(rows)
+        await new AnularConciliacion().execute(
+            { conciliacion_id: Number(c.id), motivo: 'auditoría: línea equivocada' },
+            this.ctx,
+        )
+        return `anula la conciliación ${c.id}`
+    }
+
+    /** Paga casi todo (deja de 1 a 100 centavos) y cierra la diferencia. */
+    private async cerrar_diferencia() {
+        const todas = await pendientes(this.empresas)
+        const lista = todas.filter((f) => centavosDe(f.total) - centavosDe(f.pagado) > 100n)
+        if (lista.length === 0) return 'sin facturas con saldo'
+        const f = this.azar.elegir(lista)
+        const falta = this.azar.centavos(1, 100)
+        const monto = centavosDe(f.total) - centavosDe(f.pagado) - falta
+        const r = await this.pagar({
+            cliente_id: f.cliente_id,
+            metodo: 'caja',
+            monto: texto(monto),
+            facturas: [f.id],
+            empresa_id: f.empresa_id,
+        })
+        // paso compuesto: el pago ya quedó; un rechazo del cierre (p. ej. DTE en contingencia) es parte del detalle
+        try {
+            const cerrada = await new CerrarDiferenciaPago().execute({ pago_id: r.pagos[0]!.id }, this.ctx)
+            return `paga ${texto(monto)} de la factura ${f.id} y cierra la diferencia de ${cerrada.monto}`
+        } catch (error) {
+            if (!(error instanceof Problema) || error.status >= 500) throw error
+            return `paga ${texto(monto)} de la factura ${f.id}; el cierre de la diferencia se rechaza: ${error.status} ${error.tipo.split(':').at(-1)}`
+        }
+    }
+
+    private async provisionar() {
+        const empresaId = this.azar.elegir(this.empresas)
+        const p = await new ProvisionarCartera().execute({ empresa_id: empresaId, anio: 2026 }, this.ctx)
+        return `estimación de la empresa ${empresaId}: base ${p.base}, tope ${p.tope}, monto ${p.monto}`
+    }
+
+    /** Castiga una o dos facturas pendientes de un cliente en una empresa. */
+    private async castigar() {
+        const lista = await pendientes(this.empresas)
+        if (lista.length === 0) return 'sin cartera'
+        const f = this.azar.elegir(lista)
+        const otras = lista.filter(
+            (x) => x.cliente_id === f.cliente_id && x.empresa_id === f.empresa_id && x.id !== f.id,
+        )
+        const facturas = [
+            f.id,
+            ...(otras.length > 0 && this.azar.moneda() ? [this.azar.elegir(otras).id] : []),
+        ]
+        const k = await new CastigarCartera().execute(
+            { facturas, motivo: 'auditoría: incobrable', evidencia: 'tres gestiones de cobro documentadas' },
+            this.ctx,
+        )
+        return `castigo ${k.id} del cliente ${f.cliente_id} (empresa ${f.empresa_id}): facturas ${facturas.join(', ')}, ${k.monto} (IVA ${k.iva}, estimación ${k.estimacion}, gasto ${k.gasto})`
     }
 }
