@@ -19,6 +19,7 @@ import {
 import { cargarDestinatario, construirVariables, resolverCliente } from '#notify/variables'
 import { configPara, empresaDelEvento } from '#notify/configuracion'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
+import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
 
 export interface EntradaProgramar {
     /** `outbox:<id>` para eventos; otro prefijo para recordatorios */
@@ -68,24 +69,28 @@ interface Aviso {
  *   empresa** (cada pago es de un NIT distinto, con su marca, su configuración y su bot); la
  *   plantilla dice que es parte de un cobro mayor con `{{#cobro.repartido}}` (`variables.ts`).
  *   Idempotente igual que cualquier evento: por `origen` (`outbox:<id>`) + cliente y por `pago_id`.
+ * - Lealtad (`lealtad.ts`): `lealtad.referido_calificado` va al referidor; el
+ *   `lealtad.puntos_acumulados` del crédito del referidor no se avisa (ya lo dice el del referido).
  */
 export default class ProgramarNotificacion extends DomainAction<EntradaProgramar, ResultadoProgramar> {
     readonly nombre = 'notificaciones.programar'
 
     protected async handle(input: EntradaProgramar, t: Transaccion): Promise<ResultadoProgramar> {
-        const clienteId = await resolverCliente(t.trx, input.payload)
+        // `lealtad.referido_calificado` va al referidor, no al referido (`lealtad.ts`)
+        const payload = payloadDelAviso(input.evento, input.payload)
+        const clienteId = await resolverCliente(t.trx, payload)
         if (!clienteId) return { clienteId: null, envios: [], encolar: [] }
         // Auditoría: la empresa del evento (la del pago, la factura, el servicio…), no la activa
-        const empresaEvento = await empresaDelEvento(t.trx, input.payload)
+        const empresaEvento = await empresaDelEvento(t.trx, payload)
         if (empresaEvento !== null) t.fijarEmpresa(empresaEvento)
 
-        const avisos: Aviso[] = [{ clienteId, evento: input.evento, payload: input.payload }]
+        const avisos: Aviso[] = [{ clienteId, evento: input.evento, payload }]
         if (input.evento === 'pago.registrado') {
             for (const tercero of tercerosDelPago(input.payload, clienteId)) {
                 avisos.push({
                     clienteId: tercero,
                     evento: EVENTO_PAGO_TERCERO,
-                    payload: { ...input.payload, cliente_id: tercero, pagador_id: clienteId },
+                    payload: { ...payload, cliente_id: tercero, pagador_id: clienteId },
                 })
             }
         }
@@ -123,6 +128,9 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
 
         const existentes = await enviosExistentes(t.trx, origen, aviso.clienteId)
         if (existentes.length > 0) return existentes
+
+        // Lealtad: el crédito del referidor lo avisa `lealtad.referido_calificado` (`lealtad.ts`)
+        if (await avisoCubierto(t.trx, aviso.evento, aviso.payload)) return null
 
         // Un solo aviso de pago por pago y cliente (pago.registrado o comprobante.aprobado)
         if (EVENTOS_AVISO_PAGO.has(aviso.evento)) {

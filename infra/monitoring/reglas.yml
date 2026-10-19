@@ -45,6 +45,12 @@ groups:
         annotations:
           summary: '{{ $labels.cron }} no corre hace más de 2 h'
 
+      # Diarios de lealtad (billing-worker): lealtad.otorgar_antiguedad 03:05 y lealtad.vencer 03:20 Guatemala
+      - alert: CronDeLealtadAtrasado
+        expr: time() - argosisp_cron_ultima_ejecucion_timestamp_seconds{cron=~"lealtad.otorgar_antiguedad|lealtad.vencer"} > 25 * 3600
+        annotations:
+          summary: '{{ $labels.cron }} no corre hace más de 25 h (diario; ¿billing-worker detenido?)'
+
       - alert: CronDeNotifyAtrasado
         expr: time() - argosisp_cron_ultima_ejecucion_timestamp_seconds{cron=~"notificaciones.recordatorios|notificaciones.vigilar_crons"} > 900
         annotations:

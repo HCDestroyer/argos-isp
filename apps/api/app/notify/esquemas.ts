@@ -132,6 +132,7 @@ export const ConfiguracionNotificaciones = definirEsquema(
             pago: booleano,
             promesa: booleano,
             comprobante: booleano,
+            lealtad: booleano,
         }),
         version: {
             type: 'integer',

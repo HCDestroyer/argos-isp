@@ -14,13 +14,48 @@ import { ZONA } from '#notify/formato'
 import { horasDeCorte } from '#billing/cortes'
 
 /**
- * Crons de billing (A3) que se vigilan por su corrida en `audit.acciones` (las registra
- * `RegistrarCorrida` con canal `cron`). `cadaMin` es su periodo en `billing/jobs.ts`.
+ * Cron vigilado: periódico (`cadaMin`, su periodo en `billing/jobs.ts`) o diario (`diario`, hora
+ * `HH:mm` en Guatemala, la de `CRONS_DIARIOS` de `billing/jobs.ts`).
  */
-export const CRONS_VIGILADOS = [
+export type CronVigilado =
+    | { accion: string; descripcion: string; cadaMin: number }
+    | { accion: string; descripcion: string; diario: string }
+
+/**
+ * Crons de billing (A3) que se vigilan por su corrida en `audit.acciones` (las registra
+ * `RegistrarCorrida` con canal `cron`, con el nombre de la acción).
+ */
+export const CRONS_VIGILADOS: readonly CronVigilado[] = [
     { accion: 'facturas.generar', descripcion: 'La generación de facturas', cadaMin: 60 },
     { accion: 'facturas.vencer_pendientes', descripcion: 'El vencimiento de facturas y mora', cadaMin: 60 },
-] as const
+    // lealtad (contratos/lealtad.md §15.1): `lealtad:antiguedad` 03:05 y `lealtad:vencer` 03:20
+    {
+        accion: 'lealtad.otorgar_antiguedad',
+        descripcion: 'Los puntos de lealtad por antigüedad',
+        diario: '03:05',
+    },
+    { accion: 'lealtad.vencer', descripcion: 'El vencimiento de puntos de lealtad', diario: '03:20' },
+]
+
+/**
+ * Último instante en que el cron debió correr (hasta `ahora`) y el siguiente después de una
+ * corrida. Periódico: `ultima + cadaMin`. Diario: la hora de hoy en Guatemala si ya pasó; si no,
+ * la de ayer.
+ */
+function horario(cron: CronVigilado, ahora: DateTime, ultima: DateTime | null) {
+    if ('cadaMin' in cron) {
+        return {
+            // atrasado si la última corrida es anterior a `debio - tolerancia` (ver handle)
+            debio: ahora.minus({ minutes: cron.cadaMin }),
+            siguiente: ultima ? ultima.plus({ minutes: cron.cadaMin }) : null,
+        }
+    }
+    const [hora, minuto] = cron.diario.split(':').map(Number) as [number, number]
+    const local = ahora.setZone(ZONA)
+    let debio = local.set({ hour: hora, minute: minuto, second: 0, millisecond: 0 })
+    if (debio > local) debio = debio.minus({ days: 1 })
+    return { debio: debio.toUTC(), siguiente: debio.toUTC() }
+}
 
 export const ACCION_CORTE = 'servicios.corte'
 export const TOLERANCIA_POR_DEFECTO_MIN = 30
@@ -42,9 +77,12 @@ export interface ResultadoVigilar {
  * `notificaciones.vigilar_crons` (cron cada 5 min en `notify:worker`): avisa al equipo cuando un
  * cron de facturación o de corte no corrió a su hora, y cuando vuelve a correr.
  *
- * - **Horarios** (`facturas.generar`, `facturas.vencer_pendientes`): atrasado si la última corrida
+ * - **Periódicos** (`facturas.generar`, `facturas.vencer_pendientes`): atrasado si la última corrida
  *   correcta por cron tiene más de `periodo + NOTIFY_CRON_TOLERANCIA_MIN` (o nunca corrió).
  *   Incidente `cron:<accion>`, abierto hasta que vuelva a correr.
+ * - **Diarios** (`lealtad.otorgar_antiguedad` 03:05, `lealtad.vencer` 03:20, Guatemala): atrasado
+ *   si pasó la tolerancia desde su hora de hoy (o de ayer, antes de esa hora) y no hay corrida
+ *   correcta desde esa hora. Mismo incidente `cron:<accion>`.
  * - **Corte** (`servicios.corte`): cada hora de corte de hoy (Guatemala) de los servicios vigentes
  *   que ya pasó hace más de la tolerancia y no aparece en `resultado.horas` de una corrida de hoy.
  *   Incidente `cron:servicios.corte:<fecha> <hora>`: una alerta por hora de corte perdida.
@@ -79,9 +117,15 @@ export default class VigilarCrons extends DomainAction<EntradaVigilar, Resultado
         for (const cron of CRONS_VIGILADOS) {
             const clave = `cron:${cron.accion}`
             const ultima = await ultimaCorrida(t.trx, cron.accion, ahora)
-            const limite = ahora.minus({ minutes: cron.cadaMin + tolerancia })
+            const { debio, siguiente } = horario(cron, ahora, ultima)
+            // Periódico: atrasado si no corrió en `periodo + tolerancia`. Diario: si ya pasó la
+            // tolerancia desde la hora de hoy (o de ayer) y no hay corrida desde esa hora.
+            const diario = !('cadaMin' in cron)
+            const limite = diario ? debio : debio.minus({ minutes: tolerancia })
+            const enGracia = diario && ahora < debio.plus({ minutes: tolerancia })
             const referencia = ultima ?? despliegue
             if (!ultima && referencia && referencia >= limite) continue
+            if (enGracia && (!ultima || ultima < limite)) continue
             if (!ultima || ultima < limite) {
                 resultado.atrasados.push(clave)
                 const { incidente, nuevo } = await abrirIncidente(t.trx, {
@@ -94,7 +138,7 @@ export default class VigilarCrons extends DomainAction<EntradaVigilar, Resultado
                     await avisar(incidente, 'abierto', {
                         nombre: cron.accion,
                         descripcion: cron.descripcion,
-                        esperado: instanteLocal(ultima ? ultima.plus({ minutes: cron.cadaMin }) : null),
+                        esperado: instanteLocal(siguiente),
                         ultima: instanteLocal(ultima),
                     })
                 }

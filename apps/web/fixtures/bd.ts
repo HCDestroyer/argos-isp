@@ -7,6 +7,7 @@ import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
+import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -115,6 +116,14 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
+    programasLealtad: Schema<'ProgramaLealtad'>[]
+    reglasLealtad: Schema<'ReglaLealtad'>[]
+    movimientosPuntos: Schema<'MovimientoPuntos'>[]
+    lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
+    referidosLealtad: Schema<'ReferidoLealtad'>[]
+    /** Saldo de 2.1.10 por empresa cuando no es el de los lotes (para probar el aviso de `cuadra: false`). */
+    pasivoLibroLealtad: Record<number, string>
     /** Localización fiscal por empresa (A3, fase 2). */
     fiscal: FiscalFixtures
     /** FEL por empresa: configuración, credenciales sin secretos, DTE y sustituciones (A3, fase 3). */
@@ -170,6 +179,12 @@ function inicial(): BaseFixtures {
         fiscal: fiscalInicial(),
         fel: felInicial(),
         horus: horusInicial(),
+        programasLealtad,
+        reglasLealtad,
+        movimientosPuntos,
+        lotesPuntos,
+        referidosLealtad,
+        pasivoLibroLealtad: {},
     })
     sembrarNotasCredito(datos)
     sembrarFel(datos)

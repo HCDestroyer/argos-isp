@@ -17091,6 +17091,9 @@
                       },
                       "comprobante": {
                         "type": "boolean"
+                      },
+                      "lealtad": {
+                        "type": "boolean"
                       }
                     },
                     "required": [],
@@ -17478,6 +17481,9 @@
                         "type": "boolean"
                       },
                       "comprobante": {
+                        "type": "boolean"
+                      },
+                      "lealtad": {
                         "type": "boolean"
                       }
                     },
@@ -35998,7 +36004,8 @@
               "corte",
               "pago",
               "promesa",
-              "comprobante"
+              "comprobante",
+              "lealtad"
             ],
             "properties": {
               "factura": {
@@ -36020,6 +36027,9 @@
                 "type": "boolean"
               },
               "comprobante": {
+                "type": "boolean"
+              },
+              "lealtad": {
                 "type": "boolean"
               }
             }
