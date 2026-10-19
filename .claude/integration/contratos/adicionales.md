@@ -40,8 +40,28 @@ Decisión del PM, 19 de octubre. Un servicio de internet puede tener **servicios
 ### Estado y empresa del servicio
 
 - **Retirar** el servicio da de baja todos sus adicionales activos (`motivo_baja` = el motivo del retiro, evento con `origen: retiro`).
-- **Suspender o limitar** no los toca.
+- **Suspender** los bloquea y **reactivar** los desbloquea (ver "Servicio suspendido"). **Limitar** no los toca.
 - **Cambiar de empresa** (`servicios.cambiar_empresa`): con `cortesia` o `cobrado` vigentes responde 422 `servicio_con_adicionales` (se quitan antes: son del catálogo de la otra empresa). Los `incluido` se dan de baja (`origen: cambio_empresa`) y se agregan los que el plan trae en la empresa nueva.
+
+### Servicio suspendido (decisión del PM, 19 oct)
+
+- `core.servicios_adicionales.bloqueo` ∈ `vigente` | `bloqueado`, con `bloqueado_en`. Es aparte de `estado` (`activo` | `baja`): un adicional activo puede estar bloqueado.
+- Cuando el servicio **entra** a `suspendido`, todos sus adicionales `activo` y `vigente` pasan a `bloqueado`. Cuando **sale** de `suspendido` (a `activo` o `limitado`), los bloqueados vuelven a `vigente`. Entre `activo` y `limitado` no pasa nada. Las bajas no se tocan.
+- Un adicional que se agrega a un servicio suspendido (a mano o por cambio de plan) **nace bloqueado**.
+- **Dónde se dispara:** de forma anidada en `CambiarEstadoServicio` (`aplicarBloqueoPorEstado` de `#core/adicionales`), dentro de la misma transacción que el cambio de estado. Es la única acción que cambia el estado de un servicio vivo: la usan `evaluarEstadoServicio` (corte, pagos, promesas) y las acciones manuales `suspender`, `reactivar`, `limitar` y `quitar-limite`. Así el estado y el bloqueo se confirman juntos o ninguno, sin una ventana en la que el servicio esté suspendido y la cuenta externa siga abierta. Es idempotente: solo toca las filas que todavía no están en el estado pedido, y `CambiarEstadoServicio` no hace nada si el servicio ya estaba en el estado nuevo. Se descartó un consumidor del bus porque deja esa ventana y tendría que adivinar el estado anterior.
+- Cada bloqueo o desbloqueo:
+  - deja su diff en `audit.cambios` (campos `bloqueo` y `bloqueado_en`, entidad `servicio_adicional`);
+  - se guarda en el historial `core.servicios_adicionales_bloqueos` (solo inserción: trigger y `REVOKE`), con `accion`, `estado_servicio`, `motivo` y `request_id`;
+  - emite `adicional.bloqueado` o `adicional.desbloqueado`.
+  - No sube la `version` de la asignación: no es una edición de nadie, y así una edición del panel que llegue en el mismo momento no recibe 409.
+- El bloqueo no se edita a mano. El panel lo muestra (`bloqueo`, `bloqueado_en` en `AdicionalServicio`) y su historial en `GET /servicios/:id/adicionales/:asignacionId/bloqueos` (`servicios.ver`).
+- **Consumidores:** quien integre la cuenta externa (streaming, IPTV) bloquea o reactiva con estos eventos. Hoy no hay integración. Deben ser idempotentes: el evento puede llegar dos veces.
+
+### Primer periodo de un cobrado (decisión del PM, 19 oct)
+
+- Al agregar un adicional `cobrado` a mitad de periodo, `primer_periodo` ∈ `prorrateado` (por defecto) | `sin_costo`. Solo con `cobrado` (422 en `primer_periodo` con otra modalidad); se puede cambiar al editar.
+- `cobrado_desde` (instante): desde cuándo se cobra. Es el alta o el momento en que una asignación pasa a `cobrado` al editarla (entonces `primer_periodo` toma `prorrateado` si no se indica). Al dejar de ser `cobrado` se borran los dos.
+- Los cobrados que existían antes de esta decisión quedaron `prorrateado` con `cobrado_desde = alta_en`.
 
 ## API (`/api/v1`)
 
@@ -59,11 +79,12 @@ Decisión del PM, 19 de octubre. Un servicio de internet puede tener **servicios
 | `POST /servicios/:id/adicionales` | `servicios.agregar_adicional` (+ `servicios.adicional_cortesia`) | `Idempotency-Key` |
 | `PUT /servicios/:id/adicionales/:asignacionId` | `servicios.editar_adicional` (+ `servicios.adicional_cortesia`) | Con `version`; `credencial: null` la borra |
 | `POST /servicios/:id/adicionales/:asignacionId/quitar` | `servicios.quitar_adicional` | Con `version` y `motivo` opcional |
+| `GET /servicios/:id/adicionales/:asignacionId/bloqueos` | `servicios.ver` | Historial de bloqueos y desbloqueos |
 | `GET /servicios/:id/adicionales/:asignacionId/credencial` | `servicios.ver_credencial_adicional` | En claro, auditado; 422 `sin_credencial` |
 | `GET /planes/:id/adicionales` | `planes.ver` | Lista con `cantidad` y `empresa_id` del adicional |
 | `PUT /planes/:id/adicionales` | `planes.editar` | Reemplaza la lista; sube la `version` del plan (409); diff en `audit.cambios` (campo `adicionales`) |
 
-Esquemas OpenAPI: `Adicional`, `MotivoCortesia`, `AdicionalServicio`, `AdicionalPlan`, `CredencialAdicional`.
+Esquemas OpenAPI: `Adicional`, `MotivoCortesia`, `AdicionalServicio`, `AdicionalPlan`, `CredencialAdicional`, `BloqueoAdicional`. `POST` y `PUT` de `/servicios/:id/adicionales` aceptan `primer_periodo`. En `AdicionalServicio`, `bloqueo`, `bloqueado_en`, `primer_periodo` y `cobrado_desde` son opcionales en el esquema hasta que los fixtures del panel los tengan; la API siempre los envía.
 
 ## Permisos en los roles base
 
@@ -82,12 +103,25 @@ Todos con `servicio_id`, `cliente_id`, `empresa_id` (la de la asignación), `adi
 
 | Evento | Además | Cuándo |
 | --- | --- | --- |
-| `servicio.adicional_agregado` | `origen`: `manual` o `plan` | Alta a mano, alta del servicio o cambio de plan |
-| `servicio.adicional_cambiado` | `campos[]` (`modalidad`, `identificador`, `credencial`, `precio`, `motivo`) y `modalidad_anterior` | Edición con algún cambio (`credencial` solo dice que cambió) |
+| `servicio.adicional_agregado` | `origen`: `manual` o `plan`; `primer_periodo` (o null) y `bloqueo` | Alta a mano, alta del servicio o cambio de plan |
+| `servicio.adicional_cambiado` | `campos[]` (`modalidad`, `identificador`, `credencial`, `precio`, `motivo`, `primer_periodo`) y `modalidad_anterior` | Edición con algún cambio (`credencial` solo dice que cambió) |
 | `servicio.adicional_quitado` | `origen`: `manual`, `cambio_plan`, `retiro` o `cambio_empresa`; `motivo` (texto o null) | Baja |
+
+Bloqueo por la suspensión del servicio:
+
+| Evento | Payload | Cuándo |
+| --- | --- | --- |
+| `adicional.bloqueado` | `servicio_id`, `cliente_id`, `empresa_id`, `asignacion_id`, `adicional_id`, `identificador`, `modalidad`, `estado_servicio` (`suspendido`), `motivo` (el del cambio de estado) | El servicio entra a `suspendido`, o se agrega un adicional a un servicio suspendido |
+| `adicional.desbloqueado` | ídem, con `estado_servicio` = `activo` o `limitado` | El servicio sale de `suspendido` |
 
 ## Para otros agentes
 
-- **A3 (facturación de los `cobrado`)**: la línea mensual sale de `core.servicios_adicionales` con `modalidad = 'cobrado'` y `estado = 'activo'` en el periodo (`alta_en`/`baja_en`), `precio` y `empresa_id` (la del servicio). Los eventos sirven para reaccionar (prorrateo, nota de crédito), pero la fuente es la tabla. Qué hacer con un servicio suspendido lo decide A3.
+- **A3 (facturación de los `cobrado`)**: la línea mensual sale de `core.servicios_adicionales` con `modalidad = 'cobrado'` y `estado = 'activo'` en el periodo (`alta_en`/`baja_en`), `precio` y `empresa_id` (la del servicio). Los eventos sirven para reaccionar (prorrateo, nota de crédito), pero la fuente es la tabla. Qué hacer con un servicio suspendido lo decide A3; `bloqueo = 'bloqueado'` marca los periodos en que el adicional estuvo bloqueado (historial en `core.servicios_adicionales_bloqueos`).
+  - **Primer periodo:** el periodo en curso al momento de `cobrado_desde` (el de la plantilla del servicio) se cobra según `primer_periodo`:
+    - `prorrateado`: `precio × (días desde la fecha de `cobrado_desde`, en `America/Guatemala`, hasta el fin del periodo, inclusive) / días del periodo`, redondeado a 2 decimales con `decimal.js`, como línea propia en la **siguiente factura** que se genere.
+    - `sin_costo`: el periodo en curso no se cobra.
+    - Desde el periodo siguiente, `precio` completo.
+    - Si `cobrado_desde` cae el primer día del periodo y ese periodo aún no se facturó, se cobra completo en ambos casos.
+  - La línea debe ser idempotente: una sola por asignación y periodo (por ejemplo, clave `adicional:<asignacion_id>:<periodo>`).
 - **A4 (pantallas)**: catálogo y motivos (admin), adicionales en la ficha del servicio, lista del plan en la ficha del plan. La credencial solo con el botón "Ver" (`servicios.ver_credencial_adicional`); la cortesía solo si el usuario tiene `servicios.adicional_cortesia`.
 - **A5 (portal)**: mostrar al cliente sus adicionales activos (nombre, modalidad, identificador). **Nunca la credencial**. Leer con `listarAsignaciones` de `#core/adicionales` (o pedir a A1 un endpoint del portal).
