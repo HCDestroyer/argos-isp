@@ -110,6 +110,27 @@ export const CAMPOS_CLIENTE_ACTUALIZADO = [
 ] as const
 export type CampoClienteActualizado = (typeof CAMPOS_CLIENTE_ACTUALIZADO)[number]
 
+export const MODALIDADES_ADICIONAL = ['incluido', 'cortesia', 'cobrado'] as const
+export type ModalidadAdicional = (typeof MODALIDADES_ADICIONAL)[number]
+export const CAMPOS_ADICIONAL_CAMBIADO = [
+    'modalidad',
+    'identificador',
+    'credencial',
+    'precio',
+    'motivo',
+] as const
+export type CampoAdicionalCambiado = (typeof CAMPOS_ADICIONAL_CAMBIADO)[number]
+
+/** Asignación de un adicional a un servicio (`core.servicios_adicionales`). */
+interface PayloadAdicional {
+    servicio_id: number
+    cliente_id: number
+    empresa_id: number
+    adicional_id: number
+    asignacion_id: number
+    modalidad: ModalidadAdicional
+}
+
 export interface CatalogoEventos {
     // núcleo (A1). `empresa_id` (multiempresa, 2026-10-17): la empresa del servicio; aditivo.
     'servicio.creado': {
@@ -168,6 +189,25 @@ export interface CatalogoEventos {
         capacidad_bajada_kbps: number | null
         capacidad_subida_kbps: number | null
         campos: Array<'control_velocidad' | 'capacidad'>
+        motivo: string | null
+    }
+    /**
+     * Servicios adicionales de un servicio (decisión del PM, 19 oct; `contratos/adicionales.md`):
+     * streaming, IPTV… Nunca llevan la credencial. A3 factura los `cobrado`; A5 los muestra en el
+     * portal. No cambian nada en la red (`aaa-cache` y `routeros` los ignoran).
+     */
+    'servicio.adicional_agregado': PayloadAdicional & {
+        /** `manual`: lo agregó alguien; `plan`: lo trajo el plan al crear el servicio o cambiar de plan */
+        origen: 'manual' | 'plan'
+    }
+    'servicio.adicional_cambiado': PayloadAdicional & {
+        /** campos que cambiaron; `credencial` solo dice que cambió (nunca el valor) */
+        campos: CampoAdicionalCambiado[]
+        modalidad_anterior: ModalidadAdicional
+    }
+    'servicio.adicional_quitado': PayloadAdicional & {
+        /** `manual` (quitado a mano), `cambio_plan`, `retiro` o `cambio_empresa` */
+        origen: 'manual' | 'cambio_plan' | 'retiro' | 'cambio_empresa'
         motivo: string | null
     }
     'asignacion.cambiada': {
@@ -531,6 +571,9 @@ export const EVENTOS = [
     'servicio.estado_cambiado',
     'servicio.config_cambiada',
     'asignacion.cambiada',
+    'servicio.adicional_agregado',
+    'servicio.adicional_cambiado',
+    'servicio.adicional_quitado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
     'cliente.actualizado',

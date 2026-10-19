@@ -4,7 +4,7 @@ import { cifrar } from '#shared/cifrado'
 import { actualizarConVersion } from '#shared/version'
 import type { CatalogoEventos } from '#shared/eventos'
 import { obtenerImplementacionPlan } from '#network/actions/obtener_implementacion_plan'
-import { verServicio, type ModoIpv6, type ServicioVista, type TipoConexion } from '#core/consultas/servicios'
+import { verServicio, type ModoIpv6, type TipoConexion } from '#core/consultas/servicios'
 import { exigirReferencia, exigirUserPppLibre } from '#core/actions/crear_servicio'
 import {
     asignacionesVigentes,
@@ -25,6 +25,9 @@ import {
 import { registrarTramo } from '#network/historial'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { planTemporalActivo } from '#core/planes_temporales'
+import { reconciliarIncluidos } from '#core/adicionales'
+import { advertenciasServicio } from '#network/tipos_plan'
+import type { ServicioConAdvertencias } from '#core/actions/crear_servicio'
 
 export interface EntradaEditarServicio {
     id: number
@@ -73,11 +76,15 @@ type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
  *
  * Con un plan temporal activo (lealtad) el `plan_id` del servicio es el temporal: cambiarlo responde
  * 409 `plan_temporal_activo` (primero se cancela con `servicios.cancelar_plan_temporal`).
+ *
+ * Cambiar de plan reconcilia los adicionales `incluido` con los del plan nuevo
+ * (`reconciliarIncluidos`): los que el plan nuevo no trae se dan de baja, los que faltan se agregan;
+ * `cortesia` y `cobrado` se conservan (`contratos/adicionales.md`).
  */
-export default class EditarServicio extends DomainAction<EntradaEditarServicio, ServicioVista> {
+export default class EditarServicio extends DomainAction<EntradaEditarServicio, ServicioConAdvertencias> {
     readonly nombre = 'servicios.editar'
 
-    protected async handle(input: EntradaEditarServicio, t: Transaccion): Promise<ServicioVista> {
+    protected async handle(input: EntradaEditarServicio, t: Transaccion): Promise<ServicioConAdvertencias> {
         const {
             id,
             version,
@@ -232,6 +239,14 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         ) {
             campos.push('prefijo_v6')
         }
+        if (campos.includes('plan')) {
+            await reconciliarIncluidos(
+                t,
+                { id, empresa_id: despues.empresa_id, cliente_id: despues.cliente_id },
+                despues.plan_id,
+                'cambio_plan',
+            )
+        }
         if (campos.length > 0) {
             await registrarTramo(t.trx, id, `edicion: ${campos.join(', ')}`)
             await t.emit('servicio.config_cambiada', {
@@ -260,8 +275,9 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
 
         if (excepcionesCambiadas.some((campo) => CAMPOS_QUE_AFECTAN_CORTE.includes(campo as never))) {
             await new EvaluarEstadoServicio().execute({ servicio_id: id }, t.ctx, { trx: t.trx })
-            return verServicio(id, t.trx)
+            const evaluado = await verServicio(id, t.trx)
+            return { ...evaluado, warnings: await advertenciasServicio(t.trx, id) }
         }
-        return despues
+        return { ...despues, warnings: await advertenciasServicio(t.trx, id) }
     }
 }

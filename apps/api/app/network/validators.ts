@@ -12,6 +12,7 @@ import {
     versionEsperada,
 } from '#shared/validadores'
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
+import { TIPOS_PLAN } from '#network/tipos_plan'
 import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
 /*
@@ -241,6 +242,9 @@ const camposPlan = {
         .enum([64, 56, 48] as const)
         .optional()
         .meta({ type: 'integer' }),
+    tipo: vine.enum(TIPOS_PLAN).optional().meta({
+        description: 'residencial (por defecto), empresarial o dedicado; solo advierte, nunca bloquea',
+    }),
     global: vine.boolean().optional(),
     activo: vine.boolean().optional(),
 }
@@ -279,6 +283,7 @@ export const editarPlanValidator = vine.compile(
             .enum([64, 56, 48] as const)
             .optional()
             .meta({ type: 'integer' }),
+        tipo: vine.enum(TIPOS_PLAN).optional(),
         global: vine.boolean().optional(),
         activo: vine.boolean().optional(),
     }),
@@ -289,6 +294,7 @@ export const listarPlanesValidator = vine.compile(
         ...reglasPaginacion,
         activo: vine.boolean().optional(),
         router_id: idEntidad().optional(),
+        tipo: vine.enum(TIPOS_PLAN).optional(),
     }),
 )
 
