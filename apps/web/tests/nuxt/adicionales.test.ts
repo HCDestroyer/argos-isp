@@ -60,7 +60,7 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
             expect(esquemaAsignacion.safeParse({ ...base, adicional_id: 1, precio: '0' }).error?.issues[0]?.message).toBe('El precio debe ser mayor que cero')
             expect(esquemaAsignacion.safeParse({ ...base, adicional_id: 1, modalidad: 'cortesia' }).error?.issues[0]?.message).toBe('Elige el motivo de la cortesía')
             const cobrado = esquemaAsignacion.parse({ ...base, adicional_id: 2, precio: '35', motivo_id: 4 })
-            expect(cuerpoAsignacion(cobrado, '')).toEqual({ adicional_id: 2, modalidad: 'cobrado', identificador: null, credencial: null, precio: '35.00', motivo_id: null, motivo_detalle: null })
+            expect(cuerpoAsignacion(cobrado, '')).toEqual({ adicional_id: 2, modalidad: 'cobrado', identificador: null, credencial: null, precio: '35.00', motivo_id: null, motivo_detalle: null, primer_periodo: 'prorrateado' })
             expect(esquemaAdicional.parse({ codigo: ' iptv-hd ', nombre: 'IPTV HD', descripcion: '', precio_sugerido: '' }).codigo).toBe('IPTV-HD')
             expect(esquemaAdicional.safeParse({ codigo: 'con espacio', nombre: 'X1', descripcion: '', precio_sugerido: '' }).success).toBe(false)
             expect(esquemaAdicionalesPlan.safeParse({ adicionales: [{ adicional_id: 1, cantidad: 1 }, { adicional_id: 1, cantidad: 2 }] }).error?.issues[0]?.message).toBe('Ya está en la lista: sube la cantidad')
@@ -75,7 +75,7 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
             const datos = esquemaAsignacion.parse({ ...entradaAsignacion(cortesia), identificador: 'iptv-0099' })
             expect(cambiosAsignacion(cortesia, datos, { accion: 'conservar', valor: '' })).toEqual({ version: cortesia.version, identificador: 'iptv-0099' })
             const aCobrado = esquemaAsignacion.parse({ ...entradaAsignacion(cortesia), modalidad: 'cobrado', precio: '30' })
-            expect(cambiosAsignacion(cortesia, aCobrado, { accion: 'borrar', valor: '' })).toEqual({ version: cortesia.version, modalidad: 'cobrado', precio: '30.00', credencial: null })
+            expect(cambiosAsignacion(cortesia, aCobrado, { accion: 'borrar', valor: '' })).toEqual({ version: cortesia.version, modalidad: 'cobrado', precio: '30.00', primer_periodo: 'prorrateado', credencial: null })
         })
 
         it('tipo de plan: etiqueta propia y uno desconocido por su nombre', () => {

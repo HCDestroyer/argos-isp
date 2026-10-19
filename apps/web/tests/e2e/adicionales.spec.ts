@@ -64,3 +64,41 @@ test('plan con su tipo y adicionales incluidos', async ({ page }) => {
     await expect(seccion).not.toContainText('Usuario de IPTV')
     await expect(seccion).toContainText('Cuenta de streaming')
 })
+
+test('suspender bloquea los adicionales con su historial; un cobrado entra sin costo este mes', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/servicios/1')
+    const seccion = page.locator('[data-prueba="servicio-adicionales"]')
+    await expect(seccion.locator('[data-modalidad]')).toHaveCount(3, { timeout: 15_000 })
+
+    // Cobrado a mitad de mes: «Sin costo este mes».
+    await seccion.getByRole('button', { name: 'Agregar' }).click()
+    const modal = page.getByRole('dialog', { name: 'Agregar adicional' })
+    await elegir(page, modal.locator('[data-prueba="asignacion-adicional"]'), /^Usuario de IPTV/)
+    await expect(modal.locator('[data-prueba="asignacion-primer-periodo"]')).toBeVisible()
+    await modal.getByRole('radio', { name: 'Sin costo este mes' }).check()
+    await modal.getByLabel('Identificador').fill('iptv-0888')
+    await modal.getByRole('button', { name: 'Agregar' }).click()
+    await expect(modal).toBeHidden()
+    await expect(seccion).toContainText('sin costo este mes')
+
+    // Suspender bloquea todos sus adicionales; nadie los desbloquea a mano.
+    await page.getByRole('button', { name: 'Suspender', exact: true }).click()
+    const suspender = page.getByRole('dialog', { name: 'Suspender servicio' })
+    await suspender.getByLabel('Motivo').fill('Solicitud del cliente')
+    await suspender.getByRole('button', { name: 'Suspender servicio' }).click()
+    await expect(seccion.locator('[data-prueba="adicional-bloqueado"]')).toHaveCount(4)
+
+    await seccion.getByRole('button', { name: 'Historial de bloqueos de Usuario de IPTV' }).first().click()
+    const historial = page.getByRole('dialog', { name: /^Bloqueos de Usuario de IPTV/ })
+    await expect(historial.locator('[data-bloqueo]').first()).toHaveAttribute('data-bloqueo', 'bloqueado')
+    await expect(historial).toContainText('Solicitud del cliente')
+    await page.keyboard.press('Escape')
+    await expect(historial).toBeHidden()
+
+    await page.getByRole('button', { name: 'Reactivar', exact: true }).click()
+    const reactivar = page.getByRole('dialog', { name: 'Reactivar servicio' })
+    await reactivar.getByLabel('Motivo').fill('Volvió de viaje')
+    await reactivar.getByRole('button', { name: 'Reactivar servicio' }).click()
+    await expect(seccion.locator('[data-prueba="adicional-bloqueado"]')).toHaveCount(0)
+})

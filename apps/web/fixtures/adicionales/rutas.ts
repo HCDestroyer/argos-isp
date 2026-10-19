@@ -242,6 +242,21 @@ function longitudes(cuerpo: Record<string, unknown>): Errores {
     return errores
 }
 
+const PRIMEROS_PERIODOS = ['prorrateado', 'sin_costo'] as const
+type PrimerPeriodo = typeof PRIMEROS_PERIODOS[number]
+
+/** Como `exigirPrimerPeriodo` (A1): solo un `cobrado` lleva `primer_periodo` (422 si no). */
+function primerPeriodoDe(modalidad: Modalidad, valor: unknown): PrimerPeriodo | null | undefined | Errores {
+    if (valor === undefined || valor === null) {
+        return valor
+    }
+    if (modalidad !== 'cobrado') {
+        return [{ field: 'primer_periodo', message: 'Solo un adicional cobrado lleva primer periodo', rule: 'modalidad' }]
+    }
+    const elegido = PRIMEROS_PERIODOS.find(p => p === valor)
+    return elegido ?? [{ field: 'primer_periodo', message: 'Debe ser prorrateado o sin_costo', rule: 'enum' }]
+}
+
 function sinCortesia(): RespuestaFixture {
     return problemaTipado(403, 'prohibido', 'Permiso insuficiente', 'Se requiere el permiso servicios.adicional_cortesia')
 }
@@ -272,12 +287,16 @@ function agregar(solicitud: SolicitudFixture): RespuestaFixture {
     if (!adicional.activo) {
         return regla('adicional_inactivo', `El adicional ${adicional.nombre} está desactivado`)
     }
-    const errores = [...validarModalidad(modalidad, cuerpo.precio, cuerpo.motivo_id, servicio.empresa_id), ...longitudes(cuerpo)]
-    if (errores.length) {
+    const primerPeriodo = primerPeriodoDe(modalidad, cuerpo.primer_periodo)
+    const errores = [...validarModalidad(modalidad, cuerpo.precio, cuerpo.motivo_id, servicio.empresa_id), ...longitudes(cuerpo), ...(Array.isArray(primerPeriodo) ? primerPeriodo : [])]
+    if (errores.length || Array.isArray(primerPeriodo)) {
         return invalido(errores)
     }
     const motivo = modalidad === 'cortesia' ? bd.motivosCortesia.find(m => m.id === cuerpo.motivo_id) : undefined
     const credencial = textoOpcional(cuerpo.credencial)
+    const momento = ahora()
+    // En un servicio suspendido nace bloqueado, con su fila en el historial (A1).
+    const bloqueado = servicio.estado === 'suspendido'
     const nueva = asignacion(siguienteId(bd.adicionalesServicio), servicio, adicional, {
         modalidad,
         identificador: textoOpcional(cuerpo.identificador),
@@ -286,8 +305,15 @@ function agregar(solicitud: SolicitudFixture): RespuestaFixture {
         motivo_id: motivo?.id ?? null,
         motivo_nombre: motivo?.nombre ?? null,
         motivo_detalle: modalidad === 'cortesia' ? textoOpcional(cuerpo.motivo_detalle) : null,
-    }, ahora())
+        primer_periodo: modalidad === 'cobrado' ? (primerPeriodo ?? 'prorrateado') : null,
+        cobrado_desde: modalidad === 'cobrado' ? momento : null,
+        bloqueo: bloqueado ? 'bloqueado' : 'vigente',
+        bloqueado_en: bloqueado ? momento : null,
+    }, momento)
     bd.adicionalesServicio.push(nueva)
+    if (bloqueado) {
+        registrarBloqueo(nueva.id, 'bloqueado', 'suspendido', 'servicio suspendido al agregarlo', momento)
+    }
     if (credencial) {
         bd.credencialesAdicionales[nueva.id] = credencial
     }
@@ -322,10 +348,14 @@ function editar(solicitud: SolicitudFixture): RespuestaFixture {
     }
     const precio = modalidad === 'cobrado' ? (cuerpo.precio ?? actual.precio) : cuerpo.precio
     const motivoId = modalidad === 'cortesia' ? (cuerpo.motivo_id ?? actual.motivo_id) : cuerpo.motivo_id
-    const errores = [...validarModalidad(modalidad, precio, motivoId, servicio.empresa_id), ...longitudes(cuerpo)]
-    if (errores.length) {
+    const primerPeriodo = primerPeriodoDe(modalidad, cuerpo.primer_periodo)
+    const errores = [...validarModalidad(modalidad, precio, motivoId, servicio.empresa_id), ...longitudes(cuerpo), ...(Array.isArray(primerPeriodo) ? primerPeriodo : [])]
+    if (errores.length || Array.isArray(primerPeriodo)) {
         return invalido(errores)
     }
+    const momento = ahora()
+    // Pasar a cobrado lo cobra desde ahora (`prorrateado` si no viene); dejar de serlo lo borra.
+    const pasaACobrado = modalidad === 'cobrado' && actual.modalidad !== 'cobrado'
     const motivo = modalidad === 'cortesia' ? bd.motivosCortesia.find(m => m.id === motivoId) : undefined
     const despues: AdicionalServicio = {
         ...actual,
@@ -337,8 +367,10 @@ function editar(solicitud: SolicitudFixture): RespuestaFixture {
         motivo_detalle: modalidad === 'cortesia' ? ('motivo_detalle' in cuerpo ? textoOpcional(cuerpo.motivo_detalle) : actual.motivo_detalle) : null,
         // Al dejar de ser `incluido` deja de ser del plan (un cambio de plan ya no lo da de baja).
         plan_id: modalidad === 'incluido' ? actual.plan_id : null,
+        primer_periodo: modalidad !== 'cobrado' ? null : (primerPeriodo ?? (pasaACobrado ? 'prorrateado' : actual.primer_periodo ?? 'prorrateado')),
+        cobrado_desde: modalidad !== 'cobrado' ? null : (pasaACobrado ? momento : actual.cobrado_desde ?? null),
         version: actual.version + 1,
-        updated_at: ahora(),
+        updated_at: momento,
     }
     if ('credencial' in cuerpo) {
         const credencial = textoOpcional(cuerpo.credencial)
@@ -504,6 +536,36 @@ export function reconciliarIncluidos(servicio: Servicio, motivoBaja = 'cambio_pl
     bd.adicionalesServicio.push(...nuevosIncluidos(servicio, servicio.plan_id, faltan, momento))
 }
 
+function registrarBloqueo(asignacionId: number, accion: 'bloqueado' | 'desbloqueado', estadoServicio: Servicio['estado'], motivo: string | null, momento: string): void {
+    bd.bloqueosAdicionales.push({ id: siguienteId(bd.bloqueosAdicionales), asignacion_id: asignacionId, accion, estado_servicio: estadoServicio, motivo, created_at: momento })
+}
+
+/**
+ * Como `aplicarBloqueoPorEstado` (A1), dentro del cambio de estado del servicio: al entrar a
+ * `suspendido` bloquea sus adicionales activos y al salir (salvo a `retirado`) los desbloquea, con su
+ * fila en el historial. Entre `activo` y `limitado` no hace nada. No cambia la `version`.
+ */
+export function aplicarBloqueoPorEstado(servicioId: number, de: Servicio['estado'], a: Servicio['estado'], motivo: string | null): void {
+    let accion: 'bloqueado' | 'desbloqueado'
+    if (a === 'suspendido' && de !== 'suspendido') {
+        accion = 'bloqueado'
+    }
+    else if (de === 'suspendido' && a !== 'suspendido' && a !== 'retirado') {
+        accion = 'desbloqueado'
+    }
+    else {
+        return
+    }
+    const momento = ahora()
+    for (const fila of bd.adicionalesServicio) {
+        if (fila.servicio_id !== servicioId || fila.estado !== 'activo' || fila.bloqueo === (accion === 'bloqueado' ? 'bloqueado' : 'vigente')) {
+            continue
+        }
+        Object.assign(fila, { bloqueo: accion === 'bloqueado' ? 'bloqueado' : 'vigente', bloqueado_en: accion === 'bloqueado' ? momento : null, updated_at: momento })
+        registrarBloqueo(fila.id, accion, a, motivo, momento)
+    }
+}
+
 /** Al retirar el servicio: todos sus adicionales activos se dan de baja con el motivo del retiro. */
 export function bajaPorRetiro(servicioId: number, motivo: string): void {
     const momento = ahora()
@@ -565,6 +627,16 @@ export const rutasAdicionales: RutasFixture = {
         return { status: 200, cuerpo: paginar(filas, solicitud, 100) }
     }),
     'POST /api/v1/servicios/:id/adicionales': conPermiso('servicios.agregar_adicional', conIdempotencia(agregar)),
+    /** Del más reciente al más viejo (la API pagina por `id` descendente). */
+    'GET /api/v1/servicios/:id/adicionales/:asignacionId/bloqueos': conPermiso('servicios.ver', (solicitud) => {
+        const servicio = servicioDe(solicitud)
+        const fila = bd.adicionalesServicio.find(a => a.id === idDe(solicitud, 'asignacionId') && a.servicio_id === servicio?.id)
+        if (!servicio || !fila) {
+            return noEncontrado('la asignación')
+        }
+        const filas = bd.bloqueosAdicionales.filter(b => b.asignacion_id === fila.id).sort((x, y) => y.id - x.id)
+        return { status: 200, cuerpo: paginar(filas, solicitud) }
+    }),
     'GET /api/v1/servicios/:id/adicionales/:asignacionId/credencial': conPermiso('servicios.ver_credencial_adicional', credencial),
     'POST /api/v1/servicios/:id/adicionales/:asignacionId/quitar': conPermiso('servicios.quitar_adicional', conIdempotencia(quitar)),
     'PUT /api/v1/servicios/:id/adicionales/:asignacionId': conPermiso('servicios.editar_adicional', editar),
