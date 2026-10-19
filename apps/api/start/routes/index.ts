@@ -17,6 +17,7 @@ import notify from '#start/routes/notify'
 import fiscal from '#start/routes/fiscal'
 import integraciones from '#start/routes/integraciones'
 import lealtad from '#start/routes/lealtad'
+import monitoreo from '#start/routes/monitoreo'
 
 export const registroRutas: Ruta[] = [
     ...core,
@@ -28,4 +29,5 @@ export const registroRutas: Ruta[] = [
     ...portal,
     ...notify,
     ...integraciones,
+    ...monitoreo,
 ]

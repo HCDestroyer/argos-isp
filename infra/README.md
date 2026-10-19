@@ -4,6 +4,7 @@
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `docker-compose.yml`     | Stack completo: postgres, redis, mailpit, migrate, api, procesos de fondo (relay, billing-worker, fiscal-worker, sesiones-worker, routeros-worker, worker), web, portal y, con el perfil `lab`, freeradius, aaa y coa |
 | `.env.example`           | Variables del compose; cópialo a `infra/.env`                                                                                                                                         |
+| `produccion/`            | Distribución: compose de producción (solo imágenes de GHCR), `instalar.sh`, CLI `argosisp` (actualizar y revertir), empaquetado de cada versión. `produccion/README.md`, `docs/runbooks/instalacion.md` y `actualizacion.md` |
 | `mikrotik/`              | `lab.rsc` y su README: RouterOS del laboratorio (PPPoE, RADIUS, corte IPv4/IPv6, WireGuard)                                                                                           |
 | `docker/daemon.lab.json` | Configuración del daemon de Docker para el servidor del laboratorio (IP real del cliente por IPv6)                                                                                    |
 | `ci/`                    | Verificaciones de CI de infraestructura (FreeRADIUS)                                                                                                                                  |

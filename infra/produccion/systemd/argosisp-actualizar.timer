@@ -1,0 +1,13 @@
+# Revisión diaria de parches (apagado por defecto: `argosisp auto activar`). La hora se puede cambiar
+# con `systemctl edit argosisp-actualizar.timer` (OnCalendar en hora local del servidor).
+[Unit]
+Description=ArgosIsp: revisión diaria de parches
+
+[Timer]
+# De madrugada, después del respaldo diario (BACKUP_HORA 03:13 UTC por defecto) y con margen aleatorio
+OnCalendar=*-*-* 04:20:00 UTC
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -4629,6 +4629,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Versión instalada de ArgosIsp y qué cambió en ella
+         * @description Cualquier usuario con sesión (sin permiso del ACL, como `/me`). `cambios` es la sección de la versión en CHANGELOG.md (Markdown); `notas_url`, la página de GitHub Releases.
+         */
+        get: operations["versionInstalada"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vinculaciones/revocar": {
         parameters: {
             query?: never;
@@ -8801,6 +8821,24 @@ export interface components {
         VariableDocumento: {
             nombre: string;
             descripcion: string;
+        };
+        VersionInstalada: {
+            /** @description SemVer de la imagen instalada (`1.4.2`) o `desarrollo` fuera de una imagen publicada */
+            version: string;
+            /** @description SHA del commit de la imagen */
+            commit: string | null;
+            /**
+             * Format: date-time
+             * @description Fecha de compilación de la imagen (UTC)
+             */
+            compilada: string | null;
+            /**
+             * Format: uri
+             * @description Notas de la versión en GitHub Releases (null en desarrollo)
+             */
+            notas_url: string | null;
+            /** @description Sección de la versión en CHANGELOG.md, en Markdown (null si no está) */
+            cambios: string | null;
         };
         VinculacionExterna: {
             id: number;
@@ -26340,6 +26378,35 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    versionInstalada: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versión instalada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionInstalada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

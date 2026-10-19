@@ -1,0 +1,168 @@
+# Imágenes de producción de ArgosIsp (A6, distribución): construye y publica en GHCR las seis
+# imágenes multi-arquitectura (linux/amd64 y linux/arm64) de una versión, mueve `estable` cuando
+# están TODAS y sube a la GitHub Release el paquete de instalación (infra/produccion/empaquetar.sh).
+#
+# Se dispara:
+#   - desde release.yml (workflow_call) cuando release-please publica una versión. La etiqueta que
+#     crea release-please con GITHUB_TOKEN no dispara `push: tags` (regla de GitHub), así que no hay
+#     dos corridas;
+#   - al empujar a mano una etiqueta vMAYOR.MENOR.PARCHE;
+#   - a mano (workflow_dispatch) para volver a publicar una versión existente.
+#
+# Solo GITHUB_TOKEN (packages: write para GHCR, contents: write para la Release). Ningún secreto.
+name: Imágenes
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_call:
+    inputs:
+      version:
+        description: Versión sin la v (1.4.2)
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Versión sin la v (1.4.2); la etiqueta v<versión> debe existir
+        type: string
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: imagenes-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    name: Versión
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      registro: ${{ steps.v.outputs.registro }}
+      commit: ${{ steps.v.outputs.commit }}
+      fecha: ${{ steps.v.outputs.fecha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.ref }}
+          fetch-depth: 1
+      - id: v
+        env:
+          ENTRADA: ${{ inputs.version || github.ref_name }}
+        run: |
+          version="${ENTRADA#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::versión inválida: $ENTRADA (MAYOR.MENOR.PARCHE)"
+            exit 1
+          fi
+          # GHCR exige minúsculas: ghcr.io/hcdestroyer
+          {
+            echo "version=$version"
+            echo "registro=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+
+  construir:
+    name: ${{ matrix.imagen }} (amd64 + arm64)
+    needs: preparar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { imagen: api, dockerfile: apps/api/Dockerfile }
+          - { imagen: web, dockerfile: apps/web/Dockerfile }
+          - { imagen: portal, dockerfile: apps/portal/Dockerfile }
+          - { imagen: aaa, dockerfile: services/aaa/Dockerfile }
+          - { imagen: coa, dockerfile: services/coa/Dockerfile }
+          - { imagen: backup, dockerfile: infra/backups/Dockerfile }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: v${{ needs.preparar.outputs.version }}
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.preparar.outputs.registro }}/argosisp-${{ matrix.imagen }}
+          # Solo la versión: `estable` se mueve en el job `estable`, cuando están las seis.
+          tags: type=raw,value=${{ needs.preparar.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=argosisp-${{ matrix.imagen }}
+            org.opencontainers.image.version=${{ needs.preparar.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.preparar.outputs.commit }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ARGOSISP_VERSION=${{ needs.preparar.outputs.version }}
+            ARGOSISP_COMMIT=${{ needs.preparar.outputs.commit }}
+            ARGOSISP_COMPILADA=${{ needs.preparar.outputs.fecha }}
+          cache-from: type=gha,scope=imagen-${{ matrix.imagen }}
+          cache-to: type=gha,mode=max,scope=imagen-${{ matrix.imagen }}
+
+  estable:
+    name: Canal estable y paquete de instalación
+    needs: [preparar, construir]
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.preparar.outputs.version }}
+      REGISTRO: ${{ needs.preparar.outputs.registro }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: v${{ needs.preparar.outputs.version }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `estable` solo se mueve hacia adelante: volver a publicar una versión vieja no la baja.
+      - name: Mover `estable` a ${{ needs.preparar.outputs.version }}
+        run: |
+          ultima="$(gh release list --exclude-drafts --exclude-pre-releases --limit 100 --json tagName \
+            --jq '.[].tagName' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+          if [ -n "$ultima" ] && [ "$(printf '%s\n%s\n' "$ultima" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
+            echo "::notice::$VERSION es anterior a $ultima: estable no se mueve"
+            exit 0
+          fi
+          for imagen in api web portal aaa coa backup; do
+            docker buildx imagetools create -t "$REGISTRO/argosisp-$imagen:estable" "$REGISTRO/argosisp-$imagen:$VERSION"
+          done
+
+      # El paquete va al final: `argosisp actualizar` e `instalar.sh` solo ven una versión cuando su
+      # paquete está publicado, y para entonces las seis imágenes ya existen.
+      - name: Paquete de instalación en la Release v${{ needs.preparar.outputs.version }}
+        run: |
+          infra/produccion/empaquetar.sh "$VERSION" dist
+          if ! gh release view "v$VERSION" > /dev/null 2>&1; then
+            # Etiqueta empujada a mano (sin release-please): notas generadas por GitHub
+            gh release create "v$VERSION" --verify-tag --title "v$VERSION" --generate-notes
+          fi
+          gh release upload "v$VERSION" dist/* --clobber
