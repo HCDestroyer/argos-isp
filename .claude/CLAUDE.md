@@ -179,6 +179,8 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `caja.depositada` | ledger | deposito_id, empresa_id, caja_id, cuenta_bancaria_id, cuenta_id, monto |
 | `banco.extracto_importado` / `banco.conciliado` | ledger | extracto_id o conciliacion_id, empresa_id, cuenta_bancaria_id, cuenta_id, lineas, monto; conciliado: linea_id |
 | `cartera.castigada` | ledger | castigo_id, empresa_id, cliente_id, facturas[], monto |
+| `compra.registrada` / `compra.anulada` | ledger | compra_id, empresa_id, proveedor_id, total, iva, periodo_iva |
+| `activo.dado_de_baja` | ledger | activo_id, empresa_id, motivo, valor_libros |
 | `lealtad.programa_cambiado` | lealtad | programa_id, empresa_id, campos[] |
 | `lealtad.puntos_acumulados` | lealtad | movimiento_id, empresa_id, cliente_id, servicio_id, regla_id, puntos, vence_en |
 | `lealtad.puntos_revertidos` | lealtad | movimiento_id, empresa_id, cliente_id, puntos, origen_tipo, origen_id |

@@ -96,6 +96,12 @@ export const diarioValidator = vine.compile(
                 'banco',
                 'provision',
                 'castigo',
+                'compra',
+                'pago_proveedor',
+                'depreciacion',
+                'baja_activo',
+                'diferido',
+                'alta_activo',
                 'lealtad',
             ] as const)
             .optional(),
