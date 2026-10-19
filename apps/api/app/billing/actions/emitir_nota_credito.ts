@@ -6,8 +6,14 @@ import { CERO, D as Decimal, aTexto, dec, redondear, tieneCentavosExactos, type 
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
-import { bloquearCliente, sumarAPagado, type FacturaPendiente } from '#billing/cobros'
-import { ESTADOS_PENDIENTES, pendienteDe, verFactura, type EstadoFactura } from '#billing/facturas'
+import { aplicarAnticipos, bloquearCliente, sumarAPagado, type FacturaPendiente } from '#billing/cobros'
+import {
+    ESTADOS_PENDIENTES,
+    cuentaIngresoDeLinea,
+    pendienteDe,
+    verFactura,
+    type EstadoFactura,
+} from '#billing/facturas'
 import { repartirProporcional, verNotaCredito, type NotaCreditoFila } from '#billing/notas_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { IVA_POR_CERTIFICAR } from '#billing/fel_facturas'
@@ -59,6 +65,12 @@ export interface EntradaNotaCredito {
     motivo: string
     /** nota por línea (contrato §10.9): acredita conceptos concretos con su IVA */
     lineas?: Array<{ linea_id: number; monto: string }> | null
+    /**
+     * Decisión del PM (lealtad §15.2): la nota puede pasar el saldo de la factura (también una pagada)
+     * hasta lo que le queda acreditable; el excedente queda como crédito del cliente en Anticipos
+     * (`a_favor`) y se aplica a sus facturas por `aplicarAnticipos`. La usa el canje de lealtad.
+     */
+    excedente_a_anticipos?: boolean
 }
 
 export type ServicioEvaluadoNota = Pick<
@@ -137,15 +149,36 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         if (factura.estado === 'anulada') {
             throw new Conflicto(`La factura ${factura.id} está anulada`, 'factura_anulada', 'Factura anulada')
         }
-        const saldo = pendienteDe(factura)
-        if (!ESTADOS_PENDIENTES.includes(factura.estado) || saldo.lte(0)) {
+        const conExcedente = input.excedente_a_anticipos === true
+        const saldo = ESTADOS_PENDIENTES.includes(factura.estado) ? pendienteDe(factura) : CERO
+        if (!conExcedente && (!ESTADOS_PENDIENTES.includes(factura.estado) || saldo.lte(0))) {
             throw new Conflicto(
                 `La factura ${factura.id} no tiene saldo pendiente`,
                 'factura_sin_saldo',
                 'Factura sin saldo',
             )
         }
-        if (monto.gt(saldo)) {
+        if (conExcedente) {
+            // tope: lo que a la factura le queda por acreditar (su total menos sus notas vivas)
+            const notas = (await t.trx
+                .from('billing.notas_credito as n')
+                .where('n.factura_id', factura.id)
+                .whereNotExists((q) =>
+                    q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'),
+                )
+                .select(t.trx.raw('coalesce(sum(n.monto), 0)::text as monto'))
+                .first()) as { monto: string }
+            const acreditable = dec(factura.total).minus(notas.monto)
+            if (monto.gt(acreditable)) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'monto',
+                        message: `El monto (Q${aTexto(monto)}) excede lo acreditable de la factura (Q${aTexto(acreditable)})`,
+                        rule: 'saldo_factura',
+                    },
+                ])
+            }
+        } else if (monto.gt(saldo)) {
             throw new ValidacionFallida([
                 {
                     field: 'monto',
@@ -188,6 +221,8 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             .filter((d) => d.cuenta_codigo === CUENTAS.IVA_DEBITO || d.cuenta_codigo === IVA_POR_CERTIFICAR)
             .reduce((suma, d) => suma.plus(d.debe), CERO)
 
+        const aplicado = monto.gt(saldo) ? saldo : monto
+        const aFavor = monto.minus(aplicado)
         const [fila] = (await t.trx
             .insertQuery()
             .table('billing.notas_credito')
@@ -200,6 +235,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 subtotal: aTexto(monto.minus(iva)),
                 iva: aTexto(iva),
                 monto: aTexto(monto),
+                a_favor: aTexto(aFavor),
                 motivo,
                 created_by: usuarioDelActor(t.ctx.actor),
             })
@@ -228,7 +264,24 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 origen_id: notaId,
                 movimientos: [
                     ...debitos.map((d) => ({ cuenta: d.cuenta_id, debe: aTexto(d.debe) })),
-                    { cuenta: CUENTAS.CXC_CLIENTES, haber: aTexto(monto), cliente_id: factura.cliente_id },
+                    ...(aplicado.gt(0)
+                        ? [
+                              {
+                                  cuenta: CUENTAS.CXC_CLIENTES,
+                                  haber: aTexto(aplicado),
+                                  cliente_id: factura.cliente_id,
+                              },
+                          ]
+                        : []),
+                    ...(aFavor.gt(0)
+                        ? [
+                              {
+                                  cuenta: CUENTAS.ANTICIPOS_CLIENTES,
+                                  haber: aTexto(aFavor),
+                                  cliente_id: factura.cliente_id,
+                              },
+                          ]
+                        : []),
                 ],
             },
             t.ctx,
@@ -264,11 +317,15 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         }
 
         const antes = { estado: factura.estado, pagado: factura.pagado }
-        const estado = await sumarAPagado(t.trx, factura, monto)
-        await t.registrarCambios({ tipo: 'factura', id: factura.id }, antes, {
-            estado,
-            pagado: factura.pagado,
-        })
+        if (aplicado.gt(0)) {
+            const estado = await sumarAPagado(t.trx, factura, aplicado)
+            await t.registrarCambios({ tipo: 'factura', id: factura.id }, antes, {
+                estado,
+                pagado: factura.pagado,
+            })
+        }
+        // el saldo a favor paga ya otras facturas pendientes del cliente en la empresa (como un anticipo)
+        if (aFavor.gt(0)) await aplicarAnticipos(t, factura.cliente_id, empresaId)
         await t.emit('nota_credito.emitida', {
             nota_credito_id: notaId,
             empresa_id: empresaId,
@@ -358,9 +415,14 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             .select(
                 'l.id',
                 'l.tipo',
+                'l.cuenta_codigo',
                 'l.gravable',
                 'l.total',
                 'l.iva',
+                'l.descuento',
+                t.trx.raw(
+                    '(select coalesce(sum(d.iva), 0) from billing.facturas_lineas d where d.linea_id = l.id)::text as iva_descuento',
+                ),
                 t.trx.raw(
                     '(select coalesce(sum(nl.monto), 0) from billing.notas_credito_lineas nl where nl.linea_id = l.id and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = nl.nota_id))::text as acreditado',
                 ),
@@ -370,9 +432,12 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             )) as Array<{
             id: number
             tipo: string
+            cuenta_codigo: string | null
             gravable: boolean
             total: string
             iva: string
+            descuento: string
+            iva_descuento: string
             acreditado: string
             iva_acreditado: string
         }>
@@ -385,6 +450,14 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         const cuentaIva = certificada || !factura.aviso_cobro ? CUENTAS.IVA_DEBITO : IVA_POR_CERTIFICAR
         pedidas.forEach((p, i) => {
             const linea = porId.get(Number(p.linea_id))
+            if (linea?.tipo === 'descuento') {
+                errores.push({
+                    field: `lineas.${i}.linea_id`,
+                    message: 'Una línea de descuento no se acredita: acredita la línea que descuenta',
+                    rule: 'linea',
+                })
+                return
+            }
             if (!linea) {
                 errores.push({
                     field: `lineas.${i}.linea_id`,
@@ -394,7 +467,8 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 return
             }
             const monto = dec(p.monto)
-            const restante = dec(linea.total).minus(linea.acreditado)
+            // la línea vale su neto: total menos sus descuentos (y su IVA, el del neto)
+            const restante = dec(linea.total).minus(linea.descuento).minus(linea.acreditado)
             if (monto.gt(restante)) {
                 errores.push({
                     field: `lineas.${i}.monto`,
@@ -403,20 +477,14 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 })
                 return
             }
-            const ivaRestante = dec(linea.iva).minus(linea.iva_acreditado)
+            const ivaRestante = dec(linea.iva).plus(linea.iva_descuento).minus(linea.iva_acreditado)
             const iva = !linea.gravable
                 ? CERO
                 : monto.equals(restante)
                   ? ivaRestante
                   : Decimal.min(redondear(monto.minus(monto.div('1.12'))), ivaRestante)
             resultado.push({ linea_id: Number(linea.id), monto, iva })
-            const ingreso =
-                linea.tipo === 'servicio'
-                    ? CUENTAS.INGRESOS_INTERNET
-                    : linea.tipo === 'mora'
-                      ? CUENTAS.RECARGOS_MORA
-                      : CUENTAS.OTROS_INGRESOS
-            sumar(ingreso, monto.minus(iva))
+            sumar(cuentaIngresoDeLinea(linea), monto.minus(iva))
             if (iva.gt(0)) sumar(cuentaIva, iva)
         })
         if (errores.length > 0) throw new ValidacionFallida(errores)
@@ -468,6 +536,22 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             debe: string
         }>
         const yaDebitado = new Map(previas.map((p) => [Number(p.cuenta_id), dec(p.debe)]))
+        // descuentos de la factura (5.1.01 al debe): lo acreditable de cada cuenta de ingreso es el
+        // neto de sus líneas (el descuento sin IVA rebaja la cuenta de la línea que descuenta)
+        const descuentos = (await t.trx
+            .from('billing.facturas_lineas as d')
+            .join('billing.facturas_lineas as l', 'l.id', 'd.linea_id')
+            .where('d.factura_id', factura.id)
+            .where('d.tipo', 'descuento')
+            .select('l.tipo', 'l.cuenta_codigo', t.trx.raw('(d.iva - d.total)::text as monto'))) as Array<{
+            tipo: string
+            cuenta_codigo: string | null
+            monto: string
+        }>
+        for (const d of descuentos) {
+            const cuenta = lineas.find((l) => l.cuenta_codigo === cuentaIngresoDeLinea(d))
+            if (cuenta) cuenta.haber = aTexto(dec(cuenta.haber).minus(d.monto))
+        }
         if (certificada) {
             // aviso certificado: su IVA ya se reclasificó a 2.1.02; lo que las notas internas
             // debitaron de 2.1.11 antes de certificar también cuenta como IVA ya acreditado

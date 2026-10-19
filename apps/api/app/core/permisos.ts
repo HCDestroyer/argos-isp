@@ -77,6 +77,13 @@ export const PERMISOS = {
         'Anular una nota de crédito cuya NCRE rechazó la SAT en definitivo (con el reverso de su asiento)',
     'facturas.sustituir':
         'Sustituir una factura mal emitida (anula o acredita la original y emite otra del mismo periodo)',
+    'facturas.emitir_cargo_unico':
+        'Emitir una factura manual de cargo único (instalación, equipo, visita técnica…) desde el catálogo de conceptos',
+    'facturas.cargo_sin_costo':
+        'Emitir un cargo único en Q0 (todo descontado) con su motivo del catálogo (junto con facturas.emitir_cargo_unico)',
+    'facturas.configurar_motivos': 'Administrar el catálogo de motivos de facturas en Q0 por empresa',
+    'facturas.configurar_conceptos':
+        'Administrar el catálogo de conceptos de cargo único por empresa (cuenta de ingreso e IVA)',
     'pagos.ver': 'Ver pagos',
     'pagos.registrar': 'Registrar pagos',
     'pagos.anular': 'Anular pagos',
@@ -276,6 +283,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'adicionales.ver',
             'planes.ver',
             'facturas.ver',
+            'facturas.emitir_cargo_unico',
             'pagos.ver',
             'pagos.registrar',
             'cajas.ver',
@@ -325,6 +333,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'planes.ver',
             'plantillas.ver',
             'facturas.ver',
+            'facturas.emitir_cargo_unico',
             'pagos.ver',
             'promesas.ver',
             'promesas.crear',
@@ -390,6 +399,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'facturas.nota_credito',
             'facturas.sustituir',
             'facturas.anular_nota_credito',
+            'facturas.emitir_cargo_unico',
+            'facturas.cargo_sin_costo',
+            'facturas.configurar_motivos',
+            'facturas.configurar_conceptos',
             'pagos.ver',
             'pagos.registrar',
             'pagos.anular',

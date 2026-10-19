@@ -25,6 +25,10 @@ import {
     ReferidoLealtad,
     ReglaLealtad,
     ReporteLealtad,
+    CanjeLealtad,
+    PaginaCanjesLealtad,
+    PaginaPremiosLealtad,
+    PremioLealtad,
 } from '#lealtad/esquemas'
 import { listarProgramas, programaDeEmpresa } from '#lealtad/programas'
 import { listarReglas, verRegla } from '#lealtad/reglas'
@@ -39,6 +43,12 @@ import CrearRegla, { type EntradaRegla } from '#lealtad/actions/crear_regla'
 import EditarRegla from '#lealtad/actions/editar_regla'
 import AjustarPuntos from '#lealtad/actions/ajustar_puntos'
 import RechazarReferido from '#lealtad/actions/rechazar_referido'
+import CrearPremio from '#lealtad/actions/crear_premio'
+import EditarPremio from '#lealtad/actions/editar_premio'
+import Canjear from '#lealtad/actions/canjear'
+import RevertirCanje from '#lealtad/actions/revertir_canje'
+import { listarPremios, verPremio } from '#lealtad/premios'
+import { listarCanjes, verCanje } from '#lealtad/canjes'
 
 const ERRORES_CANJE =
     ' 422 `programa_inactivo` sin programa activo; 422 `servicio_no_valido` si el cliente no tiene servicio en la empresa.'
@@ -270,6 +280,123 @@ const referidos: Ruta[] = [
     }),
 ]
 
+const premios: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/premios',
+        operacion: 'lealtadPremios',
+        resumen: 'Catálogo de premios',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.ver',
+        query: v.listarPremiosValidator,
+        respuesta: { status: 200, descripcion: 'Premios', esquema: PaginaPremiosLealtad },
+        handler: (ctx, { query }) => listarPremios(empresasDeLaLista(ctx.empresa, query.empresas), query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/premios/:id',
+        operacion: 'lealtadVerPremio',
+        resumen: 'Ver un premio',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.ver',
+        respuesta: { status: 200, descripcion: 'Premio', esquema: PremioLealtad },
+        handler: async (ctx, { params }) => {
+            const premio = await verPremio(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, premio.empresa_id)
+            return premio
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/premios',
+        operacion: 'lealtadCrearPremio',
+        resumen: 'Agregar un premio al catálogo',
+        descripcion:
+            'Campos por tipo (§5): descuento_factura con descuento_tipo y descuento_valor (tope opcional en porcentaje); mes_gratis; mejora_plan con plan_destino_id y dias; bien (el canje espera la decisión premio_bien_iva). 422 `recompensa_no_disponible` con boletos (fase 3).',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.configurar',
+        cuerpo: v.crearPremioValidator,
+        idempotente: true,
+        respuesta: { status: 201, descripcion: 'Premio creado', esquema: PremioLealtad },
+        handler: (ctx, { cuerpo }) => new CrearPremio().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/lealtad/premios/:id',
+        operacion: 'lealtadEditarPremio',
+        resumen: 'Editar o desactivar un premio',
+        descripcion: 'El tipo no cambia; activo = false lo saca del catálogo (no se borra).',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.configurar',
+        cuerpo: v.editarPremioValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Premio', esquema: PremioLealtad },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarPremio().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+]
+
+const canjes: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/canjes',
+        operacion: 'lealtadCanjes',
+        resumen: 'Canjes de puntos y su estado',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.ver',
+        query: v.listarCanjesValidator,
+        respuesta: { status: 200, descripcion: 'Canjes', esquema: PaginaCanjesLealtad },
+        handler: (ctx, { query }) => listarCanjes(empresasDeLaLista(ctx.empresa, query.empresas), query),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/canjes/:id',
+        operacion: 'lealtadVerCanje',
+        resumen: 'Ver un canje',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.ver',
+        respuesta: { status: 200, descripcion: 'Canje', esquema: CanjeLealtad },
+        handler: async (ctx, { params }) => {
+            const canje = await verCanje(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, canje.empresa_id)
+            return canje
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/canjes',
+        operacion: 'lealtadCanjear',
+        resumen: 'Canjear puntos por un premio',
+        descripcion:
+            'Los puntos salen al crear el canje (lotes que vencen antes primero; con diferimiento, asiento 2.1.10 / 4.1.06). mejora_plan programa el plan temporal (falla todo si no se puede); un descuento con factura_id emite la nota de crédito sobre la línea del plan (422 `nota_fuera_de_plazo`); sin factura queda reservado para la próxima factura. 422 `programa_inactivo`, `premio_inactivo`, `servicio_no_valido`, `saldo_insuficiente`, `parametro_sin_confirmar` (bien); 409 `sin_existencias`, `canje_pendiente`.',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.canjear',
+        cuerpo: v.canjearValidator,
+        idempotente: true,
+        respuesta: { status: 201, descripcion: 'Canje', esquema: CanjeLealtad },
+        handler: (ctx, { cuerpo }) =>
+            new Canjear().execute({ ...cuerpo, canal: 'panel' }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/canjes/:id/revertir',
+        operacion: 'lealtadRevertirCanje',
+        resumen: 'Revertir un canje reservado (devuelve los puntos)',
+        descripcion:
+            'Solo reservado: los puntos vuelven con su vencimiento original (un lote nuevo por cada lote que pagó el canje, asiento 4.1.05 / 2.1.10). 409 `canje_no_revertible`.',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.revertir_canje',
+        cuerpo: v.motivoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Canje revertido', esquema: CanjeLealtad },
+        handler: (ctx, { cuerpo, params }) =>
+            new RevertirCanje().execute(
+                { id: Number(params.id), motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            ),
+    }),
+]
+
 const reportes: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -291,4 +418,12 @@ const reportes: Ruta[] = [
     }),
 ]
 
-export default [...programas, ...reglas, ...puntos, ...referidos, ...reportes] satisfies Ruta[]
+export default [
+    ...programas,
+    ...reglas,
+    ...premios,
+    ...canjes,
+    ...puntos,
+    ...referidos,
+    ...reportes,
+] satisfies Ruta[]

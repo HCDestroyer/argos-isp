@@ -157,6 +157,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence |
 | `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
 | `pago.diferencia_cerrada` | billing | pago_id, empresa_id, cliente_id (pagador), facturas[], monto (saldo pequeño cerrado como gasto 5.3.05) |
+| `bonificacion.registrada` | billing | bonificacion_id, empresa_id, cliente_id, servicio_id, periodo, origen, bruto |
 | `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
 | `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, empresa_id, servicio_id, vence, monto |
@@ -188,6 +189,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `lealtad.puntos_revertidos` | lealtad | movimiento_id, empresa_id, cliente_id, puntos, origen_tipo, origen_id |
 | `lealtad.puntos_por_vencer` / `lealtad.puntos_vencidos` | lealtad (cron) | empresa_id, cliente_id, puntos; por vencer: vence_en, lote_id; vencidos: movimiento_id |
 | `lealtad.referido_calificado` | lealtad | referido_id, empresa_id, referidor_id, cliente_id |
+| `lealtad.canje_reservado` / `lealtad.canje_aplicado` / `lealtad.canje_revertido` | lealtad | canje_id, empresa_id, cliente_id, servicio_id, premio_id, tipo, puntos, factura_id |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

@@ -76,6 +76,21 @@ export default class AnularNotaCredito extends DomainAction<
             .where('nota_id', nota.id)
             .first()
         if (anulada) throw new Conflicto(`La nota ${nota.id} ya está anulada`, 'nota_anulada', 'Nota anulada')
+        const aFavor = (await t.trx
+            .from('billing.notas_credito')
+            .where('id', nota.id)
+            .select('a_favor')
+            .first()) as {
+            a_favor: string
+        }
+        if (Number(aFavor.a_favor) > 0) {
+            // su excedente ya es crédito del cliente (y pudo pagar otras facturas): no se deshace aquí
+            throw new Conflicto(
+                `La nota ${nota.id} dejó saldo a favor del cliente: no se anula con esta acción`,
+                'nota_con_saldo_a_favor',
+                'Nota con saldo a favor',
+            )
+        }
         const vigente = await dteVigente(t.trx, 'nota_credito', nota.id, true)
         if (vigente?.estado === 'certificado' || vigente?.estado === 'anulado') {
             throw new Conflicto(

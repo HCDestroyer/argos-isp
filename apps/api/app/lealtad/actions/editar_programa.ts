@@ -11,6 +11,8 @@ import { camposAuditables, hashTerminos, verPrograma, type ProgramaVista } from 
  * - `valor_punto`, `canje_esperado_pct` y `vencimiento_meses` aplican a los lotes nuevos: cada
  *   lote conserva el valor y la fecha de vencimiento que recibió al acumular (§6 y §6.1).
  * - Cambiar `terminos` recalcula `terminos_hash` (lo que se publica en el portal).
+ * - `visible_portal` y `canje_portal` (decisión del PM): el cliente ve sus puntos / canjea desde el
+ *   portal; el canje solo con los puntos visibles (422 en `canje_portal`).
  * - Encender el diferimiento exige las cuentas del pasivo (422 `cuentas_lealtad_faltantes`).
  * - `audit.cambios` por campo; `lealtad.programa_cambiado` con los campos que cambiaron.
  */
@@ -26,6 +28,8 @@ export interface EntradaEditarPrograma {
     aviso_vencimiento_dias?: number
     minimo_canje?: number
     terminos?: string
+    visible_portal?: boolean
+    canje_portal?: boolean
     vigente_desde?: string
     vigente_hasta?: string | null
 }
@@ -52,6 +56,8 @@ export default class EditarPrograma extends DomainAction<EntradaEditarPrograma, 
             minimo_canje: input.minimo_canje ?? actual.minimo_canje,
             terminos,
             terminos_hash: hashTerminos(terminos),
+            visible_portal: input.visible_portal ?? actual.visible_portal,
+            canje_portal: input.canje_portal ?? actual.canje_portal,
             vigente_desde: input.vigente_desde ?? actual.vigente_desde,
             vigente_hasta: input.vigente_hasta === undefined ? actual.vigente_hasta : input.vigente_hasta,
         }
@@ -61,6 +67,16 @@ export default class EditarPrograma extends DomainAction<EntradaEditarPrograma, 
             ])
         }
         if (despues.diferimiento && !actual.diferimiento) await exigirCuentasLealtad(t.trx)
+        if (despues.canje_portal && !despues.visible_portal) {
+            throw new ValidacionFallida([
+                {
+                    field: 'canje_portal',
+                    message:
+                        'El canje en el portal necesita que los puntos sean visibles en el portal (visible_portal)',
+                    rule: 'visible_portal',
+                },
+            ])
+        }
 
         await t.trx
             .from('lealtad.programas')
