@@ -22,7 +22,7 @@ import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
 import { fijarChatEquipo } from '#notify/alertas'
 import { ejecutarVigilancia } from '#notify/vigilancia'
 import { textoPuntos } from '#notify/lealtad'
-import { TOLERANCIA_POR_DEFECTO_MIN } from '#notify/actions/vigilar_crons'
+import { TOLERANCIA_POR_DEFECTO_MIN, ultimaCorrida } from '#notify/actions/vigilar_crons'
 import ConfigurarNotificaciones from '#notify/actions/configurar_notificaciones'
 import { avisoApagado, configPara, recargarConfiguracion } from '#notify/configuracion'
 
@@ -362,10 +362,12 @@ test.group('notify · interruptor del tipo de aviso lealtad', (group) => {
 
 /**
  * Registra una corrida por cron de `accion` y devuelve su instante en `audit.acciones` (lo pone la
- * base con `now()`), redondeado hacia arriba al milisegundo: una revisión en ese instante ya la ve
- * (`created_at <= ahora`) sin depender de la hora real en que corre la suite.
+ * base con `now()`, con microsegundos) truncado al milisegundo, como lo lee la vigilancia. Una
+ * revisión en ese instante ya la ve (`ultimaCorrida` cuenta su mismo milisegundo) y nunca es
+ * posterior a la corrida, así que entre las dos no puede caer la hora del cron, corra la suite a la
+ * hora que corra. También devuelve los microsegundos dentro del milisegundo.
  */
-async function registrarCorrida(accion: string): Promise<DateTime> {
+async function registrarCorridaExacta(accion: string): Promise<{ instante: DateTime; micros: number }> {
     const ctx = contextoSistema('cron')
     await new RegistrarCorrida(accion).execute(
         { parametros: { hoy: 'prueba' }, resultado: { fallidas: [] } },
@@ -374,9 +376,17 @@ async function registrarCorrida(accion: string): Promise<DateTime> {
     const fila = (await db
         .from('audit.acciones')
         .where({ accion, request_id: ctx.requestId })
-        .select(db.raw(`(extract(epoch from created_at) * 1000)::text as ms`))
-        .first()) as { ms: string }
-    return DateTime.fromMillis(Math.ceil(Number(fila.ms)), { zone: 'utc' })
+        .select(
+            db.raw(`floor(extract(epoch from created_at) * 1000)::bigint::text as ms`),
+            db.raw(`(extract(microseconds from created_at)::bigint % 1000)::int as micros`),
+        )
+        .first()) as { ms: string; micros: number }
+    return { instante: DateTime.fromMillis(Number(fila.ms), { zone: 'utc' }), micros: fila.micros }
+}
+
+async function registrarCorrida(accion: string): Promise<DateTime> {
+    const { instante } = await registrarCorridaExacta(accion)
+    return instante
 }
 
 test.group('notify · vigilancia de los crons de lealtad', (group) => {
@@ -455,5 +465,25 @@ test.group('notify · vigilancia de los crons de lealtad', (group) => {
             .select('estado')
             .first()) as { estado: string }
         assert.equal(cerrado.estado, 'cerrado')
+    })
+    test('una revisión en el milisegundo de la corrida la ve aunque la base guarde microsegundos', async ({
+        assert,
+    }) => {
+        // `created_at` lleva microsegundos; `ahora` (luxon) solo milisegundos. Se busca una corrida
+        // con microsegundos dentro de su milisegundo (casi siempre la primera: 999 de cada 1000),
+        // que es el caso en que `created_at <= ahora` la dejaba fuera.
+        let corrida = await registrarCorridaExacta('lealtad.vencer')
+        for (let i = 0; corrida.micros === 0 && i < 10; i++) {
+            corrida = await registrarCorridaExacta('lealtad.vencer')
+        }
+        assert.notEqual(corrida.micros, 0, 'una corrida con microsegundos dentro de su milisegundo')
+
+        const ultima = await db.transaction((trx) => ultimaCorrida(trx, 'lealtad.vencer', corrida.instante))
+        assert.equal(ultima?.toMillis(), corrida.instante.toMillis())
+        // Un milisegundo antes todavía no cuenta.
+        const antes = await db.transaction((trx) =>
+            ultimaCorrida(trx, 'lealtad.vencer', corrida.instante.minus({ milliseconds: 1 })),
+        )
+        assert.isTrue(!antes || antes < corrida.instante)
     })
 })
