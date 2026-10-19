@@ -11,6 +11,8 @@ import { versionFixture } from './version/rutas'
 import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
+import type { ImagenAnuncioFixture } from './anuncios/datos'
+import { anuncios, imagenesAnuncios, metricasAnuncios } from './anuncios/datos'
 import type { PlanAdicionalFixture } from './adicionales/datos'
 import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { cierres, egresos } from './egresos/datos'
@@ -48,6 +50,24 @@ export interface CobroFixture {
 }
 
 /** Cookie `argos_sesion` simulada: token, `csrf` y vencimientos (ISO, o `null` si no vence). */
+/**
+ * Fila de `billing.diferencias_cobro` (A3, decisión B): el saldo pequeño de una factura que dejó un
+ * pago, cerrado como gasto con un asiento `diferencia_cobro` (5.3.05 / CxC). `pagado` de la factura
+ * no cambia; anular el pago la revierte (`revertida_en`).
+ */
+export interface DiferenciaCobroFixture {
+    id: number
+    empresa_id: number
+    pago_id: number
+    factura_id: number
+    cliente_id: number
+    monto: string
+    asiento_id: number
+    fecha: string
+    descripcion: string
+    revertida_en: string | null
+}
+
 export interface SesionSimulada {
     token: string | null
     csrf: string | null
@@ -138,10 +158,14 @@ interface BaseFixtures {
     reglasConciliacion: Schema<'ReglaConciliacion'>[]
     provisiones: Schema<'ProvisionCartera'>[]
     castigos: Schema<'CastigoCartera'>[]
-    /** Pago y factura con la diferencia ya cerrada (`billing.diferencias_cobro`). */
-    diferenciasCerradas: { pago_id: number, factura_id: number }[]
+    /** Diferencias de cobro cerradas como gasto (`billing.diferencias_cobro`, decisión B). */
+    diferenciasCerradas: DiferenciaCobroFixture[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
     programasLealtad: Schema<'ProgramaLealtad'>[]
+    /* Anuncios del portal (A5, `contratos/anuncios.md`). */
+    anuncios: Schema<'Anuncio'>[]
+    imagenesAnuncios: Record<number, ImagenAnuncioFixture>
+    metricasAnuncios: Record<number, Schema<'MetricasAnuncio'>>
     /* Servicios adicionales (A1, `contratos/adicionales.md`). */
     adicionales: Schema<'Adicional'>[]
     motivosCortesia: Schema<'MotivoCortesia'>[]
@@ -225,6 +249,9 @@ function inicial(): BaseFixtures {
         fel: felInicial(),
         horus: horusInicial(),
         programasLealtad,
+        anuncios,
+        imagenesAnuncios,
+        metricasAnuncios,
         adicionales,
         motivosCortesia,
         adicionalesServicio,

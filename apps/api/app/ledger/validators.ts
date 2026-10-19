@@ -96,6 +96,7 @@ export const diarioValidator = vine.compile(
                 'banco',
                 'provision',
                 'castigo',
+                'diferencia_cobro',
                 'compra',
                 'pago_proveedor',
                 'depreciacion',
@@ -183,7 +184,12 @@ export const listarEgresosValidator = vine.compile(
         categoria: vine.enum(CLAVES_CATEGORIA_EGRESO).optional(),
         metodo: vine.enum(METODOS_EGRESO).optional(),
         estado: vine.enum(['registrado', 'anulado'] as const).optional(),
-        caja_id: idEntidad().optional(),
+        caja_id: idEntidad().optional().meta({
+            description: 'Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja)',
+        }),
+        turno_id: idEntidad()
+            .optional()
+            .meta({ description: 'Solo los de este turno de caja (alternativa a caja_id sin egresos.ver)' }),
         cuenta_bancaria_id: idEntidad().optional(),
     }),
 )

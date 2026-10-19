@@ -4,18 +4,17 @@ import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import { bd } from '~~/fixtures/bd'
-import { CAJA_SUR_ID, FACTURA_ACREDITADA_ID, FACTURA_CARGO_ID } from '~~/fixtures/facturacion/datos'
+import { CAJA_SUR_ID, FACTURA_ACREDITADA_ID } from '~~/fixtures/facturacion/datos'
 import PaginaCaja from '~/pages/caja/index.vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
-import PaginaFacturas from '~/pages/facturas/index.vue'
 import PaginaPago from '~/pages/pagos/[id].vue'
 
 /**
  * Fase 4 final de A3: factura `acreditada` (H16, aviso cubierto por notas internas sin cobro),
- * `tipo = 'cargo'` (H18, cargo interno no fiscal sin IVA), depósitos del turno legibles por el
- * cajero (`GET /bancos/depositos?turno_id=`) y `Pago.proveedor_cobro_nombre`.
+ * depósitos del turno legibles por el cajero (`GET /bancos/depositos?turno_id=`) y
+ * `Pago.proveedor_cobro_nombre`. (El `tipo = 'cargo'` de H18 desapareció con la decisión B.)
  */
-describe('fase 4 final · acreditada, cargo, depósitos del cajero y proveedor del pago', () => {
+describe('fase 4 final · acreditada, depósitos del cajero y proveedor del pago', () => {
     beforeEach(() => {
         reiniciarFixtures()
         sesionFixture('fixture-admin')
@@ -38,33 +37,17 @@ describe('fase 4 final · acreditada, cargo, depósitos del cajero y proveedor d
         expect(tipoFacturaVisual('servicio')).toBeNull()
         expect(tipoFacturaVisual(undefined)).toBeNull()
         expect(tipoFacturaVisual('mora')?.etiqueta).toBe('Recargo por mora')
-        expect(tipoFacturaVisual('cargo')).toMatchObject({ etiqueta: 'Cargo interno', color: 'neutral' })
+        // Decisión B: `cargo` ya no es un tipo del contrato; si llegara, se muestra por su nombre.
+        expect(tipoFacturaVisual('cargo')?.etiqueta).toBe('Cargo')
         expect(tipoFacturaVisual('ajuste_manual')?.etiqueta).toBe('Ajuste manual')
-        expect(relacionOrigen('cargo')).toBe('diferencia de cobro de la')
+        expect(relacionOrigen('cargo')).toBe('originada por la')
         expect(relacionOrigen('mora')).toBe('mora de la')
     })
 
-    it('la lista filtra por estado acreditada y muestra la insignia del cargo', async () => {
+    it('la lista filtra por estado acreditada y no queda ninguna factura de tipo cargo', async () => {
         const acreditadas = await useFacturas().listar({ estado: 'acreditada' })
         expect(acreditadas.ok && acreditadas.data.data.map(f => f.id)).toEqual([FACTURA_ACREDITADA_ID])
-        const cargos = await useFacturas().listar({ tipo: 'cargo' })
-        expect(cargos.ok && cargos.data.data.map(f => [f.id, f.iva, f.factura_origen_id])).toEqual([[FACTURA_CARGO_ID, '0.00', 1909]])
-
-        const vista = await mountSuspended(PaginaFacturas, { route: '/facturas' })
-        await vi.waitFor(() => expect(vista.find('[data-tipo="cargo"]').exists()).toBe(true))
-        expect(vista.find('[data-tipo="cargo"]').text()).toBe('Cargo interno')
-        vista.unmount()
-    })
-
-    it('ficha del cargo: insignia, origen enlazado, aviso no fiscal y sin certificación FEL', async () => {
-        const vista = await mountSuspended(PaginaFactura, { route: `/facturas/${FACTURA_CARGO_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="factura-no-fiscal"]').exists()).toBe(true))
-        expect(vista.find('[data-tipo="cargo"]').text()).toBe('Cargo interno')
-        expect(vista.find('[data-prueba="factura-no-fiscal"]').text()).toContain('No va a FEL')
-        expect(vista.text()).toContain('diferencia de cobro de la')
-        expect(vista.find('a[href="/facturas/1909"]').exists()).toBe(true)
-        expect(vista.find('[data-prueba="factura-fel"]').exists()).toBe(false)
-        vista.unmount()
+        expect(bd.facturas.some(f => (f.tipo ?? 'servicio') !== 'servicio' && f.tipo !== 'mora')).toBe(false)
     })
 
     it('ficha de la acreditada: estado propio, aviso y sin botón Certificar (la API daría 409)', async () => {

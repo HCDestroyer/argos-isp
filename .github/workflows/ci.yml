@@ -231,10 +231,10 @@ jobs:
       - name: Scripts (bash -n y shellcheck)
         if: matrix.arch == 'amd64'
         run: |
-          for s in infra/produccion/argosisp infra/produccion/instalar.sh infra/produccion/empaquetar.sh infra/ci/probar-distribucion.sh; do
+          for s in infra/produccion/argosisp infra/produccion/instalar.sh infra/produccion/empaquetar.sh infra/ci/probar-distribucion.sh infra/ci/e2e-final.sh; do
             bash -n "$s"
           done
-          shellcheck -x infra/produccion/argosisp infra/produccion/instalar.sh infra/produccion/empaquetar.sh infra/ci/probar-distribucion.sh
+          shellcheck -x infra/produccion/argosisp infra/produccion/instalar.sh infra/produccion/empaquetar.sh infra/ci/probar-distribucion.sh infra/ci/e2e-final.sh
 
       - uses: docker/setup-buildx-action@v3
 

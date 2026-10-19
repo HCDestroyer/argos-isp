@@ -178,6 +178,9 @@ export const PERMISOS = {
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
     'documentos.editar': 'Editar plantillas de documentos (aviso de cobro)',
+    'anuncios.ver': 'Ver los anuncios del portal y sus métricas (vistas y clics)',
+    'anuncios.administrar':
+        'Crear, editar, publicar y archivar los anuncios del portal y la página de corte; solo admin',
 
     // Programa de lealtad (`contratos/lealtad.md` §14); los endpoints son de A3
     'lealtad.ver': 'Ver el programa de lealtad, reglas, premios, puntos de clientes, canjes y referidos',

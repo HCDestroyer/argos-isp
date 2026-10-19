@@ -21,6 +21,9 @@
       "name": "adicionales"
     },
     {
+      "name": "anuncios"
+    },
+    {
       "name": "auth"
     },
     {
@@ -1726,6 +1729,1027 @@
         "x-implementado": true
       }
     },
+    "/api/v1/anuncios": {
+      "get": {
+        "operationId": "anunciosListar",
+        "summary": "Anuncios del portal (de la empresa activa)",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "borrador",
+                "publicado",
+                "archivado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de anuncios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Anuncio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "anunciosCrear",
+        "summary": "Crear un anuncio (en borrador)",
+        "description": "En la empresa activa (`X-Empresa-Id`; 422 `empresa_requerida` si el usuario tiene varias y no eligió). Texto plano. El botón lleva texto y URL juntos: `http(s)://…` o una ruta del portal (`/…`).",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "titulo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "texto": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Texto plano (sin HTML; el portal lo muestra tal cual, con saltos de línea)"
+                  },
+                  "boton_texto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "boton_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "`https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`)"
+                  },
+                  "inicio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "fin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "audiencia": {
+                    "type": "string",
+                    "enum": [
+                      "todos",
+                      "suspendidos",
+                      "con_puntos",
+                      "al_dia"
+                    ]
+                  },
+                  "lugares": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "portal_inicio",
+                        "pagina_corte"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 2
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": -1000,
+                    "maximum": 1000,
+                    "description": "Mayor primero en el carrusel; a igual orden, el más nuevo"
+                  }
+                },
+                "required": [
+                  "titulo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Anuncio creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anuncio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.administrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/anuncios/{id}": {
+      "get": {
+        "operationId": "anunciosVer",
+        "summary": "Ver un anuncio",
+        "description": "Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Anuncio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anuncio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "anunciosEditar",
+        "summary": "Editar un anuncio (borrador o publicado)",
+        "description": "Solo los campos enviados; `null` borra los opcionales. Archivado: 422 `anuncio_archivado`. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "titulo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "imagen_alt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Texto alternativo de la imagen (solo si el anuncio tiene imagen)"
+                  },
+                  "texto": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Texto plano (sin HTML; el portal lo muestra tal cual, con saltos de línea)"
+                  },
+                  "boton_texto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "boton_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "`https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`)"
+                  },
+                  "inicio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "fin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "audiencia": {
+                    "type": "string",
+                    "enum": [
+                      "todos",
+                      "suspendidos",
+                      "con_puntos",
+                      "al_dia"
+                    ]
+                  },
+                  "lugares": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "portal_inicio",
+                        "pagina_corte"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 2
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": -1000,
+                    "maximum": 1000,
+                    "description": "Mayor primero en el carrusel; a igual orden, el más nuevo"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Anuncio actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anuncio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.administrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/anuncios/{id}/archivar": {
+      "post": {
+        "operationId": "anunciosArchivar",
+        "summary": "Archivar un anuncio (deja de verse; conserva sus métricas)",
+        "description": "Desde borrador o publicado; ya archivado no cambia nada. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Anuncio archivado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anuncio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.administrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/anuncios/{id}/imagen": {
+      "get": {
+        "operationId": "anunciosImagen",
+        "summary": "Imagen de un anuncio (vista previa del panel, con ETag)",
+        "description": "Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagen",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "anunciosCambiarImagen",
+        "summary": "Subir o quitar la imagen de un anuncio",
+        "description": "`multipart/form-data` con `imagen`: PNG, JPEG o WebP (por su contenido), hasta 1 MB y de 64 a 4096 px por lado; `alt` (texto alternativo) obligatorio si el anuncio aún no tiene. `quitar=true` sin archivo la quita. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "alt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Texto alternativo; obligatorio al subir si el anuncio aún no tiene"
+                  },
+                  "quitar": {
+                    "description": "true = quitar la imagen (sin archivo)",
+                    "type": "boolean"
+                  },
+                  "imagen": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PNG, JPEG o WebP, hasta 1 MB"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Anuncio con su imagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anuncio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.administrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/anuncios/{id}/metricas": {
+      "get": {
+        "operationId": "anunciosMetricas",
+        "summary": "Vistas y clics de un anuncio (totales, por lugar y por día)",
+        "description": "Visitantes distintos (uno por sesión del navegador), sin datos personales. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Métricas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasAnuncio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/anuncios/{id}/publicar": {
+      "post": {
+        "operationId": "anunciosPublicar",
+        "summary": "Publicar un anuncio (se ve en el portal dentro de su vigencia)",
+        "description": "Desde borrador o archivado; ya publicado no cambia nada. Con `fin` pasado, 422 `anuncio_vencido`. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.",
+        "tags": [
+          "anuncios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Anuncio publicado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anuncio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "anuncios.administrar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "authLogin",
@@ -2359,7 +3383,7 @@
       "get": {
         "operationId": "bancosDepositos",
         "summary": "Depósitos de caja (en tránsito o acreditados)",
-        "description": "Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.",
+        "description": "Permiso bancos.ver o cajas.ver. Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.",
         "tags": [
           "bancos"
         ],
@@ -2477,16 +3501,6 @@
               }
             }
           },
-          "403": {
-            "description": "Sin el permiso cajas.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -2498,7 +3512,6 @@
             }
           }
         },
-        "x-permiso": "cajas.ver",
         "x-implementado": true
       }
     },
@@ -12653,6 +13666,7 @@
       "get": {
         "operationId": "egresosListar",
         "summary": "Listar egresos",
+        "description": "Permiso egresos.ver o cajas.ver. Con egresos.ver, los de sus empresas y su alcance (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero, para el esperado provisional de /caja), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.",
         "tags": [
           "egresos"
         ],
@@ -12763,6 +13777,17 @@
             "name": "caja_id",
             "in": "query",
             "required": false,
+            "description": "Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "turno_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los de este turno de caja (alternativa a caja_id sin egresos.ver)",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -12817,16 +13842,6 @@
               }
             }
           },
-          "403": {
-            "description": "Sin el permiso egresos.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -12838,7 +13853,6 @@
             }
           }
         },
-        "x-permiso": "egresos.ver",
         "x-implementado": true
       },
       "post": {
@@ -14688,8 +15702,7 @@
               "type": "string",
               "enum": [
                 "servicio",
-                "mora",
-                "cargo"
+                "mora"
               ]
             }
           }
@@ -23065,6 +24078,7 @@
                 "banco",
                 "provision",
                 "castigo",
+                "diferencia_cobro",
                 "compra",
                 "pago_proveedor",
                 "depreciacion",
@@ -27586,7 +28600,7 @@
       "post": {
         "operationId": "pagosCerrarDiferencia",
         "summary": "Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)",
-        "description": "Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.",
+        "description": "El saldo de cada factura del pago se cierra como gasto: asiento diferencia_cobro 5.3.05 Diferencias de cobro / CxC, sin tocar IVA ni DTE (el DTE va por el total). pagado no cambia (solo dinero cobrado); la factura queda pagada porque pagado + diferencias vigentes = total. Emite pago.diferencia_cerrada y re-evalúa los servicios. Anular el pago revierte la diferencia. 422 diferencia_sobre_tope; 409 sin_diferencia, pago_anulado o anulacion_en_proceso.",
         "tags": [
           "pagos"
         ],
@@ -30834,6 +31848,225 @@
           }
         },
         "x-permiso": "plantillas.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/anuncios": {
+      "get": {
+        "operationId": "portalAnuncios",
+        "summary": "Anuncios vigentes para el cliente en un lugar del portal",
+        "description": "`lugar=pagina_corte`: el cliente del servicio de la IP (solo su empresa) o, si no, el de la sesión. `lugar=portal_inicio`: el de la sesión. Solo publicados, dentro de su vigencia y cuya audiencia le aplica (`todos`, `suspendidos`: algún servicio suspendido o limitado, `al_dia`: sin eso ni facturas vencidas, `con_puntos`: saldo de puntos > 0). Sin cliente identificado: lista vacía. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "lugar",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "portal_inicio",
+                "pagina_corte"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Anuncios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalAnuncio"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/anuncios/{id}/eventos": {
+      "post": {
+        "operationId": "portalAnuncioEvento",
+        "summary": "Cuenta una vista o un clic de un anuncio vigente",
+        "description": "`visitante` es un UUID que el navegador genera por sesión (sin datos personales; nada va en la URL). Idempotente: una vista y un clic por visitante y anuncio. 404 si el anuncio no está vigente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "vista",
+                      "clic"
+                    ]
+                  },
+                  "visitante": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "lugar": {
+                    "type": "string",
+                    "enum": [
+                      "portal_inicio",
+                      "pagina_corte"
+                    ]
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "visitante",
+                  "lugar"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Contado (o ya estaba)"
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/anuncios/{id}/imagen": {
+      "get": {
+        "operationId": "portalAnuncioImagen",
+        "summary": "Imagen de un anuncio vigente (mismo origen del portal, con ETag)",
+        "description": "Solo de anuncios publicados y vigentes; si no, 404. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagen",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
         "x-implementado": true
       }
     },
@@ -36310,6 +37543,8 @@
                         "adicionales.desactivar_motivo",
                         "adicionales.editar",
                         "adicionales.ver",
+                        "anuncios.administrar",
+                        "anuncios.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.reatribuir_llegada",
@@ -36595,6 +37830,8 @@
                         "adicionales.desactivar_motivo",
                         "adicionales.editar",
                         "adicionales.ver",
+                        "anuncios.administrar",
+                        "anuncios.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.reatribuir_llegada",
@@ -42653,6 +43890,8 @@
                             "adicionales.desactivar_motivo",
                             "adicionales.editar",
                             "adicionales.ver",
+                            "anuncios.administrar",
+                            "anuncios.ver",
                             "bancos.conciliar",
                             "bancos.importar_extracto",
                             "bancos.reatribuir_llegada",
@@ -44849,6 +46088,187 @@
           }
         }
       },
+      "Anuncio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "titulo",
+          "texto",
+          "imagen",
+          "boton",
+          "inicio",
+          "fin",
+          "audiencia",
+          "lugares",
+          "orden",
+          "estado",
+          "vigente",
+          "publicado_en",
+          "archivado_en",
+          "creado_por",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "texto": {
+            "type": "string",
+            "description": "Texto plano, sin HTML"
+          },
+          "imagen": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "url",
+              "tipo",
+              "ancho",
+              "alto",
+              "alt"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "`/api/v1/anuncios/:id/imagen?v=…` (con sesión del panel)"
+              },
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/webp"
+                ]
+              },
+              "ancho": {
+                "type": "integer"
+              },
+              "alto": {
+                "type": "integer"
+              },
+              "alt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "boton": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "texto",
+              "url"
+            ],
+            "properties": {
+              "texto": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "description": "`http(s)://…` o ruta del portal que empieza con `/`"
+              }
+            }
+          },
+          "inicio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "audiencia": {
+            "type": "string",
+            "enum": [
+              "todos",
+              "suspendidos",
+              "con_puntos",
+              "al_dia"
+            ]
+          },
+          "lugares": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "portal_inicio",
+                "pagina_corte"
+              ]
+            }
+          },
+          "orden": {
+            "type": "integer"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "publicado",
+              "archivado"
+            ]
+          },
+          "vigente": {
+            "type": "boolean",
+            "description": "Publicado y dentro de su vigencia ahora mismo"
+          },
+          "publicado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "archivado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "AplicacionPago": {
         "type": "object",
         "required": [
@@ -44948,6 +46368,7 @@
               "banco",
               "provision",
               "castigo",
+              "diferencia_cobro",
               "compra",
               "pago_proveedor",
               "depreciacion",
@@ -49019,7 +50440,7 @@
           "empresa_id",
           "monto",
           "tope",
-          "notas"
+          "diferencias"
         ],
         "properties": {
           "pago_id": {
@@ -49037,34 +50458,36 @@
             "$ref": "#/components/schemas/Dinero",
             "description": "diferencia_cobro_tope de la empresa"
           },
-          "notas": {
+          "diferencias": {
             "type": "array",
             "items": {
               "type": "object",
               "required": [
                 "factura_id",
-                "nota_credito_id",
+                "diferencia_id",
                 "monto",
-                "ncre"
+                "asiento_id"
               ],
               "properties": {
                 "factura_id": {
                   "type": "integer",
                   "minimum": 1
                 },
-                "nota_credito_id": {
+                "diferencia_id": {
                   "type": "integer",
                   "minimum": 1
                 },
                 "monto": {
                   "$ref": "#/components/schemas/Dinero"
                 },
-                "ncre": {
-                  "type": "boolean",
-                  "description": "true = NCRE (la factura tenía DTE); false = nota interna"
+                "asiento_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Asiento diferencia_cobro (5.3.05 / CxC)"
                 }
               }
-            }
+            },
+            "description": "Una por factura: el saldo cerrado como gasto, sin tocar IVA ni DTE"
           }
         }
       },
@@ -51481,10 +52904,9 @@
             "type": "string",
             "enum": [
               "servicio",
-              "mora",
-              "cargo"
+              "mora"
             ],
-            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)"
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura"
           },
           "factura_origen_id": {
             "type": [
@@ -51492,7 +52914,7 @@
               "null"
             ],
             "minimum": 1,
-            "description": "Factura que originó la mora o el cargo"
+            "description": "Factura que originó la mora"
           },
           "vencida_en": {
             "type": [
@@ -53384,6 +54806,79 @@
           }
         }
       },
+      "MetricasAnuncio": {
+        "type": "object",
+        "required": [
+          "anuncio_id",
+          "vistas",
+          "clics",
+          "por_lugar",
+          "por_dia"
+        ],
+        "properties": {
+          "anuncio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "vistas": {
+            "type": "integer",
+            "description": "Visitantes distintos que lo vieron (uno por sesión del navegador)"
+          },
+          "clics": {
+            "type": "integer",
+            "description": "Visitantes distintos que tocaron su botón"
+          },
+          "por_lugar": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "lugar",
+                "vistas",
+                "clics"
+              ],
+              "properties": {
+                "lugar": {
+                  "type": "string",
+                  "enum": [
+                    "portal_inicio",
+                    "pagina_corte"
+                  ]
+                },
+                "vistas": {
+                  "type": "integer"
+                },
+                "clics": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "por_dia": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "dia",
+                "vistas",
+                "clics"
+              ],
+              "properties": {
+                "dia": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "vistas": {
+                  "type": "integer"
+                },
+                "clics": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
       "MigracionAaaRouter": {
         "type": "object",
         "required": [
@@ -53636,8 +55131,10 @@
               "pago",
               "mora",
               "nota_credito",
+              "diferencia_cobro",
               "ajuste"
-            ]
+            ],
+            "description": "diferencia_cobro = saldo pequeño de un pago cerrado como gasto (abono sin cobro)"
           },
           "referencia_id": {
             "type": "integer",
@@ -55781,6 +57278,80 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PortalAnuncio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "titulo",
+          "texto",
+          "imagen",
+          "boton"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "texto": {
+            "type": "string",
+            "description": "Texto plano: mostrar como texto, nunca como HTML"
+          },
+          "imagen": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "url",
+              "ancho",
+              "alto",
+              "alt"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "`/api/v1/portal/anuncios/:id/imagen?v=…` (mismo origen)"
+              },
+              "ancho": {
+                "type": "integer"
+              },
+              "alto": {
+                "type": "integer"
+              },
+              "alt": {
+                "type": "string"
+              }
+            }
+          },
+          "boton": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "texto",
+              "url"
+            ],
+            "properties": {
+              "texto": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "description": "`http(s)://…` o ruta del portal que empieza con `/`"
+              }
+            }
           }
         }
       },

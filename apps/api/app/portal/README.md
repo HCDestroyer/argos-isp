@@ -337,6 +337,20 @@ del contador de la ventana, no una caché de datos, así que no choca con la reg
 | `PORTAL_REDIS_PREFIJO`       | `COLAS_PREFIJO` o `argosisp` | Prefijo de las claves del portal en Redis (`redis_portal.ts`): `<prefijo>:portal:limite:<endpoint>:<ip>` y `<prefijo>:portal:auditado:…` |
 | `PORTAL_AUDITORIA_VENTANA_S` | `600`                        | Ventana de auditoría de las consultas públicas; `0` audita todas                                                                         |
 
+### Anuncios (contrato `contratos/anuncios.md`)
+
+Promociones por empresa en el inicio del portal y la página de corte. Panel: `GET/POST /anuncios`,
+`GET/PUT /anuncios/:id`, `POST /anuncios/:id/imagen` (PNG, JPEG o WebP por firma, hasta 1 MB, con
+`alt`), `POST /anuncios/:id/publicar` y `/archivar`, `GET /anuncios/:id/metricas`; permisos
+`anuncios.ver` y `anuncios.administrar`. Acciones `anuncios.crear`, `anuncios.editar`,
+`anuncios.cambiar_imagen`, `anuncios.publicar` y `anuncios.archivar` (auditadas, con `version`).
+Portal: `GET /portal/anuncios?lugar=` (publicados, vigentes y de la audiencia del cliente),
+`GET /portal/anuncios/:id/imagen` y `POST /portal/anuncios/:id/eventos` (vistas y clics por
+visitante anónimo, idempotentes; `anuncios.registrar_evento` es telemetría y solo audita errores).
+Tablas `core.anuncios` y `core.anuncios_eventos`. Lecturas en `anuncios.ts`, imagen en
+`anuncios_imagenes.ts`. Pruebas: `tests/portal/anuncios.spec.ts`. No emite eventos: nadie consume
+un cambio de anuncio y el portal lo lee en la siguiente consulta.
+
 ### Nodo portal remoto (contrato `contratos/nodo-portal.md`)
 
 El portal puede correr en otro servidor sin base de datos. Llama a `/api/v1/portal/**` con
