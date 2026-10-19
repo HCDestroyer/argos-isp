@@ -229,7 +229,7 @@ onMounted(cargar)
                         {{ formatearFechaHora(pago.created_at) }} ·
                         <ULink
                             :to="enlace(`/clientes/${pago.cliente_id}?tab=cuenta`)"
-                            class="text-default hover:text-primary"
+                            class="text-default underline hover:text-primary"
                         >
                             {{ nombres.nombre(pago.cliente_id) }}
                         </ULink>
