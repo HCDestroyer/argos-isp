@@ -26,7 +26,8 @@ export function hashCodigo(codigo: string): string {
  * `horus.generar_enlace` (permiso `horus.configurar`): enlace de
  * conexión de §1.4. Código aleatorio de 32 bytes; en la base solo su SHA-256, con vencimiento a
  * los 15 min y un solo uso. El código va en el fragmento (`#`), que el navegador no envía.
- * El código no queda en la auditoría (la salida no se audita).
+ * El código no queda en la auditoría (la salida no se audita). Generar un enlace anula los
+ * anteriores sin usar (1.5.0): canjearlos responde 410.
  */
 export default class GenerarEnlaceHorus extends DomainAction<EntradaGenerarEnlace, SalidaGenerarEnlace> {
     readonly nombre = 'horus.generar_enlace'
@@ -40,6 +41,12 @@ export default class GenerarEnlaceHorus extends DomainAction<EntradaGenerarEnlac
                 { field: 'base_url', message: `URL pública de Argos: ${error}`, rule: 'url' },
             ])
         }
+        const anulados = (await t.trx
+            .from('integraciones.horus_enlaces')
+            .whereNull('usado_en')
+            .whereNull('anulado_en')
+            .update({ anulado_en: t.trx.knexRawQuery('now()') }, ['id'])) as Array<{ id: number }>
+        if (anulados.length > 0) t.anotarAuditoria({ enlaces_anulados: anulados.map((e) => Number(e.id)) })
         const codigo = randomBytes(32).toString('base64url')
         const vence = new Date(Date.now() + VIGENCIA_ENLACE_MIN * 60_000)
         const [fila] = (await t.trx

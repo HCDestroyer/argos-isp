@@ -1285,7 +1285,9 @@ integraciones.push(
         etiqueta: 'integraciones',
         permiso: 'sso.emitir',
         descripcion:
-            'Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial). Devuelve ' +
+            'Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial; si el ' +
+            'conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `horus_apagado` mientras ' +
+            'el conector esté apagado). Destino `cliente` o `servicio` con el id de Argos. Devuelve ' +
             'la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje ' +
             'abre la sesión del usuario local vinculado, o pide su login.',
         cuerpo: v.emitirTicketSsoValidator,
