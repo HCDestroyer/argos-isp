@@ -52,14 +52,18 @@ export interface ApiFalsa {
     url: string
     /** Rutas (con query) que llegaron a la "API". */
     rutas: string[]
+    /** Cabeceras de cada petición que llegó (mismo orden que `rutas`). */
+    cabeceras: IncomingHttpHeaders[]
     cerrar: () => Promise<void>
 }
 
 /** API falsa: responde `{}` a todo y anota qué rutas le llegaron a través del proxy del portal. */
 export async function levantarApiFalsa(): Promise<ApiFalsa> {
     const rutas: string[] = []
+    const cabeceras: IncomingHttpHeaders[] = []
     const servidor: Server = createServer((peticion, respuesta) => {
         rutas.push(peticion.url ?? '')
+        cabeceras.push(peticion.headers)
         respuesta.setHeader('content-type', 'application/json')
         respuesta.end('{}')
     })
@@ -68,6 +72,7 @@ export async function levantarApiFalsa(): Promise<ApiFalsa> {
     return {
         url: `http://127.0.0.1:${port}`,
         rutas,
+        cabeceras,
         cerrar: () => new Promise<void>(resolver => servidor.close(() => resolver())),
     }
 }

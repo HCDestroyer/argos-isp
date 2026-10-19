@@ -16,6 +16,11 @@ import {
     PlantillaDocumentoFabrica,
     PortalContacto,
     PortalCondicionesPromesa,
+    NodoPortal,
+    NodoPortalCreado,
+    NodoPortalInterno,
+    NodoPortalInternoCreado,
+    NodoPortalInternoRevocado,
     PortalBanco,
     PortalComprobante,
     PortalCuenta,
@@ -34,6 +39,7 @@ import {
 } from '#portal/esquemas'
 import {
     condicionesPromesaValidator,
+    crearNodoPortalValidator,
     editarContactoValidator,
     editarEmpresaValidator,
     editarPlantillaDocumentoValidator,
@@ -47,7 +53,7 @@ import {
     verificarCodigoValidator,
     vincularTelegramValidator,
 } from '#portal/validators'
-import { ipOrigenDeLaPeticion } from '#portal/ip_origen'
+import { ipOrigenDelCliente } from '#portal/ip_origen'
 import { DemasiadasPeticiones, limitarPorIp } from '#portal/limite_peticiones'
 import {
     borrarCookieSesion,
@@ -115,6 +121,9 @@ import {
     urlRetornoPortal,
 } from '#portal/pagos_en_linea'
 import { exigirAlcance } from '#core/acl'
+import CrearNodoPortal from '#portal/actions/crear_nodo_portal'
+import RevocarNodoPortal from '#portal/actions/revocar_nodo_portal'
+import { idDeNodoPorNombre, listarNodosPortal, vistaInterna } from '#portal/nodos_portal'
 import { dimensionesDeFactura } from '#billing/facturas'
 
 /** Responde un PDF en línea (se abre en el navegador; el usuario lo guarda si quiere). */
@@ -158,7 +167,7 @@ const SOBRE_LA_SESION =
  */
 async function ipDelCliente(ctx: HttpContext, endpoint: string): Promise<string> {
     ctx.response.header('Cache-Control', 'no-store')
-    const ip = ipOrigenDeLaPeticion(ctx)
+    const ip = await ipOrigenDelCliente(ctx)
     if (!ip) throw new Error('La conexión no trae una IP de origen válida')
     await limitarPorIp(ctx, endpoint, ip)
     return ip
@@ -1035,6 +1044,108 @@ const comprobantes: Ruta[] = [
     }),
 ]
 
+/** Nodos portal remotos (contrato `nodo-portal.md`): tokens del portal que corre en otro servidor. */
+const nodosPortal: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/nodos-portal',
+        operacion: 'nodosPortalCrear',
+        resumen: 'Dar de alta un nodo portal remoto (el token se muestra una sola vez)',
+        descripcion:
+            'El token `argn_…` va en `X-Argos-Nodo-Token`. Solo sirve en `/api/v1/portal/**` y ' +
+            '`GET /version`; con él la API toma la IP del cliente de `X-Argos-Cliente-Ip`. Mismas acciones ' +
+            'que `POST /internal/nodos-portal` (CLI). 409 `nodo_portal_existe` si el nombre ya se usó.',
+        etiqueta: 'portal',
+        permiso: 'nodos_portal.administrar',
+        cuerpo: crearNodoPortalValidator,
+        respuesta: { status: 201, descripcion: 'Nodo creado', esquema: NodoPortalCreado },
+        handler: (ctx, { cuerpo }) => new CrearNodoPortal().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/nodos-portal',
+        operacion: 'nodosPortalListar',
+        resumen: 'Listar nodos portal remotos',
+        etiqueta: 'portal',
+        permiso: 'nodos_portal.administrar',
+        query: paginaPortalValidator,
+        respuesta: { status: 200, descripcion: 'Página de nodos', esquema: pagina(NodoPortal) },
+        handler: (_ctx, { query }) => listarNodosPortal(query),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/nodos-portal/:id/revocar',
+        operacion: 'nodosPortalRevocar',
+        resumen: 'Revocar el token de un nodo portal (401 desde su siguiente petición)',
+        etiqueta: 'portal',
+        permiso: 'nodos_portal.administrar',
+        respuesta: { status: 200, descripcion: 'Nodo revocado', esquema: NodoPortal },
+        handler: (ctx, { params }) =>
+            new RevocarNodoPortal().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+]
+
+/**
+ * Las mismas acciones para el CLI (`argosisp nodo-portal crear|listar|revocar`), que corre dentro
+ * del contenedor de la API con `INTERNAL_TOKEN`. Actor `sistema`, canal `interno`.
+ */
+const SOBRE_EL_CLI =
+    'Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4.'
+const nodosPortalInternos: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/internal/nodos-portal',
+        operacion: 'internoNodosPortalCrear',
+        resumen: 'Dar de alta un nodo portal desde el CLI (el token se muestra una sola vez)',
+        descripcion: `${SOBRE_EL_CLI} 409 \`nodo_portal_existe\` si el nombre ya se usó.`,
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        cuerpo: crearNodoPortalValidator,
+        respuesta: { status: 201, descripcion: 'Nodo creado', esquema: NodoPortalInternoCreado },
+        handler: async (ctx, { cuerpo }) => {
+            const { token, datos } = await new CrearNodoPortal().execute(
+                cuerpo,
+                ctx.contextoAccion('interno'),
+            )
+            return { nombre: datos.nombre, token, creado_en: datos.created_at }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/internal/nodos-portal',
+        operacion: 'internoNodosPortalListar',
+        resumen: 'Listar nodos portal (CLI)',
+        descripcion: SOBRE_EL_CLI,
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        query: paginaPortalValidator,
+        respuesta: { status: 200, descripcion: 'Página de nodos', esquema: pagina(NodoPortalInterno) },
+        handler: async (_ctx, { query }) => {
+            const resultado = await listarNodosPortal({ ...query, limit: query.limit ?? 200 })
+            return { ...resultado, data: resultado.data.map(vistaInterna) }
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/internal/nodos-portal/:nombre/revocar',
+        operacion: 'internoNodosPortalRevocar',
+        resumen: 'Revocar un nodo portal por nombre (CLI)',
+        descripcion: SOBRE_EL_CLI,
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        parametros: { nombre: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,62}$' } },
+        respuesta: { status: 200, descripcion: 'Nodo revocado', esquema: NodoPortalInternoRevocado },
+        handler: async (ctx, { params }) => {
+            const id = await idDeNodoPorNombre(String(params.nombre))
+            const nodo = await new RevocarNodoPortal().execute({ id }, ctx.contextoAccion('interno'))
+            return { nombre: nodo.nombre, revocado_en: nodo.revocado_en }
+        },
+    }),
+]
+
 const portal: Ruta[] = [
     ...publicas,
     ...autenticadas,
@@ -1044,6 +1155,8 @@ const portal: Ruta[] = [
     ...pagosEnLinea,
     ...documentos,
     ...empresa,
+    ...nodosPortal,
+    ...nodosPortalInternos,
 ]
 
 export default portal
