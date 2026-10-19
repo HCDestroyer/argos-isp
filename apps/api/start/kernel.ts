@@ -31,4 +31,5 @@ export const middleware = router.named({
     empresa: () => import('#middleware/empresa_middleware'),
     idempotencia: () => import('#middleware/idempotencia_middleware'),
     interno: () => import('#middleware/interno_middleware'),
+    sesionONodo: () => import('#portal/sesion_o_nodo_middleware'),
 })

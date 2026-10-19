@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, ir, menu } from './ayudas'
+import { entrar, ir } from './ayudas'
 
 /**
  * Sesión deslizante y ventana de bloqueo (`contratos/sesion-panel.md` §4, decisión del PM de la
@@ -78,18 +78,14 @@ test('"No soy yo / Salir" va al login completo sin los datos de la sesión', asy
 
 test('a menos de 15 min del tope avisa que guarde su trabajo', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
-    // Mueve el tope de la cookie simulada y recarga en el mismo paso (si no, una petición en vuelo
-    // la renovaría y volvería a escribirla).
-    const recarga = page.waitForEvent('load')
-    await page.evaluate(() => {
-        const clave = 'argos_fixtures_cookie_sesion'
-        const sesion: Record<string, unknown> = JSON.parse(sessionStorage.getItem(clave) ?? '{}')
-        sesion.expiraEn = new Date(Date.now() + 5 * 60_000).toISOString()
-        sesion.expiraMaxEn = new Date(Date.now() + 10 * 60_000).toISOString()
-        window.addEventListener('beforeunload', () => sessionStorage.setItem(clave, JSON.stringify(sesion)))
-        location.reload()
-    })
-    await recarga
-    await menu(page)
-    await expect(page.getByText('Tu sesión terminará pronto; guarda tu trabajo').first()).toBeVisible()
+    // El tope a 10 min lo aplica el fixture en la siguiente petición (`argos_fixtures_tope_sesion`):
+    // escribir la cookie simulada antes de recargar perdía contra las peticiones en vuelo, que la
+    // reescribían con el tope de 72 h.
+    await page.evaluate(() => localStorage.setItem('argos_fixtures_tope_sesion', '10'))
+    await page.reload()
+    // El aviso es un toast de 20 s abajo a la derecha. No se abre el menú: en el teléfono el toast
+    // tapa el último grupo («Configuración») y el clic de `menu()` esperaba a que se cerrara solo
+    // (traza del CI: 18.7 s en ese clic), así que la aserción llegaba con el toast ya cerrado.
+    await expect(page.locator('[id^="dashboard-panel"]').first()).toBeVisible()
+    await expect(page.getByText('Tu sesión terminará pronto; guarda tu trabajo', { exact: true })).toBeVisible()
 })

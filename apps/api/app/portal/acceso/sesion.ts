@@ -3,6 +3,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { configIpOrigen, listaConfiables, normalizarIp } from '#portal/ip_origen'
 import db from '@adonisjs/lucid/services/db'
 import { NoAutenticado } from '#shared/errores'
+import { nodoDeLaPeticion } from '#portal/nodo_portal'
 import { COOKIE_SESION, PREFIJO_TOKEN, RUTA_COOKIE, configAcceso, hashToken } from '#portal/acceso/codigos'
 
 /**
@@ -98,13 +99,17 @@ export function llegoPorHttps(
  * origen), ruta `/api/v1/portal` y `Secure` con HTTPS (`PORTAL_COOKIE_SEGURA=siempre` lo fuerza).
  */
 export function opcionesCookie(ctx: HttpContext) {
-    const secure =
-        process.env.PORTAL_COOKIE_SEGURA === 'siempre' ||
-        llegoPorHttps(
-            ctx.request.request.socket.remoteAddress,
-            'encrypted' in ctx.request.request.socket && ctx.request.request.socket.encrypted === true,
-            ctx.request.header('x-forwarded-proto'),
-        )
+    // Nodo portal remoto: cuenta cómo llegó el navegador al nodo (`X-Argos-Cliente-Proto`), no
+    // cómo llegó el nodo a la API (que siempre es HTTPS).
+    const nodo = nodoDeLaPeticion(ctx)
+    const porHttps = nodo
+        ? nodo.https
+        : llegoPorHttps(
+              ctx.request.request.socket.remoteAddress,
+              'encrypted' in ctx.request.request.socket && ctx.request.request.socket.encrypted === true,
+              ctx.request.header('x-forwarded-proto'),
+          )
+    const secure = process.env.PORTAL_COOKIE_SEGURA === 'siempre' || porHttps
     return { httpOnly: true, sameSite: 'strict' as const, path: RUTA_COOKIE, secure }
 }
 

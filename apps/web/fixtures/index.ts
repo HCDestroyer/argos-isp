@@ -16,6 +16,9 @@ import login401 from './auth/login.401.json'
 import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
+import { rutasCartera } from './cartera/rutas'
+import { rutasCobros } from './cobros/rutas'
+import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasLealtad } from './lealtad/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasComprobantes } from './comprobantes/rutas'
@@ -172,6 +175,31 @@ export function vencimientosSesionFixture(expiraEn: string | null, expiraMaxEn: 
  */
 export const CLAVE_VENCER_SESION = 'argos_fixtures_vencer_sesion'
 
+/**
+ * Clave de `localStorage` para Playwright: minutos hasta el tope absoluto de la sesión. La
+ * siguiente petición con la cookie lo aplica a `bd.sesion` (y lo guarda en la cookie simulada) y
+ * la clave se borra. Escribir la cookie simulada a mano antes de recargar no es fiable: una
+ * petición en vuelo de la página vieja (los fixtures responden 150 ms después) la vuelve a
+ * escribir con el tope anterior.
+ */
+export const CLAVE_TOPE_SESION = 'argos_fixtures_tope_sesion'
+
+function topePedido(): number | null {
+    try {
+        const almacen = globalThis.localStorage
+        const valor = almacen?.getItem(CLAVE_TOPE_SESION) ?? null
+        if (!almacen || valor === null) {
+            return null
+        }
+        almacen.removeItem(CLAVE_TOPE_SESION)
+        const minutos = Number(valor)
+        return Number.isFinite(minutos) && minutos > 0 ? minutos : null
+    }
+    catch {
+        return null
+    }
+}
+
 function vencimientoPedido(metodo: string): boolean {
     try {
         const almacen = globalThis.localStorage
@@ -211,6 +239,10 @@ function revisarVencimiento(solicitud: SolicitudFixture): RespuestaFixture | nul
     }
     if (vencimientoPedido(solicitud.metodo)) {
         bd.sesion.expiraEn = new Date(0).toISOString()
+    }
+    const minutosTope = topePedido()
+    if (minutosTope !== null) {
+        bd.sesion.expiraMaxEn = new Date(Date.now() + minutosTope * 60_000).toISOString()
     }
     const ahora = Date.now()
     const tope = bd.sesion.expiraMaxEn ? new Date(bd.sesion.expiraMaxEn).getTime() : Number.POSITIVE_INFINITY
@@ -438,6 +470,11 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         return { status: 200, cuerpo: me }
     },
 
+    // Fase 4 primero: `GET /cobros/por-liquidar` antes que el recibo `GET /cobros/:id`, y
+    // `GET /reportes/conciliacion-bancaria` antes que los reportes genéricos.
+    ...rutasCobros,
+    ...rutasConciliacion,
+    ...rutasCartera,
     // Antes que los reportes genéricos (GET /reportes/:reporte).
     ...rutasLealtad,
     ...rutasEmpresas,

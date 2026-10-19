@@ -1,5 +1,6 @@
 import { BlockList, isIP } from 'node:net'
 import type { HttpContext } from '@adonisjs/core/http'
+import { nodoDeLaPeticion, resolverNodoPortal } from '#portal/nodo_portal'
 
 /**
  * IP de origen del cliente para el portal (página de corte).
@@ -14,6 +15,9 @@ import type { HttpContext } from '@adonisjs/core/http'
  * - `PORTAL_PROXIES_CONFIABLES`: IPs o CIDR (IPv4/IPv6) separados por coma; p. ej. la red de Docker
  *   donde corre el portal (`172.16.0.0/12`). Vacía = no se confía en ninguna cabecera.
  * - `PORTAL_CABECERA_IP`: cabecera a leer (por defecto `x-forwarded-for`).
+ *
+ * Nodo portal remoto (`nodo_portal.ts`): con un `X-Argos-Nodo-Token` válido la IP es la de
+ * `X-Argos-Cliente-Ip` y no se mira `X-Forwarded-For`. Sin token válido esa cabecera nunca se lee.
  */
 
 export interface ConfigIpOrigen {
@@ -93,12 +97,26 @@ export function resolverIpOrigen(
     return ip
 }
 
-/** IP de origen de la petición HTTP según la configuración del entorno. */
+/**
+ * IP de origen de la petición HTTP según la configuración del entorno. Si la petición ya pasó por
+ * `ipOrigenDelCliente` y vino de un nodo portal válido, la IP que mandó el nodo.
+ */
 export function ipOrigenDeLaPeticion(ctx: HttpContext): string | null {
+    const nodo = nodoDeLaPeticion(ctx)
+    if (nodo) return nodo.ipCliente
     const config = configIpOrigen()
     return resolverIpOrigen(
         ctx.request.request.socket.remoteAddress,
         ctx.request.header(config.cabecera),
         config,
     )
+}
+
+/**
+ * Como `ipOrigenDeLaPeticion`, pero antes valida el token del nodo portal si la petición trae uno
+ * (401 si no es válido). Las rutas `/portal/*` usan esta.
+ */
+export async function ipOrigenDelCliente(ctx: HttpContext): Promise<string | null> {
+    await resolverNodoPortal(ctx)
+    return ipOrigenDeLaPeticion(ctx)
 }
