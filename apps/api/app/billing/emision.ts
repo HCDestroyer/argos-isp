@@ -30,7 +30,11 @@ import {
  * Con FEL desactivada (todas las empresas al migrar) todo queda como antes.
  */
 
-/** `CxC / Ingresos (servicio) + Otros ingresos + Recargos + IVA` (a `2.1.02` o `2.1.11`). */
+/**
+ * `CxC + Descuentos / Ingresos (servicio) + Otros ingresos + Recargos + IVA` (a `2.1.02` o `2.1.11`).
+ * Con líneas `descuento`: los ingresos van por el bruto, el descuento (sin IVA) al debe de `5.1.01` y el
+ * IVA es el del neto (lealtad §5: `CxC 150.00 + 5.1.01 44.64 / 4.1.01 178.57 + 2.1.02 16.07`).
+ */
 export function movimientosFactura(
     clienteId: number,
     lineas: Array<Pick<LineaCalculada, 'tipo' | 'total' | 'iva'>>,
@@ -40,17 +44,22 @@ export function movimientosFactura(
     let internet = CERO
     let otros = CERO
     let mora = CERO
+    let descuentos = CERO
     let iva = CERO
     for (const linea of lineas) {
         const subtotal = dec(linea.total).minus(linea.iva)
         if (linea.tipo === 'servicio') internet = internet.plus(subtotal)
         else if (linea.tipo === 'mora') mora = mora.plus(subtotal)
+        else if (linea.tipo === 'descuento') descuentos = descuentos.minus(subtotal)
         else otros = otros.plus(subtotal)
         iva = iva.plus(linea.iva)
     }
-    const movimientos: LineaAsiento[] = [
-        { cuenta: CUENTAS.CXC_CLIENTES, debe: aTexto(total), cliente_id: clienteId },
-    ]
+    const movimientos: LineaAsiento[] = []
+    if (total.gt(0)) {
+        movimientos.push({ cuenta: CUENTAS.CXC_CLIENTES, debe: aTexto(total), cliente_id: clienteId })
+    }
+    // descuento de la factura (lealtad): la venta queda bruta en ingresos y el descuento en 5.1.01
+    if (descuentos.gt(0)) movimientos.push({ cuenta: CUENTAS.DESCUENTOS, debe: aTexto(descuentos) })
     if (internet.gt(0)) movimientos.push({ cuenta: CUENTAS.INGRESOS_INTERNET, haber: aTexto(internet) })
     if (otros.gt(0)) movimientos.push({ cuenta: CUENTAS.OTROS_INGRESOS, haber: aTexto(otros) })
     if (mora.gt(0)) movimientos.push({ cuenta: CUENTAS.RECARGOS_MORA, haber: aTexto(mora) })
@@ -100,7 +109,8 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
             periodo: datos.periodo,
             clave_unica: datos.clave_unica,
             vence_en: datos.vence_en,
-            estado: modo === 'por_certificar' ? 'por_certificar' : 'emitida',
+            // un descuento del 100 % (mes gratis) deja la factura en cero: nace pagada
+            estado: modo === 'por_certificar' ? 'por_certificar' : totales.total.lte(0) ? 'pagada' : 'emitida',
             subtotal: aTexto(totales.subtotal),
             iva: aTexto(totales.iva),
             total: aTexto(totales.total),
@@ -122,10 +132,7 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
         return { factura_id: otra?.id ?? null, creada: false, modo, dte: null }
     }
     t.fijarEntidad('factura', facturaId)
-    await t.trx
-        .insertQuery()
-        .table('billing.facturas_lineas')
-        .multiInsert(datos.lineas.map((linea) => ({ ...linea, factura_id: facturaId })))
+    await insertarLineas(t, facturaId, datos.lineas)
 
     if (modo !== 'por_certificar') {
         await contabilizarFactura(t, {
@@ -177,6 +184,41 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
         }
     }
     return { factura_id: facturaId, creada: true, modo, dte }
+}
+
+/**
+ * Inserta las líneas en orden; cada `descuento` va ligado (`linea_id`) a la línea de su
+ * `linea_indice`, y esa línea guarda la suma de sus descuentos en `descuento`.
+ */
+export async function insertarLineas(
+    t: Transaccion,
+    facturaId: number,
+    lineas: LineaCalculada[],
+): Promise<number[]> {
+    const ids: number[] = []
+    const descontado = new Map<number, Dec>()
+    for (const { linea_indice: indice, ...linea } of lineas) {
+        let lineaId: number | null = null
+        if (linea.tipo === 'descuento') {
+            const objetivo = indice === undefined ? undefined : ids[indice]
+            if (objetivo === undefined) throw new Error('Línea de descuento sin la línea que descuenta antes')
+            lineaId = objetivo
+            descontado.set(objetivo, (descontado.get(objetivo) ?? CERO).minus(linea.total))
+        }
+        const [fila] = (await t.trx
+            .insertQuery()
+            .table('billing.facturas_lineas')
+            .insert({ ...linea, factura_id: facturaId, linea_id: lineaId })
+            .returning('id')) as Array<{ id: number }>
+        ids.push(Number(fila!.id))
+    }
+    for (const [id, monto] of descontado) {
+        await t.trx
+            .from('billing.facturas_lineas')
+            .where('id', id)
+            .update({ descuento: aTexto(monto) })
+    }
+    return ids
 }
 
 export interface FacturaParaContabilizar {

@@ -20,12 +20,63 @@ export type TipoFactura = 'servicio' | 'mora'
 
 export interface LineaCalculada {
     concepto: string
-    tipo: 'servicio' | 'producto' | 'mora' | 'otro'
+    tipo: 'servicio' | 'producto' | 'mora' | 'otro' | 'descuento'
     cantidad: string
     precio_unitario: string
     gravable: boolean
     iva: string
     total: string
+    /**
+     * Solo en `descuento`: índice (en la misma lista) de la línea que descuenta. Al insertar se
+     * guarda como `linea_id` (contrato de localización fiscal §3.5).
+     */
+    linea_indice?: number
+}
+
+export interface DescuentoPedido {
+    /** índice de la línea a descontar (la del plan es la 0) */
+    indice: number
+    concepto: string
+    /** Q con IVA incluido; si pasa lo que le queda a la línea, se recorta (nunca la deja bajo cero) */
+    monto: Monto
+}
+
+/**
+ * Agrega las líneas `descuento` (negativas) a las de la factura. El IVA de la factura queda el del
+ * **neto** (lealtad §5, inv. F.1): el IVA de cada descuento es el IVA del neto de su línea menos el IVA
+ * que ya tenía (la línea y sus descuentos anteriores), así `Σ iva` = IVA de `línea − descuentos`
+ * redondeado una sola vez. Un descuento recortado a 0 no se agrega.
+ */
+export function aplicarDescuentos(lineas: LineaCalculada[], descuentos: DescuentoPedido[]): LineaCalculada[] {
+    const salida = [...lineas]
+    const usado = new Map<number, { total: Dec; iva: Dec }>()
+    for (const d of descuentos) {
+        const objetivo = lineas[d.indice]
+        if (!objetivo || objetivo.tipo === 'descuento') {
+            throw new Error(`Descuento sobre una línea inexistente o que ya es descuento (${d.indice})`)
+        }
+        const previo = usado.get(d.indice) ?? { total: CERO, iva: CERO }
+        const restante = dec(objetivo.total).minus(previo.total)
+        const pedido = redondear(d.monto)
+        const monto = pedido.gt(restante) ? restante : pedido
+        if (monto.lte(0)) continue
+        const neto = restante.minus(monto)
+        const ivaNeto = objetivo.gravable ? redondear(neto.minus(neto.div(DIVISOR_IVA))) : CERO
+        const ivaAntes = dec(objetivo.iva).minus(previo.iva)
+        const iva = ivaNeto.minus(ivaAntes)
+        usado.set(d.indice, { total: previo.total.plus(monto), iva: previo.iva.minus(iva) })
+        salida.push({
+            concepto: d.concepto,
+            tipo: 'descuento',
+            cantidad: '1',
+            precio_unitario: aTexto(monto.negated()),
+            gravable: objetivo.gravable,
+            iva: aTexto(iva),
+            total: aTexto(monto.negated()),
+            linea_indice: d.indice,
+        })
+    }
+    return salida
 }
 
 /**
@@ -252,6 +303,8 @@ export async function verFactura(id: number, cliente: QueryClientContract = db.c
             'gravable',
             'iva',
             'total',
+            'linea_id',
+            'descuento',
         )
     const notas = await notasDeFactura(id, cliente)
     // FEL (semana 5): la factura se certifica con el NIT y los datos fiscales de su empresa

@@ -6214,13 +6214,19 @@ export interface components {
             id: number;
             concepto: string;
             /** @enum {string} */
-            tipo: "servicio" | "producto" | "mora" | "otro";
+            tipo: "servicio" | "producto" | "mora" | "otro" | "descuento";
             /** @description Decimal con hasta 3 decimales */
             cantidad: string;
             precio_unitario: components["schemas"]["Dinero"];
             gravable: boolean;
+            /** @description En una línea descuento, negativo: el IVA de la factura es el del neto */
             iva: components["schemas"]["Dinero"];
+            /** @description En una línea descuento, negativo */
             total: components["schemas"]["Dinero"];
+            /** @description Solo en tipo descuento: la línea que descuenta (de la misma factura) */
+            linea_id?: number | null;
+            /** @description Suma de los descuentos de esta línea (0.00 si no tiene) */
+            descuento?: components["schemas"]["Dinero"];
         };
         FacturasVencidasResumen: {
             /** @description Número de facturas vencidas con saldo */

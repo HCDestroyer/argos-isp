@@ -38883,7 +38883,8 @@
               "servicio",
               "producto",
               "mora",
-              "otro"
+              "otro",
+              "descuento"
             ]
           },
           "cantidad": {
@@ -38897,10 +38898,24 @@
             "type": "boolean"
           },
           "iva": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "En una línea descuento, negativo: el IVA de la factura es el del neto"
           },
           "total": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "En una línea descuento, negativo"
+          },
+          "linea_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Solo en tipo descuento: la línea que descuenta (de la misma factura)"
+          },
+          "descuento": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Suma de los descuentos de esta línea (0.00 si no tiene)"
           }
         }
       },
