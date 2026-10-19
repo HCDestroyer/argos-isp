@@ -16,6 +16,7 @@ import login401 from './auth/login.401.json'
 import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
 import { rutasCajas } from './cajas/rutas'
+import { rutasVersion } from './version/rutas'
 import { rutasLealtad } from './lealtad/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasComprobantes } from './comprobantes/rutas'
@@ -440,6 +441,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
 
     // Antes que los reportes genéricos (GET /reportes/:reporte).
     ...rutasLealtad,
+    ...rutasVersion,
     ...rutasEmpresas,
     ...rutasFiscal,
     ...rutasNotificaciones,

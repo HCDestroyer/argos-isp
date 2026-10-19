@@ -7,6 +7,7 @@ import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
+import { versionFixture } from './version/rutas'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
@@ -116,6 +117,8 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /** `GET /version` (A6): la versión instalada que ve el panel. */
+    version: Schema<'VersionInstalada'>
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
     programasLealtad: Schema<'ProgramaLealtad'>[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
@@ -176,6 +179,7 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        version: versionFixture,
         fiscal: fiscalInicial(),
         fel: felInicial(),
         horus: horusInicial(),
