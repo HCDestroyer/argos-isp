@@ -123,44 +123,57 @@ const accesos = computed(() => {
                 <li
                     v-for="servicio in props.grupo.servicios"
                     :key="servicio.id"
-                    class="flex items-center justify-between gap-3 p-3 sm:p-4"
+                    class="space-y-3 p-3 sm:p-4"
                     data-testid="servicio-cuenta"
                 >
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-medium text-default">
-                            {{ servicio.plan ?? 'Servicio de internet' }}
-                        </p>
-                        <p
-                            v-if="servicio.direccion"
-                            class="truncate text-xs text-muted"
-                        >
-                            {{ servicio.direccion }}
-                        </p>
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <p class="truncate text-sm font-medium text-default">
+                                    {{ servicio.plan ?? 'Servicio de internet' }}
+                                </p>
+                                <UBadge
+                                    v-if="servicio.plan_tipo"
+                                    :label="TIPOS_PLAN[servicio.plan_tipo]"
+                                    color="neutral"
+                                    variant="outline"
+                                    size="sm"
+                                    data-testid="plan-tipo"
+                                />
+                            </div>
+                            <p
+                                v-if="servicio.direccion"
+                                class="truncate text-xs text-muted"
+                            >
+                                {{ servicio.direccion }}
+                            </p>
+                        </div>
+                        <div class="flex shrink-0 flex-col items-end gap-1">
+                            <EstadoServicioBadge
+                                :estado="servicio.estado"
+                                size="sm"
+                            />
+                            <span
+                                v-if="props.grupo.servicios.length > 1"
+                                class="text-sm font-medium tabular-nums text-highlighted"
+                                data-testid="saldo-servicio"
+                            >
+                                {{ formatearQuetzales(servicio.monto_adeudado) }}
+                            </span>
+                            <UButton
+                                v-if="props.promesaPorServicio[servicio.id] === true"
+                                label="Pedir promesa"
+                                icon="i-lucide-hand-coins"
+                                color="neutral"
+                                variant="link"
+                                size="sm"
+                                class="px-0"
+                                data-testid="pedir-promesa"
+                                @click="emit('pedirPromesa', servicio.id)"
+                            />
+                        </div>
                     </div>
-                    <div class="flex shrink-0 flex-col items-end gap-1">
-                        <EstadoServicioBadge
-                            :estado="servicio.estado"
-                            size="sm"
-                        />
-                        <span
-                            v-if="props.grupo.servicios.length > 1"
-                            class="text-sm font-medium tabular-nums text-highlighted"
-                            data-testid="saldo-servicio"
-                        >
-                            {{ formatearQuetzales(servicio.monto_adeudado) }}
-                        </span>
-                        <UButton
-                            v-if="props.promesaPorServicio[servicio.id] === true"
-                            label="Pedir promesa"
-                            icon="i-lucide-hand-coins"
-                            color="neutral"
-                            variant="link"
-                            size="sm"
-                            class="px-0"
-                            data-testid="pedir-promesa"
-                            @click="emit('pedirPromesa', servicio.id)"
-                        />
-                    </div>
+                    <CuentaAdicionales :adicionales="servicio.adicionales" />
                 </li>
             </ul>
         </UCard>

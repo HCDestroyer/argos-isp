@@ -430,7 +430,7 @@ const rutasBase: RutasFixture = {
                     ...CUENTA_FIXTURE,
                     cliente: sesion.contacto,
                     servicios: CUENTA_FIXTURE.servicios.map(servicio => promesa.aprobada
-                        ? { ...servicio, estado: 'activo' as const, promesa_activa: true }
+                        ? { ...servicio, estado: 'activo' as const, promesa_activa: true, adicionales: servicio.adicionales.map(a => ({ ...a, bloqueado: false })) }
                         : servicio),
                 } satisfies Schema<'PortalCuenta'>,
             }),

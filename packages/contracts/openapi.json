@@ -57281,6 +57281,57 @@
           }
         }
       },
+      "PortalAdicional": {
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "identificador",
+          "modalidad",
+          "precio",
+          "bloqueado"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "identificador": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Usuario de IPTV, correo de la cuenta…"
+          },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "incluido",
+              "cortesia",
+              "cobrado"
+            ],
+            "description": "`incluido` en el plan, de `cortesia` (sin cobro) o `cobrado` aparte (`precio`)"
+          },
+          "precio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Precio mensual; solo con `cobrado`"
+          },
+          "bloqueado": {
+            "type": "boolean",
+            "description": "Bloqueado por la suspensión del servicio; vuelve solo al reactivarse"
+          }
+        }
+      },
       "PortalAnuncio": {
         "type": "object",
         "required": [
@@ -58485,6 +58536,8 @@
           "id",
           "estado",
           "plan",
+          "plan_tipo",
+          "adicionales",
           "direccion",
           "promesa_activa",
           "monto_adeudado",
@@ -58503,6 +58556,25 @@
               "string",
               "null"
             ]
+          },
+          "plan_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "residencial",
+              "empresarial",
+              "dedicado"
+            ],
+            "description": "Tipo del plan: residencial, empresarial o dedicado (null sin plan)"
+          },
+          "adicionales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalAdicional"
+            },
+            "description": "Servicios adicionales activos (streaming, IPTV…), sin la credencial"
           },
           "direccion": {
             "type": [
