@@ -3,7 +3,8 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
-import { dec, type Dec } from '#ledger/dinero'
+import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
+import type { LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
@@ -138,9 +139,16 @@ export async function listarCastigos(filtros: OpcionesPaginacion, empresas: numb
     return { ...pagina, data: (await conFacturas(cliente, pagina.data)) as CastigoVista[] }
 }
 
+/** Lo recuperado de un castigo por pagos vigentes (`ledger.recuperaciones_castigo`, H17). */
+const RECUPERADO_VIGENTE = `
+    SELECT r.castigo_id, sum(r.monto) AS monto, sum(r.iva) AS iva
+      FROM ledger.recuperaciones_castigo r JOIN billing.pagos p ON p.id = r.pago_id
+     WHERE p.estado = 'registrado'
+     GROUP BY 1`
+
 /**
  * Lo que falta recuperar de los castigos del cliente en la empresa (decisión g del líder): Σ castigado −
- * Σ recuperado en `4.2.03 Recuperación de cuentas incobrables` (movimientos con su `cliente_id`).
+ * Σ recuperado por pagos vigentes (`ledger.recuperaciones_castigo`; anular el pago lo devuelve).
  */
 export async function porRecuperar(
     cliente: QueryClientContract,
@@ -148,11 +156,92 @@ export async function porRecuperar(
     clienteId: number,
 ): Promise<Dec> {
     const r = (await cliente.rawQuery(
-        `SELECT (SELECT coalesce(sum(k.monto), 0) FROM ledger.castigos k WHERE k.empresa_id = ? AND k.cliente_id = ?)
-              - (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.movimientos m
-                   JOIN ledger.asientos a ON a.id = m.asiento_id JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                  WHERE c.codigo = ? AND a.empresa_id = ? AND m.cliente_id = ?) AS falta`,
-        [empresaId, clienteId, CUENTAS_GT.RECUPERACION_INCOBRABLES, empresaId, clienteId],
+        `SELECT coalesce(sum(k.monto - coalesce(r.monto, 0)), 0)::text AS falta
+           FROM ledger.castigos k LEFT JOIN (${RECUPERADO_VIGENTE}) r ON r.castigo_id = k.id
+          WHERE k.empresa_id = ? AND k.cliente_id = ?`,
+        [empresaId, clienteId],
     )) as { rows: Array<{ falta: string }> }
     return dec(r.rows[0]!.falta)
+}
+
+export interface Recuperacion {
+    castigo_id: number
+    monto: Dec
+    base: Dec
+    iva: Dec
+}
+
+/**
+ * H17 (decisión del líder): reparte hasta `disponible` entre los castigos del cliente con saldo por
+ * recuperar (el más antiguo primero). Cada parte se divide en la proporción IVA / monto de su castigo:
+ * la base es ingreso `4.2.03` y el IVA vuelve a `2.1.11` (de donde lo sacó el castigo de un aviso sin
+ * DTE; un castigo sin IVA lo recupera todo como base). El IVA se calcula sobre lo acumulado para que,
+ * recuperado todo, sume exactamente el del castigo.
+ */
+export async function repartirRecuperacion(
+    cliente: QueryClientContract,
+    empresaId: number,
+    clienteId: number,
+    disponible: Dec,
+): Promise<Recuperacion[]> {
+    if (disponible.lte(0)) return []
+    const { rows } = (await cliente.rawQuery(
+        `SELECT k.id, k.monto::text AS monto, k.iva::text AS iva,
+                coalesce(r.monto, 0)::text AS recuperado, coalesce(r.iva, 0)::text AS iva_recuperado
+           FROM ledger.castigos k LEFT JOIN (${RECUPERADO_VIGENTE}) r ON r.castigo_id = k.id
+          WHERE k.empresa_id = ? AND k.cliente_id = ? AND k.monto > coalesce(r.monto, 0)
+          ORDER BY k.id`,
+        [empresaId, clienteId],
+    )) as {
+        rows: Array<{ id: number; monto: string; iva: string; recuperado: string; iva_recuperado: string }>
+    }
+    const partes: Recuperacion[] = []
+    let resto = disponible
+    for (const k of rows) {
+        if (resto.lte(0)) break
+        const falta = dec(k.monto).minus(k.recuperado)
+        const monto = falta.lt(resto) ? falta : resto
+        const ivaAcumulado = redondear(dec(k.recuperado).plus(monto).times(k.iva).div(k.monto))
+        let iva = ivaAcumulado.minus(k.iva_recuperado)
+        if (iva.lt(0)) iva = CERO
+        if (iva.gt(monto)) iva = monto
+        partes.push({ castigo_id: Number(k.id), monto, base: monto.minus(iva), iva })
+        resto = resto.minus(monto)
+    }
+    return partes
+}
+
+/** Movimientos del asiento del pago por lo recuperado: base a 4.2.03 (con el cliente) e IVA a 2.1.11. */
+export function movimientosRecuperacion(partes: Recuperacion[], clienteId: number): LineaAsiento[] {
+    const base = partes.reduce((a, p) => a.plus(p.base), CERO)
+    const iva = partes.reduce((a, p) => a.plus(p.iva), CERO)
+    return [
+        ...(base.gt(0)
+            ? [{ cuenta: CUENTAS_GT.RECUPERACION_INCOBRABLES, haber: aTexto(base), cliente_id: clienteId }]
+            : []),
+        ...(iva.gt(0) ? [{ cuenta: CUENTAS_GT.IVA_POR_CERTIFICAR, haber: aTexto(iva) }] : []),
+    ]
+}
+
+/** Guarda lo recuperado de cada castigo por el pago (insert-only). */
+export async function guardarRecuperacion(
+    trx: QueryClientContract,
+    empresaId: number,
+    pagoId: number,
+    partes: Recuperacion[],
+): Promise<void> {
+    if (partes.length === 0) return
+    await trx
+        .insertQuery()
+        .table('ledger.recuperaciones_castigo')
+        .multiInsert(
+            partes.map((p) => ({
+                empresa_id: empresaId,
+                castigo_id: p.castigo_id,
+                pago_id: pagoId,
+                monto: aTexto(p.monto),
+                base: aTexto(p.base),
+                iva: aTexto(p.iva),
+            })),
+        )
 }

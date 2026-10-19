@@ -19,7 +19,10 @@ import {
     saldoCuenta,
     servicioFacturado,
 } from '#tests/contabilidad/ayudas_contabilidad'
-import { cola, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { cola, datosNit, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { crearClienteFila } from '#tests/core/fabricas'
+import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 
@@ -309,6 +312,110 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
             [CUENTAS_GT.RECUPERACION_INCOBRABLES, '0.00', '5.00'],
         ])
         await new AnularPago().execute({ pago_id: hist.id, motivo: 'duplicado' }, e.ctx)
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('H16 · aviso acreditado entero por notas internas: estado acreditada, sin DTE ni cola; a mano 409', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const f = s.facturas[0]!
+        await new EmitirNotaCredito().execute({ factura_id: f.id, monto: '100.00', motivo: 'baja' }, e.ctx)
+        await new EmitirNotaCredito().execute({ factura_id: f.id, monto: '50.00', motivo: 'baja' }, e.ctx)
+        const [despues] = await facturasDelServicio(s.servicioId)
+        assert.equal(despues!.estado, 'acreditada')
+        await cola(e)
+        assert.lengthOf(await dtesDe('factura', f.id), 0)
+        const manual = await errorDe(new SolicitarCertificacion().execute({ factura_id: f.id }, e.ctx))
+        assert.equal(manual.codigo, 'factura_acreditada')
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('H17 · la recuperación de un aviso castigado se parte en base (4.2.03) e IVA (2.1.11) como el castigo', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const k = await new CastigarCartera().execute(
+            { facturas: [s.facturas[0]!.id], motivo: 'incobrable', evidencia: 'gestión documentada' },
+            e.ctx,
+        )
+        assert.equal(k.iva, '16.07')
+        const p1 = await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '100.00', empresa_id: e.B },
+            e.ctx,
+        )
+        const caja = await codigoCaja(p1.caja_id!)
+        assert.deepEqual(await lineas('pago', p1.id), [
+            [caja, '100.00', '0.00'],
+            [CUENTAS_GT.RECUPERACION_INCOBRABLES, '0.00', '89.29'],
+            [IVA_POR_CERTIFICAR, '0.00', '10.71'],
+        ])
+        // el resto recupera exactamente el IVA que faltaba; lo que sobra es anticipo
+        const p2 = await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '60.00', empresa_id: e.B },
+            e.ctx,
+        )
+        assert.deepEqual(await lineas('pago', p2.id), [
+            [caja, '60.00', '0.00'],
+            [CUENTAS_GT.RECUPERACION_INCOBRABLES, '0.00', '44.64'],
+            [IVA_POR_CERTIFICAR, '0.00', '5.36'],
+            [CUENTAS.ANTICIPOS_CLIENTES, '0.00', '10.00'],
+        ])
+        // anular la primera devuelve su parte: la siguiente recuperación vuelve a tomarla
+        await new AnularPago().execute({ pago_id: p1.id, motivo: 'cheque rechazado' }, e.ctx)
+        const rec = await db
+            .from('ledger.recuperaciones_castigo as r')
+            .join('billing.pagos as p', 'p.id', 'r.pago_id')
+            .where('r.castigo_id', k.id)
+            .where('p.estado', 'registrado')
+            .select(db.raw('sum(r.monto)::text as monto'), db.raw('sum(r.iva)::text as iva'))
+            .first()
+        assert.deepEqual({ monto: rec.monto, iva: rec.iva }, { monto: '50.00', iva: '5.36' })
+    })
+
+    test('H18 · con DTE de la factura, anular el pago que cerró la diferencia la devuelve como cargo interno CxC / 5.3.05', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
+        const pago = await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '149.50', empresa_id: e.B },
+            e.ctx,
+        )
+        await new CerrarDiferenciaPago().execute({ pago_id: pago.id }, e.ctx)
+        await cola(e)
+        const [dte] = await dtesDe('factura', s.facturas[0]!.id)
+        assert.equal(dte?.estado, 'certificado')
+        await new AnularPago().execute({ pago_id: pago.id, motivo: 'cheque rechazado' }, e.ctx)
+        const cargo = await db
+            .from('billing.diferencias_cobro_cargos as c')
+            .join('billing.facturas as f', 'f.id', 'c.factura_id')
+            .where('c.pago_id', pago.id)
+            .select('f.id', 'f.tipo', 'f.estado', 'f.total', 'f.iva', 'f.factura_origen_id')
+            .firstOrFail()
+        assert.deepInclude(cargo, {
+            tipo: 'cargo',
+            estado: 'emitida',
+            total: '0.50',
+            iva: '0.00',
+            factura_origen_id: s.facturas[0]!.id,
+        })
+        assert.deepEqual(await lineas('factura', Number(cargo.id)), [
+            [CUENTAS.CXC_CLIENTES, '0.50', '0.00'],
+            [CUENTAS_GT.DIFERENCIAS_COBRO, '0.00', '0.50'],
+        ])
+        // el DTE no se toca y el cargo nunca va a la cola
+        await cola(e)
+        assert.deepEqual(
+            (await dtesDe('factura', s.facturas[0]!.id)).map((d) => [d.id, d.estado]),
+            [[dte!.id, 'certificado']],
+        )
+        assert.lengthOf(await dtesDe('factura', Number(cargo.id)), 0)
+        // anular otra vez no duplica (el pago ya está anulado)
+        const otra = await errorDe(new AnularPago().execute({ pago_id: pago.id, motivo: 'otra vez' }, e.ctx))
+        assert.isString(otra.codigo)
         await afirmarLibro(assert, [e.B, e.C])
     })
 })

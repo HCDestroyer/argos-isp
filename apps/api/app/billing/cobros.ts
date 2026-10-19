@@ -138,14 +138,35 @@ export interface Aplicacion {
     estado: EstadoFactura
 }
 
-/** Suma `monto` a lo pagado de la factura y recalcula su estado. */
+/**
+ * H16 (decisión del líder): un aviso de cobro cubierto sin que nadie pagara nada (todo por notas
+ * internas) no es venta: queda `acreditada`, no `pagada`, y nunca entra en la cola FEL. Se mira el
+ * dinero vigente aplicado (pagos registrados y saldos a favor importados sin anular).
+ */
+async function acreditadaSinCobro(trx: TransactionClientContract, facturaId: number): Promise<boolean> {
+    const { rows } = (await trx.rawQuery(
+        `SELECT f.aviso_cobro,
+                coalesce((SELECT sum(a.monto) FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
+                           WHERE a.factura_id = f.id AND p.estado = 'registrado'), 0)
+              + coalesce((SELECT sum(a.monto) FROM billing.saldos_iniciales_aplicaciones a
+                           JOIN billing.saldos_iniciales s ON s.id = a.saldo_inicial_id
+                          WHERE a.factura_id = f.id AND s.anulado_en IS NULL), 0) AS cobrado
+           FROM billing.facturas f WHERE f.id = ?`,
+        [facturaId],
+    )) as { rows: Array<{ aviso_cobro: boolean; cobrado: string }> }
+    const f = rows[0]
+    return Boolean(f?.aviso_cobro) && dec(f!.cobrado).isZero()
+}
+
+/** Suma `monto` a lo pagado de la factura y recalcula su estado (H16: `acreditada` sin cobro). */
 export async function sumarAPagado(
     trx: TransactionClientContract,
     factura: FacturaPendiente,
     monto: Dec,
 ): Promise<EstadoFactura> {
     const pagado = dec(factura.pagado).plus(monto)
-    const estado = estadoSegunPago({ total: factura.total, pagado, vencida_en: factura.vencida_en })
+    let estado = estadoSegunPago({ total: factura.total, pagado, vencida_en: factura.vencida_en })
+    if (estado === 'pagada' && (await acreditadaSinCobro(trx, factura.id))) estado = 'acreditada'
     await trx
         .from('billing.facturas')
         .where('id', factura.id)

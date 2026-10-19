@@ -104,11 +104,12 @@ export const listarFacturasValidator = vine.compile(
                 'vencida',
                 'anulada',
                 'castigada',
+                'acreditada',
             ] as const)
             .optional(),
         periodo: fechaIso().optional(),
         tipo: vine
-            .enum(['servicio', 'mora'] as const)
+            .enum(['servicio', 'mora', 'cargo'] as const)
             .optional()
             .meta({ description: 'servicio = factura del periodo; mora = recargo por vencimiento' }),
     }),

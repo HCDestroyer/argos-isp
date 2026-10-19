@@ -24,7 +24,10 @@ export type EstadoFactura =
     | 'anulada'
     /** fase 4 (decisión g): castigo de cartera; `pagado` + castigado = total */
     | 'castigada'
-export type TipoFactura = 'servicio' | 'mora'
+    /** H16: aviso de cobro cubierto entero por notas internas, sin cobro: no es venta, no se certifica */
+    | 'acreditada'
+/** `cargo`: cargo interno no fiscal sin IVA (H18: diferencia de cobro que vuelve al anular su pago) */
+export type TipoFactura = 'servicio' | 'mora' | 'cargo'
 
 export interface LineaCalculada {
     concepto: string

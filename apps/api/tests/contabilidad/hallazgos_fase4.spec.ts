@@ -163,7 +163,7 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
         await cola(e)
         const dtes = await dtesDe('factura', f.id)
         assert.lengthOf(dtes, 0, `DTE ${dtes[0]?.id} por Q${dtes[0]?.total} (${dtes[0]?.estado})`)
-    }).fails('H16: el aviso acreditado al 100 % sale certificado por Q0.00')
+    })
 
     test('H17 · recuperar un aviso castigado lleva todo a 4.2.03: el IVA que salió de 2.1.11 no vuelve (confirmar con contador)', async ({
         assert,
@@ -184,7 +184,7 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
             e.ctx,
         )
         assert.equal(await saldoCuenta(e.B, '4.2.03'), '-133.93', 'solo la base es recuperación')
-    }).fails('H17: lo recuperado va entero a 4.2.03 (Q150.00) y 2.1.11 queda sin el IVA percibido')
+    })
 
     test('H18 · con DTE de la factura, anular el pago deja viva la diferencia que cerró (sin cargo ni NDEB)', async ({
         assert,
