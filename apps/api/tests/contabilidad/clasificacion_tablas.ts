@@ -30,7 +30,8 @@ export const INMUTABLES: Record<string, string> = {
     // localización fiscal, fase 3 (FEL)
     'billing.notas_credito_lineas': 'nota de crédito por línea (§10.9)',
     'billing.sustituciones': 'sustitución de una factura (§10.9)',
-    'billing.notas_credito_aplicaciones': 'aplicación del saldo a favor de una nota de crédito a una factura (dinero; lealtad §15.2)',
+    'billing.notas_credito_aplicaciones':
+        'aplicación del saldo a favor de una nota de crédito a una factura (dinero; lealtad §15.2)',
     'fiscal.dte_intentos': 'bitácora ante el certificador (§3.6)',
     // localización fiscal §10.7 (numeración guardada)
     'ledger.asientos_numeros': 'número de diario asignado al insertar (§10.7)',
