@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { SelectItem, TableColumn } from '@nuxt/ui'
 
 /**
  * Planes (A1): lista con su modelo de velocidad, alta (`planes.crear`) y edición
@@ -12,9 +12,21 @@ definePageMeta({ permiso: 'planes.ver' })
 useHead({ title: 'Planes · ArgosIsp' })
 
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
 const { puede } = usePermisos()
 
-const lista = usePaginacionCursor(cursor => usePlanes().listar({}, cursor))
+/** Filtro por tipo de plan (`?tipo=`, A1). Reka UI no admite `''` como valor de un ítem. */
+const TODOS = 'todos'
+const tipo = ref<TipoPlan | typeof TODOS>(esTipoPlan(route.query.tipo) ? route.query.tipo : TODOS)
+const itemsTipo: SelectItem[] = [{ label: 'Todos los tipos', value: TODOS }, ...ITEMS_TIPO_PLAN]
+
+const lista = usePaginacionCursor(cursor => usePlanes().listar(tipo.value === TODOS ? {} : { tipo: tipo.value }, cursor))
+
+watch(tipo, async (valor) => {
+    await router.replace({ query: valor === TODOS ? {} : { tipo: valor } })
+    await lista.recargar()
+})
 
 const columnas: TableColumn<Plan>[] = [
     { accessorKey: 'nombre', header: 'Plan', meta: { class: { td: 'whitespace-normal' } } },
@@ -81,6 +93,14 @@ onMounted(() => void lista.recargar())
                 :reintentando="lista.cargando.value"
             />
             <template v-else>
+                <USelect
+                    v-model="tipo"
+                    :items="itemsTipo"
+                    icon="i-lucide-tag"
+                    aria-label="Filtrar por tipo de plan"
+                    class="w-full sm:w-56"
+                    data-prueba="filtro-tipo-plan"
+                />
                 <UTable
                     :data="lista.filas.value"
                     :columns="columnas"
@@ -91,7 +111,14 @@ onMounted(() => void lista.recargar())
                     <template #nombre-cell="{ row }">
                         <div class="flex min-w-0 flex-col gap-0.5">
                             <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                {{ row.original.nombre }}
+                                <ULink
+                                    :to="`/planes/${row.original.id}`"
+                                    class="hover:text-primary"
+                                >{{ row.original.nombre }}</ULink>
+                                <TipoPlanBadge
+                                    :tipo="row.original.tipo"
+                                    size="sm"
+                                />
                                 <UBadge
                                     v-if="!row.original.activo"
                                     label="Inactivo"
@@ -124,21 +151,31 @@ onMounted(() => void lista.recargar())
                         <span class="whitespace-nowrap tabular-nums">{{ formatearQuetzales(row.original.precio) }}</span>
                     </template>
                     <template #acciones-cell="{ row }">
-                        <UButton
-                            v-if="puede('planes.editar')"
-                            icon="i-lucide-pencil"
-                            color="neutral"
-                            variant="ghost"
-                            size="sm"
-                            :aria-label="`Editar ${row.original.nombre}`"
-                            :data-prueba="`editar-plan-${row.original.id}`"
-                            @click="abrir(row.original)"
-                        />
+                        <div class="flex justify-end gap-1">
+                            <UButton
+                                v-if="puede('planes.editar')"
+                                icon="i-lucide-pencil"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                :aria-label="`Editar ${row.original.nombre}`"
+                                :data-prueba="`editar-plan-${row.original.id}`"
+                                @click="abrir(row.original)"
+                            />
+                            <UButton
+                                :to="`/planes/${row.original.id}`"
+                                icon="i-lucide-chevron-right"
+                                color="neutral"
+                                variant="ghost"
+                                size="sm"
+                                :aria-label="`Ver ${row.original.nombre}`"
+                            />
+                        </div>
                     </template>
                     <template #empty>
                         <UEmpty
                             icon="i-lucide-gauge"
-                            title="Todavía no hay planes"
+                            :title="tipo === TODOS ? 'Todavía no hay planes' : `No hay planes de tipo ${TIPOS_PLAN[tipo].etiqueta.toLowerCase()}`"
                             variant="naked"
                         />
                     </template>

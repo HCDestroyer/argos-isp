@@ -32,6 +32,11 @@ La aplicación no atiende entre el paso 3 y el 5 (unos minutos, la mayor parte e
 
 Cada corrida deja su registro en `/opt/argosisp/registros/actualizar-<fecha>.log`. Solo una operación a la vez (bloqueo en `/opt/argosisp/.bloqueo`).
 
+## API del portal y nodos portal
+
+- `api-portal` (la misma API para el tráfico del portal) se actualiza, se vigila y se revierte junto con `api`: misma imagen, misma base. Si una instalación anterior no tiene `ARGOSISP_API_PORTAL` en el `.env`, `argosisp actualizar` lo escribe: `si`, o `no` con menos de 3 GB de RAM (lo avisa en el registro). Apagarlo: `ARGOSISP_API_PORTAL=no` y `sudo argosisp levantar`.
+- **Nodos portal:** actualiza primero el servidor principal y después cada nodo con `sudo argosisp actualizar`. El nodo solo cambia su imagen del portal, toma como objetivo la versión de `GET /api/v1/version` del central y se niega a pasarla (ni con `--version`). Si no puede leer la versión del central (token revocado, central caído), no se actualiza. `argosisp estado` en el nodo avisa si no coincide. `argosisp revertir` en un nodo solo vuelve a la imagen anterior (no tiene base que restaurar).
+
 ## Parches automáticos (opcional, apagado por defecto)
 
 ```sh
@@ -73,7 +78,7 @@ El comando termina con `NO SE PUDO RESTAURAR …` o `LA VERSIÓN … NO QUEDÓ S
 
 1. Cada push a `main` actualiza la PR **"chore: publicar versión X.Y.Z"** de release-please (`.github/workflows/release.yml`) con la versión y el `CHANGELOG.md` en español (secciones en `release-please-config.json`; `docs`, `test`, `ci`, `chore` y `refactor` no aparecen). Los commits deben seguir Conventional Commits; los que no (por ejemplo `merge: …`) no entran.
 2. La PR la abre `GITHUB_TOKEN`, así que el CI no corre solo: ciérrala y vuelve a abrirla (o `workflow_dispatch` del CI en su rama) y mergea con CI en verde.
-3. Al mergear: etiqueta `vX.Y.Z`, GitHub Release con las notas, y `imagenes.yml` construye las seis imágenes (`ghcr.io/hcdestroyer/argosisp-{api,web,portal,aaa,coa,backup}`) para amd64 y arm64, mueve `estable` cuando están todas y sube a la Release `argosisp-X.Y.Z.tar.gz`, su `.sha256` e `instalar.sh`. Recién entonces los servidores ven la versión.
+3. Al mergear: etiqueta `vX.Y.Z`, GitHub Release con las notas, y `imagenes.yml` construye las siete imágenes (`ghcr.io/hcdestroyer/argosisp-{api,web,portal,aaa,coa,backup,freeradius}`) para amd64 y arm64, mueve `estable` cuando están todas y sube a la Release `argosisp-X.Y.Z.tar.gz`, su `.sha256` e `instalar.sh`. Recién entonces los servidores ven la versión.
 4. La primera versión: release-please empieza en `0.0.0` (manifiesto `.release-please-manifest.json`). Para que la entrega de la fase 1 salga como `1.0.0`, agregar `"release-as": "1.0.0"` al paquete `.` de `release-please-config.json` en la PR que la prepara y quitarlo después.
 5. Etiqueta a mano (sin release-please): `git tag v1.2.3 && git push origin v1.2.3` dispara `imagenes.yml` y crea la Release con notas generadas por GitHub. Volver a publicar una versión: `workflow_dispatch` de `imagenes.yml`. `estable` nunca retrocede.
 6. Una sola vez, después de la primera publicación: en GitHub → Packages, cambiar cada paquete `argosisp-*` a **público** (GHCR los crea privados aunque el repositorio sea público) para que los servidores descarguen sin credenciales.

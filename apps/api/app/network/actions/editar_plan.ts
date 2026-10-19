@@ -1,7 +1,13 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
-import { columnasPlan, exigirVelocidadValida, type DatosPlan } from '#network/actions/crear_plan'
+import {
+    columnasPlan,
+    exigirVelocidadValida,
+    type DatosPlan,
+    type PlanConAdvertencias,
+} from '#network/actions/crear_plan'
+import { advertenciasPlan } from '#network/tipos_plan'
 import { velocidadDePlan } from '#network/actions/obtener_implementacion_plan'
 import { columnasPlanRouter, verPlan, type PlanRouterVista, type PlanVista } from '#network/consultas/planes'
 import { CAMPOS_VELOCIDAD } from '#network/velocidad'
@@ -31,11 +37,14 @@ export function camposVelocidadCambiados(
  * router con los valores nuevos (422; la de un router lleva su id en el detalle). Si cambió un
  * campo de velocidad, emite `plan.velocidad_cambiada` con `router_id: null` (A2 recalcula padres
  * y perfiles en todos los routers).
+ *
+ * `tipo` se edita como cualquier campo (diff en `audit.cambios`); no cambia la velocidad, así que no
+ * emite evento. La respuesta trae `warnings[]` (`advertenciasPlan`).
  */
-export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanVista> {
+export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanConAdvertencias> {
     readonly nombre = 'planes.editar'
 
-    protected async handle(input: EntradaEditarPlan, t: Transaccion): Promise<PlanVista> {
+    protected async handle(input: EntradaEditarPlan, t: Transaccion): Promise<PlanConAdvertencias> {
         const { id, version, ...datos } = input
         t.fijarEntidad('plan', id)
         const antes = await verPlan(id, t.trx)
@@ -71,6 +80,6 @@ export default class EditarPlan extends DomainAction<EntradaEditarPlan, PlanVist
             await t.emit('plan.velocidad_cambiada', { plan_id: id, router_id: null, campos })
         }
         refrescarAaaAlConfirmar(t, { planId: id })
-        return despues
+        return { ...despues, warnings: advertenciasPlan(despues) }
     }
 }

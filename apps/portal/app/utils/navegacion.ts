@@ -3,7 +3,7 @@
  * secciones (escritorio) salen de esta misma lista. Son enlaces reales con la sección en la URL:
  * "Atrás" del teléfono vuelve a la sección anterior y se pueden compartir o recargar.
  */
-export type SeccionCuenta = 'inicio' | 'pagar' | 'facturas' | 'cuenta'
+export type SeccionCuenta = 'inicio' | 'pagar' | 'facturas' | 'puntos' | 'cuenta'
 
 export interface ItemNavegacion {
     seccion: SeccionCuenta
@@ -16,8 +16,15 @@ export const SECCIONES_CUENTA: readonly ItemNavegacion[] = [
     { seccion: 'inicio', etiqueta: 'Inicio', icono: 'i-lucide-house', to: '/cuenta' },
     { seccion: 'pagar', etiqueta: 'Pagar', icono: 'i-lucide-wallet', to: '/cuenta?seccion=pagar' },
     { seccion: 'facturas', etiqueta: 'Facturas', icono: 'i-lucide-receipt', to: '/cuenta?seccion=facturas' },
+    // Solo si el panel activó el programa de puntos en el portal (`seccionesVisibles`).
+    { seccion: 'puntos', etiqueta: 'Puntos', icono: 'i-lucide-sparkles', to: '/cuenta?seccion=puntos' },
     { seccion: 'cuenta', etiqueta: 'Cuenta', icono: 'i-lucide-user-round', to: '/cuenta?seccion=cuenta' },
 ]
+
+/** Las secciones de la barra: «Puntos» solo con el programa visible en el portal. */
+export function seccionesVisibles(conPuntos: boolean): readonly ItemNavegacion[] {
+    return conPuntos ? SECCIONES_CUENTA : SECCIONES_CUENTA.filter(item => item.seccion !== 'puntos')
+}
 
 /** `?seccion=` de la ruta → sección; cualquier otra cosa → inicio. */
 export function seccionDeLaRuta(valor: unknown): SeccionCuenta {

@@ -4,6 +4,310 @@
  */
 
 export interface paths {
+    "/api/v1/activos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activos fijos con su depreciación acumulada y valor en libros */
+        get: operations["activosListar"];
+        put?: never;
+        /**
+         * Alta de un activo que no entra por una compra (inventario inicial o aporte)
+         * @description Asiento alta_activo: 1.2.01.NN / 1.2.02.NN (depreciación inicial) + contrapartida (2.9.01, 3.1.01 o 3.3.01). Un activo comprado nace con la compra (línea activo_fijo). 422 tasa_sobre_tope.
+         */
+        post: operations["activosRegistrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver activo fijo */
+        get: operations["activosVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activos/{id}/dar-de-baja": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Venta o retiro de un activo (cancela costo y depreciación; ganancia o pérdida)
+         * @description Deprecia lo pendiente hasta el mes anterior; asiento baja_activo: 1.2.02 + Banco (precio) + 5.3.06 / 1.2.01 + 4.2.02. 409 activo_dado_de_baja. Emite activo.dado_de_baja.
+         */
+        post: operations["activosDarDeBaja"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activos/depreciar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar las cuotas de depreciación pendientes hasta un mes terminado
+         * @description Lo mismo que el cron diario depreciar: una cuota por activo y mes (repetir no duplica). Solo meses terminados (422 mes_terminado).
+         */
+        post: operations["activosDepreciar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/adicionales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catálogo de servicios adicionales (streaming, IPTV…) de la empresa activa */
+        get: operations["adicionalesListar"];
+        put?: never;
+        /**
+         * Crear un servicio adicional en el catálogo de la empresa
+         * @description 409 `adicional_duplicado` si el código ya existe en la empresa (también desactivado).
+         */
+        post: operations["adicionalesCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/adicionales/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un servicio adicional del catálogo */
+        get: operations["adicionalesVer"];
+        /** Editar un servicio adicional del catálogo */
+        put: operations["adicionalesEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/adicionales/{id}/desactivar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Desactivar un servicio adicional (no se borra; las asignaciones vigentes siguen) */
+        post: operations["adicionalesDesactivar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/adicionales/motivos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Motivos de cortesía: los comunes y los de la empresa activa */
+        get: operations["adicionalesMotivos"];
+        put?: never;
+        /**
+         * Crear un motivo de cortesía de la empresa
+         * @description 409 `motivo_duplicado` si el código ya existe en la empresa o entre los comunes.
+         */
+        post: operations["adicionalesCrearMotivo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/adicionales/motivos/{id}/desactivar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desactivar un motivo de cortesía (no se borra)
+         * @description Un motivo común solo con alcance global (403 `empresa_no_permitida`).
+         */
+        post: operations["adicionalesDesactivarMotivo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Anuncios del portal (de la empresa activa) */
+        get: operations["anunciosListar"];
+        put?: never;
+        /**
+         * Crear un anuncio (en borrador)
+         * @description En la empresa activa (`X-Empresa-Id`; 422 `empresa_requerida` si el usuario tiene varias y no eligió). Texto plano. El botón lleva texto y URL juntos: `http(s)://…` o una ruta del portal (`/…`).
+         */
+        post: operations["anunciosCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ver un anuncio
+         * @description Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        get: operations["anunciosVer"];
+        /**
+         * Editar un anuncio (borrador o publicado)
+         * @description Solo los campos enviados; `null` borra los opcionales. Archivado: 422 `anuncio_archivado`. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        put: operations["anunciosEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/archivar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archivar un anuncio (deja de verse; conserva sus métricas)
+         * @description Desde borrador o publicado; ya archivado no cambia nada. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        post: operations["anunciosArchivar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Imagen de un anuncio (vista previa del panel, con ETag)
+         * @description Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        get: operations["anunciosImagen"];
+        put?: never;
+        /**
+         * Subir o quitar la imagen de un anuncio
+         * @description `multipart/form-data` con `imagen`: PNG, JPEG o WebP (por su contenido), hasta 1 MB y de 64 a 4096 px por lado; `alt` (texto alternativo) obligatorio si el anuncio aún no tiene. `quitar=true` sin archivo la quita. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        post: operations["anunciosCambiarImagen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/metricas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Vistas y clics de un anuncio (totales, por lugar y por día)
+         * @description Visitantes distintos (uno por sesión del navegador), sin datos personales. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        get: operations["anunciosMetricas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/publicar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publicar un anuncio (se ve en el portal dentro de su vigencia)
+         * @description Desde borrador o archivado; ya publicado no cambia nada. Con `fin` pasado, 422 `anuncio_vencido`. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        post: operations["anunciosPublicar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -881,6 +1185,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/compras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compras (documentos de proveedores) con sus líneas y retenciones */
+        get: operations["comprasListar"];
+        put?: never;
+        /**
+         * Registrar una compra al contado o al crédito (Gasto/Activo + IVA crédito / Caja|Banco|Proveedores)
+         * @description Solo inserción. Al contado crea el egreso que la paga (un solo asiento, el de la compra). Al crédito queda en 2.1.03 con el auxiliar del proveedor. FPEQ, FCAP y RECIBO sin crédito fiscal; crédito fuera de la ventana: 422 credito_fiscal_extemporaneo. 409 compra_duplicada. Retenciones sugeridas si no se indican. Emite compra.registrada.
+         */
+        post: operations["comprasRegistrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver compra */
+        get: operations["comprasVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/{id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular una compra (asiento de reverso)
+         * @description Reverso con fecha de hoy y las etiquetas de impuesto en signo contrario (el libro de compras resta la anulación en su mes). Al contado anula también su egreso. 409 compra_anulada, compra_con_notas, compra_con_pagos, compra_con_constancia, activo_con_cuotas, diferido_con_cuotas. Emite compra.anulada.
+         */
+        post: operations["comprasAnular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/{id}/constancias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar la constancia de retención emitida al proveedor por una retención de la compra
+         * @description No mueve el libro (la retención ya está en 2.1.04 o 2.1.05). Monto = el de la retención de la compra. 409 constancia_registrada, constancia_duplicada, compra_anulada.
+         */
+        post: operations["comprasRegistrarConstancia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/desde-egreso/{egresoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar como compra un egreso que tenía factura (reclasificación, sin duplicar el asiento)
+         * @description El asiento del egreso no se toca: la compra lleva una reclasificación (IVA crédito / gasto del egreso). El neto (total − retenciones) debe ser el monto del egreso (422 compra_distinta_del_egreso). Fuera de la ventana del crédito entra sin crédito. 409 egreso_con_compra, egreso_de_compra, egreso_anulado. Emite compra.registrada.
+         */
+        post: operations["comprasDesdeEgreso"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/comprobantes": {
         parameters: {
             query?: never;
@@ -978,6 +1380,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/constancias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Constancias de retención recibidas de clientes y emitidas a proveedores */
+        get: operations["constanciasListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cuentas-bancarias": {
         parameters: {
             query?: never;
@@ -1028,6 +1447,64 @@ export interface paths {
         get: operations["dashboardResumen"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diferimientos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gastos pagados por anticipado (1.1.13) e ingresos cobrados por anticipado (2.1.12) */
+        get: operations["diferimientosListar"];
+        put?: never;
+        /**
+         * Diferir una línea de factura (ingreso) o de compra (gasto) en N meses
+         * @description Factura: Ingreso / 2.1.12 por la base (el IVA no se difiere). Compra: 1.1.13 / Gasto. Las cuotas vuelven cada mes con el cron diferir. 409 linea_diferida, factura_no_emitida, compra_anulada.
+         */
+        post: operations["diferimientosRegistrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diferimientos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver diferimiento con sus cuotas */
+        get: operations["diferimientosVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diferimientos/amortizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar las cuotas de diferidos pendientes hasta un mes terminado
+         * @description Lo mismo que el cron diario diferir: una cuota por diferimiento y mes (repetir no duplica).
+         */
+        post: operations["diferimientosAmortizar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3259,6 +3736,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libros/compras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Libro de compras y servicios recibidos (vista previa, sin folio)
+         * @description Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio llega con los bloqueos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.
+         */
+        get: operations["librosCompras"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/compras/cuadre": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cuadre del libro de compras con 1.1.04 IVA crédito fiscal, por mes */
+        get: operations["librosComprasCuadre"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -3616,6 +4130,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pagos-proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pagos a proveedores con sus aplicaciones a compras */
+        get: operations["pagosProveedoresListar"];
+        put?: never;
+        /**
+         * Pagar compras al crédito de un proveedor (Proveedores / Caja | Banco)
+         * @description Aplica a las compras pedidas y luego a la más antigua por vencimiento. No pasa del saldo pendiente (422 pago_excede_saldo). En efectivo sale del turno abierto de la caja (baja su esperado). La cuenta es de la empresa del proveedor (422 cuenta_de_otra_empresa).
+         */
+        post: operations["pagosProveedoresRegistrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pagos-proveedores/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver pago a proveedor */
+        get: operations["pagosProveedoresVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pagos-proveedores/{id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular un pago a proveedor (asiento de reverso)
+         * @description Reverso con fecha de hoy; sus compras vuelven a quedar con saldo. 409 pago_anulado.
+         */
+        post: operations["pagosProveedoresAnular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pagos/{id}": {
         parameters: {
             query?: never;
@@ -3881,6 +4453,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/planes/{id}/adicionales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Adicionales que trae el plan (con su cantidad)
+         * @description De todas las empresas; cada servicio recibe solo los de su empresa.
+         */
+        get: operations["planesAdicionales"];
+        /**
+         * Definir los adicionales que trae el plan (reemplaza la lista)
+         * @description Sube la `version` del plan (409 si cambió). No toca los servicios existentes: se aplica al crear un servicio o al cambiar de plan.
+         */
+        put: operations["planesDefinirAdicionales"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/planes/{id}/routers": {
         parameters: {
             query?: never;
@@ -3971,6 +4567,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/anuncios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Anuncios vigentes para el cliente en un lugar del portal
+         * @description `lugar=pagina_corte`: el cliente del servicio de la IP (solo su empresa) o, si no, el de la sesión. `lugar=portal_inicio`: el de la sesión. Solo publicados, dentro de su vigencia y cuya audiencia le aplica (`todos`, `suspendidos`: algún servicio suspendido o limitado, `al_dia`: sin eso ni facturas vencidas, `con_puntos`: saldo de puntos > 0). Sin cliente identificado: lista vacía. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalAnuncios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/anuncios/{id}/eventos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cuenta una vista o un clic de un anuncio vigente
+         * @description `visitante` es un UUID que el navegador genera por sesión (sin datos personales; nada va en la URL). Idempotente: una vista y un clic por visitante y anuncio. 404 si el anuncio no está vigente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        post: operations["portalAnuncioEvento"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/anuncios/{id}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Imagen de un anuncio vigente (mismo origen del portal, con ETag)
+         * @description Solo de anuncios publicados y vigentes; si no, 404. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalAnuncioImagen"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/bancos": {
         parameters: {
             query?: never;
@@ -3985,6 +4641,30 @@ export interface paths {
         get: operations["portalBancos"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/canjes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Canjes del cliente de la sesión y su estado
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalCanjes"];
+        put?: never;
+        /**
+         * El cliente canjea sus puntos por un premio
+         * @description Llama `lealtad.canjear` (A3) con actor `cliente` y canal `portal`. 404 si el premio no está en el portal (inactivo, sin `en_portal` o de un programa no visible). Errores de la acción: 403 `canje_portal_inactivo`, 422 `saldo_insuficiente`, `servicio_no_valido`, `premio_inactivo`, `recompensa_no_disponible`, `parametro_sin_confirmar`; 409 `sin_existencias`, `canje_pendiente`. Un descuento queda `reservado` para la próxima factura del servicio. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        post: operations["portalCanjear"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4335,6 +5015,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/premios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Premios canjeables desde el portal, con lo que le falta al cliente para cada uno
+         * @description Activos y con `en_portal`, del más barato al más caro. Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalPremios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/promesas": {
         parameters: {
             query?: never;
@@ -4371,6 +5071,26 @@ export interface paths {
          * @description Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalPromesaCondiciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/puntos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Puntos del cliente por empresa: saldo, lo que vence pronto, movimientos y términos
+         * @description Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalPuntos"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4617,6 +5337,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proveedores de la empresa con el saldo de su auxiliar (2.1.03) */
+        get: operations["proveedoresListar"];
+        put?: never;
+        /**
+         * Dar de alta un proveedor (NIT validado como en el núcleo)
+         * @description NIT con dígito verificador, CUI o id_extranjero (no residentes). 409 proveedor_duplicado si la empresa ya tiene uno activo con ese documento.
+         */
+        post: operations["proveedoresCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proveedores/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver proveedor */
+        get: operations["proveedoresVer"];
+        /**
+         * Editar un proveedor (con version)
+         * @description Con version (409 si cambió) y audit.cambios. El documento y el país no se editan (422 campo_solo_lectura).
+         */
+        put: operations["proveedoresEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proveedores/{id}/estado-cuenta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Auxiliar del proveedor en 2.1.03: compras, NCRE, pagos, saldo y documentos pendientes */
+        get: operations["proveedoresEstadoCuenta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/red/eventos": {
         parameters: {
             query?: never;
@@ -4729,6 +5508,26 @@ export interface paths {
          * @description Por cuenta con extractos: saldo del libro, saldo del extracto, partidas en tránsito de cada lado y diferencia (0 = saldo del extracto = libro ± partidas en tránsito).
          */
         get: operations["reportesConciliacionBancaria"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/cuentas-por-pagar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Antigüedad de proveedores (por vencer, 1-30, 31-60, 61-90, +90 días)
+         * @description Saldo pendiente de cada compra al crédito por días desde su vencimiento al corte, por proveedor. El total cuadra con 2.1.03 (check cxp_antiguedad). Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.
+         */
+        get: operations["reportesCuentasPorPagar"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5111,6 +5910,90 @@ export interface paths {
         /** Editar servicio (plan, router, IPs, datos) */
         put: operations["serviciosEditar"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/adicionales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Adicionales del servicio (sin credenciales)
+         * @description Del más reciente al más viejo; `estado` filtra activos o bajas.
+         */
+        get: operations["serviciosAdicionales"];
+        put?: never;
+        /**
+         * Agregar un adicional al servicio (incluido, cortesía o cobrado)
+         * @description `cobrado` exige `precio` > 0; `cortesia` exige `motivo_id` y además el permiso `servicios.adicional_cortesia` (403). 422 `adicional_de_otra_empresa`, `adicional_inactivo` o `servicio_retirado`. Un mismo adicional puede agregarse varias veces.
+         */
+        post: operations["serviciosAgregarAdicional"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Editar un adicional del servicio (modalidad, identificador, credencial, precio, motivo)
+         * @description 409 si `version` cambió; 422 `adicional_dado_de_baja`. Pasar a `cortesia` o cambiar su motivo exige además `servicios.adicional_cortesia`. `credencial: null` la borra.
+         */
+        put: operations["serviciosEditarAdicional"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}/credencial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ver la credencial de un adicional del servicio (queda auditado)
+         * @description 422 `sin_credencial` si no tiene.
+         */
+        get: operations["serviciosCredencialAdicional"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}/quitar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dar de baja un adicional del servicio (con fecha; nunca se borra)
+         * @description 409 si `version` cambió; 422 `adicional_dado_de_baja` si ya estaba de baja.
+         */
+        post: operations["serviciosQuitarAdicional"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5700,9 +6583,170 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        ActivoFijo: {
+            id: number;
+            empresa_id: number;
+            clase: string;
+            descripcion: string;
+            serie: string | null;
+            ubicacion: string | null;
+            compra_id: number | null;
+            compra_linea_id: number | null;
+            /** Format: date */
+            fecha_alta: string;
+            /**
+             * Format: date
+             * @description Primer mes que se deprecia
+             */
+            inicio_depreciacion: string;
+            /** @description Sin el IVA tomado como crédito fiscal */
+            costo: components["schemas"]["Dinero"];
+            valor_residual: components["schemas"]["Dinero"];
+            depreciacion_inicial: components["schemas"]["Dinero"];
+            /** @description Por ciento anual (línea recta), ≤ tope legal de la clase */
+            tasa_anual: string;
+            cuota_mensual: components["schemas"]["Dinero"];
+            cuenta_activo_codigo: string;
+            cuenta_depreciacion_codigo: string;
+            depreciacion_acumulada: components["schemas"]["Dinero"];
+            valor_libros: components["schemas"]["Dinero"];
+            cuotas: number;
+            /** Format: date */
+            ultima_cuota: string | null;
+            /** @enum {string} */
+            estado: "vigente" | "dado_de_baja";
+            baja: {
+                /** Format: date */
+                fecha: string;
+                /** @enum {string} */
+                tipo: "venta" | "retiro" | "anulacion";
+                motivo: string;
+                precio_venta: components["schemas"]["Dinero"];
+                valor_libros: components["schemas"]["Dinero"];
+                asiento_id: number | null;
+            } | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        Adicional: {
+            id: number;
+            /** @description Empresa (NIT) del catálogo */
+            empresa_id: number;
+            /** @description Único en la empresa, en mayúsculas */
+            codigo: string;
+            nombre: string;
+            descripcion: string | null;
+            /** @description Sugerencia para asignarlo cobrado */
+            precio_sugerido: components["schemas"]["Dinero"] | null;
+            /** @description Desactivado: no se asigna ni lo traen los planes */
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AdicionalPlan: {
+            plan_id: number;
+            adicional_id: number;
+            /** @description Empresa del adicional: solo lo reciben servicios de esa empresa */
+            empresa_id: number;
+            adicional_codigo: string;
+            adicional_nombre: string;
+            adicional_activo: boolean;
+            cantidad: number;
+        };
+        AdicionalServicio: {
+            /** @description Id de la asignación (`asignacionId` en las rutas) */
+            id: number;
+            empresa_id: number;
+            servicio_id: number;
+            adicional_id: number;
+            adicional_codigo: string;
+            adicional_nombre: string;
+            /** @enum {string} */
+            modalidad: "incluido" | "cortesia" | "cobrado";
+            /** @description Usuario de IPTV, correo de la cuenta… */
+            identificador: string | null;
+            /** @description Si hay credencial guardada; se lee con GET …/credencial (queda auditado) */
+            tiene_credencial: boolean;
+            /** @description Solo con cobrado */
+            precio: components["schemas"]["Dinero"] | null;
+            /** @description Motivo de cortesía (solo con cortesia) */
+            motivo_id: number | null;
+            motivo_nombre: string | null;
+            motivo_detalle: string | null;
+            /** @description Plan que lo trajo (solo incluido asignado por el plan) */
+            plan_id: number | null;
+            /** @enum {string} */
+            estado: "activo" | "baja";
+            /** Format: date-time */
+            alta_en: string;
+            /** Format: date-time */
+            baja_en: string | null;
+            /** @description Texto de la baja, o retiro, cambio_plan, cambio_empresa */
+            motivo_baja: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Advertencia: {
+            /** @enum {string} */
+            codigo: "plan_dedicado_asimetrico" | "plan_dedicado_compartido" | "servicio_cliente_cf";
+            mensaje: string;
+        };
         AjustePuntos: {
             movimiento: components["schemas"]["MovimientoPuntos"];
             saldo: number;
+        };
+        Anuncio: {
+            id: number;
+            empresa_id: number;
+            titulo: string;
+            /** @description Texto plano, sin HTML */
+            texto: string;
+            imagen: {
+                /** @description `/api/v1/anuncios/:id/imagen?v=…` (con sesión del panel) */
+                url: string;
+                /** @enum {string} */
+                tipo: "image/png" | "image/jpeg" | "image/webp";
+                ancho: number;
+                alto: number;
+                alt: string | null;
+            } | null;
+            boton: {
+                texto: string;
+                /** @description `http(s)://…` o ruta del portal que empieza con `/` */
+                url: string;
+            } | null;
+            /** Format: date-time */
+            inicio: string | null;
+            /** Format: date-time */
+            fin: string | null;
+            /** @enum {string} */
+            audiencia: "todos" | "suspendidos" | "con_puntos" | "al_dia";
+            lugares: ("portal_inicio" | "pagina_corte")[];
+            orden: number;
+            /** @enum {string} */
+            estado: "borrador" | "publicado" | "archivado";
+            /** @description Publicado y dentro de su vigencia ahora mismo */
+            vigente: boolean;
+            /** Format: date-time */
+            publicado_en: string | null;
+            /** Format: date-time */
+            archivado_en: string | null;
+            creado_por: number | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         AplicacionPago: {
             factura_id: number;
@@ -5726,7 +6770,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "lealtad";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -6182,6 +7226,66 @@ export interface components {
             /** @description Solo viene (en true) si la celda puede ser null (p. ej. "Sin zona"); ausente = nunca null */
             nulable?: boolean;
         };
+        Compra: {
+            id: number;
+            empresa_id: number;
+            proveedor_id: number;
+            proveedor_nombre: string;
+            proveedor_nit: string;
+            /** @enum {string} */
+            tipo_documento: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+            serie: string;
+            numero: string;
+            autorizacion: string | null;
+            /** Format: date */
+            fecha_documento: string;
+            /**
+             * Format: date
+             * @description Primer día del mes del libro de compras (crédito fiscal)
+             */
+            periodo_iva: string;
+            /**
+             * Format: date
+             * @description Fecha contable del asiento: max(fecha_documento, periodo_iva)
+             */
+            fecha: string;
+            /** @enum {string} */
+            condicion: "contado" | "credito";
+            /** Format: date */
+            vence_en: string | null;
+            base_bienes: components["schemas"]["Dinero"];
+            base_servicios: components["schemas"]["Dinero"];
+            base_importaciones: components["schemas"]["Dinero"];
+            exento: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            total: components["schemas"]["Dinero"];
+            credito_fiscal: boolean;
+            retencion_iva: components["schemas"]["Dinero"];
+            retencion_isr: components["schemas"]["Dinero"];
+            /** @description total − retenciones: lo que se paga al proveedor */
+            neto: components["schemas"]["Dinero"];
+            /** @description Pendiente de pago (crédito vigente); 0 en contado, NCRE y anuladas */
+            saldo: components["schemas"]["Dinero"];
+            compra_referencia_id: number | null;
+            /** @description Egreso existente desde el que se registró */
+            egreso_id: number | null;
+            /** @description Egreso que la pagó al contado */
+            egreso_pago_id: number | null;
+            descripcion: string | null;
+            asiento_id: number | null;
+            /** @enum {string} */
+            estado: "vigente" | "anulada";
+            /** Format: date-time */
+            anulado_en: string | null;
+            anulado_por: number | null;
+            motivo_anulacion: string | null;
+            asiento_reverso_id: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            lineas: components["schemas"]["LineaCompra"][];
+            retenciones: components["schemas"]["RetencionCompra"][];
+        };
         Comprobante: {
             id: number;
             /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
@@ -6500,6 +7604,33 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
         };
+        ConstanciaRetencion: {
+            id: number;
+            empresa_id: number;
+            /**
+             * @description recibida de un cliente (con su pago) o emitida a un proveedor (con su compra)
+             * @enum {string}
+             */
+            direccion: "recibida" | "emitida";
+            /** @enum {string} */
+            impuesto: "iva" | "isr";
+            impuesto_codigo: string;
+            numero: string;
+            /** Format: date */
+            fecha: string;
+            monto: components["schemas"]["Dinero"];
+            pago_id: number | null;
+            cliente_id: number | null;
+            cliente_nombre: string | null;
+            compra_id: number | null;
+            proveedor_id: number | null;
+            proveedor_nombre: string | null;
+            /** @description El pago o la compra sigue vigente */
+            vigente: boolean;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         ConsumoHorus: {
             /** @enum {string} */
             conector: "activo" | "apagado";
@@ -6539,6 +7670,13 @@ export interface components {
                 direcciones: string[];
             }[];
         };
+        CredencialAdicional: {
+            servicio_id: number;
+            asignacion_id: number;
+            identificador: string | null;
+            /** @description En claro; cada consulta queda auditada */
+            credencial: string;
+        };
         CredencialesFel: {
             id: number;
             empresa_id: number;
@@ -6564,6 +7702,17 @@ export interface components {
             user_ppp: string;
             /** @description En claro; cada consulta queda auditada */
             pass_ppp: string;
+        };
+        CuadreCompras: {
+            empresa_id: number;
+            /** @description YYYY-MM */
+            periodo: string;
+            /** @description Crédito fiscal del libro de compras del mes */
+            libro: components["schemas"]["Dinero"];
+            /** @description Movimiento de 1.1.04 de los asientos de compras del mes */
+            cuenta: components["schemas"]["Dinero"];
+            diferencia: components["schemas"]["Dinero"];
+            cuadra: boolean;
         };
         Cuenta: {
             /** @description Empresa de la subcuenta (caja o cuenta bancaria); null = cuenta común */
@@ -6723,6 +7872,37 @@ export interface components {
                 ncre: boolean;
             }[];
         };
+        Diferimiento: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            origen: "factura" | "compra";
+            factura_id: number | null;
+            factura_linea_id: number | null;
+            compra_id: number | null;
+            compra_linea_id: number | null;
+            descripcion: string;
+            /** @description 1.1.13 (gasto) o 2.1.12 (ingreso) */
+            cuenta_diferida_codigo: string;
+            cuenta_destino_codigo: string;
+            total: components["schemas"]["Dinero"];
+            /** Format: date */
+            inicio: string;
+            meses: number;
+            amortizado: components["schemas"]["Dinero"];
+            pendiente: components["schemas"]["Dinero"];
+            cuotas: {
+                /** Format: date */
+                mes: string;
+                monto: components["schemas"]["Dinero"];
+                asiento_id: number;
+            }[];
+            /** @enum {string} */
+            estado: "vigente" | "amortizado" | "cancelado";
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         /**
          * @description Monto en quetzales con 2 decimales, como string
          * @example 150.00
@@ -6836,6 +8016,8 @@ export interface components {
             cuenta_bancaria_id: number | null;
             cuenta_bancaria_nombre: string | null;
             asiento_id: number | null;
+            /** @description Compra al contado que paga este egreso (fase 5): su asiento es el de la compra y se anula con la compra */
+            compra_id?: number | null;
             /** @enum {string} */
             estado: "registrado" | "anulado";
             registrado_por: number | null;
@@ -7053,6 +8235,37 @@ export interface components {
             movimientos: components["schemas"]["MovimientoEstadoCuenta"][];
             /** @description Multiempresa: una sección por empresa (cada NIT cobra lo suyo); saldo de la raíz = total informativo */
             empresas?: components["schemas"]["SeccionEstadoCuenta"][];
+        };
+        EstadoCuentaProveedor: {
+            proveedor: components["schemas"]["Proveedor"];
+            /** Format: date */
+            desde: string | null;
+            /** Format: date */
+            hasta: string;
+            saldo_inicial: components["schemas"]["Dinero"];
+            movimientos: {
+                asiento_id: number;
+                /** Format: date */
+                fecha: string;
+                /** @enum {string} */
+                tipo: "compra" | "nota_credito" | "pago" | "anulacion" | "ajuste";
+                documento: string;
+                descripcion: string;
+                debe: components["schemas"]["Dinero"];
+                haber: components["schemas"]["Dinero"];
+                /** @description Lo que la empresa le debe después del movimiento */
+                saldo: components["schemas"]["Dinero"];
+            }[];
+            /** @description Saldo del auxiliar en 2.1.03 al corte */
+            saldo_final: components["schemas"]["Dinero"];
+            pendientes: {
+                compra_id: number;
+                documento: string;
+                /** Format: date */
+                vence_en: string;
+                saldo: components["schemas"]["Dinero"];
+                dias_vencida: number;
+            }[];
         };
         /** @enum {string} */
         EstadoFactura: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
@@ -7590,6 +8803,19 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        LineaCompra: {
+            id: number;
+            descripcion: string;
+            /** @enum {string} */
+            tipo: "bien" | "servicio" | "activo_fijo" | "combustible" | "importacion";
+            cuenta_id: number;
+            cuenta_codigo: string;
+            exento: boolean;
+            base: components["schemas"]["Dinero"];
+            iva: components["schemas"]["Dinero"];
+            clase_activo: string | null;
+            diferir_meses: number | null;
+        };
         LineaExtracto: {
             id: number;
             extracto_id: number;
@@ -7756,6 +8982,25 @@ export interface components {
             /** @description Solo en `GET /me`: empresa activa de la petición (`X-Empresa-Id` o la única del usuario); null si tiene varias y no eligió */
             empresa_activa_id?: number | null;
         };
+        MetricasAnuncio: {
+            anuncio_id: number;
+            /** @description Visitantes distintos que lo vieron (uno por sesión del navegador) */
+            vistas: number;
+            /** @description Visitantes distintos que tocaron su botón */
+            clics: number;
+            por_lugar: {
+                /** @enum {string} */
+                lugar: "portal_inicio" | "pagina_corte";
+                vistas: number;
+                clics: number;
+            }[];
+            por_dia: {
+                /** Format: date */
+                dia: string;
+                vistas: number;
+                clics: number;
+            }[];
+        };
         MigracionAaaRouter: {
             router_id: number;
             /**
@@ -7774,6 +9019,20 @@ export interface components {
              */
             primer_accounting: string | null;
         };
+        MotivoCortesia: {
+            id: number;
+            /** @description null = común a todas las empresas */
+            empresa_id: number | null;
+            codigo: string;
+            nombre: string;
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         Movimiento: {
             id: number;
             cuenta_id: number;
@@ -7784,6 +9043,9 @@ export interface components {
             cliente_id: number | null;
             /** @description Cliente del auxiliar (CxC, anticipos) */
             cliente_nombre?: string | null;
+            /** @description Proveedor del auxiliar (2.1.03 Proveedores) */
+            proveedor_id?: number | null;
+            proveedor_nombre?: string | null;
             /** @description Impuesto de la partida (fiscal.impuestos) */
             impuesto_codigo?: string | null;
             /** @description Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro */
@@ -7983,8 +9245,21 @@ export interface components {
             cliente_nombre?: string;
             /** @enum {string} */
             metodo: "caja" | "pasarela" | "deposito" | "transferencia" | "ach" | "remesa" | "agente" | "debito";
+            /** @description Lo que el pago aplica a la deuda (efectivo o depósito + constancias de retención) */
             monto: components["schemas"]["Dinero"];
             comision: components["schemas"]["Dinero"];
+            /** @description Parte del monto cubierta con constancias de retención del cliente (fase 5): a caja o banco entró monto − comision − retenido */
+            retenido?: components["schemas"]["Dinero"];
+            /** @description Constancias de retención recibidas con el pago (1.1.05 IVA, 1.1.06 ISR) */
+            constancias?: {
+                /** @enum {string} */
+                impuesto: "iva" | "isr";
+                impuesto_codigo: string;
+                numero: string;
+                /** Format: date */
+                fecha: string;
+                monto: components["schemas"]["Dinero"];
+            }[];
             referencia: string | null;
             caja_id: number | null;
             pasarela: string | null;
@@ -8041,6 +9316,41 @@ export interface components {
             fecha: string;
             /** @description Días desde el pago */
             dias: number;
+        };
+        PagoProveedor: {
+            id: number;
+            empresa_id: number;
+            proveedor_id: number;
+            proveedor_nombre: string;
+            /** Format: date */
+            fecha: string;
+            /** @enum {string} */
+            metodo: "caja" | "banco" | "cuenta_bancaria";
+            caja_id: number | null;
+            /** @description Turno de caja del que salió el efectivo (baja su esperado) */
+            turno_id: number | null;
+            banco_id: number | null;
+            cuenta_bancaria_id: number | null;
+            cuenta_id: number;
+            cuenta_codigo: string;
+            monto: components["schemas"]["Dinero"];
+            referencia: string | null;
+            descripcion: string | null;
+            asiento_id: number | null;
+            /** @enum {string} */
+            estado: "registrado" | "anulado";
+            /** Format: date-time */
+            anulado_en: string | null;
+            motivo_anulacion: string | null;
+            asiento_reverso_id: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            aplicaciones: {
+                compra_id: number;
+                documento: string;
+                monto: components["schemas"]["Dinero"];
+            }[];
         };
         PaisLocalizacion: {
             /** @description ISO 3166-1 alfa-2 */
@@ -8129,6 +9439,11 @@ export interface components {
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
             tamano_prefijo_delegado: 64 | 56 | 48;
+            /**
+             * @description residencial (por defecto), empresarial o dedicado
+             * @enum {string}
+             */
+            tipo?: "residencial" | "empresarial" | "dedicado";
             global: boolean;
             activo: boolean;
             /** @description Control optimista: envíala al editar */
@@ -8137,6 +9452,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Solo al crear o editar: advertencias del tipo de plan (nunca bloquean) */
+            warnings?: components["schemas"]["Advertencia"][];
         };
         PlanEfectivo: {
             id: number;
@@ -8184,6 +9501,11 @@ export interface components {
             pool_ipv6_delegacion: string | null;
             local_address: string | null;
             no_crear_reglas: boolean;
+            /**
+             * @description Tipo del plan (residencial, empresarial, dedicado)
+             * @enum {string}
+             */
+            tipo?: "residencial" | "empresarial" | "dedicado";
         };
         PlanRouter: {
             id: number;
@@ -8317,9 +9639,48 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        PortalAnuncio: {
+            id: number;
+            empresa_id: number;
+            titulo: string;
+            /** @description Texto plano: mostrar como texto, nunca como HTML */
+            texto: string;
+            imagen: {
+                /** @description `/api/v1/portal/anuncios/:id/imagen?v=…` (mismo origen) */
+                url: string;
+                ancho: number;
+                alto: number;
+                alt: string;
+            } | null;
+            boton: {
+                texto: string;
+                /** @description `http(s)://…` o ruta del portal que empieza con `/` */
+                url: string;
+            } | null;
+        };
         PortalBanco: {
             id: number;
             nombre: string;
+        };
+        PortalCanje: {
+            id: number;
+            empresa_id: number;
+            servicio_id: number;
+            premio_nombre: string;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            puntos: number;
+            /**
+             * @description `reservado`: para la próxima factura; `aplicado`; `revertido`; `rechazado`
+             * @enum {string}
+             */
+            estado: "reservado" | "aplicado" | "revertido" | "rechazado";
+            /** @description Q descontados; null mientras está reservado */
+            descuento: components["schemas"]["Dinero"] | null;
+            /** Format: date-time */
+            aplicado_en: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         PortalComprobante: {
             id: number;
@@ -8589,6 +9950,29 @@ export interface components {
             /** Format: date-time */
             pagado_en: string | null;
         };
+        PortalPremio: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            nombre: string;
+            costo_puntos: number;
+            /** @enum {string|null} */
+            descuento_tipo: "monto" | "porcentaje" | null;
+            descuento_valor: components["schemas"]["Dinero"] | null;
+            tope: components["schemas"]["Dinero"] | null;
+            /** @description Días de la mejora de plan */
+            dias: number | null;
+            /** @description Nombre del plan de la mejora */
+            plan_destino: string | null;
+            agotado: boolean;
+            /** @description Para la tarjeta; la acción `lealtad.canjear` decide */
+            canjeable: boolean;
+            /** @enum {string|null} */
+            motivo_no_canjeable: "canje_desactivado" | "puntos_insuficientes" | "agotado" | "no_disponible_en_portal" | null;
+            /** @description Puntos que faltan (el mayor entre costo y mínimo, menos el saldo) */
+            faltan: number;
+        };
         PortalPromesa: {
             id: number;
             servicio_id: number;
@@ -8615,6 +9999,48 @@ export interface components {
             corregible: boolean;
             /** @description Estado del servicio tras la promesa (solo si quedó aprobada) */
             servicio_estado: components["schemas"]["EstadoServicio"] | null;
+        };
+        PortalPuntosEmpresa: {
+            /** @description Empresa del programa (los puntos son por NIT) */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            programa: {
+                nombre: string;
+                /** @description Términos publicados del programa (texto plano) */
+                terminos: string;
+                /** @description Saldo mínimo para canjear */
+                minimo_canje: number;
+                /** @description null = los puntos no vencen */
+                vencimiento_meses: number | null;
+                aviso_vencimiento_dias: number;
+                /** @description El cliente puede canjear desde el portal */
+                canje_portal: boolean;
+            };
+            /** @description Puede ser negativo tras un reverso; entonces no canjea */
+            saldo: number;
+            /** @description Puntos que vencen dentro del aviso del programa */
+            por_vencer: number;
+            /** Format: date */
+            proximo_vencimiento: string | null;
+            vencen_pronto: {
+                puntos: number;
+                /** Format: date */
+                vence_en: string;
+            }[];
+            /** @description Los últimos 20, del más reciente; sin motivos internos ni valores contables */
+            movimientos: {
+                id: number;
+                /** @enum {string} */
+                tipo: "acumulacion" | "canje" | "vencimiento" | "reverso" | "ajuste";
+                /** @enum {string} */
+                origen_tipo: "factura" | "pago" | "servicio" | "referido" | "canje" | "sorteo" | "ajuste" | "nota_credito" | "lote";
+                /** @description Con signo: positivo gana, negativo sale */
+                puntos: number;
+                servicio_id: number | null;
+                /** Format: date */
+                vence_en: string | null;
+                /** Format: date-time */
+                created_at: string;
+            }[];
         };
         PortalServicio: {
             id: number;
@@ -8831,6 +10257,34 @@ export interface components {
             } | null;
             /** @description Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación) */
             servicio?: components["schemas"]["ServicioEvaluado"];
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Proveedor: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            tipo_documento: "nit" | "cui" | "id_extranjero";
+            /** @description Documento normalizado (sin guion, mayúsculas) */
+            nit: string;
+            nombre: string;
+            /** @enum {string} */
+            tipo: "general" | "pequeno_contribuyente" | "no_residente" | "sin_documento";
+            /** @enum {string|null} */
+            regimen_isr: "utilidades" | "opcional_simplificado" | "pequeno_contribuyente" | null;
+            agente_retencion_iva: boolean;
+            pais: string;
+            direccion: string | null;
+            correo: string | null;
+            telefono: string | null;
+            dias_credito: number;
+            activo: boolean;
+            /** @description Saldo de su auxiliar en 2.1.03 (lo que la empresa le debe) */
+            saldo: components["schemas"]["Dinero"];
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -9323,6 +10777,47 @@ export interface components {
             /** Format: date-time */
             generado_en: string;
         };
+        ReporteCuentasPorPagar: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                proveedor_id: number;
+                proveedor: string;
+                nit: string;
+                compras: number;
+                por_vencer: components["schemas"]["Dinero"];
+                dias_0_30: components["schemas"]["Dinero"];
+                dias_31_60: components["schemas"]["Dinero"];
+                dias_61_90: components["schemas"]["Dinero"];
+                dias_mas_90: components["schemas"]["Dinero"];
+                vencido: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                proveedor_id: number | null;
+                proveedor: number | null;
+                nit: number | null;
+                compras: number | null;
+                por_vencer: components["schemas"]["Dinero"] | null;
+                dias_0_30: components["schemas"]["Dinero"] | null;
+                dias_31_60: components["schemas"]["Dinero"] | null;
+                dias_61_90: components["schemas"]["Dinero"] | null;
+                dias_mas_90: components["schemas"]["Dinero"] | null;
+                vencido: components["schemas"]["Dinero"] | null;
+                total: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ReporteEgresos: {
             reporte: string;
             titulo: string;
@@ -9494,6 +10989,64 @@ export interface components {
                 cuadra: boolean;
             }[];
         };
+        ReporteLibroCompras: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                compra_id: number;
+                movimiento: string;
+                /** Format: date */
+                fecha: string;
+                tipo: string;
+                serie: string;
+                numero: string;
+                nit: string;
+                proveedor: string;
+                bienes: components["schemas"]["Dinero"];
+                servicios: components["schemas"]["Dinero"];
+                importaciones: components["schemas"]["Dinero"];
+                exento: components["schemas"]["Dinero"];
+                iva: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+                retencion_iva: components["schemas"]["Dinero"];
+                retencion_isr: components["schemas"]["Dinero"];
+                credito: string;
+                iva_credito: components["schemas"]["Dinero"];
+                periodo_iva: string;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                compra_id: number | null;
+                movimiento: number | null;
+                fecha: number | null;
+                tipo: number | null;
+                serie: number | null;
+                numero: number | null;
+                nit: number | null;
+                proveedor: number | null;
+                bienes: components["schemas"]["Dinero"] | null;
+                servicios: components["schemas"]["Dinero"] | null;
+                importaciones: components["schemas"]["Dinero"] | null;
+                exento: components["schemas"]["Dinero"] | null;
+                iva: components["schemas"]["Dinero"] | null;
+                total: components["schemas"]["Dinero"] | null;
+                retencion_iva: components["schemas"]["Dinero"] | null;
+                retencion_isr: components["schemas"]["Dinero"] | null;
+                credito: number | null;
+                iva_credito: components["schemas"]["Dinero"] | null;
+                periodo_iva: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ReportePromesas: {
             reporte: string;
             titulo: string;
@@ -9580,6 +11133,14 @@ export interface components {
             /** @description Servicios que no se pudieron evaluar (ver log) */
             errores: number;
             vencimiento: components["schemas"]["ResultadoVencimiento"] | null;
+        };
+        ResultadoCuotasMes: {
+            /** Format: date */
+            hasta: string;
+            cuotas: number;
+            monto: components["schemas"]["Dinero"];
+            /** @description Activos o diferimientos que recibieron cuotas */
+            ids: number[];
         };
         ResultadoGeneracion: {
             generadas: number;
@@ -9850,6 +11411,15 @@ export interface components {
             con_sesion_desde: number;
             sin_sesion_desde: components["schemas"]["ServicioSinSesion"][];
         };
+        RetencionCompra: {
+            impuesto_codigo: string;
+            /** @enum {string} */
+            impuesto: "iva" | "isr";
+            base: components["schemas"]["Dinero"];
+            /** @description Por ciento (texto exacto de fiscal.impuestos) */
+            tasa: string;
+            monto: components["schemas"]["Dinero"];
+        };
         RevocacionVinculaciones: {
             revocadas: number;
         };
@@ -10000,6 +11570,11 @@ export interface components {
             ipv6_duid: string | null;
             cliente_nombre: string;
             plan_nombre: string;
+            /**
+             * @description Tipo del plan del servicio (solo lectura; se cambia en el plan)
+             * @enum {string}
+             */
+            plan_tipo?: "residencial" | "empresarial" | "dedicado";
             router_nombre: string;
             zona_nombre: string | null;
             excepciones: components["schemas"]["ExcepcionesServicio"];
@@ -10027,6 +11602,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Solo al crear o editar: advertencias del tipo de plan (nunca bloquean) */
+            warnings?: components["schemas"]["Advertencia"][];
         };
         ServicioEvaluado: {
             servicio_id: number;
@@ -10633,6 +12210,1493 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    activosListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                clase?: "equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros";
+                estado?: "vigente" | "dado_de_baja";
+                compra_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de activos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ActivoFijo"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso activos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    activosRegistrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    /** @enum {string} */
+                    clase: "equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros";
+                    descripcion: string;
+                    serie?: string | null;
+                    /** @description Sitio, nodo o cliente (CPE en comodato) */
+                    ubicacion?: string | null;
+                    /** Format: date */
+                    fecha_alta?: string | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    costo: string;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    valor_residual?: string | null;
+                    /**
+                     * @description Depreciación acumulada al darlo de alta (inventario inicial)
+                     * @example 150.00
+                     */
+                    depreciacion_inicial?: string | null;
+                    /** @description Por defecto el tope legal de la clase (parámetro depreciacion) */
+                    tasa_anual?: string | null;
+                    /** @description Saldos de apertura (por defecto), capital social o utilidades acumuladas */
+                    contrapartida?: ("2.9.01" | "3.1.01" | "3.3.01") | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Activo registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivoFijo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso activos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    activosVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Activo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivoFijo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso activos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    activosDarDeBaja: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    tipo: "venta" | "retiro";
+                    motivo: string;
+                    /** Format: date */
+                    fecha?: string | null;
+                    /**
+                     * @description Venta: precio sin IVA
+                     * @example 150.00
+                     */
+                    precio_venta?: string | null;
+                    /** @description Venta: cuenta que recibe el precio */
+                    cuenta_bancaria_id?: number | null;
+                    banco_id?: number | null;
+                    cuenta_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Activo dado de baja */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivoFijo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso activos.dar_de_baja; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    activosDepreciar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date
+                     * @description Último mes a registrar (cualquier día); por defecto el mes anterior al actual
+                     */
+                    hasta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Cuotas registradas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoCuotasMes"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso activos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                /** @description Busca en nombre y código */
+                q?: string;
+                activo?: boolean;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de adicionales */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Adicional"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesCrear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa (NIT) del catálogo; por defecto, la empresa activa */
+                    empresa_id?: number;
+                    /** @description Código único en la empresa: letras, dígitos, guion y guion bajo (se guarda en mayúsculas) */
+                    codigo: string;
+                    nombre: string;
+                    descripcion?: string | null;
+                    /**
+                     * @description Precio sugerido para asignarlo `cobrado` (solo una sugerencia)
+                     * @example 150.00
+                     */
+                    precio_sugerido?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Adicional creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Adicional"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Adicional */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Adicional"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Código único en la empresa: letras, dígitos, guion y guion bajo (se guarda en mayúsculas) */
+                    codigo?: string;
+                    nombre?: string;
+                    descripcion?: string | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    precio_sugerido?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Adicional actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Adicional"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesDesactivar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Adicional desactivado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Adicional"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesMotivos: {
+        parameters: {
+            query?: {
+                activo?: boolean;
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Motivos de cortesía */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoCortesia"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesCrearMotivo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa (NIT) del catálogo; por defecto, la empresa activa */
+                    empresa_id?: number;
+                    /** @description Código único en la empresa: letras, dígitos, guion y guion bajo (se guarda en mayúsculas) */
+                    codigo: string;
+                    nombre: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Motivo creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoCortesia"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.crear_motivo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    adicionalesDesactivarMotivo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Motivo desactivado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoCortesia"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso adicionales.desactivar_motivo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "borrador" | "publicado" | "archivado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de anuncios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Anuncio"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    titulo: string;
+                    /** @description Texto plano (sin HTML; el portal lo muestra tal cual, con saltos de línea) */
+                    texto?: string;
+                    boton_texto?: string | null;
+                    /** @description `https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`) */
+                    boton_url?: string | null;
+                    /** Format: date-time */
+                    inicio?: string | null;
+                    /** Format: date-time */
+                    fin?: string | null;
+                    /** @enum {string} */
+                    audiencia?: "todos" | "suspendidos" | "con_puntos" | "al_dia";
+                    lugares?: ("portal_inicio" | "pagina_corte")[];
+                    /** @description Mayor primero en el carrusel; a igual orden, el más nuevo */
+                    orden?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Anuncio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    titulo?: string;
+                    /** @description Texto alternativo de la imagen (solo si el anuncio tiene imagen) */
+                    imagen_alt?: string;
+                    /** @description Texto plano (sin HTML; el portal lo muestra tal cual, con saltos de línea) */
+                    texto?: string;
+                    boton_texto?: string | null;
+                    /** @description `https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`) */
+                    boton_url?: string | null;
+                    /** Format: date-time */
+                    inicio?: string | null;
+                    /** Format: date-time */
+                    fin?: string | null;
+                    /** @enum {string} */
+                    audiencia?: "todos" | "suspendidos" | "con_puntos" | "al_dia";
+                    lugares?: ("portal_inicio" | "pagina_corte")[];
+                    /** @description Mayor primero en el carrusel; a igual orden, el más nuevo */
+                    orden?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosArchivar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio archivado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosImagen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosCambiarImagen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Texto alternativo; obligatorio al subir si el anuncio aún no tiene */
+                    alt?: string;
+                    /** @description true = quitar la imagen (sin archivo) */
+                    quitar?: boolean;
+                    /**
+                     * Format: binary
+                     * @description PNG, JPEG o WebP, hasta 1 MB
+                     */
+                    imagen?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio con su imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosMetricas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Métricas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricasAnuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosPublicar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio publicado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     authLogin: {
         parameters: {
             query?: never;
@@ -14230,6 +17294,571 @@ export interface operations {
             };
         };
     };
+    comprasListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                proveedor_id?: number;
+                /** @description Mes del libro de compras (cualquier día) */
+                periodo_iva?: string;
+                /** @description Fecha del documento desde */
+                desde?: string;
+                hasta?: string;
+                tipo_documento?: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+                estado?: "vigente" | "anulada";
+                condicion?: "contado" | "credito";
+                /** @description Solo compras al crédito con saldo */
+                pendientes?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de compras */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Compra"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasRegistrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    proveedor_id: number;
+                    /** @enum {string} */
+                    tipo_documento: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+                    serie?: string | null;
+                    numero: string;
+                    /** @description UUID de autorización del DTE del proveedor */
+                    autorizacion?: string | null;
+                    /** Format: date */
+                    fecha_documento: string;
+                    /**
+                     * Format: date
+                     * @description Mes en que se toma el crédito (cualquier día del mes). Por defecto el del documento; hasta credito_fiscal_ventana_meses después
+                     */
+                    periodo_iva?: string | null;
+                    /** @description Por defecto, si el documento desglosa IVA. false = gasto sin crédito (IVA al costo) */
+                    credito_fiscal?: boolean | null;
+                    /** @description NCRE (obligatoria) o NDEB: la compra que corrige */
+                    compra_referencia_id?: number | null;
+                    descripcion?: string | null;
+                    lineas: {
+                        descripcion: string;
+                        /** @description Por defecto servicio */
+                        tipo?: ("bien" | "servicio" | "activo_fijo" | "combustible" | "importacion") | null;
+                        /** @description Código de la cuenta de gasto o de activo (5.2.01) */
+                        cuenta?: string | null;
+                        /** @description O la categoría de egreso (su cuenta de gasto) */
+                        categoria?: ("energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros") | null;
+                        /** @description Obligatoria en activo_fijo: la línea va a 1.2.01.NN y da de alta el activo */
+                        clase_activo?: ("equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros") | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        total: string;
+                        /**
+                         * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
+                         * @example 150.00
+                         */
+                        iva?: string | null;
+                        exento?: boolean | null;
+                        /** @description Gasto pagado por anticipado: va a 1.1.13 y se amortiza en N meses (§10.10) */
+                        diferir_meses?: number | null;
+                        /**
+                         * Format: date
+                         * @description Mes en que empieza la amortización (por defecto el mes de la compra)
+                         */
+                        diferir_desde?: string | null;
+                        activo_descripcion?: string | null;
+                        activo_serie?: string | null;
+                        activo_ubicacion?: string | null;
+                        /** @description Tasa anual de depreciación; por defecto el máximo legal de la clase (parámetro depreciacion) */
+                        activo_tasa_anual?: string | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        activo_valor_residual?: string | null;
+                    }[];
+                    /** @description Retenciones emitidas. Sin el campo, las sugeridas (agente de retención, pequeño contribuyente, régimen opcional); [] = ninguna */
+                    retenciones?: {
+                        /** @description Impuesto de retención emitida (RET_IVA_ESP_C, RET_IVA_PEQ_C, RET_ISR_OPC_C, RET_ISR_NR_*…) */
+                        codigo: string;
+                        /**
+                         * @description Sin él se calcula con la tasa vigente
+                         * @example 150.00
+                         */
+                        monto?: string | null;
+                    }[] | null;
+                    /** @enum {string} */
+                    condicion: "contado" | "credito";
+                    /**
+                     * Format: date
+                     * @description Crédito: por defecto la fecha del documento + días de crédito del proveedor
+                     */
+                    vence_en?: string | null;
+                    /** @description Contado: de dónde sale el pago (crea el egreso que la paga) */
+                    metodo?: ("caja" | "banco" | "cuenta_bancaria") | null;
+                    caja_id?: number | null;
+                    banco_id?: number | null;
+                    cuenta_bancaria_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Compra registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compra */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasAnular: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Compra anulada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasRegistrarConstancia: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Retención de la compra que ampara (RET_IVA_ESP_C, RET_ISR_OPC_C…) */
+                    impuesto_codigo: string;
+                    numero: string;
+                    /**
+                     * Format: date
+                     * @description Por defecto hoy
+                     */
+                    fecha?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Constancia registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstanciaRetencion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    comprasDesdeEgreso: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                egresoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    proveedor_id: number;
+                    /** @enum {string} */
+                    tipo_documento: "FACT" | "FCAM" | "FPEQ" | "FCAP" | "NCRE" | "NDEB" | "FESP" | "DUA" | "RECIBO";
+                    serie?: string | null;
+                    numero: string;
+                    /** @description UUID de autorización del DTE del proveedor */
+                    autorizacion?: string | null;
+                    /** Format: date */
+                    fecha_documento: string;
+                    /**
+                     * Format: date
+                     * @description Mes en que se toma el crédito (cualquier día del mes). Por defecto el del documento; hasta credito_fiscal_ventana_meses después
+                     */
+                    periodo_iva?: string | null;
+                    /** @description Por defecto, si el documento desglosa IVA. false = gasto sin crédito (IVA al costo) */
+                    credito_fiscal?: boolean | null;
+                    /** @description NCRE (obligatoria) o NDEB: la compra que corrige */
+                    compra_referencia_id?: number | null;
+                    descripcion?: string | null;
+                    lineas: {
+                        descripcion: string;
+                        /** @description Por defecto servicio */
+                        tipo?: ("bien" | "servicio" | "activo_fijo" | "combustible" | "importacion") | null;
+                        /** @description Código de la cuenta de gasto o de activo (5.2.01) */
+                        cuenta?: string | null;
+                        /** @description O la categoría de egreso (su cuenta de gasto) */
+                        categoria?: ("energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros") | null;
+                        /** @description Obligatoria en activo_fijo: la línea va a 1.2.01.NN y da de alta el activo */
+                        clase_activo?: ("equipo_red" | "computacion" | "mobiliario" | "vehiculos" | "herramientas" | "edificios" | "otros") | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        total: string;
+                        /**
+                         * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
+                         * @example 150.00
+                         */
+                        iva?: string | null;
+                        exento?: boolean | null;
+                        /** @description Gasto pagado por anticipado: va a 1.1.13 y se amortiza en N meses (§10.10) */
+                        diferir_meses?: number | null;
+                        /**
+                         * Format: date
+                         * @description Mes en que empieza la amortización (por defecto el mes de la compra)
+                         */
+                        diferir_desde?: string | null;
+                        activo_descripcion?: string | null;
+                        activo_serie?: string | null;
+                        activo_ubicacion?: string | null;
+                        /** @description Tasa anual de depreciación; por defecto el máximo legal de la clase (parámetro depreciacion) */
+                        activo_tasa_anual?: string | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        activo_valor_residual?: string | null;
+                    }[];
+                    /** @description Retenciones emitidas. Sin el campo, las sugeridas (agente de retención, pequeño contribuyente, régimen opcional); [] = ninguna */
+                    retenciones?: {
+                        /** @description Impuesto de retención emitida (RET_IVA_ESP_C, RET_IVA_PEQ_C, RET_ISR_OPC_C, RET_ISR_NR_*…) */
+                        codigo: string;
+                        /**
+                         * @description Sin él se calcula con la tasa vigente
+                         * @example 150.00
+                         */
+                        monto?: string | null;
+                    }[] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Compra registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compra"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     comprobantesListar: {
         parameters: {
             query?: {
@@ -14545,6 +18174,68 @@ export interface operations {
             };
         };
     };
+    constanciasListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                direccion?: "recibida" | "emitida";
+                impuesto?: "iva" | "isr";
+                desde?: string;
+                hasta?: string;
+                vigente?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de constancias */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ConstanciaRetencion"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     cuentasBancariasListar: {
         parameters: {
             query?: {
@@ -14819,6 +18510,247 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    diferimientosListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                origen?: "factura" | "compra";
+                factura_id?: number;
+                compra_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de diferimientos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Diferimiento"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    diferimientosRegistrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    origen: "factura" | "compra";
+                    factura_linea_id?: number | null;
+                    compra_linea_id?: number | null;
+                    meses: number;
+                    /**
+                     * Format: date
+                     * @description Mes de la primera cuota (por defecto el del documento)
+                     */
+                    inicio?: string | null;
+                    descripcion?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Diferimiento registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diferimiento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.registrar_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    diferimientosVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Diferimiento */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Diferimiento"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    diferimientosAmortizar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date
+                     * @description Último mes a registrar (cualquier día); por defecto el mes anterior al actual
+                     */
+                    hasta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Cuotas registradas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoCuotasMes"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.registrar_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -22774,7 +26706,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "lealtad";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };
@@ -23274,6 +27206,112 @@ export interface operations {
             };
             /** @description Petición idempotente en curso */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosCompras: {
+        parameters: {
+            query?: {
+                /** @description Por defecto la empresa activa */
+                empresa_id?: number;
+                /** @description Mes inicial (cualquier día); por defecto el actual */
+                desde?: string;
+                /** @description Mes final; por defecto el de desde */
+                hasta?: string;
+                formato?: "json" | "csv" | "xlsx";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Libro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteLibroCompras"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosComprasCuadre: {
+        parameters: {
+            query?: {
+                empresa_id?: number;
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuadre por mes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CuadreCompras"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -24622,6 +28660,19 @@ export interface operations {
                     facturas?: number[];
                     /** @description Empresa del pago: aplica solo a sus facturas, sin dividir. Sin ella, la de la cuenta bancaria o la de las facturas; un cobro en caja de varias empresas se divide en un pago por empresa (cobro_id) */
                     empresa_id?: number | null;
+                    /** @description Constancias de retención que entrega el cliente: el pago aplica monto + Σ constancias; a caja o banco entra monto (1.1.05/1.1.06 por cada constancia) */
+                    retenciones?: {
+                        /** @description Retención recibida (RET_IVA_ESP, RET_IVA_PUB, RET_IVA_EXP, RET_IVA_TAR, RET_IVA_TAR_COMB, RET_IVA_PEQ, RET_ISR_OPC) */
+                        codigo: string;
+                        numero: string;
+                        /** Format: date */
+                        fecha?: string | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        monto: string;
+                    }[] | null;
                 };
             };
         };
@@ -24646,6 +28697,280 @@ export interface operations {
             };
             /** @description Sin el permiso pagos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pagosProveedoresListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                proveedor_id?: number;
+                desde?: string;
+                hasta?: string;
+                estado?: "registrado" | "anulado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de pagos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PagoProveedor"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pagosProveedoresRegistrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    proveedor_id: number;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /**
+                     * @description caja, banco (del libro) o cuenta_bancaria propia
+                     * @enum {string}
+                     */
+                    metodo: "caja" | "banco" | "cuenta_bancaria";
+                    caja_id?: number | null;
+                    banco_id?: number | null;
+                    cuenta_bancaria_id?: number | null;
+                    /**
+                     * Format: date
+                     * @description Por defecto hoy; no futura
+                     */
+                    fecha?: string | null;
+                    /** @description Cheque, transferencia… */
+                    referencia?: string | null;
+                    descripcion?: string | null;
+                    /** @description Compras a pagar primero (en ese orden); luego la más antigua por vencimiento */
+                    compras?: number[] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Pago registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagoProveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.pagar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pagosProveedoresVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pago */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagoProveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pagosProveedoresAnular: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Pago anulado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagoProveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso compras.pagar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -25399,6 +29724,7 @@ export interface operations {
                 limit?: number;
                 activo?: boolean;
                 router_id?: number;
+                tipo?: "residencial" | "empresarial" | "dedicado";
             };
             header?: never;
             path?: never;
@@ -25485,6 +29811,11 @@ export interface operations {
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
                     tamano_prefijo_delegado?: 64 | 56 | 48;
+                    /**
+                     * @description residencial (por defecto), empresarial o dedicado; solo advierte, nunca bloquea
+                     * @enum {string}
+                     */
+                    tipo?: "residencial" | "empresarial" | "dedicado";
                     global?: boolean;
                     activo?: boolean;
                 };
@@ -25620,6 +29951,8 @@ export interface operations {
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
                     tamano_prefijo_delegado?: 64 | 56 | 48;
+                    /** @enum {string} */
+                    tipo?: "residencial" | "empresarial" | "dedicado";
                     global?: boolean;
                     activo?: boolean;
                 };
@@ -25633,6 +29966,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Plan"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso planes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    planesAdicionales: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Adicionales del plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdicionalPlan"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso planes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    planesDefinirAdicionales: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída del plan (la lista es parte del plan); si cambió responde 409 */
+                    version: number;
+                    /** @description Lista completa (reemplaza la anterior); [] la vacía */
+                    adicionales: {
+                        adicional_id: number;
+                        cantidad: number;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Adicionales del plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdicionalPlan"][];
                 };
             };
             /** @description No autenticado */
@@ -26292,6 +30753,153 @@ export interface operations {
             };
         };
     };
+    portalAnuncios: {
+        parameters: {
+            query: {
+                lugar: "portal_inicio" | "pagina_corte";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Anuncios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalAnuncio"][];
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalAnuncioEvento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    tipo: "vista" | "clic";
+                    /** Format: uuid */
+                    visitante: string;
+                    /** @enum {string} */
+                    lugar: "portal_inicio" | "pagina_corte";
+                };
+            };
+        };
+        responses: {
+            /** @description Contado (o ya estaba) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalAnuncioImagen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalBancos: {
         parameters: {
             query?: never;
@@ -26308,6 +30916,127 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalBanco"][];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCanjes: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de canjes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalCanje"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCanjear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    premio_id: number;
+                    servicio_id: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Canje hecho */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCanje"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
@@ -27235,6 +31964,46 @@ export interface operations {
             };
         };
     };
+    portalPremios: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Premios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPremio"][];
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalPromesas: {
         parameters: {
             query?: {
@@ -27377,6 +32146,46 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalPuntos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Puntos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPuntosEmpresa"][];
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -28113,6 +32922,355 @@ export interface operations {
             };
         };
     };
+    proveedoresListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                /** @description Nombre (contiene) o documento exacto */
+                buscar?: string;
+                tipo?: "general" | "pequeno_contribuyente" | "no_residente" | "sin_documento";
+                activo?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de proveedores */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Proveedor"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresCrear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number | null;
+                    /** @description nit (por defecto; dígito verificador), cui o id_extranjero (no residentes) */
+                    tipo_documento?: ("nit" | "cui" | "id_extranjero") | null;
+                    /** @description Documento del proveedor */
+                    nit: string;
+                    /** @description Por defecto GT */
+                    pais?: string | null;
+                    nombre: string;
+                    /** @description general (por defecto), pequeno_contribuyente (FPEQ/FCAP), no_residente (id_extranjero) o sin_documento (factura especial) */
+                    tipo?: ("general" | "pequeno_contribuyente" | "no_residente" | "sin_documento") | null;
+                    /** @description opcional_simplificado: la empresa le retiene ISR (RET_ISR_OPC_C) */
+                    regimen_isr?: ("utilidades" | "opcional_simplificado" | "pequeno_contribuyente") | null;
+                    /** @description El proveedor también es agente de retención de IVA (no se le retiene) */
+                    agente_retencion_iva?: boolean | null;
+                    direccion?: string | null;
+                    correo?: string | null;
+                    telefono?: string | null;
+                    /** @description Plazo de pago por defecto de sus compras al crédito */
+                    dias_credito?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Proveedor creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proveedor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresEditar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string | null;
+                    /** @description general (por defecto), pequeno_contribuyente (FPEQ/FCAP), no_residente (id_extranjero) o sin_documento (factura especial) */
+                    tipo?: ("general" | "pequeno_contribuyente" | "no_residente" | "sin_documento") | null;
+                    /** @description opcional_simplificado: la empresa le retiene ISR (RET_ISR_OPC_C) */
+                    regimen_isr?: ("utilidades" | "opcional_simplificado" | "pequeno_contribuyente") | null;
+                    /** @description El proveedor también es agente de retención de IVA (no se le retiene) */
+                    agente_retencion_iva?: boolean | null;
+                    direccion?: string | null;
+                    correo?: string | null;
+                    telefono?: string | null;
+                    /** @description Plazo de pago por defecto de sus compras al crédito */
+                    dias_credito?: number | null;
+                    activo?: boolean | null;
+                    /** @description No se edita (422 campo_solo_lectura) */
+                    nit?: string | null;
+                    tipo_documento?: ("nit" | "cui" | "id_extranjero") | null;
+                    pais?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Proveedor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proveedoresEstadoCuenta: {
+        parameters: {
+            query?: {
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estado de cuenta */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoCuentaProveedor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso proveedores.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     redEventosListar: {
         parameters: {
             query?: {
@@ -28429,6 +33587,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResumenConciliacionBancaria"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reportesCuentasPorPagar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Día de referencia de la antigüedad (hoy por defecto) */
+                corte?: string;
+                proveedor_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteCuentasPorPagar"];
                 };
             };
             /** @description No autenticado */
@@ -28862,7 +34074,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -28920,7 +34132,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -29900,6 +35112,8 @@ export interface operations {
                 zona_id?: number;
                 /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
                 con_deuda_vencida?: boolean;
+                /** @description Tipo del plan del servicio: residencial, empresarial o dedicado */
+                tipo?: "residencial" | "empresarial" | "dedicado";
             };
             header?: never;
             path?: never;
@@ -30209,6 +35423,388 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso servicios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosAdicionales: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                /** @description Solo los activos o solo las bajas; sin él, todos */
+                estado?: "activo" | "baja";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de adicionales */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AdicionalServicio"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosAgregarAdicional: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Adicional activo de la empresa del servicio */
+                    adicional_id: number;
+                    /**
+                     * @description cortesia exige además el permiso servicios.adicional_cortesia y motivo_id
+                     * @enum {string}
+                     */
+                    modalidad: "incluido" | "cortesia" | "cobrado";
+                    /** @description Usuario de IPTV, correo de la cuenta de streaming… */
+                    identificador?: string | null;
+                    /** @description Se guarda cifrada; nunca vuelve en las respuestas (ver `/credencial`) */
+                    credencial?: string | null;
+                    /**
+                     * @description Obligatorio y > 0 con cobrado; solo con cobrado
+                     * @example 150.00
+                     */
+                    precio?: string | null;
+                    /** @description Motivo de cortesía (GET /adicionales/motivos); obligatorio con cortesia */
+                    motivo_id?: number | null;
+                    motivo_detalle?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Adicional agregado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdicionalServicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.agregar_adicional; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosEditarAdicional: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                asignacionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @enum {string} */
+                    modalidad?: "incluido" | "cortesia" | "cobrado";
+                    /** @description Usuario de IPTV, correo de la cuenta de streaming… */
+                    identificador?: string | null;
+                    /** @description Se guarda cifrada; nunca vuelve en las respuestas (ver `/credencial`) */
+                    credencial?: string | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    precio?: string | null;
+                    motivo_id?: number | null;
+                    motivo_detalle?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Adicional actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdicionalServicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.editar_adicional; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosCredencialAdicional: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                asignacionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Credencial en claro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredencialAdicional"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver_credencial_adicional */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosQuitarAdicional: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                asignacionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    motivo?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Adicional dado de baja */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdicionalServicio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.quitar_adicional; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -31596,7 +37192,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

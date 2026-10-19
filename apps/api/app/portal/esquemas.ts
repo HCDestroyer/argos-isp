@@ -14,6 +14,9 @@ import {
 } from '#shared/openapi/esquemas'
 import { EstadoServicio } from '#core/esquemas'
 import { METODOS_PAGO } from '#shared/eventos'
+import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
+import { ESTADOS_CANJE } from '#lealtad/canjes'
+import { ORIGENES_MOVIMIENTO, TIPOS_MOVIMIENTO } from '#lealtad/puntos'
 
 /**
  * Schemas del portal del cliente (A5). Desde la IP solo se muestra información mínima:
@@ -617,6 +620,88 @@ export const PortalPagoEnLinea = definirEsquema(
     }),
 )
 
+/*
+|--------------------------------------------------------------------------
+| Anuncios (contrato `anuncios.md`)
+|--------------------------------------------------------------------------
+*/
+
+const LUGAR_ANUNCIO = enumerado(['portal_inicio', 'pagina_corte'])
+
+const BotonAnuncio = nulable(
+    objeto({
+        texto: texto,
+        url: { ...texto, description: '`http(s)://…` o ruta del portal que empieza con `/`' },
+    }),
+)
+
+export const Anuncio = definirEsquema(
+    'Anuncio',
+    objeto({
+        id,
+        empresa_id: id,
+        titulo: texto,
+        texto: { ...texto, description: 'Texto plano, sin HTML' },
+        imagen: nulable(
+            objeto({
+                url: { ...texto, description: '`/api/v1/anuncios/:id/imagen?v=…` (con sesión del panel)' },
+                tipo: enumerado(['image/png', 'image/jpeg', 'image/webp']),
+                ancho: entero,
+                alto: entero,
+                alt: nulable(texto),
+            }),
+        ),
+        boton: BotonAnuncio,
+        inicio: nulable(instante),
+        fin: nulable(instante),
+        audiencia: enumerado(['todos', 'suspendidos', 'con_puntos', 'al_dia']),
+        lugares: lista(LUGAR_ANUNCIO),
+        orden: entero,
+        estado: enumerado(['borrador', 'publicado', 'archivado']),
+        vigente: { ...booleano, description: 'Publicado y dentro de su vigencia ahora mismo' },
+        publicado_en: nulable(instante),
+        archivado_en: nulable(instante),
+        creado_por: nulable(id),
+        version: { type: 'integer', minimum: 1, description: 'Control optimista: envíala al editar' },
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+/** Lo que el portal pinta: sin estado, audiencia ni datos internos. */
+export const PortalAnuncio = definirEsquema(
+    'PortalAnuncio',
+    objeto({
+        id,
+        empresa_id: id,
+        titulo: texto,
+        texto: { ...texto, description: 'Texto plano: mostrar como texto, nunca como HTML' },
+        imagen: nulable(
+            objeto({
+                url: { ...texto, description: '`/api/v1/portal/anuncios/:id/imagen?v=…` (mismo origen)' },
+                ancho: entero,
+                alto: entero,
+                alt: texto,
+            }),
+        ),
+        boton: BotonAnuncio,
+    }),
+)
+
+export const MetricasAnuncio = definirEsquema(
+    'MetricasAnuncio',
+    objeto({
+        anuncio_id: id,
+        vistas: {
+            ...entero,
+            description: 'Visitantes distintos que lo vieron (uno por sesión del navegador)',
+        },
+        clics: { ...entero, description: 'Visitantes distintos que tocaron su botón' },
+        por_lugar: lista(objeto({ lugar: LUGAR_ANUNCIO, vistas: entero, clics: entero })),
+        por_dia: lista(objeto({ dia: fecha, vistas: entero, clics: entero })),
+    }),
+)
+
 /** Nodo portal remoto (`contratos/nodo-portal.md`). Nunca expone el token ni su hash. */
 export const NodoPortal = definirEsquema(
     'NodoPortal',
@@ -670,4 +755,87 @@ export const NodoPortalInternoCreado = definirEsquema(
 export const NodoPortalInternoRevocado = definirEsquema(
     'NodoPortalInternoRevocado',
     objeto({ nombre: texto, revocado_en: instante }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Puntos de lealtad en el portal (contrato `lealtad.md` §12)
+|--------------------------------------------------------------------------
+*/
+
+export const PortalPuntosEmpresa = definirEsquema(
+    'PortalPuntosEmpresa',
+    objeto({
+        empresa: { ...PortalMarcaEmpresa, description: 'Empresa del programa (los puntos son por NIT)' },
+        programa: objeto({
+            nombre: texto,
+            terminos: { ...texto, description: 'Términos publicados del programa (texto plano)' },
+            minimo_canje: { ...entero, description: 'Saldo mínimo para canjear' },
+            vencimiento_meses: { ...nulable(entero), description: 'null = los puntos no vencen' },
+            aviso_vencimiento_dias: entero,
+            canje_portal: { ...booleano, description: 'El cliente puede canjear desde el portal' },
+        }),
+        saldo: { ...entero, description: 'Puede ser negativo tras un reverso; entonces no canjea' },
+        por_vencer: { ...entero, description: 'Puntos que vencen dentro del aviso del programa' },
+        proximo_vencimiento: nulable(fecha),
+        vencen_pronto: lista(objeto({ puntos: entero, vence_en: fecha })),
+        movimientos: {
+            ...lista(
+                objeto({
+                    id,
+                    tipo: enumerado(TIPOS_MOVIMIENTO),
+                    origen_tipo: enumerado(ORIGENES_MOVIMIENTO),
+                    puntos: { ...entero, description: 'Con signo: positivo gana, negativo sale' },
+                    servicio_id: nulable(id),
+                    vence_en: nulable(fecha),
+                    created_at: instante,
+                }),
+            ),
+            description: 'Los últimos 20, del más reciente; sin motivos internos ni valores contables',
+        },
+    }),
+)
+
+export const PortalPremio = definirEsquema(
+    'PortalPremio',
+    objeto({
+        id,
+        empresa_id: id,
+        tipo: enumerado(TIPOS_PREMIO),
+        nombre: texto,
+        costo_puntos: entero,
+        descuento_tipo: nulable(enumerado(TIPOS_DESCUENTO)),
+        descuento_valor: nulable(Dinero),
+        tope: nulable(Dinero),
+        dias: { ...nulable(entero), description: 'Días de la mejora de plan' },
+        plan_destino: { ...nulable(texto), description: 'Nombre del plan de la mejora' },
+        agotado: booleano,
+        canjeable: { ...booleano, description: 'Para la tarjeta; la acción `lealtad.canjear` decide' },
+        motivo_no_canjeable: nulable(
+            enumerado(['canje_desactivado', 'puntos_insuficientes', 'agotado', 'no_disponible_en_portal']),
+        ),
+        faltan: {
+            ...entero,
+            description: 'Puntos que faltan (el mayor entre costo y mínimo, menos el saldo)',
+        },
+    }),
+)
+
+export const PortalCanje = definirEsquema(
+    'PortalCanje',
+    objeto({
+        id,
+        empresa_id: id,
+        servicio_id: id,
+        premio_nombre: texto,
+        tipo: enumerado(TIPOS_PREMIO),
+        puntos: entero,
+        estado: {
+            ...enumerado(ESTADOS_CANJE),
+            description: '`reservado`: para la próxima factura; `aplicado`; `revertido`; `rechazado`',
+        },
+        descuento: { ...nulable(Dinero), description: 'Q descontados; null mientras está reservado' },
+        aplicado_en: nulable(instante),
+        created_at: instante,
+    }),
 )
