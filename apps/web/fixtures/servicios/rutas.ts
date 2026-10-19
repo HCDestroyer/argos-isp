@@ -22,7 +22,7 @@ import {
     versionCambiada,
 } from '../comun'
 import { nuevaSesion } from '../sesiones/datos'
-import { asignarIncluidos, bajaPorRetiro, bloqueoCambioEmpresa, reconciliarIncluidos } from '../adicionales/rutas'
+import { asignarIncluidos, aplicarBloqueoPorEstado, bajaPorRetiro, bloqueoCambioEmpresa, reconciliarIncluidos } from '../adicionales/rutas'
 import { advertenciasServicio, TIPOS_PLAN } from '../planes/tipos'
 
 type Servicio = Schema<'Servicio'>
@@ -350,6 +350,8 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
                     ...(ruta === 'reactivar' ? { suspension_manual: false, suspension_manual_motivo: null } : {}),
                 }
         bd.servicios[indice] = despues
+        // Suspender bloquea sus adicionales y reactivar los desbloquea, en el mismo cambio (A1).
+        aplicarBloqueoPorEstado(actual.id, actual.estado, despues.estado, motivo)
         if (regla.a === 'retirado') {
             // Retirar da de baja todos sus adicionales activos con el motivo del retiro (A1).
             bajaPorRetiro(actual.id, motivo)
