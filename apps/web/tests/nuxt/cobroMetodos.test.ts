@@ -1,8 +1,9 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import ReciboPago from '~/components/ReciboPago.vue'
 import PaginaCobro from '~/pages/cobro/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Tarea 1 del día 4 (2.ª tanda): cobro con efectivo, depósito, transferencia, ACH y remesa, con
@@ -79,22 +80,22 @@ describe('cobro · cinco métodos', () => {
 
     it('la pantalla pide banco y cuenta con transferencia, muestra el 409 junto a la referencia', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=2' })
-        await vi.waitFor(() => expect(vista.find('[data-factura="209"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-factura="209"]').exists()).toBe(true))
         await usePagos().registrar({ cliente_id: 4, metodo: 'deposito', monto: '1.00', cuenta_bancaria_id: 1, referencia: 'BOL-55' }, nuevaClaveIdempotencia())
 
         const estado = (vista.vm as unknown as { $: { setupState: { estado: EntradaCobro } } }).$.setupState.estado
         estado.metodo = 'transferencia'
-        await vi.waitFor(() => expect(vista.text()).toContain('Banco de origen'))
+        await esperar(() => expect(vista.text()).toContain('Banco de origen'))
         expect(vista.text()).toContain('Cuenta de destino')
         expect(vista.text()).toContain('Referencia de la transferencia')
 
         estado.metodo = 'deposito'
-        await vi.waitFor(() => expect(vista.text()).toContain('Número de boleta'))
+        await esperar(() => expect(vista.text()).toContain('Número de boleta'))
         expect(vista.text()).not.toContain('Banco de origen')
         estado.cuenta_bancaria_id = 1
         estado.referencia = 'BOL-55'
         await vista.get('form').trigger('submit')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="referencia-duplicada"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="referencia-duplicada"]').exists()).toBe(true))
         expect(vista.text()).toContain('Ya está registrada en otro pago')
         expect(vista.find('[aria-label="Recibo de pago"]').exists()).toBe(false)
     })

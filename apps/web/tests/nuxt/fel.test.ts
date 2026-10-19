@@ -1,7 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import Decimal from 'decimal.js'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Component } from 'vue'
 import { DEMORA_WORKER_MS, reiniciarFixtures, romperCadenaFixture, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
@@ -14,6 +14,7 @@ import PaginaFel from '~/pages/configuracion/fel.vue'
 import PaginaDte from '~/pages/dte/index.vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
 import PaginaNota from '~/pages/notas-credito/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * FEL en el panel (A3, fase 3; contrato §8, §10.9, §10.10 y §17): composables contra los fixtures
@@ -139,7 +140,7 @@ describe('FEL · composables y fixtures', () => {
         expect(solicitud.ok && solicitud.data.dte?.estado).toBe('contingencia')
 
         await useFel().cambiarContingencia(false, 'Volvió el servicio', nuevaClaveIdempotencia(), 1)
-        await vi.waitFor(() => expect(bd.fel.dte.find(d => d.documento_id === factura.id)?.estado).toBe('certificado'), ESPERA_WORKER)
+        await esperar(() => expect(bd.fel.dte.find(d => d.documento_id === factura.id)?.estado).toBe('certificado'), ESPERA_WORKER)
     })
 
     it('la cola filtra por estado y documento; reintentar un rechazado crea otro DTE que se certifica', async () => {
@@ -152,7 +153,7 @@ describe('FEL · composables y fixtures', () => {
         const nuevo = await useDte().reintentar(rechazado.id, nuevaClaveIdempotencia())
         expect(nuevo.ok && nuevo.data).toMatchObject({ estado: 'pendiente', solicitud: 'manual', documento_id: rechazado.documento_id })
         expect(nuevo.ok && nuevo.data.id).not.toBe(rechazado.id)
-        await vi.waitFor(() => expect(facturaDe(rechazado).fel_estado).toBe('certificado'), ESPERA_WORKER)
+        await esperar(() => expect(facturaDe(rechazado).fel_estado).toBe('certificado'), ESPERA_WORKER)
 
         const certificado = dteDe('certificado')
         const noReintentable = await useDte().reintentar(certificado.id, nuevaClaveIdempotencia())
@@ -176,7 +177,7 @@ describe('FEL · composables y fixtures', () => {
         const nota = await useFacturas().notaCredito(factura.id, { monto: '1.00', motivo: 'Prueba' }, nuevaClaveIdempotencia())
         expect(!nota.ok && nota.problema).toMatchObject({ status: 409, detail: expect.stringContaining('anulación pendiente') })
         expect(!nota.ok && problemaFelLegible(nota.problema).title).toBe('El DTE está en proceso')
-        await vi.waitFor(() => expect(bd.facturas.find(f => f.id === factura.id)?.estado).toBe('anulada'), ESPERA_WORKER)
+        await esperar(() => expect(bd.facturas.find(f => f.id === factura.id)?.estado).toBe('anulada'), ESPERA_WORKER)
         expect(bd.asientos.some(a => a.origen_tipo === 'factura' && a.origen_id === factura.id && a.reversa_de !== null)).toBe(true)
     })
 
@@ -299,7 +300,7 @@ describe('FEL · pantallas', () => {
 
     it('Configuración → FEL: modo, credenciales «configuradas» sin secretos y 422 avisos_por_certificar con la cuenta', async () => {
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="fel-modo"]').text()).toBe('Obligatoria'))
+        await esperar(() => expect(vista.find('[data-prueba="fel-modo"]').text()).toBe('Obligatoria'))
         const pruebas = vista.find('[data-credenciales="pruebas"]')
         expect(pruebas.find('[data-prueba="credenciales-estado"]').text()).toBe('Configuradas')
         expect(pruebas.text()).toContain('argosnet')
@@ -310,34 +311,34 @@ describe('FEL · pantallas', () => {
         expect(radios).toHaveLength(3)
         await radios[2]?.trigger('click')
         await vista.find('form').trigger('submit')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="fel-avisos-por-certificar"]').text()).toMatch(/\d+ avisos de cobro sin certificar/)
     })
 
     it('Configuración → FEL con error de la API: el aviso con «Reintentar», sin datos inventados', async () => {
         simularFalla('GET /api/v1/fel/configuracion', 501)
         const vista = await mountSuspended(conApp(PaginaFel), { route: '/configuracion/fel' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="fel-error"]').text()).toContain('Reintentar'))
+        await esperar(() => expect(vista.find('[data-prueba="fel-error"]').text()).toContain('Reintentar'))
         expect(vista.find('[data-prueba="fel-modo"]').exists()).toBe(false)
     })
 
     it('el aviso global aparece con la FEL desactivada (Fibra del Sur) y no con la obligatoria', async () => {
         useEmpresaActiva().elegir(2)
         const sur = await mountSuspended(conApp(AvisoFel), { route: '/facturas' })
-        await vi.waitFor(() => expect(sur.find('[data-prueba="aviso-fel-desactivada"]').exists()).toBe(true))
+        await esperar(() => expect(sur.find('[data-prueba="aviso-fel-desactivada"]').exists()).toBe(true))
         expect(sur.text()).toContain('obligatoria para el régimen general')
         sur.unmount()
 
         useEmpresaActiva().elegir(1)
         const argosnet = await mountSuspended(conApp(AvisoFel), { route: '/facturas' })
-        await vi.waitFor(() => expect(useFel().estado.value?.empresaId).toBe(1))
+        await esperar(() => expect(useFel().estado.value?.empresaId).toBe(1))
         expect(argosnet.find('[data-prueba="aviso-fel"]').exists()).toBe(false)
     })
 
     it('la factura muestra su DTE (estado, autorización, serie y número) y el rechazo con «Reintentar»', async () => {
         const certificado = dteDe('certificado')
         const vista = await mountSuspended(conApp(PaginaFactura), { route: `/facturas/${certificado.documento_id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="dte-estado"]').text()).toBe('Certificado'))
+        await esperar(() => expect(vista.find('[data-prueba="dte-estado"]').text()).toBe('Certificado'))
         expect(vista.find('[data-prueba="dte-autorizacion"]').text()).toContain(certificado.autorizacion ?? '—')
         expect(vista.find('[data-prueba="dte-serie-numero"]').text()).toContain(`${certificado.serie} · ${certificado.numero}`)
         expect(vista.find('[data-prueba="dte-xml"]').exists()).toBe(true)
@@ -345,7 +346,7 @@ describe('FEL · pantallas', () => {
 
         const rechazado = dteDe('rechazado')
         const conError = await mountSuspended(conApp(PaginaFactura), { route: `/facturas/${rechazado.documento_id}` })
-        await vi.waitFor(() => expect(conError.find('[data-prueba="dte-estado"]').text()).toBe('Rechazado'))
+        await esperar(() => expect(conError.find('[data-prueba="dte-estado"]').text()).toBe('Rechazado'))
         expect(conError.find('[data-prueba="dte-error"]').text()).toContain('Error de validación de la SAT')
         expect(conError.find('[data-prueba="dte-reintentar"]').exists()).toBe(true)
     })
@@ -353,7 +354,7 @@ describe('FEL · pantallas', () => {
     it('una factura por certificar no es deuda: sin saldo pendiente y con su aviso', async () => {
         const factura = bd.facturas.find(f => f.estado === 'por_certificar')
         const vista = await mountSuspended(conApp(PaginaFactura), { route: `/facturas/${factura?.id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="factura-por-certificar"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="factura-por-certificar"]').exists()).toBe(true))
         expect(vista.text()).toContain('Por certificar')
         expect(vista.find('[data-prueba="factura-estado"]').text()).toBe('Por certificar')
     })
@@ -361,37 +362,37 @@ describe('FEL · pantallas', () => {
     it('la nota con la NCRE rechazada ofrece anularla; sin el permiso no', async () => {
         const ncre = dteDe('rechazado', 'nota_credito')
         const vista = await mountSuspended(conApp(PaginaNota), { route: `/notas-credito/${ncre.documento_id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="nota-ncre-rechazada"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="nota-ncre-rechazada"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="abrir-anular-nota"]').exists()).toBe(true)
         vista.unmount()
 
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'facturas.anular_nota_credito') }
         const sinPermiso = await mountSuspended(conApp(PaginaNota), { route: `/notas-credito/${ncre.documento_id}` })
-        await vi.waitFor(() => expect(sinPermiso.find('[data-prueba="nota-ncre-rechazada"]').exists()).toBe(true))
+        await esperar(() => expect(sinPermiso.find('[data-prueba="nota-ncre-rechazada"]').exists()).toBe(true))
         expect(sinPermiso.find('[data-prueba="abrir-anular-nota"]').exists()).toBe(false)
     })
 
     it('la cola de DTE lista los rechazados y con error muestra «Reintentar»', async () => {
         const vista = await mountSuspended(conApp(PaginaDte), { route: '/dte?estado=rechazado' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-dte"]').text()).toContain('Rechazado'))
+        await esperar(() => expect(vista.find('[data-prueba="tabla-dte"]').text()).toContain('Rechazado'))
         expect(vista.find('[data-prueba="tabla-dte"]').text()).not.toContain('Certificado')
         vista.unmount()
 
         simularFalla('GET /api/v1/dte', 501)
         const conError = await mountSuspended(conApp(PaginaDte), { route: '/dte' })
-        await vi.waitFor(() => expect(conError.find('[data-prueba="dte-lista-error"]').text()).toContain('Reintentar'))
+        await esperar(() => expect(conError.find('[data-prueba="dte-lista-error"]').text()).toContain('Reintentar'))
         expect(conError.find('[data-prueba="tabla-dte"]').exists()).toBe(false)
     })
 
     it('integridad del libro: verificada, y la ruptura con su asiento', async () => {
         const vista = await mountSuspended(conApp(LibroIntegridad))
-        await vi.waitFor(() => expect(vista.find('[data-prueba="integridad-estado"]').text()).toBe('Cadena verificada'))
+        await esperar(() => expect(vista.find('[data-prueba="integridad-estado"]').text()).toBe('Cadena verificada'))
         expect(vista.find('[data-prueba="integridad-ultimo-hash"]').text()).toMatch(/[0-9a-f]{64}/)
         vista.unmount()
 
         romperCadenaFixture(1, { sello: 5, asiento_id: 5, motivo: 'asiento_en_mes_cerrado', esperado: 'c'.repeat(64), obtenido: 'd'.repeat(64) })
         const rota = await mountSuspended(conApp(LibroIntegridad))
-        await vi.waitFor(() => expect(rota.find('[data-prueba="integridad-ruptura"]').text()).toContain('Ruptura en el sello 5'))
+        await esperar(() => expect(rota.find('[data-prueba="integridad-ruptura"]').text()).toContain('Ruptura en el sello 5'))
         expect(rota.find('[data-prueba="integridad-ruptura"]').text()).toContain('mes ya cerrado')
         expect(rota.find('[data-prueba="integridad-asiento"]').exists()).toBe(true)
     })
@@ -404,7 +405,7 @@ describe('FEL · pantallas', () => {
             return
         }
         const vista = await mountSuspended(conApp(PaginaFactura), { route: `/facturas/${rechazado.documento_id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="dte-estado"]').text()).toBe('Rechazado'))
+        await esperar(() => expect(vista.find('[data-prueba="dte-estado"]').text()).toBe('Rechazado'))
         expect(vista.find('[data-prueba="dte-reintentar"]').exists()).toBe(false)
         expect(vista.find('[data-prueba="abrir-sustituir"]').exists()).toBe(false)
     })

@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
@@ -14,6 +14,7 @@ import PaginaPago from '~/pages/pagos/[id].vue'
 import PaginaPorLiquidar from '~/pages/cobros/por-liquidar.vue'
 import PaginaProveedores from '~/pages/configuracion/proveedores-cobro.vue'
 import PaginaTransito from '~/pages/bancos/transito.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Fase 4 · cobros y bancos (A3, contrato de localización fiscal §10.3, §10.9 y §18): espejos de
@@ -166,21 +167,21 @@ describe('fase 4 · cobros y bancos', () => {
 
         it('la pantalla marca la anomalía y el contracargo, y abre la liquidación con lo pendiente', async () => {
             const vista = await mountSuspended(PaginaPorLiquidar, { route: '/cobros/por-liquidar' })
-            await vi.waitFor(() => expect(vista.find('[data-proveedor="1"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-proveedor="1"]').exists()).toBe(true))
             const tarjeta = vista.find('[data-proveedor="1"]')
             expect(tarjeta.find('[data-prueba="saldo-puente"]').text()).toContain('Q 218.33')
             expect(tarjeta.find('[data-prueba="anomalias"]').text()).toBe('1 con más de 7 días')
             expect(tarjeta.findAll('[data-anomalia="si"]')).toHaveLength(1)
             expect(tarjeta.text()).toContain('Contracargo #7004')
             expect(tarjeta.text()).toContain('− Q 50.00')
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-liquidaciones"]').text()).toContain('LIQ-2026-10-10'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-liquidaciones"]').text()).toContain('LIQ-2026-10-10'))
             expect(vista.findAll('[data-prueba="abrir-liquidacion"]')).toHaveLength(2)
         })
 
         it('con error 501: el aviso con Reintentar y ningún saldo', async () => {
             simularFalla('GET /api/v1/cobros/por-liquidar', 501)
             const vista = await mountSuspended(PaginaPorLiquidar, { route: '/cobros/por-liquidar' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="por-liquidar-error"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-prueba="por-liquidar-error"]').exists()).toBe(true))
             expect(vista.text()).toContain('Reintentar')
             expect(vista.find('[data-prueba="saldo-puente"]').exists()).toBe(false)
             expect(vista.text()).not.toContain('Cuadra')
@@ -204,7 +205,7 @@ describe('fase 4 · cobros y bancos', () => {
                 expect(movido.ok && movido.data.desde).toBe('2099-12-01')
             }
             const vista = await mountSuspended(PaginaProveedores, { route: '/configuracion/proveedores-cobro' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-proveedores"]').text()).toContain('Débito BI'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-proveedores"]').text()).toContain('Débito BI'))
             expect(vista.find('[data-prueba="nuevo-proveedor"]').exists()).toBe(true)
         })
     })
@@ -231,7 +232,7 @@ describe('fase 4 · cobros y bancos', () => {
         it('la caja resta los depósitos del esperado provisional y el cajero deposita sin ver la lista', async () => {
             await useCajas().depositar(2, { monto: '100.00', boleta: 'B-80', cuenta_id: 16 }, nuevaClaveIdempotencia())
             const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=2' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="turno-depositos"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-prueba="turno-depositos"]').exists()).toBe(true))
             expect(vista.find('[data-prueba="turno-depositos"]').text()).toContain('− Q 100.00')
             expect(vista.find('[data-prueba="depositos-turno"]').text()).toContain('boleta B-80')
             const turno = bd.turnos.find(t => t.id === 42)
@@ -241,7 +242,7 @@ describe('fase 4 · cobros y bancos', () => {
             useUsuarioActual().value = meCajero
             sesionFixture('fixture-cajero')
             const cajero = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
-            await vi.waitFor(() => expect(cajero.find('[data-prueba="abrir-deposito"]').exists()).toBe(true))
+            await esperar(() => expect(cajero.find('[data-prueba="abrir-deposito"]').exists()).toBe(true))
             expect(cajero.find('[data-prueba="turno-depositos"]').exists()).toBe(false)
         })
 
@@ -253,7 +254,7 @@ describe('fase 4 · cobros y bancos', () => {
             const resumen = await useFondosEnTransito().resumen()
             expect(resumen.ok && resumen.data).toEqual([{ empresa_id: 1, saldo_libro: '3400.00', pendiente: '3400.00', diferencia: '0.00', cuadra: true, depositos: 1, traslados: 2 }])
             const vista = await mountSuspended(PaginaTransito, { route: '/bancos/transito' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-traslados"]').text()).toContain('TR-9'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-traslados"]').text()).toContain('TR-9'))
             expect(vista.find('[data-prueba="tabla-depositos"]').text()).toContain('B-4471')
             expect(vista.find('[data-prueba="resumen-transito"]').text()).toContain('Q 3,400.00')
         })
@@ -317,19 +318,19 @@ describe('fase 4 · cobros y bancos', () => {
             expect(bd.depositos.find(d => d.id === 1)?.estado).toBe('en_transito')
             expect(bd.depositos.find(d => d.id === nuevo)?.estado).toBe('acreditado')
             const vista = await mountSuspended(PaginaExtracto, { route: '/bancos/extractos/1' })
-            await vi.waitFor(() => expect(vista.find('[data-reatribuir="4"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-reatribuir="4"]').exists()).toBe(true))
         })
 
         it('la pantalla del extracto: avance, aplicar reglas con su resultado y acciones por línea', async () => {
             const vista = await mountSuspended(PaginaExtracto, { route: '/bancos/extractos/1' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="avance-conciliacion"]').text()).toBe('1 de 6'))
+            await esperar(() => expect(vista.find('[data-prueba="avance-conciliacion"]').text()).toBe('1 de 6'))
             expect(vista.findAll('[data-conciliar]')).toHaveLength(5)
             expect(vista.findAll('[data-deshacer]')).toHaveLength(1)
             await vista.find('[data-prueba="aplicar-reglas"]').trigger('click')
-            await vi.waitFor(() => expect(vista.find('[data-prueba="resultado-reglas"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-prueba="resultado-reglas"]').exists()).toBe(true))
             expect(vista.find('[data-prueba="resultado-reglas"]').text()).toContain('Reglas aplicadas: 2 líneas conciliadas')
             expect(vista.find('[data-prueba="resultado-reglas"]').text()).toContain('3 sin regla que aplique')
-            await vi.waitFor(() => expect(vista.find('[data-prueba="avance-conciliacion"]').text()).toBe('3 de 6'))
+            await esperar(() => expect(vista.find('[data-prueba="avance-conciliacion"]').text()).toBe('3 de 6'))
         })
 
         it('el reporte: libro y extracto con sus partidas en tránsito, y cuadra', async () => {
@@ -337,7 +338,7 @@ describe('fase 4 · cobros y bancos', () => {
             const fila = reporte.ok ? reporte.data[0] : undefined
             expect(fila).toMatchObject({ saldo_libro: '3908.38', saldo_extracto: '4795.48', diferencia_apertura: '0.00', total_libro_en_transito: '-1400.40', total_extracto_en_transito: '-513.30', diferencia: '0.00', cuadra: true })
             const vista = await mountSuspended(PaginaConciliacion, { route: '/bancos/conciliacion?cuenta=16&fecha=2026-10-15' })
-            await vi.waitFor(() => expect(vista.find('[data-cuenta="16"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-cuenta="16"]').exists()).toBe(true))
             expect(vista.find('[data-prueba="saldo-extracto"]').text()).toContain('Q 4,795.48')
             expect(vista.find('[data-prueba="cuadra-conciliacion"]').text()).toBe('Cuadra')
         })
@@ -359,8 +360,8 @@ describe('fase 4 · cobros y bancos', () => {
             expect(leida.ok && leida.data).toMatchObject({ estado: 'castigada', pagado: factura.pagado })
 
             const vista = await mountSuspended(PaginaCartera, { route: '/cartera' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Cliente cerró operaciones'))
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Castigada'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Cliente cerró operaciones'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-castigos"]').text()).toContain('Castigada'))
             expect(vista.find('[data-prueba="tabla-provisiones"]').text()).toContain('2025')
         })
 
@@ -380,7 +381,7 @@ describe('fase 4 · cobros y bancos', () => {
 
         it('ficha del pago: proveedor de cobro y liquidación; cerrar una diferencia pequeña', async () => {
             const liquidado = await mountSuspended(PaginaPago, { route: '/pagos/7003' })
-            await vi.waitFor(() => expect(liquidado.find('[data-prueba="pago-proveedor"]').text()).toContain('Pasarela en línea · 1.1.10.01'))
+            await esperar(() => expect(liquidado.find('[data-prueba="pago-proveedor"]').text()).toContain('Pasarela en línea · 1.1.10.01'))
             expect(liquidado.find('[data-prueba="pago-liquidacion"]').text()).toContain('Liquidación #1')
             liquidado.unmount()
 
@@ -395,7 +396,7 @@ describe('fase 4 · cobros y bancos', () => {
                 return
             }
             const vista = await mountSuspended(PaginaPago, { route: `/pagos/${pago.data.id}` })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="pago-saldo-facturas"]').text()).toContain('Q 0.33'))
+            await esperar(() => expect(vista.find('[data-prueba="pago-saldo-facturas"]').text()).toContain('Q 0.33'))
             expect(vista.find('[data-prueba="abrir-cerrar-diferencia"]').exists()).toBe(true)
             vista.unmount()
 

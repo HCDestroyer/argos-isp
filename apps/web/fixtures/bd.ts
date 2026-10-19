@@ -11,6 +11,8 @@ import { versionFixture } from './version/rutas'
 import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
+import type { ImagenAnuncioFixture } from './anuncios/datos'
+import { anuncios, imagenesAnuncios, metricasAnuncios } from './anuncios/datos'
 import type { PlanAdicionalFixture } from './adicionales/datos'
 import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { asientosBonificaciones, bonificaciones, conceptosCargo, motivosSinCosto } from './bonificaciones/datos'
@@ -167,6 +169,10 @@ interface BaseFixtures {
     /** Líneas de las facturas de cargo único (el detalle de las demás se arma del plan). */
     lineasCargoUnico: Record<number, Schema<'FacturaLinea'>[]>
     programasLealtad: Schema<'ProgramaLealtad'>[]
+    /* Anuncios del portal (A5, `contratos/anuncios.md`). */
+    anuncios: Schema<'Anuncio'>[]
+    imagenesAnuncios: Record<number, ImagenAnuncioFixture>
+    metricasAnuncios: Record<number, Schema<'MetricasAnuncio'>>
     /* Servicios adicionales (A1, `contratos/adicionales.md`). */
     adicionales: Schema<'Adicional'>[]
     motivosCortesia: Schema<'MotivoCortesia'>[]
@@ -254,6 +260,9 @@ function inicial(): BaseFixtures {
         bonificaciones,
         lineasCargoUnico: {},
         programasLealtad,
+        anuncios,
+        imagenesAnuncios,
+        metricasAnuncios,
         adicionales,
         motivosCortesia,
         adicionalesServicio,

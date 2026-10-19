@@ -22,6 +22,7 @@ import { rutasCobros } from './cobros/rutas'
 import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasLealtad } from './lealtad/rutas'
 import { rutasBonificaciones } from './bonificaciones/rutas'
+import { rutasAnuncios } from './anuncios/rutas'
 import { rutasAdicionales } from './adicionales/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasComprobantes } from './comprobantes/rutas'
@@ -482,6 +483,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasCartera,
     // Antes que los reportes genéricos (GET /reportes/:reporte).
     ...rutasLealtad,
+    ...rutasAnuncios,
     ...rutasVersion,
     // Antes que servicios y planes: `/servicios/:id/adicionales` y `/planes/:id/adicionales`.
     ...rutasAdicionales,

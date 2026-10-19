@@ -1,5 +1,5 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
@@ -8,6 +8,7 @@ import ClientePuntos from '~/components/ClientePuntos.vue'
 import PaginaLealtad from '~/pages/lealtad/index.vue'
 import PaginaReferidos from '~/pages/lealtad/referidos.vue'
 import PaginaReporte from '~/pages/reportes/lealtad.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1): espejos de los validadores, composables
@@ -114,23 +115,23 @@ describe('lealtad · fase 1', () => {
     describe('pantallas', () => {
         it('programa activo con sus reglas y la vista del valor; sin programa ofrece crearlo', async () => {
             const vista = await mountSuspended(PaginaLealtad, { route: '/lealtad' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="programa"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-prueba="programa"]').exists()).toBe(true))
             expect(vista.find('[data-prueba="estado-programa"]').text()).toBe('Activo')
             expect(vista.find('[data-prueba="desactivar-programa"]').exists()).toBe(true)
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-reglas-lealtad"]').text()).toContain('Pago a tiempo'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-reglas-lealtad"]').text()).toContain('Pago a tiempo'))
             expect(vista.text()).toContain('pasivo Q 0.080000 por punto')
             vista.unmount()
 
             bd.programasLealtad = []
             const vacia = await mountSuspended(PaginaLealtad, { route: '/lealtad' })
-            await vi.waitFor(() => expect(vacia.find('[data-prueba="sin-programa"]').exists()).toBe(true))
+            await esperar(() => expect(vacia.find('[data-prueba="sin-programa"]').exists()).toBe(true))
             expect(vacia.text()).toContain('Crear programa')
         })
 
         it('con error al leer el programa: aviso con Reintentar y ningún dato', async () => {
             simularFalla('GET /api/v1/lealtad/programa', 500)
             const vista = await mountSuspended(PaginaLealtad, { route: '/lealtad' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="programa-error-carga"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-prueba="programa-error-carga"]').exists()).toBe(true))
             expect(vista.text()).toContain('Reintentar')
             expect(vista.text()).not.toContain('Crear programa')
             expect(vista.find('[data-prueba="programa"]').exists()).toBe(false)
@@ -138,7 +139,7 @@ describe('lealtad · fase 1', () => {
 
         it('puntos del cliente: saldo, lotes vivos y movimientos; con error no muestra saldo', async () => {
             const vista = await mountSuspended(ClientePuntos, { props: { clienteId: 2, clienteNombre: 'Juan Carlos Ramírez' } })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="saldo-puntos"]').exists()).toBe(true))
+            await esperar(() => expect(vista.find('[data-prueba="saldo-puntos"]').exists()).toBe(true))
             expect(vista.find('[data-prueba="saldo-puntos"]').text()).toContain('230 pts')
             expect(vista.find('[data-prueba="tabla-movimientos-puntos"]').text()).toContain('Compensación por falla del 12 de octubre')
             expect(vista.find('[data-prueba="abrir-ajuste"]').exists()).toBe(true)
@@ -147,33 +148,33 @@ describe('lealtad · fase 1', () => {
             useUsuarioActual().value = meCajero
             sesionFixture('fixture-cajero')
             const cajero = await mountSuspended(ClientePuntos, { props: { clienteId: 2, clienteNombre: 'Juan Carlos Ramírez' } })
-            await vi.waitFor(() => expect(cajero.find('[data-prueba="saldo-puntos"]').exists()).toBe(true))
+            await esperar(() => expect(cajero.find('[data-prueba="saldo-puntos"]').exists()).toBe(true))
             expect(cajero.find('[data-prueba="abrir-ajuste"]').exists()).toBe(false)
             cajero.unmount()
 
             simularFalla('GET /api/v1/clientes/:id/puntos', 501)
             const falla = await mountSuspended(ClientePuntos, { props: { clienteId: 2, clienteNombre: 'Juan Carlos Ramírez' } })
-            await vi.waitFor(() => expect(falla.find('[data-prueba="puntos-error"]').exists()).toBe(true))
+            await esperar(() => expect(falla.find('[data-prueba="puntos-error"]').exists()).toBe(true))
             expect(falla.find('[data-prueba="saldo-puntos"]').exists()).toBe(false)
             expect(falla.text()).not.toContain('pts')
         })
 
         it('referidos: estados y Rechazar solo en los no rechazados', async () => {
             const vista = await mountSuspended(PaginaReferidos, { route: '/lealtad/referidos' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-referidos"]').text()).toContain('Rosa Elena Cifuentes'))
+            await esperar(() => expect(vista.find('[data-prueba="tabla-referidos"]').text()).toContain('Rosa Elena Cifuentes'))
             expect(vista.text()).toContain('Calificado')
             expect(vista.findAll('[data-rechazar]')).toHaveLength(2)
         })
 
         it('reporte: cuadra; si el libro no coincide, el aviso se ve arriba', async () => {
             const vista = await mountSuspended(PaginaReporte, { route: '/reportes/lealtad' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="cuadra-lealtad"]').text()).toBe('Cuadra con el libro'))
+            await esperar(() => expect(vista.find('[data-prueba="cuadra-lealtad"]').text()).toBe('Cuadra con el libro'))
             expect(vista.find('[data-prueba="lealtad-no-cuadra"]').exists()).toBe(false)
             vista.unmount()
 
             bd.pasivoLibroLealtad[1] = '20.00'
             const mal = await mountSuspended(PaginaReporte, { route: '/reportes/lealtad' })
-            await vi.waitFor(() => expect(mal.find('[data-prueba="lealtad-no-cuadra"]').exists()).toBe(true))
+            await esperar(() => expect(mal.find('[data-prueba="lealtad-no-cuadra"]').exists()).toBe(true))
             expect(mal.find('[data-prueba="lealtad-no-cuadra"]').text()).toContain('lotes Q 18.40 · 2.1.10 Q 20.00')
             expect(mal.find('[data-prueba="cuadra-lealtad"]').text()).toBe('No cuadra')
         })
