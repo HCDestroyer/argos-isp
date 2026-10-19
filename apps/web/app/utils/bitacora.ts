@@ -173,6 +173,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'horus.canjear_enlace': 'Horus se conectó con el enlace de Argos',
     'horus.conectar_enlace': 'Conectado con un enlace de Horus',
     'horus.recibir_webhook': 'Aviso de Horus recibido',
+    'nodos_portal.crear': 'Nodo portal creado',
+    'nodos_portal.revocar': 'Nodo portal revocado',
     'ip.resolver': 'IPs consultadas por Horus',
     'sso.emitir': 'Ticket de autologin emitido para Horus',
     'vinculaciones.quitar': 'Vinculación con otro sistema quitada',
