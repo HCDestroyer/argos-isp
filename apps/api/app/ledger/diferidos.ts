@@ -79,7 +79,12 @@ async function completar(cliente: QueryClientContract, filas: Array<Record<strin
             filas.map((f) => Number(f.id)),
         )
         .orderBy('mes')
-        .select('diferimiento_id', cliente.raw(`to_char(mes, 'YYYY-MM-DD') as mes`), 'monto', 'asiento_id')) as Array<{
+        .select(
+            'diferimiento_id',
+            cliente.raw(`to_char(mes, 'YYYY-MM-DD') as mes`),
+            'monto',
+            'asiento_id',
+        )) as Array<{
         diferimiento_id: number
         mes: string
         monto: string
@@ -148,7 +153,9 @@ export async function diferimientoDeFactura(cliente: QueryClientContract, factur
     return cliente
         .from('ledger.diferimientos as d')
         .where('d.factura_id', facturaId)
-        .whereNotExists((q) => q.from('ledger.diferimientos_cancelaciones as x').whereRaw('x.diferimiento_id = d.id'))
+        .whereNotExists((q) =>
+            q.from('ledger.diferimientos_cancelaciones as x').whereRaw('x.diferimiento_id = d.id'),
+        )
         .select('d.id')
         .first()
 }

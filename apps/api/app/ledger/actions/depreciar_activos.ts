@@ -91,7 +91,10 @@ export default class DepreciarActivos extends DomainAction<EntradaDepreciar, Res
             const hechas = (await t.trx
                 .from('ledger.activos_cuotas')
                 .where('activo_id', activo.id)
-                .select(t.trx.raw(`to_char(mes, 'YYYY-MM-DD') as mes`), 'monto')) as Array<{ mes: string; monto: string }>
+                .select(t.trx.raw(`to_char(mes, 'YYYY-MM-DD') as mes`), 'monto')) as Array<{
+                mes: string
+                monto: string
+            }>
             const meses = new Set(hechas.map((h) => h.mes))
             let restante = dec(activo.costo)
                 .minus(activo.valor_residual)
@@ -116,12 +119,15 @@ export default class DepreciarActivos extends DomainAction<EntradaDepreciar, Res
                     t.ctx,
                     { trx: t.trx },
                 )
-                await t.trx.insertQuery().table('ledger.activos_cuotas').insert({
-                    activo_id: activo.id,
-                    mes,
-                    monto: aTexto(monto),
-                    asiento_id: asiento.id,
-                })
+                await t.trx
+                    .insertQuery()
+                    .table('ledger.activos_cuotas')
+                    .insert({
+                        activo_id: activo.id,
+                        mes,
+                        monto: aTexto(monto),
+                        asiento_id: asiento.id,
+                    })
                 restante = restante.minus(monto)
                 total = total.plus(monto)
                 cuotas += 1

@@ -15,6 +15,9 @@
       "name": "acl"
     },
     {
+      "name": "activos"
+    },
+    {
       "name": "auth"
     },
     {
@@ -103,6 +106,691 @@
     }
   ],
   "paths": {
+    "/api/v1/activos": {
+      "get": {
+        "operationId": "activosListar",
+        "summary": "Activos fijos con su depreciación acumulada y valor en libros",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "clase",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "equipo_red",
+                "computacion",
+                "mobiliario",
+                "vehiculos",
+                "herramientas",
+                "edificios",
+                "otros"
+              ]
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vigente",
+                "dado_de_baja"
+              ]
+            }
+          },
+          {
+            "name": "compra_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de activos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ActivoFijo"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso activos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "activos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "activosRegistrar",
+        "summary": "Alta de un activo que no entra por una compra (inventario inicial o aporte)",
+        "description": "Asiento alta_activo: 1.2.01.NN / 1.2.02.NN (depreciación inicial) + contrapartida (2.9.01, 3.1.01 o 3.3.01). Un activo comprado nace con la compra (línea activo_fijo). 422 tasa_sobre_tope.",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "clase": {
+                    "type": "string",
+                    "enum": [
+                      "equipo_red",
+                      "computacion",
+                      "mobiliario",
+                      "vehiculos",
+                      "herramientas",
+                      "edificios",
+                      "otros"
+                    ]
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 300
+                  },
+                  "serie": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "ubicacion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "Sitio, nodo o cliente (CPE en comodato)"
+                  },
+                  "fecha_alta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "costo": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "valor_residual": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "depreciacion_inicial": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Depreciación acumulada al darlo de alta (inventario inicial)",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "tasa_anual": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,3}(\\.\\d{1,2})?$",
+                    "description": "Por defecto el tope legal de la clase (parámetro depreciacion)"
+                  },
+                  "contrapartida": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "2.9.01",
+                          "3.1.01",
+                          "3.3.01"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Saldos de apertura (por defecto), capital social o utilidades acumuladas"
+                  }
+                },
+                "required": [
+                  "clase",
+                  "descripcion",
+                  "costo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Activo registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivoFijo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso activos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "activos.registrar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/activos/{id}": {
+      "get": {
+        "operationId": "activosVer",
+        "summary": "Ver activo fijo",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivoFijo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso activos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "activos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/activos/{id}/dar-de-baja": {
+      "post": {
+        "operationId": "activosDarDeBaja",
+        "summary": "Venta o retiro de un activo (cancela costo y depreciación; ganancia o pérdida)",
+        "description": "Deprecia lo pendiente hasta el mes anterior; asiento baja_activo: 1.2.02 + Banco (precio) + 5.3.06 / 1.2.01 + 4.2.02. 409 activo_dado_de_baja. Emite activo.dado_de_baja.",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "venta",
+                      "retiro"
+                    ]
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "precio_venta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Venta: precio sin IVA",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Venta: cuenta que recibe el precio"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Activo dado de baja",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivoFijo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso activos.dar_de_baja; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "activos.dar_de_baja",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/activos/depreciar": {
+      "post": {
+        "operationId": "activosDepreciar",
+        "summary": "Registrar las cuotas de depreciación pendientes hasta un mes terminado",
+        "description": "Lo mismo que el cron diario depreciar: una cuota por activo y mes (repetir no duplica). Solo meses terminados (422 mes_terminado).",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Último mes a registrar (cualquier día); por defecto el mes anterior al actual"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cuotas registradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCuotasMes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso activos.registrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "activos.registrar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "authLogin",
@@ -9205,6 +9893,449 @@
           }
         },
         "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/diferimientos": {
+      "get": {
+        "operationId": "diferimientosListar",
+        "summary": "Gastos pagados por anticipado (1.1.13) e ingresos cobrados por anticipado (2.1.12)",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "factura",
+                "compra"
+              ]
+            }
+          },
+          {
+            "name": "factura_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "compra_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de diferimientos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Diferimiento"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "diferimientosRegistrar",
+        "summary": "Diferir una línea de factura (ingreso) o de compra (gasto) en N meses",
+        "description": "Factura: Ingreso / 2.1.12 por la base (el IVA no se difiere). Compra: 1.1.13 / Gasto. Las cuotas vuelven cada mes con el cron diferir. 409 linea_diferida, factura_no_emitida, compra_anulada.",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "origen": {
+                    "type": "string",
+                    "enum": [
+                      "factura",
+                      "compra"
+                    ]
+                  },
+                  "factura_linea_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "compra_linea_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "meses": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 120
+                  },
+                  "inicio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Mes de la primera cuota (por defecto el del documento)"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "origen",
+                  "meses"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Diferimiento registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Diferimiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.registrar_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.registrar_asiento",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/diferimientos/{id}": {
+      "get": {
+        "operationId": "diferimientosVer",
+        "summary": "Ver diferimiento con sus cuotas",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Diferimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Diferimiento"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/diferimientos/amortizar": {
+      "post": {
+        "operationId": "diferimientosAmortizar",
+        "summary": "Registrar las cuotas de diferidos pendientes hasta un mes terminado",
+        "description": "Lo mismo que el cron diario diferir: una cuota por diferimiento y mes (repetir no duplica).",
+        "tags": [
+          "activos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Último mes a registrar (cualquier día); por defecto el mes anterior al actual"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cuotas registradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCuotasMes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.registrar_asiento; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.registrar_asiento",
         "x-implementado": true
       }
     },
@@ -18417,7 +19548,8 @@
                 "pago_proveedor",
                 "depreciacion",
                 "baja_activo",
-                "diferido"
+                "diferido",
+                "alta_activo"
               ]
             }
           },
@@ -30718,6 +31850,9 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "activos.dar_de_baja",
+                        "activos.registrar",
+                        "activos.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.trasladar",
@@ -30972,6 +32107,9 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "activos.dar_de_baja",
+                        "activos.registrar",
+                        "activos.ver",
                         "bancos.conciliar",
                         "bancos.importar_extracto",
                         "bancos.trasladar",
@@ -35695,6 +36833,9 @@
                         "items": {
                           "type": "string",
                           "enum": [
+                            "activos.dar_de_baja",
+                            "activos.registrar",
+                            "activos.ver",
                             "bancos.conciliar",
                             "bancos.importar_extracto",
                             "bancos.trasladar",
@@ -37313,6 +38454,188 @@
           }
         }
       },
+      "ActivoFijo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "clase",
+          "descripcion",
+          "serie",
+          "ubicacion",
+          "compra_id",
+          "compra_linea_id",
+          "fecha_alta",
+          "inicio_depreciacion",
+          "costo",
+          "valor_residual",
+          "depreciacion_inicial",
+          "tasa_anual",
+          "cuota_mensual",
+          "cuenta_activo_codigo",
+          "cuenta_depreciacion_codigo",
+          "depreciacion_acumulada",
+          "valor_libros",
+          "cuotas",
+          "ultima_cuota",
+          "estado",
+          "baja",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "clase": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ubicacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "compra_linea_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "fecha_alta": {
+            "type": "string",
+            "format": "date"
+          },
+          "inicio_depreciacion": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer mes que se deprecia"
+          },
+          "costo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Sin el IVA tomado como crédito fiscal"
+          },
+          "valor_residual": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "depreciacion_inicial": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "tasa_anual": {
+            "type": "string",
+            "description": "Por ciento anual (línea recta), ≤ tope legal de la clase"
+          },
+          "cuota_mensual": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cuenta_activo_codigo": {
+            "type": "string"
+          },
+          "cuenta_depreciacion_codigo": {
+            "type": "string"
+          },
+          "depreciacion_acumulada": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "valor_libros": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cuotas": {
+            "type": "integer"
+          },
+          "ultima_cuota": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "dado_de_baja"
+            ]
+          },
+          "baja": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "fecha",
+              "tipo",
+              "motivo",
+              "precio_venta",
+              "valor_libros",
+              "asiento_id"
+            ],
+            "properties": {
+              "fecha": {
+                "type": "string",
+                "format": "date"
+              },
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "venta",
+                  "retiro",
+                  "anulacion"
+                ]
+              },
+              "motivo": {
+                "type": "string"
+              },
+              "precio_venta": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "valor_libros": {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              "asiento_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              }
+            }
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "AplicacionPago": {
         "type": "object",
         "required": [
@@ -37416,7 +38739,8 @@
               "pago_proveedor",
               "depreciacion",
               "baja_activo",
-              "diferido"
+              "diferido",
+              "alta_activo"
             ]
           },
           "origen_id": {
@@ -41403,6 +42727,144 @@
                 }
               }
             }
+          }
+        }
+      },
+      "Diferimiento": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "origen",
+          "factura_id",
+          "factura_linea_id",
+          "compra_id",
+          "compra_linea_id",
+          "descripcion",
+          "cuenta_diferida_codigo",
+          "cuenta_destino_codigo",
+          "total",
+          "inicio",
+          "meses",
+          "amortizado",
+          "pendiente",
+          "cuotas",
+          "estado",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "factura",
+              "compra"
+            ]
+          },
+          "factura_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "factura_linea_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "compra_linea_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "cuenta_diferida_codigo": {
+            "type": "string",
+            "description": "1.1.13 (gasto) o 2.1.12 (ingreso)"
+          },
+          "cuenta_destino_codigo": {
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date"
+          },
+          "meses": {
+            "type": "integer"
+          },
+          "amortizado": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cuotas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "mes",
+                "monto",
+                "asiento_id"
+              ],
+              "properties": {
+                "mes": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "asiento_id": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "amortizado",
+              "cancelado"
+            ]
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -52085,6 +53547,35 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "ResultadoCuotasMes": {
+        "type": "object",
+        "required": [
+          "hasta",
+          "cuotas",
+          "monto",
+          "ids"
+        ],
+        "properties": {
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "cuotas": {
+            "type": "integer"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Activos o diferimientos que recibieron cuotas"
           }
         }
       },

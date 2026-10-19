@@ -150,7 +150,8 @@ const diferimientos: Ruta[] = [
         etiqueta: 'activos',
         permiso: 'libro.registrar_asiento',
         cuerpo: v.cuotasMesValidator,
-        descripcion: 'Lo mismo que el cron diario diferir: una cuota por diferimiento y mes (repetir no duplica).',
+        descripcion:
+            'Lo mismo que el cron diario diferir: una cuota por diferimiento y mes (repetir no duplica).',
         respuesta: { status: 200, descripcion: 'Cuotas registradas', esquema: ResultadoCuotas },
         handler: async (ctx, { cuerpo }) => {
             const r = await new AmortizarDiferidos().execute(

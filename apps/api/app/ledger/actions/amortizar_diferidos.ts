@@ -88,7 +88,10 @@ export default class AmortizarDiferidos extends DomainAction<EntradaAmortizar, R
             const hechas = (await t.trx
                 .from('ledger.diferimientos_cuotas')
                 .where('diferimiento_id', d.id)
-                .select(t.trx.raw(`to_char(mes, 'YYYY-MM-DD') as mes`), 'monto')) as Array<{ mes: string; monto: string }>
+                .select(t.trx.raw(`to_char(mes, 'YYYY-MM-DD') as mes`), 'monto')) as Array<{
+                mes: string
+                monto: string
+            }>
             const meses = new Set(hechas.map((h) => h.mes))
             const importe = dec(d.total)
             let acumulado = hechas.reduce((s, h) => s.plus(h.monto), CERO)
@@ -119,12 +122,15 @@ export default class AmortizarDiferidos extends DomainAction<EntradaAmortizar, R
                     t.ctx,
                     { trx: t.trx },
                 )
-                await t.trx.insertQuery().table('ledger.diferimientos_cuotas').insert({
-                    diferimiento_id: d.id,
-                    mes,
-                    monto: aTexto(monto),
-                    asiento_id: asiento.id,
-                })
+                await t.trx
+                    .insertQuery()
+                    .table('ledger.diferimientos_cuotas')
+                    .insert({
+                        diferimiento_id: d.id,
+                        mes,
+                        monto: aTexto(monto),
+                        asiento_id: asiento.id,
+                    })
                 acumulado = acumulado.plus(monto)
                 total = total.plus(monto)
                 cuotas += 1

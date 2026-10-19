@@ -12,6 +12,8 @@ import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
 import SellarAsientos from '#ledger/actions/sellar_asientos'
 import VerificarIntegridad from '#ledger/actions/verificar_integridad'
 import { pendientesDeSellar } from '#ledger/sellos'
+import DepreciarActivos from '#ledger/actions/depreciar_activos'
+import AmortizarDiferidos from '#ledger/actions/amortizar_diferidos'
 
 /**
  * Crons de facturación con BullMQ (`node ace billing:worker`).
@@ -27,6 +29,8 @@ import { pendientesDeSellar } from '#ledger/sellos'
  * | `conciliar` | 06:30 Guatemala | `ConciliarPasarela` (cobros en línea de ayer contra el proveedor) |
  * | `sellar` | 1 min | `SellarAsientos` (`ledger:sellar`: cadena de hash del libro, §10.10); sin asientos pendientes no llama la acción |
  * | `integridad` | 02:15 Guatemala | `VerificarIntegridad` (recalcula la cadena; `libro.integridad_rota` si no verifica) |
+ * | `depreciar` | 02:30 Guatemala | `DepreciarActivos` (cuotas de activos fijos hasta el mes anterior; único activo + mes, §10.10) |
+ * | `diferir` | 02:40 Guatemala | `AmortizarDiferidos` (cuotas de diferidos hasta el mes anterior; único diferimiento + mes) |
  *
  * Lock: el worker tiene concurrencia 1 y además cada job toma un advisory lock de Postgres
  * (`pg_try_advisory_xact_lock`) mientras corre; si otra instancia ya lo tiene, el disparo se
@@ -47,6 +51,8 @@ export const CRONS = {
 export const CRONS_DIARIOS = {
     conciliar: { pattern: '30 6 * * *', tz: 'America/Guatemala' },
     integridad: { pattern: '15 2 * * *', tz: 'America/Guatemala' },
+    depreciar: { pattern: '30 2 * * *', tz: 'America/Guatemala' },
+    diferir: { pattern: '40 2 * * *', tz: 'America/Guatemala' },
 } as const
 export type NombreCron = keyof typeof CRONS | keyof typeof CRONS_DIARIOS
 
@@ -148,6 +154,11 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
             })
         case 'integridad':
             return conLock(nombre, () => new VerificarIntegridad().execute({}, ctx))
+        case 'depreciar':
+            // todo lo pendiente hasta el mes anterior (fase 5, §10.10); repetirlo no duplica
+            return conLock(nombre, () => new DepreciarActivos().execute({}, ctx))
+        case 'diferir':
+            return conLock(nombre, () => new AmortizarDiferidos().execute({}, ctx))
         default:
             throw new Error(`Cron de billing desconocido: ${nombre}`)
     }

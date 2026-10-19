@@ -57,19 +57,25 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
         if (!Number.isInteger(input.meses) || input.meses < 2 || input.meses > 120) {
             throw new ValidacionFallida([{ field: 'meses', message: 'De 2 a 120 meses', rule: 'meses' }])
         }
-        const datos = input.origen === 'factura' ? await this.deFactura(t, input) : await this.deCompra(t, input)
+        const datos =
+            input.origen === 'factura' ? await this.deFactura(t, input) : await this.deCompra(t, input)
         exigirAccesoEmpresa(t.ctx, datos.empresaId)
         t.fijarEmpresa(datos.empresaId)
         const cuentaDiferida = (await t.trx
             .from('ledger.cuentas')
             .where({
                 pais: PAIS_PLAN,
-                codigo: input.origen === 'factura' ? CUENTAS_GT.INGRESOS_COBRADOS_ANTICIPADO : CUENTAS_GT.GASTOS_PAGADOS_ANTICIPADO,
+                codigo:
+                    input.origen === 'factura'
+                        ? CUENTAS_GT.INGRESOS_COBRADOS_ANTICIPADO
+                        : CUENTAS_GT.GASTOS_PAGADOS_ANTICIPADO,
             })
             .select('id')
             .firstOrFail()) as { id: number }
         const inicio = inicioDeMes(input.inicio ? fechaValida(input.inicio, 'inicio') : datos.fecha)
-        const fecha = (await periodoCerrado(t.trx, datos.fecha, datos.empresaId)) ? hoyGuatemala() : datos.fecha
+        const fecha = (await periodoCerrado(t.trx, datos.fecha, datos.empresaId))
+            ? hoyGuatemala()
+            : datos.fecha
 
         const [fila] = (await t.trx
             .insertQuery()
@@ -118,22 +124,34 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
         return verDiferimiento(id, t.trx)
     }
 
-    private async exigirLibre(t: Transaccion, columna: 'factura_linea_id' | 'compra_linea_id', lineaId: number) {
+    private async exigirLibre(
+        t: Transaccion,
+        columna: 'factura_linea_id' | 'compra_linea_id',
+        lineaId: number,
+    ) {
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, hashtext(?))', [3018, `${columna}:${lineaId}`])
         const previo = await t.trx
             .from('ledger.diferimientos as d')
             .where(`d.${columna}`, lineaId)
-            .whereNotExists((q) => q.from('ledger.diferimientos_cancelaciones as x').whereRaw('x.diferimiento_id = d.id'))
+            .whereNotExists((q) =>
+                q.from('ledger.diferimientos_cancelaciones as x').whereRaw('x.diferimiento_id = d.id'),
+            )
             .select('d.id')
             .first()
         if (previo) {
-            throw new Conflicto(`La línea ${lineaId} ya está diferida (diferimiento ${previo.id})`, 'linea_diferida', 'Línea diferida')
+            throw new Conflicto(
+                `La línea ${lineaId} ya está diferida (diferimiento ${previo.id})`,
+                'linea_diferida',
+                'Línea diferida',
+            )
         }
     }
 
     private async deFactura(t: Transaccion, input: EntradaDiferimiento): Promise<DatosLinea> {
         if (!input.factura_linea_id) {
-            throw new ValidacionFallida([{ field: 'factura_linea_id', message: 'Indica la línea de la factura', rule: 'required' }])
+            throw new ValidacionFallida([
+                { field: 'factura_linea_id', message: 'Indica la línea de la factura', rule: 'required' },
+            ])
         }
         const linea = (await t.trx
             .from('billing.facturas_lineas as l')
@@ -175,7 +193,9 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
         await this.exigirLibre(t, 'factura_linea_id', Number(linea.id))
         const base = dec(linea.total).minus(linea.iva)
         if (base.lte(0)) {
-            throw new ValidacionFallida([{ field: 'factura_linea_id', message: 'La línea no tiene base que diferir', rule: 'monto' }])
+            throw new ValidacionFallida([
+                { field: 'factura_linea_id', message: 'La línea no tiene base que diferir', rule: 'monto' },
+            ])
         }
         const destino = (await t.trx
             .from('ledger.cuentas')
@@ -195,7 +215,9 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
 
     private async deCompra(t: Transaccion, input: EntradaDiferimiento): Promise<DatosLinea> {
         if (!input.compra_linea_id) {
-            throw new ValidacionFallida([{ field: 'compra_linea_id', message: 'Indica la línea de la compra', rule: 'required' }])
+            throw new ValidacionFallida([
+                { field: 'compra_linea_id', message: 'Indica la línea de la compra', rule: 'required' },
+            ])
         }
         const linea = (await t.trx
             .from('ledger.compras_lineas as l')
@@ -216,7 +238,9 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
                 'c.tipo_documento',
                 'c.credito_fiscal',
                 t.trx.raw(`to_char(c.fecha, 'YYYY-MM-DD') as fecha`),
-                t.trx.raw('EXISTS (SELECT 1 FROM ledger.compras_anulaciones x WHERE x.compra_id = c.id) as anulada'),
+                t.trx.raw(
+                    'EXISTS (SELECT 1 FROM ledger.compras_anulaciones x WHERE x.compra_id = c.id) as anulada',
+                ),
             )
             .first()) as {
             id: number
@@ -235,14 +259,32 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
             anulada: boolean
         } | null
         if (!linea) throw new NoEncontrado(`La línea de compra ${input.compra_linea_id} no existe`)
-        if (linea.anulada) throw new Conflicto(`La compra ${linea.compra_id} está anulada`, 'compra_anulada', 'Compra anulada')
-        if (linea.cuenta_tipo !== 'gasto' || linea.tipo === 'activo_fijo' || linea.tipo_documento === 'NCRE') {
+        if (linea.anulada) {
+            throw new Conflicto(
+                `La compra ${linea.compra_id} está anulada`,
+                'compra_anulada',
+                'Compra anulada',
+            )
+        }
+        if (
+            linea.cuenta_tipo !== 'gasto' ||
+            linea.tipo === 'activo_fijo' ||
+            linea.tipo_documento === 'NCRE'
+        ) {
             throw new ValidacionFallida([
-                { field: 'compra_linea_id', message: 'Solo se difiere un gasto (no activos fijos ni NCRE)', rule: 'no_aplica' },
+                {
+                    field: 'compra_linea_id',
+                    message: 'Solo se difiere un gasto (no activos fijos ni NCRE)',
+                    rule: 'no_aplica',
+                },
             ])
         }
         if (linea.diferir_meses) {
-            throw new Conflicto(`La línea ${linea.id} ya se difirió al registrar la compra`, 'linea_diferida', 'Línea diferida')
+            throw new Conflicto(
+                `La línea ${linea.id} ya se difirió al registrar la compra`,
+                'linea_diferida',
+                'Línea diferida',
+            )
         }
         await this.exigirLibre(t, 'compra_linea_id', Number(linea.id))
         const monto = linea.credito_fiscal ? dec(linea.base) : dec(linea.base).plus(linea.iva)

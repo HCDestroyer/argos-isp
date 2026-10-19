@@ -996,6 +996,16 @@ Reparto de §10 por fase (la tabla de fases está en `PLAN.md`):
 | 37  | Retención de tarjeta en combustibles             | Si el 1.5 % (`RET_IVA_TAR_COMB`) es sobre el IVA o sobre el total                                                                                                                                                      | Sobre el IVA (como el 15 %)              | inv. A.1 (confianza media); A3 (fase 2)       |
 | 38  | Avisos vivos al desactivar la FEL               | Si se reclasifican en masa a `2.1.02` (y cómo se declaran) al dejar de emitir con FEL, o si basta con impedir desactivar (hoy: 422 `avisos_por_certificar`) | Impedir desactivar                       | Hallazgo H8 del auditor (fase 3)              |
 | 39  | NIT equivocado dentro del plazo de anulación     | Si se corrige anulando el DTE y emitiendo otro o con NCRE completa y una factura nueva (hoy: NCRE si hay DTE certificado)                     | NCRE + factura nueva                     | §17 (desvío b, fase 3)                        |
+| 40  | Momento de la retención emitida                  | Si la retención de IVA/ISR al proveedor se causa al registrar la factura o al pagarla | Al registrar la compra | inv. A.1, A.2; A3 (fase 5) |
+| 41  | Retenciones que se sugieren                      | Agente de IVA a todo proveedor general no agente desde `ret_iva_minimo`; 5 % del total a pequeño contribuyente desde `ret_iva_pequeno_desde`; ISR 7 % al régimen opcional sin mínimo; nada a no residentes ni FESP sin pedirlo | Así | inv. A.1, A.2; A3 (fase 5) |
+| 42  | Documentos de proveedores                        | FESP solo a `sin_documento`; un no residente solo con RECIBO (sin IVA ni crédito: ¿IVA de servicios del exterior?); DUA con crédito | Así | inv. A.1; A3 (fase 5) |
+| 43  | Constancia recibida después del pago             | La constancia del cliente se registra con el pago; una que llega días después no tiene acción propia | Con el pago | inv. A.1; A3 (fase 5) |
+| 44  | Anticipos a proveedores                          | Un pago a proveedor no pasa del saldo de sus compras | Sin anticipos (422 `pago_excede_saldo`) | A3 (fase 5) |
+| 45  | Mes de la baja de un activo                      | Si el mes de la baja se deprecia | No se deprecia | inv. A.2 (art. 28); A3 (fase 5) |
+| 46  | IVA en la venta de activos fijos                 | La baja por venta registra el precio sin IVA en un banco; el IVA de la venta no se calcula | Facturar aparte | inv. A.1; A3 (fase 5) |
+| 47  | Activos del inventario inicial                   | Contrapartida (saldos de apertura, capital o utilidades) y depreciación acumulada al darlos de alta | 2.9.01 por defecto | inv. B.1; A3 (fase 5) |
+| 48  | Factura con ingreso diferido                     | Cómo se anula o se acredita una factura cuyo ingreso está en 2.1.12 (hoy 409 `factura_diferida`) | Impedido | odoo §9; A3 (fase 5) |
+| 49  | Equipo de red en comodato (CPE)                  | Si el CPE en casa del cliente se activa y deprecia como equipo de red (10 %) | Como activo de la clase `equipo_red` | inv. A.2; A3 (fase 5) |
 
 ## 16. Desvíos aprobados en la implementación (A3, fase 2)
 
@@ -1073,3 +1083,44 @@ Rama `a3/fase4-bancos`. Lo que sigue cumple §10.3 y §10.9; cada punto marcado 
 | `12.iva_por_certificar_distinto`, `12.iva_por_certificar_del_documento`, `12.movimiento_en_2.1.11_de_origen_inesperado` | El castigo saca IVA de `2.1.11` | `F4.iva_por_certificar_distinto` y `F4.castigo_mal_contabilizado` (solo agregados; el del documento queda para el auditor) |
 
 Nuevos de la fase 4: `F4.cobros_por_liquidar_distinto`, `F4.liquidacion_mal_contabilizada`, `F4.fondos_en_transito_distinto`, `F4.conciliacion_descuadrada`, `F4.conciliacion_duplicada`.
+
+## 19. Implementación de la fase 5 (compras, proveedores, activos y diferidos, A3): pendiente de aprobación del líder
+
+Rama `a3/fase5-compras` (sobre `a3/fase4-bancos`). Cumple §3.3, §3.4, §3.5, §6, §10.8 (auxiliar y antigüedad de proveedores) y §10.10 (activos y diferidos). Cada **desvío** espera aprobación; lo que el informe no verifica va en las filas 40 a 49 de §15.
+
+**Compras.**
+
+- **Desvío (a) · asiento de la compra desde un egreso.** Origen `compra` (no `reclasificacion`): `reclasificacion` es la de `2.1.11` (§10.1) y el auditor la valida como tal (`12.reclasificacion_mal_formada`). La partida de la cuenta del egreso queda aparte de la de cada línea (no se netea) para conservar la etiqueta de base; en el caso común el efecto neto es `1.1.04 / Gasto` por el IVA. Anulada la compra, el egreso se puede volver a registrar.
+- **Desvío (b) · columnas nuevas.** `ledger.compras.base_importaciones` (`total = bienes + servicios + importaciones + exento + iva`), `fecha` (fecha contable = max(fecha del documento, inicio de `periodo_iva`)), `ledger.compras_lineas.exento` y `diferir_meses`, y la tabla `ledger.compras_retenciones` (una fila por impuesto de retención con base, tasa y monto). No hay `compras.asiento_id`: el asiento se encuentra por origen, como el de los egresos (la fila es inmutable y el asiento nace después).
+- **Desvío (c) · libro de compras.** `GET /libros/compras` (vista previa, `libros.ver`) lista las compras por `periodo_iva` y cada **anulación** en el mes de su reverso con los valores en negativo; así el crédito del libro de cada mes = movimiento de `1.1.04` de los asientos de compras de ese mes (`GET /libros/compras/cuadre`). La emisión con folio queda para la fase de libros. Los reversos de compras copian las etiquetas con el signo contrario (`RevertirAsiento.invertir_etiquetas`; los demás reversos siguen sin etiquetas).
+- NCRE del proveedor: solo al crédito, contra una compra vigente del mismo proveedor y sin pasar de su saldo (422 `ncre_excede_saldo`); toma su crédito fiscal y no lleva retenciones. Una compra con NCRE, pagos o constancia no se anula (409).
+- El pago al contado crea su egreso con la categoría de la cuenta de la primera línea (o `otros`) y `compra_id`; `egresos.anular` lo rechaza (409 `egreso_de_compra`) y la vista del egreso muestra el asiento de la compra.
+
+**Retenciones y constancias.**
+
+- **Desvío (d) · retención recibida.** `POST /pagos` acepta `retenciones[] { codigo, numero, fecha?, monto }`; `monto` sigue siendo lo que entra a caja o banco y el pago aplica `monto + Σ constancias` (`billing.pagos.monto`) con la parte retenida en la columna nueva `billing.pagos.retenido`. Un pago con constancias es de una empresa (422 `retencion_en_cobro_repartido`) y no va a un proveedor de cobro (422 `retencion_con_proveedor_cobro`). El esperado del turno, los depósitos y el reporte de cierres cuentan `monto − retenido`.
+- **Desvío (e) · número de constancia.** Único por (empresa, impuesto, número) solo entre las **emitidas** (índice parcial); entre las recibidas lo valida la acción sobre los pagos vigentes (409 `constancia_duplicada`): la constancia de un pago anulado se puede volver a usar.
+- Constancia emitida: `POST /compras/:id/constancias` registra el número de la constancia por una retención de la compra (una por retención, sin asiento).
+
+**Pagos a proveedores.** `ledger.pagos_proveedores` guarda la cuenta del libro (`cuenta_id`) además del medio; las aplicaciones van en `ledger.pagos_proveedores_aplicaciones` (el `compras[]` del contrato). No paga de más (fila 44).
+
+**Activos y diferidos.**
+
+- **Desvío (f) · origen `alta_activo`** para `POST /activos` (inventario inicial o aporte: `1.2.01 / 1.2.02 (inicial) + 2.9.01·3.1.01·3.3.01`): `ajuste` con `origen_id` lo usa el auditor para los saldos iniciales importados. Columna `ledger.activos.depreciacion_inicial` para activos que llegan depreciados.
+- **Desvío (g) · cuotas bajo pedido además del cron.** Los crons diarios `depreciar` (02:30) y `diferir` (02:40) del `billing:worker` (con su lock) procesan todo lo pendiente hasta el mes anterior; `POST /activos/depreciar` y `POST /diferimientos/amortizar` hacen lo mismo a mano (no estaban en §11.1). El asiento de una cuota va al último día de su mes, o a hoy si ese mes ya está cerrado (hasta que lleguen los bloqueos por tipo y `fecha_documento`, fase 6).
+- Cuotas con origen `depreciacion` / `diferido` y `origen_id` = el activo o el diferimiento; cada cuota guarda su `asiento_id` (único activo + mes, diferimiento + mes).
+- Baja: `venta` (precio sin IVA a una cuenta bancaria, fila 46) o `retiro`; anular una compra sin cuotas deja una baja `anulacion` sin asiento y cancela sus diferimientos (`ledger.diferimientos_cancelaciones`, tabla nueva; revierte el asiento inicial si lo hubo).
+- Diferidos: línea de compra con `diferir_meses` (va directo a `1.1.13`) o `POST /diferimientos` sobre una línea ya registrada de factura (base sin IVA a `2.1.12`) o de compra. Una factura con ingreso diferido no se anula ni se acredita (409 `factura_diferida`, fila 48).
+
+**Permisos** (A1): `activos.ver`, `activos.registrar`, `activos.dar_de_baja` agregados en `permisos.ts` (entran a `contabilidad` con los fiscales; `lectura` recibe `activos.ver`).
+
+**Invariantes del auditor que la fase 5 deja atrás** (no se relajó ninguno; mis pruebas corren el auditor completo con los reemplazos de la fase 4 y, solo para estos, la versión de `tests/ledger/verificar_compras.ts`):
+
+| Invariante | Por qué ya no aplica tal cual | Versión de la fase 5 (A3) |
+| --- | --- | --- |
+| `9.origen_de_asiento_desconocido` (y `F4.`) | Orígenes `compra`, `pago_proveedor`, `depreciacion`, `baja_activo`, `diferido`, `alta_activo` | `F5.origen_de_asiento_desconocido` |
+| `4.saldo_de_caja_o_banco_distinto_de_sus_documentos` (y `F4.`) | Pagos a proveedores, ventas de activos y pagos con constancias (entra `monto − comision − retenido`) | `F5.saldo_de_caja_o_banco…` |
+| `4.caja_cerrada_no_cuadra` (y `F4.`) | El egreso de una compra al contado tiene el asiento de la compra; pagos a proveedores en efectivo | `F5.caja_cerrada_no_cuadra` |
+| `5.pago_vigente_mal_contabilizado` (y `F4.`) | Pago con constancias: dinero = monto − comisión − retenido; `1.1.05` + `1.1.06` = retenido | `F5.pago_vigente_mal_contabilizado` |
+
+Nuevos de la fase 5: `F5.auxiliar_sin_proveedor`, `F5.cxp_distinta_de_compras_pendientes`, `F5.compra_con_saldo_fuera_de_rango`, `F5.compra_mal_contabilizada`, `F5.compra_anulada_mal`, `F5.egreso_de_compra_con_asiento_propio`, `F5.retenciones_por_pagar_distintas`, `F5.pago_proveedor_mal_contabilizado`, `F5.retenciones_recibidas_distintas`, `F5.libro_compras_distinto_de_1.1.04`, `F5.activo_depreciado_de_mas`, `F5.depreciacion_acumulada_distinta`, `F5.costo_de_activos_distinto`, `F5.cuota_de_depreciacion_mal_contabilizada`, `F5.diferido_amortizado_de_mas`, `F5.saldo_diferido_distinto`.

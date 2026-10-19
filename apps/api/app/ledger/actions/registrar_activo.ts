@@ -38,7 +38,11 @@ export interface EntradaRegistrarActivo {
     contrapartida?: string | null
 }
 
-const CONTRAPARTIDAS: string[] = [CUENTAS.SALDOS_APERTURA, CUENTAS_GT.CAPITAL_SOCIAL, CUENTAS_GT.UTILIDADES_ACUMULADAS]
+const CONTRAPARTIDAS: string[] = [
+    CUENTAS.SALDOS_APERTURA,
+    CUENTAS_GT.CAPITAL_SOCIAL,
+    CUENTAS_GT.UTILIDADES_ACUMULADAS,
+]
 
 export default class RegistrarActivo extends DomainAction<EntradaRegistrarActivo, ActivoVista> {
     readonly nombre = 'activos.registrar'
@@ -69,7 +73,9 @@ export default class RegistrarActivo extends DomainAction<EntradaRegistrarActivo
         }
         const hoy = hoyGuatemala()
         const fechaAlta = input.fecha_alta ? fechaValida(input.fecha_alta, 'fecha_alta') : hoy
-        if (fechaAlta > hoy) errores.push({ field: 'fecha_alta', message: 'No puede ser futura', rule: 'futuro' })
+        if (fechaAlta > hoy) {
+            errores.push({ field: 'fecha_alta', message: 'No puede ser futura', rule: 'futuro' })
+        }
         const contrapartida = input.contrapartida?.trim() || CUENTAS.SALDOS_APERTURA
         if (!CONTRAPARTIDAS.includes(contrapartida)) {
             errores.push({

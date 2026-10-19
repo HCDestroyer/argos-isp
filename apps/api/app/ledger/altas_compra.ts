@@ -97,41 +97,53 @@ export async function altasDeLaCompra(
                             },
                         ])
                     }
-                    await t.trx.insertQuery().table('ledger.activos').insert({
-                        empresa_id: compra.empresaId,
-                        clase: linea.clase_activo,
-                        descripcion: entrada?.activo_descripcion?.trim() || linea.descripcion,
-                        serie: entrada?.activo_serie?.trim() || null,
-                        ubicacion: entrada?.activo_ubicacion?.trim() || null,
-                        compra_id: compraId,
-                        compra_linea_id: lineaId,
-                        fecha_alta: compra.fecha,
-                        inicio_depreciacion: await inicioDepreciacion(t.trx, compra.empresaId, compra.fecha),
-                        costo: aTexto(costo(linea)),
-                        valor_residual: aTexto(residual),
-                        tasa_anual: tasas.get(i)!,
-                        cuenta_activo_id: cuentas.activo,
-                        cuenta_depreciacion_id: cuentas.depreciacion,
-                        cuenta_gasto_id: cuentas.gasto,
-                        registrado_por: registradoPor,
-                    })
+                    await t.trx
+                        .insertQuery()
+                        .table('ledger.activos')
+                        .insert({
+                            empresa_id: compra.empresaId,
+                            clase: linea.clase_activo,
+                            descripcion: entrada?.activo_descripcion?.trim() || linea.descripcion,
+                            serie: entrada?.activo_serie?.trim() || null,
+                            ubicacion: entrada?.activo_ubicacion?.trim() || null,
+                            compra_id: compraId,
+                            compra_linea_id: lineaId,
+                            fecha_alta: compra.fecha,
+                            inicio_depreciacion: await inicioDepreciacion(
+                                t.trx,
+                                compra.empresaId,
+                                compra.fecha,
+                            ),
+                            costo: aTexto(costo(linea)),
+                            valor_residual: aTexto(residual),
+                            tasa_anual: tasas.get(i)!,
+                            cuenta_activo_id: cuentas.activo,
+                            cuenta_depreciacion_id: cuentas.depreciacion,
+                            cuenta_gasto_id: cuentas.gasto,
+                            registrado_por: registradoPor,
+                        })
                 }
                 if (linea.diferir_meses && diferida) {
-                    const desde = entrada?.diferir_desde ? fechaValida(entrada.diferir_desde, `lineas.${i}.diferir_desde`) : compra.fecha
-                    await t.trx.insertQuery().table('ledger.diferimientos').insert({
-                        empresa_id: compra.empresaId,
-                        origen: 'compra',
-                        compra_id: compraId,
-                        compra_linea_id: lineaId,
-                        descripcion: `Compra ${compraId} · ${linea.descripcion}`,
-                        cuenta_diferida_id: diferida,
-                        cuenta_destino_id: linea.cuenta.id,
-                        total: aTexto(costo(linea)),
-                        inicio: inicioDeMes(desde),
-                        meses: linea.diferir_meses,
-                        asiento_inicial: false,
-                        registrado_por: registradoPor,
-                    })
+                    const desde = entrada?.diferir_desde
+                        ? fechaValida(entrada.diferir_desde, `lineas.${i}.diferir_desde`)
+                        : compra.fecha
+                    await t.trx
+                        .insertQuery()
+                        .table('ledger.diferimientos')
+                        .insert({
+                            empresa_id: compra.empresaId,
+                            origen: 'compra',
+                            compra_id: compraId,
+                            compra_linea_id: lineaId,
+                            descripcion: `Compra ${compraId} · ${linea.descripcion}`,
+                            cuenta_diferida_id: diferida,
+                            cuenta_destino_id: linea.cuenta.id,
+                            total: aTexto(costo(linea)),
+                            inicio: inicioDeMes(desde),
+                            meses: linea.diferir_meses,
+                            asiento_inicial: false,
+                            registrado_por: registradoPor,
+                        })
                 }
             }
         },
@@ -151,7 +163,9 @@ export async function anularAltasDeLaCompra(t: Transaccion, compraId: number, mo
         .select(
             'ac.id',
             'ac.costo',
-            t.trx.raw('(SELECT count(*)::int FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id) as cuotas'),
+            t.trx.raw(
+                '(SELECT count(*)::int FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id) as cuotas',
+            ),
             t.trx.raw('EXISTS (SELECT 1 FROM ledger.activos_bajas b WHERE b.activo_id = ac.id) as baja'),
         )) as Array<{ id: number; costo: string; cuotas: number; baja: boolean }>
     for (const activo of activos) {
@@ -163,17 +177,25 @@ export async function anularAltasDeLaCompra(t: Transaccion, compraId: number, mo
             )
         }
         if (activo.baja) {
-            throw new Conflicto(`El activo ${activo.id} de la compra ya está dado de baja`, 'activo_dado_de_baja', 'Activo dado de baja')
+            throw new Conflicto(
+                `El activo ${activo.id} de la compra ya está dado de baja`,
+                'activo_dado_de_baja',
+                'Activo dado de baja',
+            )
         }
     }
     const diferimientos = (await t.trx
         .from('ledger.diferimientos as d')
         .where('d.compra_id', compraId)
-        .whereNotExists((q) => q.from('ledger.diferimientos_cancelaciones as x').whereRaw('x.diferimiento_id = d.id'))
+        .whereNotExists((q) =>
+            q.from('ledger.diferimientos_cancelaciones as x').whereRaw('x.diferimiento_id = d.id'),
+        )
         .select(
             'd.id',
             'd.asiento_inicial',
-            t.trx.raw('(SELECT count(*)::int FROM ledger.diferimientos_cuotas q WHERE q.diferimiento_id = d.id) as cuotas'),
+            t.trx.raw(
+                '(SELECT count(*)::int FROM ledger.diferimientos_cuotas q WHERE q.diferimiento_id = d.id) as cuotas',
+            ),
         )) as Array<{ id: number; asiento_inicial: boolean; cuotas: number }>
     for (const d of diferimientos) {
         if (d.cuotas > 0) {
@@ -186,16 +208,19 @@ export async function anularAltasDeLaCompra(t: Transaccion, compraId: number, mo
     }
     const registradoPor = usuarioDelActor(t.ctx.actor)
     for (const activo of activos) {
-        await t.trx.insertQuery().table('ledger.activos_bajas').insert({
-            activo_id: activo.id,
-            fecha: hoyGuatemala(),
-            tipo: 'anulacion',
-            motivo: `anulación de la compra ${compraId}: ${motivo}`,
-            costo: activo.costo,
-            depreciacion_acumulada: '0.00',
-            valor_libros: activo.costo,
-            registrado_por: registradoPor,
-        })
+        await t.trx
+            .insertQuery()
+            .table('ledger.activos_bajas')
+            .insert({
+                activo_id: activo.id,
+                fecha: hoyGuatemala(),
+                tipo: 'anulacion',
+                motivo: `anulación de la compra ${compraId}: ${motivo}`,
+                costo: activo.costo,
+                depreciacion_acumulada: '0.00',
+                valor_libros: activo.costo,
+                registrado_por: registradoPor,
+            })
     }
     for (const d of diferimientos) {
         let reverso: number | null = null
@@ -209,18 +234,25 @@ export async function anularAltasDeLaCompra(t: Transaccion, compraId: number, mo
                 .first()
             if (inicial) {
                 const r = await new RevertirAsiento().execute(
-                    { asiento_id: Number(inicial.id), motivo: `anulación de la compra ${compraId}: ${motivo}`, por_anulacion: true },
+                    {
+                        asiento_id: Number(inicial.id),
+                        motivo: `anulación de la compra ${compraId}: ${motivo}`,
+                        por_anulacion: true,
+                    },
                     t.ctx,
                     { trx: t.trx },
                 )
                 reverso = r.id
             }
         }
-        await t.trx.insertQuery().table('ledger.diferimientos_cancelaciones').insert({
-            diferimiento_id: d.id,
-            motivo: `anulación de la compra ${compraId}: ${motivo}`,
-            asiento_id: reverso,
-            cancelado_por: registradoPor,
-        })
+        await t.trx
+            .insertQuery()
+            .table('ledger.diferimientos_cancelaciones')
+            .insert({
+                diferimiento_id: d.id,
+                motivo: `anulación de la compra ${compraId}: ${motivo}`,
+                asiento_id: reverso,
+                cancelado_por: registradoPor,
+            })
     }
 }

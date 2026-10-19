@@ -15,19 +15,32 @@ export const registrarActivoValidator = vine.compile(
         clase: vine.enum(CLAVES_CLASE_ACTIVO),
         descripcion: vine.string().trim().minLength(2).maxLength(300),
         serie: texto(100).nullable().optional(),
-        ubicacion: texto(200).nullable().optional().meta({ description: 'Sitio, nodo o cliente (CPE en comodato)' }),
+        ubicacion: texto(200)
+            .nullable()
+            .optional()
+            .meta({ description: 'Sitio, nodo o cliente (CPE en comodato)' }),
         fecha_alta: fechaIso().nullable().optional(),
         costo: dinero(),
         valor_residual: dinero().nullable().optional(),
         depreciacion_inicial: dinero().nullable().optional().meta({
             description: 'Depreciación acumulada al darlo de alta (inventario inicial)',
         }),
-        tasa_anual: vine.string().trim().regex(/^\d{1,3}(\.\d{1,2})?$/).nullable().optional().meta({
-            description: 'Por defecto el tope legal de la clase (parámetro depreciacion)',
-        }),
-        contrapartida: vine.enum(['2.9.01', '3.1.01', '3.3.01'] as const).nullable().optional().meta({
-            description: 'Saldos de apertura (por defecto), capital social o utilidades acumuladas',
-        }),
+        tasa_anual: vine
+            .string()
+            .trim()
+            .regex(/^\d{1,3}(\.\d{1,2})?$/)
+            .nullable()
+            .optional()
+            .meta({
+                description: 'Por defecto el tope legal de la clase (parámetro depreciacion)',
+            }),
+        contrapartida: vine
+            .enum(['2.9.01', '3.1.01', '3.3.01'] as const)
+            .nullable()
+            .optional()
+            .meta({
+                description: 'Saldos de apertura (por defecto), capital social o utilidades acumuladas',
+            }),
     }),
 )
 
@@ -37,7 +50,10 @@ export const bajaActivoValidator = vine.compile(
         motivo: motivo(),
         fecha: fechaIso().nullable().optional(),
         precio_venta: dinero().nullable().optional().meta({ description: 'Venta: precio sin IVA' }),
-        cuenta_bancaria_id: idEntidad().nullable().optional().meta({ description: 'Venta: cuenta que recibe el precio' }),
+        cuenta_bancaria_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Venta: cuenta que recibe el precio' }),
         banco_id: idEntidad().nullable().optional(),
         cuenta_id: idEntidad().nullable().optional(),
     }),
@@ -59,7 +75,10 @@ export const registrarDiferimientoValidator = vine.compile(
         factura_linea_id: idEntidad().nullable().optional(),
         compra_linea_id: idEntidad().nullable().optional(),
         meses: vine.number().withoutDecimals().range([2, 120]),
-        inicio: fechaIso().nullable().optional().meta({ description: 'Mes de la primera cuota (por defecto el del documento)' }),
+        inicio: fechaIso()
+            .nullable()
+            .optional()
+            .meta({ description: 'Mes de la primera cuota (por defecto el del documento)' }),
         descripcion: texto(300).nullable().optional(),
     }),
 )
@@ -81,4 +100,3 @@ export const cuotasMesValidator = vine.compile(
         }),
     }),
 )
-

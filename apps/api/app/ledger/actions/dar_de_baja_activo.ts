@@ -55,7 +55,11 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3016, activo.id])
         const previa = await t.trx.from('ledger.activos_bajas').where('activo_id', activo.id).first()
         if (previa) {
-            throw new Conflicto(`El activo ${activo.id} ya está dado de baja`, 'activo_dado_de_baja', 'Activo dado de baja')
+            throw new Conflicto(
+                `El activo ${activo.id} ya está dado de baja`,
+                'activo_dado_de_baja',
+                'Activo dado de baja',
+            )
         }
 
         const errores: ErrorCampo[] = []
@@ -67,13 +71,23 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
             errores.push({ field: 'precio_venta', message: 'Monto inválido', rule: 'monto' })
         }
         if (input.tipo === 'venta' && precio.lte(0)) {
-            errores.push({ field: 'precio_venta', message: 'Una venta lleva su precio (sin IVA)', rule: 'required' })
+            errores.push({
+                field: 'precio_venta',
+                message: 'Una venta lleva su precio (sin IVA)',
+                rule: 'required',
+            })
         }
         if (input.tipo === 'retiro' && precio.gt(0)) {
-            errores.push({ field: 'precio_venta', message: 'Un retiro no tiene precio: usa tipo venta', rule: 'no_aplica' })
+            errores.push({
+                field: 'precio_venta',
+                message: 'Un retiro no tiene precio: usa tipo venta',
+                rule: 'no_aplica',
+            })
         }
         const motivo = input.motivo?.trim() ?? ''
-        if (motivo.length < 3) errores.push({ field: 'motivo', message: 'El motivo es obligatorio', rule: 'motivo' })
+        if (motivo.length < 3) {
+            errores.push({ field: 'motivo', message: 'El motivo es obligatorio', rule: 'motivo' })
+        }
         if (errores.length > 0) throw new ValidacionFallida(errores)
         const cobro =
             input.tipo === 'venta' ? (await resolverCuentaBanco(t.trx, input, { empresaId }))! : null
@@ -87,13 +101,17 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
         const resultado = precio.minus(libros)
 
         const movimientos: LineaAsiento[] = []
-        if (acumulada.gt(0)) movimientos.push({ cuenta: Number(activo.cuenta_depreciacion_id), debe: aTexto(acumulada) })
+        if (acumulada.gt(0)) {
+            movimientos.push({ cuenta: Number(activo.cuenta_depreciacion_id), debe: aTexto(acumulada) })
+        }
         if (cobro && precio.gt(0)) movimientos.push({ cuenta: cobro.cuenta_id, debe: aTexto(precio) })
         if (resultado.isNegative()) {
             movimientos.push({ cuenta: CUENTAS_GT.PERDIDA_BAJA_ACTIVOS, debe: aTexto(resultado.abs()) })
         }
         movimientos.push({ cuenta: Number(activo.cuenta_activo_id), haber: aTexto(costo) })
-        if (resultado.gt(CERO)) movimientos.push({ cuenta: CUENTAS_GT.GANANCIA_VENTA_ACTIVOS, haber: aTexto(resultado) })
+        if (resultado.gt(CERO)) {
+            movimientos.push({ cuenta: CUENTAS_GT.GANANCIA_VENTA_ACTIVOS, haber: aTexto(resultado) })
+        }
         const asiento = await new RegistrarAsiento().execute(
             {
                 empresa_id: empresaId,
@@ -106,19 +124,22 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
             t.ctx,
             { trx: t.trx },
         )
-        await t.trx.insertQuery().table('ledger.activos_bajas').insert({
-            activo_id: activo.id,
-            fecha,
-            tipo: input.tipo,
-            motivo,
-            precio_venta: aTexto(precio),
-            cuenta_cobro_id: cobro?.cuenta_id ?? null,
-            costo: aTexto(costo),
-            depreciacion_acumulada: aTexto(acumulada),
-            valor_libros: aTexto(libros),
-            asiento_id: asiento.id,
-            registrado_por: usuarioDelActor(t.ctx.actor),
-        })
+        await t.trx
+            .insertQuery()
+            .table('ledger.activos_bajas')
+            .insert({
+                activo_id: activo.id,
+                fecha,
+                tipo: input.tipo,
+                motivo,
+                precio_venta: aTexto(precio),
+                cuenta_cobro_id: cobro?.cuenta_id ?? null,
+                costo: aTexto(costo),
+                depreciacion_acumulada: aTexto(acumulada),
+                valor_libros: aTexto(libros),
+                asiento_id: asiento.id,
+                registrado_por: usuarioDelActor(t.ctx.actor),
+            })
         await t.emit('activo.dado_de_baja', {
             activo_id: activo.id,
             empresa_id: empresaId,

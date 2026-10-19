@@ -12,7 +12,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * invalidar la caché de parámetros fiscales, `ConsumidorFiscal`; `pago.registrado` → pedir la
  * certificación de los avisos de cobro cubiertos, `ConsumidorFel`); `--sin-eventos` lo apaga.
  *
- * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas`, `conciliar`, `sellar` o `integridad`) y termina:
+ * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas`, `conciliar`, `sellar`, `integridad`, `depreciar` o `diferir`) y termina:
  * útil en el laboratorio y en scripts.
  */
 export default class BillingWorker extends BaseCommand {
@@ -27,7 +27,7 @@ export default class BillingWorker extends BaseCommand {
 
     @flags.string({
         description:
-            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad) y termina',
+            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad, depreciar, diferir) y termina',
     })
     declare unaVez?: string
 

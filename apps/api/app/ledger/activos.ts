@@ -40,7 +40,11 @@ export function mesCerradoAnterior(): string {
 }
 
 /** Fecha del asiento de una cuota del mes: su último día, o hoy si ese mes ya está cerrado. */
-export async function fechaDeCuota(cliente: QueryClientContract, mes: string, empresaId: number): Promise<string> {
+export async function fechaDeCuota(
+    cliente: QueryClientContract,
+    mes: string,
+    empresaId: number,
+): Promise<string> {
     const fin = finDeMes(mes)
     if (await periodoCerrado(cliente, fin, empresaId)) return hoyGuatemala()
     return fin
@@ -53,11 +57,18 @@ export interface CuentasClase {
 }
 
 /** Cuentas del libro de una clase de activo (422 si la clase no existe). */
-export async function cuentasDeClase(cliente: QueryClientContract, clase: ClaseActivo): Promise<CuentasClase> {
+export async function cuentasDeClase(
+    cliente: QueryClientContract,
+    clase: ClaseActivo,
+): Promise<CuentasClase> {
     const definicion = CLASES_ACTIVO.find((c) => c.clave === clase)
     if (!definicion) {
         throw new Problema(422, 'validacion', 'Datos inválidos', `La clase de activo ${clase} no existe`, [
-            { field: 'clase', message: `Clases: ${CLASES_ACTIVO.map((c) => c.clave).join(', ')}`, rule: 'clase_activo' },
+            {
+                field: 'clase',
+                message: `Clases: ${CLASES_ACTIVO.map((c) => c.clave).join(', ')}`,
+                rule: 'clase_activo',
+            },
         ])
     }
     const codigos = [
@@ -187,7 +198,9 @@ function consultaActivos(cliente: QueryClientContract) {
             cliente.raw(
                 `(ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id), 0))::text as depreciacion_acumulada`,
             ),
-            cliente.raw(`(SELECT count(*)::int FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id) as cuotas`),
+            cliente.raw(
+                `(SELECT count(*)::int FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id) as cuotas`,
+            ),
             cliente.raw(
                 `(SELECT to_char(max(q.mes), 'YYYY-MM-DD') FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id) as ultima_cuota`,
             ),
