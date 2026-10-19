@@ -120,6 +120,8 @@ test.group('Multiempresa: migración de los datos existentes', () => {
             await trx.rawQuery(`
                 DROP TRIGGER servicios_empresa_por_defecto ON core.servicios;
                 DROP FUNCTION core.servicios_empresa_por_defecto();
+                -- posterior (lealtad): depende de empresa_id
+                DROP TRIGGER servicios_codigo_referido ON core.servicios;
                 ALTER TABLE core.servicios DROP COLUMN empresa_id;
                 ALTER TABLE core.zonas DROP COLUMN empresa_sugerida_id;
                 ALTER TABLE network.routers DROP COLUMN empresa_sugerida_id;

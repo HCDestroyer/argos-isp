@@ -18,3 +18,13 @@
 | `process_resident_memory_bytes`, `nodejs_heap_used_bytes`, `process_start_time_seconds`   |                  | proceso de la API                                                                                                                                                                                                                             |
 
 Prometheus, reglas de alerta y el servicio del compose: `infra/monitoring/README.md`. Pruebas: `tests/monitoreo/metricas.spec.ts`.
+
+## Versión instalada · `GET /api/v1/version` (distribución)
+
+`version.ts` + `esquemas.ts`, ruta en `start/routes/monitoreo.ts`. Cualquier usuario con sesión (sin permiso del ACL, como `/me`); no audita ni emite eventos.
+
+- `version`, `commit`, `compilada`: `ARGOSISP_VERSION`, `ARGOSISP_COMMIT` y `ARGOSISP_COMPILADA` que pone la imagen (`ARG` de los Dockerfiles, `.github/workflows/imagenes.yml`). Fuera de una imagen publicada, `desarrollo` y null.
+- `notas_url`: `https://github.com/HCDestroyer/argos-isp/releases/tag/v<versión>` (`ARGOSISP_REPO_URL` cambia el repositorio); null en desarrollo.
+- `cambios`: la sección de la versión en el `CHANGELOG.md` que la imagen trae en `/app/CHANGELOG.md` (en desarrollo, el de la raíz del monorepo; `ARGOSISP_CHANGELOG` cambia la ruta), en Markdown. Se lee una vez por proceso.
+
+Pruebas: `tests/monitoreo/version.spec.ts`. Distribución completa: `infra/produccion/README.md`.

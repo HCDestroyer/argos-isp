@@ -31,6 +31,7 @@
     "#billing/*": "./app/billing/*.js",
     "#ledger/*": "./app/ledger/*.js",
     "#fiscal/*": "./app/fiscal/*.js",
+    "#lealtad/*": "./app/lealtad/*.js",
     "#portal/*": "./app/portal/*.js",
     "#notify/*": "./app/notify/*.js",
     "#importacion/*": "./app/importacion/*.js",
