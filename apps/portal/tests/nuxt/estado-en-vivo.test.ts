@@ -13,14 +13,38 @@ function usarEscenario(fixture: string) {
     window.history.replaceState({}, '', `/corte?fixture=${fixture}`)
 }
 
-async function esperarHasta(condicion: () => boolean, ms = 2_000) {
-    const fin = Date.now() + ms
-    while (!condicion()) {
-        if (Date.now() > fin) {
-            throw new Error('La condición no se cumplió a tiempo')
+/**
+ * Reloj falso (setTimeout, clearTimeout y Date) desde aquí: los ciclos y el plazo de la vigilancia
+ * corren en tiempo virtual y no dependen de lo cargada que esté la máquina. Se activa después de
+ * montar, porque el montaje de Nuxt usa setTimeout real.
+ */
+function relojFalso() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+}
+
+/**
+ * Deja terminar las consultas en vuelo (las respuestas de los fixtures no usan temporizadores) y
+ * avanza el reloj virtual de `pasoMs` en `pasoMs` hasta que se cumpla la condición. El límite es de
+ * pasos, no de tiempo real.
+ */
+async function avanzarHasta(condicion: () => boolean, pasoMs: number, pasos = 200) {
+    for (let paso = 0; paso < pasos; paso++) {
+        await flushPromises()
+        if (condicion()) {
+            return
         }
-        await new Promise(resolve => setTimeout(resolve, 10))
+        await vi.advanceTimersByTimeAsync(pasoMs)
     }
+    throw new Error(`La condición no se cumplió en ${pasos} pasos de ${pasoMs} ms`)
+}
+
+/** Avanza el reloj virtual dejando terminar lo que esté en vuelo. */
+async function avanzar(ms: number, pasoMs = 10) {
+    for (let transcurrido = 0; transcurrido < ms; transcurrido += pasoMs) {
+        await flushPromises()
+        await vi.advanceTimersByTimeAsync(pasoMs)
+    }
+    await flushPromises()
 }
 
 /** Monta el composable con intervalos cortos y devuelve su estado. */
@@ -47,16 +71,17 @@ describe('useEstadoServicio', () => {
         usarEscenario('reactivacion')
         await useApi().GET('/api/v1/portal/quien-soy') // reinicia el contador del fixture
         const espia = vi.spyOn(useApi(), 'GET')
-        const { estado, wrapper } = await montarVigilancia({ intervaloMs: 20, duracionMs: 2_000 })
+        const { estado, wrapper } = await montarVigilancia({ intervaloMs: 20, duracionMs: 60_000 })
+        relojFalso()
 
         estado.vigilar()
         expect(estado.vigilando.value).toBe(true)
-        await esperarHasta(() => estado.activo.value)
+        await avanzarHasta(() => estado.activo.value, 20)
         expect(estado.vigilando.value).toBe(false)
         expect(estado.ultimo.value).toEqual({ identificado: true, estado: 'activo', monto_adeudado: '0.00' })
 
         const llamadas = espia.mock.calls.length
-        await new Promise(resolve => setTimeout(resolve, 80))
+        await avanzar(80)
         expect(espia.mock.calls.length).toBe(llamadas)
         expect(espia.mock.calls.every(llamada => (llamada as unknown[])[0] === '/api/v1/portal/estado')).toBe(true)
         wrapper.unmount()
@@ -65,9 +90,10 @@ describe('useEstadoServicio', () => {
     it('se rinde al terminar el plazo sin ver activo', async () => {
         usarEscenario('suspendido')
         const { estado, wrapper } = await montarVigilancia({ intervaloMs: 20, duracionMs: 100 })
+        relojFalso()
 
         estado.vigilar()
-        await esperarHasta(() => estado.agotado.value)
+        await avanzarHasta(() => estado.agotado.value, 20)
         expect(estado.vigilando.value).toBe(false)
         expect(estado.activo.value).toBe(false)
 
@@ -83,11 +109,12 @@ describe('useEstadoServicio', () => {
         usarEscenario('suspendido')
         const espia = vi.spyOn(useApi(), 'GET')
         const { estado, wrapper } = await montarVigilancia({ intervaloMs: 50, duracionMs: 10_000 })
+        relojFalso()
 
         estado.vigilar()
         estado.vigilar()
         estado.vigilar()
-        await new Promise(resolve => setTimeout(resolve, 130))
+        await avanzar(130)
         // Inmediata + a los 50 ms + a los 100 ms: 3, nunca 9.
         expect(espia.mock.calls.length).toBeLessThanOrEqual(3)
         wrapper.unmount()
