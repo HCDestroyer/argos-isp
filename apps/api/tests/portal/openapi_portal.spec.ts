@@ -25,6 +25,7 @@ const SOLO_SESION = [
     'portalNotaCreditoXml',
     'portalNotaCreditoPdf',
     'portalComprobantes',
+    'portalBonificaciones',
 ]
 
 type Operacion = {
