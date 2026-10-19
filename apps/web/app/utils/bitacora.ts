@@ -97,6 +97,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'bancos.importar_extracto': 'Extracto bancario importado',
     'bancos.conciliar': 'Línea del extracto conciliada',
     'bancos.anular_conciliacion': 'Conciliación bancaria deshecha',
+    'bancos.reatribuir_llegada': 'Llegada al banco reatribuida',
     'bancos.registrar_desde_extracto': 'Partida del extracto registrada',
     'bancos.crear_regla': 'Regla de conciliación creada',
     'bancos.editar_regla': 'Regla de conciliación editada',

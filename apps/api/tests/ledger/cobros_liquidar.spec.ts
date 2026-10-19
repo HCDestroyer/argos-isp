@@ -12,8 +12,7 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import { errorDe, lineas, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
-import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
-import { afirmarLibroFase4 } from '#tests/ledger/verificar_bancos'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
  * Fase 4 (§10.3): cobros por liquidar. Un pago por pasarela de un proveedor configurado va a su
@@ -128,7 +127,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             resumen!.anomalias.map((a) => a.pago_id),
             [p1.id, p2.id],
         )
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
 
         // descuadrada y con un pago ajeno
         const descuadre = await errorDe(
@@ -223,16 +222,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             ),
         )
         assert.equal(dup.codigo, 'liquidacion_duplicada')
-        await afirmarLibroFase4(assert, [e.B, e.C])
-        // lo que bloquea al auditor original (para el reporte): exactamente los invariantes del mundo
-        // anterior a la fase 4, nada más
-        const violaciones = await verificarLibro([e.B])
-        const originales = [...new Set(violaciones.map((v) => v.invariante.split(' ')[0]))]
-        assert.sameMembers(originales, [
-            '5.pago_vigente_mal_contabilizado',
-            '9.origen_de_asiento_desconocido',
-            '4.saldo_de_caja_o_banco_distinto_de_sus_documentos',
-        ])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('contracargo: un pago liquidado y anulado deja 1.1.10 en negativo y la siguiente liquidación lo descuenta', async ({
@@ -271,7 +261,7 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             resumen!.pagos.map((p) => [p.pago_id, p.tipo]),
             [[p1.id, 'contracargo']],
         )
-        await afirmarLibroFase4(assert, [e.B])
+        await afirmarLibro(assert, [e.B])
 
         const p2 = await pagarPasarela(e, e.B, s.clienteId, '120.00')
         // el contracargo de un pago no liquidado no existe
@@ -311,10 +301,10 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
         ;[resumen] = await resumenCobrosPorLiquidar([e.B])
         assert.equal(resumen!.pendiente, '0.00')
         assert.isTrue(resumen!.cuadra)
-        await afirmarLibroFase4(assert, [e.B])
+        await afirmarLibro(assert, [e.B])
     })
 
-    test('agente y débito: un proveedor por método; desactivado, los pagos nuevos vuelven al banco', async ({
+    test('agente y débito: un proveedor por método; sin pagos se mueve el corte y se desactiva; con pagos, 409', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -325,6 +315,46 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             e.ctx,
         )
         assert.equal(agente.codigo, 'agente')
+        // sin pagos: el corte se mueve (hoy o futuro) y se puede desactivar y volver a activar
+        const movido = await new EditarProveedorCobro().execute(
+            { id: agente.id, version: agente.version, desde: '2099-01-01' },
+            e.ctx,
+        )
+        assert.equal(movido.desde, '2099-01-01')
+        const pasado = await errorDe(
+            new EditarProveedorCobro().execute(
+                { id: agente.id, version: movido.version, desde: '2020-01-01' },
+                e.ctx,
+            ),
+        )
+        assert.include(pasado.reglas, 'pasado')
+        const apagado = await new EditarProveedorCobro().execute(
+            { id: agente.id, version: movido.version, activo: false },
+            e.ctx,
+        )
+        assert.isFalse(apagado.activo)
+        assert.exists(
+            await db
+                .from('audit.cambios')
+                .where({ entidad_tipo: 'proveedor_cobro', entidad_id: agente.id, campo: 'activo' })
+                .first(),
+        )
+        // apagado o con el corte en el futuro, el pago va al banco como antes
+        const alBanco = await new RegistrarPago().execute(
+            {
+                cliente_id: s.clienteId,
+                metodo: 'agente',
+                monto: '7.00',
+                referencia: unico('AG'),
+                empresa_id: e.C,
+            },
+            e.ctx,
+        )
+        assert.isNull(alBanco.proveedor_cobro_id)
+        const listo = await new EditarProveedorCobro().execute(
+            { id: agente.id, version: apagado.version, activo: true, desde: hoyGuatemala() },
+            e.ctx,
+        )
         const pago = await new RegistrarPago().execute(
             {
                 cliente_id: s.clienteId,
@@ -348,16 +378,6 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
         )
         assert.isNull(debito.proveedor_cobro_id, 'débito sin proveedor configurado: al banco como antes')
 
-        const editado = await new EditarProveedorCobro().execute(
-            { id: agente.id, version: agente.version, activo: false },
-            e.ctx,
-        )
-        assert.isFalse(editado.activo)
-        const cambio = await db
-            .from('audit.cambios')
-            .where({ entidad_tipo: 'proveedor_cobro', entidad_id: agente.id, campo: 'activo' })
-            .first()
-        assert.exists(cambio)
         const conflicto = await errorDe(
             new EditarProveedorCobro().execute(
                 { id: agente.id, version: agente.version, nombre: 'X' },
@@ -365,27 +385,22 @@ test.group('Fase 4 · cobros por liquidar (1.1.10)', (group) => {
             ),
         )
         assert.equal(conflicto.status, 409)
-        const soloLectura = await errorDe(
-            new EditarProveedorCobro().execute(
-                { id: agente.id, version: editado.version, desde: '2027-01-01' },
-                e.ctx,
-            ),
-        )
-        assert.include(soloLectura.reglas, 'campo_solo_lectura')
-        const despues = await new RegistrarPago().execute(
-            {
-                cliente_id: s.clienteId,
-                metodo: 'agente',
-                monto: '7.00',
-                referencia: unico('AG'),
-                empresa_id: e.C,
-            },
+        for (const cambio of [{ activo: false }, { desde: '2099-01-01' }]) {
+            const conPagos = await errorDe(
+                new EditarProveedorCobro().execute(
+                    { id: agente.id, version: listo.version, ...cambio },
+                    e.ctx,
+                ),
+            )
+            assert.equal(conPagos.codigo, 'proveedor_con_pagos')
+        }
+        const renombrado = await new EditarProveedorCobro().execute(
+            { id: agente.id, version: listo.version, nombre: 'Agentes' },
             e.ctx,
         )
-        assert.isNull(despues.proveedor_cobro_id)
+        assert.equal(renombrado.nombre, 'Agentes')
         assert.equal(await saldoCuenta(e.C, agente.cuenta_codigo), '25.00')
-        await afirmarLibroFase4(assert, [e.C])
-        // sin proveedores ni orígenes nuevos, el auditor original sigue en verde en otra empresa
+        await afirmarLibro(assert, [e.C])
         await afirmarLibro(assert, e.B)
     })
 })

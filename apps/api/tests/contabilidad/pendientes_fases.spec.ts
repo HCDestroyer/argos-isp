@@ -69,11 +69,12 @@ const PENDIENTES: Pendiente[] = [
             'Estudio Odoo n.º 7: Σ de ledger.movimientos con impuesto_codigo = IVA y cuadrícula de cuota en el periodo = IVA de la declaración; Σ de la cuadrícula de base = base declarada; cada asiento de factura y nota etiqueta base y cuota.',
     },
     // Conciliación bancaria (estudio Odoo)
+    // «conciliación bancaria solo por inserción»: activado en `fase4.spec.ts` (fase 4, §10.3) salvo el bloqueo duro
     {
-        titulo: 'conciliación bancaria solo por inserción',
-        fase: 'sin fase en PLAN (estudio Odoo n.º 19, propuesta para después de la fase 5)',
+        titulo: 'el bloqueo duro exige cero líneas del extracto sin conciliar',
+        fase: 'localización fiscal, fase 5 (bloqueos; estudio Odoo n.º 19)',
         criterio:
-            'ledger.extractos, extractos_lineas y conciliaciones rechazan UPDATE/DELETE (trigger y REVOKE); deshacer una conciliación es una fila nueva; nunca se reescribe el asiento conciliado (a diferencia de Odoo); el bloqueo duro exige cero líneas sin conciliar.',
+            'Con ledger.bloqueos duro hasta F, ninguna línea de extracto con fecha ≤ F queda sin conciliación vigente; poner el bloqueo con líneas pendientes responde 422.',
     },
     // Lealtad
     {

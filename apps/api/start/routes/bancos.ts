@@ -45,6 +45,7 @@ import {
 import ImportarExtracto from '#ledger/actions/importar_extracto'
 import ConciliarLinea from '#ledger/actions/conciliar_linea'
 import AnularConciliacion from '#ledger/actions/anular_conciliacion'
+import ReatribuirLlegada from '#ledger/actions/reatribuir_llegada'
 import RegistrarDesdeExtracto from '#ledger/actions/registrar_desde_extracto'
 import CrearReglaConciliacion from '#ledger/actions/crear_regla_conciliacion'
 import EditarReglaConciliacion from '#ledger/actions/editar_regla_conciliacion'
@@ -360,6 +361,20 @@ const conciliacion: Ruta[] = [
                 ctx.contextoAccion(),
             )
         },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/bancos/llegadas/reatribuir',
+        operacion: 'bancosReatribuirLlegada',
+        resumen: 'Corregir la llegada al banco atribuida al depósito o traslado equivocado',
+        etiqueta: 'bancos',
+        permiso: 'bancos.reatribuir_llegada',
+        cuerpo: v.reatribuirLlegadaValidator,
+        idempotente: true,
+        descripcion:
+            'Solo inserción: deshace la conciliación de la línea, revierte el asiento de llegada (el documento original vuelve a 1.1.11) y registra la llegada del documento correcto con la misma línea. 404 sin llegada vigente; 422 conciliacion_descuadrada si el monto no coincide.',
+        respuesta: { status: 201, descripcion: 'Conciliación nueva', esquema: Conciliacion },
+        handler: (ctx, { cuerpo }) => new ReatribuirLlegada().execute(cuerpo, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',

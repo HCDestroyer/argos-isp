@@ -252,7 +252,7 @@ export default class ConciliarLinea extends DomainAction<EntradaConciliarLinea, 
                 'd.monto',
                 t.trx.raw(`to_char(d.fecha, 'YYYY-MM-DD') as fecha`),
                 t.trx.raw(
-                    `EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = ? AND x.documento_id = d.id) as acreditado`,
+                    `EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = ? AND x.documento_id = d.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id)) as acreditado`,
                     [tipo],
                 ),
             )) as Array<{

@@ -56,7 +56,7 @@ export interface TrasladoVista {
 function acreditado(cliente: QueryClientContract, tipo: TipoTransito, alias: string) {
     return cliente.raw(
         `(SELECT to_char(x.fecha, 'YYYY-MM-DD') FROM ledger.transitos_acreditados x
-           WHERE x.tipo = '${tipo}' AND x.documento_id = ${alias}.id) as acreditado_en`,
+           WHERE x.tipo = '${tipo}' AND x.documento_id = ${alias}.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id)) as acreditado_en`,
     )
 }
 
@@ -126,7 +126,7 @@ type FiltrosTransito = OpcionesPaginacion & { estado?: 'en_transito' | 'acredita
 
 function filtrarEstado(tipo: TipoTransito, alias: string, estado: FiltrosTransito['estado']) {
     return (q: { whereRaw: (sql: string) => unknown }) => {
-        const existe = `EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = '${tipo}' AND x.documento_id = ${alias}.id)`
+        const existe = `EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = '${tipo}' AND x.documento_id = ${alias}.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))`
         if (estado === 'acreditado') q.whereRaw(existe)
         if (estado === 'en_transito') q.whereRaw(`NOT ${existe}`)
     }
@@ -193,10 +193,10 @@ export async function resumenFondosEnTransito(
         const pendientes = (await cliente.rawQuery(
             `SELECT tipo, count(*)::int AS n, coalesce(sum(monto), 0)::text AS monto FROM (
                  SELECT 'deposito' AS tipo, d.monto FROM ledger.depositos d
-                  WHERE d.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'deposito' AND x.documento_id = d.id)
+                  WHERE d.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'deposito' AND x.documento_id = d.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))
                  UNION ALL
                  SELECT 'traslado', t.monto FROM ledger.traslados t
-                  WHERE t.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'traslado' AND x.documento_id = t.id)
+                  WHERE t.empresa_id = ? AND NOT EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'traslado' AND x.documento_id = t.id AND NOT EXISTS (SELECT 1 FROM ledger.transitos_reatribuciones rr WHERE rr.acreditado_id = x.id))
              ) p GROUP BY tipo`,
             [empresaId, empresaId],
         )) as { rows: Array<{ tipo: TipoTransito; n: number; monto: string }> }

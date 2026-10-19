@@ -91,7 +91,7 @@ export const PlantillaFacturacion = definirEsquema(
 
 export const EstadoFactura = definirEsquema(
     'EstadoFactura',
-    enumerado(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
+    enumerado(['por_certificar', 'emitida', 'parcial', 'pagada', 'vencida', 'anulada', 'castigada']),
 )
 
 export const FacturaLinea = definirEsquema(

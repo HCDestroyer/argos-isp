@@ -16,7 +16,8 @@ import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_a
  * - `pagos[]`: los pagos del proveedor que incluye (vigentes y sin liquidar). `contracargos[]`:
  *   pagos ya liquidados y después anulados que el proveedor descuenta (el reverso del pago dejó
  *   1.1.10.NN en negativo por ese monto).
- * - `bruto` = Σ pagos − Σ contracargos (422 `liquidacion_descuadrada`); `neto` = `bruto − comision`
+ * - `bruto` = Σ pagos − Σ contracargos (422 `liquidacion_descuadrada`); `neto` = `bruto − comision`.
+ *   Con solo contracargos (H14) el bruto es ≤ 0: el proveedor debita el banco y 1.1.10.NN vuelve a 0
  *   (si se manda, debe coincidir). La **comisión sale de la liquidación**, no se estima en el pago.
  * - Asiento `liquidacion_cobro`: `Banco (neto) + 5.1.02 Comisiones (comisión) / 1.1.10.NN (bruto)`
  *   en el banco de la liquidación (por defecto la cuenta del proveedor) y con su `fecha` (no
@@ -74,9 +75,9 @@ export default class LiquidarCobros extends DomainAction<EntradaLiquidarCobros, 
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(3010, ?::int)', [proveedor.id])
 
         const errores: ErrorCampo[] = []
-        const montoValido = (valor: string, campo: string, positivo: boolean) => {
+        const montoValido = (valor: string, campo: string, conSigno: boolean) => {
             const d = dec(valor)
-            if ((positivo ? d.lte(0) : d.isNegative()) || !tieneCentavosExactos(d)) {
+            if ((!conSigno && d.isNegative()) || !tieneCentavosExactos(d)) {
                 errores.push({ field: campo, message: 'Monto inválido (2 decimales)', rule: 'monto' })
             }
             return d
@@ -91,7 +92,11 @@ export default class LiquidarCobros extends DomainAction<EntradaLiquidarCobros, 
                 rule: 'neto',
             })
         }
-        if (neto.isNegative()) {
+        // H14: con solo contracargos el bruto es ≤ 0 y el proveedor debita el banco (neto < 0)
+        if (bruto.isZero() && comision.isZero()) {
+            errores.push({ field: 'bruto', message: 'La liquidación no mueve nada', rule: 'monto' })
+        }
+        if (bruto.gt(0) && neto.isNegative()) {
             errores.push({
                 field: 'comision',
                 message: 'La comisión no puede superar el bruto',
@@ -109,10 +114,10 @@ export default class LiquidarCobros extends DomainAction<EntradaLiquidarCobros, 
         }
         const pagosIds = [...new Set(input.pagos ?? [])]
         const contracargosIds = [...new Set(input.contracargos ?? [])]
-        if (pagosIds.length === 0) {
+        if (pagosIds.length + contracargosIds.length === 0) {
             errores.push({
                 field: 'pagos',
-                message: 'La liquidación incluye al menos un pago',
+                message: 'La liquidación incluye al menos un pago o un contracargo',
                 rule: 'required',
             })
         }
@@ -236,9 +241,12 @@ export default class LiquidarCobros extends DomainAction<EntradaLiquidarCobros, 
         ))!
 
         const movimientos: LineaAsiento[] = []
+        // con signo: un neto negativo sale del banco y un bruto negativo devuelve el puente a cero
         if (neto.gt(0)) movimientos.push({ cuenta: banco.cuenta_id, debe: aTexto(neto) })
+        if (neto.lt(0)) movimientos.push({ cuenta: banco.cuenta_id, haber: aTexto(neto.abs()) })
         if (comision.gt(0)) movimientos.push({ cuenta: CUENTAS.COMISIONES_PASARELAS, debe: aTexto(comision) })
-        movimientos.push({ cuenta: Number(proveedor.cuenta_id), haber: aTexto(bruto) })
+        if (bruto.gt(0)) movimientos.push({ cuenta: Number(proveedor.cuenta_id), haber: aTexto(bruto) })
+        if (bruto.lt(0)) movimientos.push({ cuenta: Number(proveedor.cuenta_id), debe: aTexto(bruto.abs()) })
 
         const sha = input.sha256?.trim().toLowerCase() || null
         const [fila] = (await t.trx

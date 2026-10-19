@@ -7,7 +7,7 @@ import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { dteVigente } from '#fiscal/fel/dte'
-import { bloquearCliente, sumarAPagado, type FacturaPendiente } from '#billing/cobros'
+import { bloquearCliente, type FacturaPendiente } from '#billing/cobros'
 import { ESTADOS_PENDIENTES, pendienteDe, type EstadoFactura } from '#billing/facturas'
 import { verCastigo, type CastigoVista } from '#ledger/cartera'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
@@ -24,8 +24,10 @@ import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
  *   NCRE; contador).
  * - El resto, primero contra la estimación `1.1.12` disponible y lo que falte a `5.3.02`:
  *   `2.1.11 + 1.1.12 (o 5.3.02) / CxC`, origen `castigo`.
- * - La factura queda cubierta (`pagado = total`, como un abono) y no se certifica; el servicio se
- *   reevalúa. Una factura se castiga una vez. Evento `cartera.castigada`.
+ * - La factura queda **`castigada`** (decisión g del líder): sale de cartera, de la antigüedad y del
+ *   corte; `pagado` no cambia (solo dinero cobrado) y lo castigado se lee de `castigos_facturas`. No se
+ *   certifica; el servicio se reevalúa. Lo que el cliente pague después es **recuperación**
+ *   (`4.2.03`, `pagos.registrar`). Una factura se castiga una vez. Evento `cartera.castigada`.
  */
 
 export interface EntradaCastigarCartera {
@@ -230,12 +232,20 @@ export default class CastigarCartera extends DomainAction<EntradaCastigarCartera
 
         const servicios = new Set<number>()
         for (const p of partes) {
-            const antes = { estado: p.factura.estado, pagado: p.factura.pagado }
-            const estado = await sumarAPagado(t.trx, p.factura, p.monto)
-            await t.registrarCambios({ tipo: 'factura', id: p.factura.id }, antes, {
-                estado,
-                pagado: p.factura.pagado,
-            })
+            // decisión (g): estado propio; `pagado` sigue siendo solo lo cobrado (pagado + castigado = total)
+            await t.trx
+                .from('billing.facturas')
+                .where('id', p.factura.id)
+                .update({
+                    estado: 'castigada',
+                    version: t.trx.knexRawQuery('version + 1'),
+                    updated_at: t.trx.knexRawQuery('now()'),
+                } as Record<string, unknown>)
+            await t.registrarCambios(
+                { tipo: 'factura', id: p.factura.id },
+                { estado: p.factura.estado },
+                { estado: 'castigada' },
+            )
             if (p.factura.servicio_id) servicios.add(Number(p.factura.servicio_id))
         }
         for (const servicioId of [...servicios].sort((a, b) => a - b)) {

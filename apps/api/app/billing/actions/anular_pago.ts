@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { NoEncontrado, ReglaNegocio } from '#shared/errores'
+import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import type { MetodoPago } from '#shared/eventos'
 import { dec } from '#ledger/dinero'
@@ -14,6 +14,7 @@ import {
     type FacturaPendiente,
 } from '#billing/cobros'
 import { verPago, type PagoVista } from '#billing/pagos'
+import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
 
@@ -108,6 +109,21 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                 'pagado',
                 'vencida_en',
             )) as FacturaPendiente[]
+        const castigadas = (await t.trx
+            .from('ledger.castigos_facturas')
+            .whereIn(
+                'factura_id',
+                facturas.map((f) => f.id),
+            )
+            .select('factura_id')) as Array<{ factura_id: number }>
+        if (castigadas.length > 0) {
+            throw new Conflicto(
+                `El pago ${pago.id} se aplicó a facturas ya castigadas (${castigadas.map((c) => c.factura_id).join(', ')}): ` +
+                    'el castigo cerró su saldo; corrige con un asiento de ajuste',
+                'factura_castigada',
+                'Factura castigada',
+            )
+        }
         for (const factura of facturas) {
             const aplicado = aplicaciones.find((a) => a.factura_id === factura.id)!
             await sumarAPagado(t.trx, factura, dec(aplicado.monto).negated())
@@ -144,6 +160,42 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
+
+        // H13: la diferencia de cobro que este pago cerró se justificaba con él; su nota interna se anula
+        // (reverso espejo). Una NCRE ya enviada a la SAT no se deshace aquí (contrato §18)
+        const diferencias = (await t.trx
+            .from('billing.diferencias_cobro as d')
+            .where('d.pago_id', pago.id)
+            .whereNotExists((q) =>
+                q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = d.nota_credito_id'),
+            )
+            .whereNotExists((q) =>
+                q
+                    .from('fiscal.dte as e')
+                    .whereRaw("e.documento_tipo = 'nota_credito' AND e.documento_id = d.nota_credito_id"),
+            )
+            // con el documento ya en la SAT (o en camino) la nota quedó en su neto: no se toca
+            .whereNotExists((q) =>
+                q
+                    .from('fiscal.dte as e')
+                    .join('billing.notas_credito as n', 'n.id', 'd.nota_credito_id')
+                    .whereRaw(
+                        "e.documento_tipo IN ('factura', 'nota_debito') AND e.documento_id = n.factura_id AND e.estado IN ('pendiente', 'error_temporal', 'contingencia', 'certificado', 'anulacion_pendiente')",
+                    ),
+            )
+            .orderBy('d.id')
+            .select('d.nota_credito_id')) as Array<{ nota_credito_id: number }>
+        for (const d of diferencias) {
+            await new AnularNotaCredito().execute(
+                {
+                    nota_id: Number(d.nota_credito_id),
+                    motivo: `anulación del pago ${pago.id}: ${input.motivo}`,
+                    pago_id: pago.id,
+                },
+                t.ctx,
+                { trx: t.trx },
+            )
+        }
 
         await t.emit('pago.anulado', {
             pago_id: pago.id,

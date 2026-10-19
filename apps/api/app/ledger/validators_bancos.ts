@@ -71,10 +71,10 @@ export const liquidarCobrosValidator = vine.compile(
         proveedor_cobro_id: idEntidad(),
         fecha: fechaIso().nullable().optional().meta({ description: 'Fecha del depósito; por defecto hoy' }),
         referencia: vine.string().trim().minLength(1).maxLength(120),
-        bruto: dinero(),
+        bruto: montoConSigno(),
         comision: dinero(),
-        neto: dinero().nullable().optional().meta({ description: 'Si se manda, debe ser bruto − comisión' }),
-        pagos: vine.array(idEntidad()).minLength(1).maxLength(5000),
+        neto: montoConSigno().nullable().optional(),
+        pagos: vine.array(idEntidad()).maxLength(5000),
         contracargos: vine
             .array(idEntidad())
             .maxLength(5000)
@@ -205,6 +205,20 @@ export const conciliarValidator = vine.compile(
 )
 
 export const anularConciliacionValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const reatribuirLlegadaValidator = vine.compile(
+    vine.object({
+        tipo: vine.enum(['deposito', 'traslado'] as const),
+        documento_id: idEntidad().meta({
+            description: 'Depósito o traslado al que se atribuyó la llegada por error',
+        }),
+        nuevo_tipo: vine.enum(['deposito', 'traslado'] as const),
+        nuevo_documento_id: idEntidad().meta({
+            description: 'Depósito o traslado en tránsito que en verdad llegó',
+        }),
+        motivo: motivo(),
+    }),
+)
 
 export const registrarDesdeExtractoValidator = vine.compile(
     vine.object({
