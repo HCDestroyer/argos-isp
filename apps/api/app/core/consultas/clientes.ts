@@ -39,6 +39,8 @@ export const COLUMNAS_CLIENTE = [
     'canal_preferido',
     'telegram_chat_id',
     'responsable_pago_id',
+    'referido_por_id',
+    'referido_empresa_id',
     'version',
     'created_at',
     'updated_at',
@@ -50,14 +52,24 @@ export type ClienteVista = Record<(typeof COLUMNAS_CLIENTE)[number], unknown> & 
     responsable_pago_id: number | null
     /** nombre del responsable de pago (lectura; no es columna) */
     responsable_pago_nombre: string | null
+    /** códigos de referido del cliente, uno por empresa (`core.codigos_referido`; lectura) */
+    codigos_referido: Array<{ empresa_id: number; codigo: string }>
 }
 
 /** Nombre del responsable de pago de `core.clientes as c` (subconsulta escalar). */
 const NOMBRE_RESPONSABLE =
     '(SELECT r.nombre FROM core.clientes r WHERE r.id = c.responsable_pago_id) AS responsable_pago_nombre'
 
+/** Códigos de referido de `core.clientes as c`, por empresa (subconsulta escalar). */
+const CODIGOS_REFERIDO =
+    "(SELECT coalesce(jsonb_agg(jsonb_build_object('empresa_id', k.empresa_id, 'codigo', k.codigo) ORDER BY k.empresa_id), '[]'::jsonb) FROM core.codigos_referido k WHERE k.cliente_id = c.id) AS codigos_referido"
+
 function columnasVista(cliente: QueryClientContract) {
-    return [...COLUMNAS_CLIENTE.map((col) => `c.${col}`), cliente.raw(NOMBRE_RESPONSABLE)]
+    return [
+        ...COLUMNAS_CLIENTE.map((col) => `c.${col}`),
+        cliente.raw(NOMBRE_RESPONSABLE),
+        cliente.raw(CODIGOS_REFERIDO),
+    ]
 }
 
 export interface FiltrosClientes extends OpcionesPaginacion {

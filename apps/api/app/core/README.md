@@ -124,6 +124,22 @@ No cambian de nombre sin acuerdo en `.claude/integration/` (reglas en su README)
 - `core.servicios`: `id`, `cliente_id`, `plan_id`, `plantilla_facturacion_id`, `costo_override` (numeric(14,2), null = precio del plan), `fecha_instalacion` (date), `estado` (`activo`/`limitado`/`suspendido`/`retirado`).
 - `network.planes`: `precio` (numeric(14,2)), `bajada_limitada_kbps`, `subida_limitada_kbps` (> 0).
 
+## Lealtad: planes temporales y referidos (`planes_temporales.ts`, `referidos.ts`, `jobs.ts`; contrato `.claude/integration/contratos/lealtad.md` §3, §5 y §16)
+
+| Acción | Permiso | Eventos |
+| --- | --- | --- |
+| `ProgramarPlanTemporal` (`POST /servicios/:id/planes-temporales`; anidada desde `lealtad.canjear` con `origen: lealtad`) | `servicios.programar_plan_temporal` (admin, soporte) | los de `IniciarPlanTemporal` si `inicio` ya llegó |
+| `IniciarPlanTemporal` (cron, o anidada al programar) | `servicios.iniciar_plan_temporal` (sistema) | `servicio.config_cambiada` (`campos: ['plan']`, `motivo: 'plan_temporal'`, `plan_temporal_id`) |
+| `TerminarPlanTemporal` (cron) | `servicios.terminar_plan_temporal` (sistema) | ídem, de vuelta al plan base |
+| `CancelarPlanTemporal` (`POST /servicios/:id/planes-temporales/:planTemporalId/cancelar`, con `version`) | `servicios.cancelar_plan_temporal` (admin, soporte) | ídem si estaba activo |
+
+- Plan efectivo: mientras un plan temporal está `activo`, `core.servicios.plan_id` **es** el temporal y `plan_original_id` el plan base. RADIUS (`aaa:user:*`, reescrito al confirmar, sin TTL; el grupo `aaa-cache` lo repite con el evento), RouterOS y la facturación lo leen como cualquier plan. Al terminar o cancelar, solo vuelve el plan: IPs, prefijos y demás datos no se tocan. Por eso el temporal debe tener el mismo `dual_stack` y tamaño de prefijo delegado (422 `plan_temporal_incompatible`).
+- Uno `programado` o `activo` por servicio (409 `plan_temporal_existente`); `origen` + `origen_id` único (el mismo canje devuelve el ya programado). Con uno activo, `PUT /servicios/:id` con otro `plan_id` → 409 `plan_temporal_activo`; `servicios.retirar` lo cancela (`motivo: retiro`) y deja el plan base. Al iniciar, `plan_original_id` se actualiza al plan que el servicio tenga en ese momento.
+- La vista `Servicio` trae `plan_temporal` (el vigente o null); `GET /servicios/:id/planes-temporales` (`servicios.ver`) lista todos. Diff en `audit.cambios` con entidad `plan_temporal` (y `plan_id` del servicio).
+- Cron `planes_temporales` (cola BullMQ `core-cron`, cada minuto, lo atiende `node ace eventos:relay`; `--sin-crons` lo apaga, `--una-vez planes_temporales` lo corre una vez): con advisory lock, termina los activos con `fin ≤ ahora` y luego inicia los programados con `inicio ≤ ahora` (todo lo pendiente, nunca "los de hoy"). Cada plan es su propia clave y su propia transacción: la acción solo actúa si la fila sigue en el estado esperado, así repetir la corrida no duplica eventos. Un programado cuyo `fin` pasó sin iniciarse queda `terminado` (`vencido_sin_iniciar`).
+- Interfaz para A3: `planTemporalActivo(servicio_id, trx)` (descuento de la factura hasta el precio de `plan_original_id`).
+- Referidos: `core.codigos_referido` (8 caracteres sin 0/O/1/I/L, únicos; uno por cliente y empresa) lo crea un trigger con el primer servicio del cliente en cada empresa (alta o cambio de empresa). La vista `Cliente` trae `codigos_referido[]`, `referido_por_id` y `referido_empresa_id`. `POST /clientes` acepta `codigo_referido` (mayúsculas o minúsculas, con guiones): `resolverCodigoReferido` guarda el referidor y la empresa del código; 422 `referido_invalido` si el formato no es válido, no existe (o es de una empresa fuera del alcance) o el referidor tiene el mismo NIT, CUI o pasaporte. Interfaces: `codigoReferidoDe(cliente_id, empresa_id)` y `referidoDeCliente(cliente_id)`.
+
 ## Auditoría de cambios (`app/shared/domain_action.ts`, `app/shared/nombres_campo.ts`)
 
 - `Transaccion.registrarCambios` guarda en `audit.cambios.campo` el nombre con `nombreCampo`: las claves sin mayúsculas quedan igual (`ipv4`, `prefijo_enlace_v6`, `pass_ppp`) y las camelCase se convierten sin separar dígitos (`prefijoEnlaceV6` → `prefijo_enlace_v6`). `esCampoSensible` (`enmascarar.ts`) usa el mismo convertidor; `pass_ppp`/`passPpp`, `*password*`, `*secret*`, `*token*`, `*hash*`, `api_key` y `llave_*` se guardan como `***`.
