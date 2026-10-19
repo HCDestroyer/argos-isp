@@ -466,9 +466,7 @@ test.group('Lealtad · canjes', (group) => {
         const e = await prepararEmpresas()
         await canjeSobrePagada(e)
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'H-lealtad-nota-a-favor: los invariantes 3 y 5 del auditor aún no cuentan el saldo a favor de las notas de crédito (notas_credito.a_favor y notas_credito_aplicaciones)',
-    )
+    })
 
     test('portal: el cliente canjea solo con visible_portal y canje_portal activos, y solo lo suyo', async ({
         assert,
