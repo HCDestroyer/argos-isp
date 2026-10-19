@@ -68,6 +68,16 @@ export function rutaOrigen(asiento: Pick<AsientoLibro, 'origen_tipo' | 'origen_i
     if (asiento.origen_tipo === 'nota_credito') {
         return `/notas-credito/${asiento.origen_id}`
     }
+    // Fase 4 (bancos): la liquidación tiene ficha; depósitos y traslados se ven en fondos en tránsito.
+    if (asiento.origen_tipo === 'liquidacion_cobro') {
+        return `/cobros/liquidaciones/${asiento.origen_id}`
+    }
+    if (asiento.origen_tipo === 'deposito' || asiento.origen_tipo === 'traslado') {
+        return '/bancos/transito'
+    }
+    if (asiento.origen_tipo === 'provision' || asiento.origen_tipo === 'castigo') {
+        return '/cartera'
+    }
     return null
 }
 
