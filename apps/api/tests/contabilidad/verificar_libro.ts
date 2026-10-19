@@ -382,9 +382,12 @@ async function verificarLibroCon(
                  AND NOT (cubierto = 0 AND pagado = total AND NOT tiene_asiento))`,
     )
     await revisar(
-        '5.factura_estado_inconsistente (estadoSegunPago; H16: acreditada = aviso sin DTE vivo cubierto entero por notas internas, sin cobro)',
+        '5.factura_estado_inconsistente (estadoSegunPago con la cobertura pagado + diferencias vigentes, decisión B; H16: acreditada = aviso sin DTE vivo cubierto entero por notas internas, sin cobro)',
         `WITH x AS (
              SELECT f.*,
+                    f.pagado + (SELECT coalesce(sum(dc.monto), 0) FROM billing.diferencias_cobro dc
+                               WHERE dc.factura_id = f.id
+                                 AND NOT EXISTS (SELECT 1 FROM ledger.asientos dr WHERE dr.reversa_de = dc.asiento_id)) AS cubierto,
                     coalesce((SELECT sum(a.monto) FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
                                WHERE a.factura_id = f.id AND p.estado = 'registrado'), 0)
                   + coalesce((SELECT sum(a.monto) FROM billing.saldos_iniciales_aplicaciones a
@@ -407,7 +410,7 @@ async function verificarLibroCon(
           WHERE estado <> CASE
                     WHEN pagado = total AND aviso_cobro AND NOT dte_vivo AND cobrado = 0 AND internas = total AND total > 0
                         THEN 'acreditada'
-                    WHEN pagado = total THEN 'pagada'
+                    WHEN cubierto = total THEN 'pagada'
                     WHEN vencida_en IS NOT NULL THEN 'vencida'
                     WHEN pagado > 0 THEN 'parcial'
                     ELSE 'emitida' END`,
@@ -689,7 +692,7 @@ async function verificarLibroCon(
           WHERE ${E('a.empresa_id')}
             AND a.origen_tipo NOT IN ('factura', 'mora', 'pago', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
                                       'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
-                                      'provision', 'castigo', 'lealtad')`,
+                                      'provision', 'castigo', 'lealtad', 'diferencia_cobro')`,
     )
 
     /*
@@ -1096,24 +1099,12 @@ async function verificarLibroCon(
                  -- su NCRE: rechazada en definitivo, nunca certificada (ni en curso)
                  OR EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'nota_credito' AND d.documento_id = x.nota_id
                               AND NOT (d.estado = 'rechazado' AND d.definitivo))
-                 -- sin DTE: en obligatoria solo la nota interna de la diferencia de un pago anulado (H13), anulada con
-                 -- ese pago y sin un DTE de la factura emitido antes de anularla; fuera de obligatoria, una nota interna
+                 -- sin DTE: en obligatoria ninguna (decisión B: la diferencia de cobro ya no es una nota que el pago
+                 -- anulado anule); fuera de obligatoria, una nota interna
                  OR (NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'nota_credito' AND d.documento_id = x.nota_id)
-                     AND coalesce(c.modo, 'desactivada') = 'obligatoria'
-                     AND NOT EXISTS (
-                         SELECT 1 FROM billing.notas_credito_anulaciones xa
-                           JOIN billing.diferencias_cobro dc ON dc.nota_credito_id = xa.nota_id AND dc.pago_id = xa.pago_id
-                           JOIN billing.pagos pa ON pa.id = xa.pago_id AND pa.estado = 'anulado'
-                           JOIN billing.notas_credito nn ON nn.id = xa.nota_id
-                           JOIN billing.facturas ff ON ff.id = nn.factura_id
-                          WHERE xa.nota_id = x.nota_id
-                            AND NOT EXISTS (SELECT 1 FROM fiscal.dte fd WHERE fd.documento_id = ff.id
-                                             AND fd.documento_tipo = CASE WHEN ff.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
-                                             AND fd.estado <> 'rechazado' AND fd.created_at <= xa.anulado_en)))
-                 -- la anulación por pago es solo la de su diferencia, y de un pago anulado
-                 OR EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones xa WHERE xa.nota_id = x.nota_id AND xa.pago_id IS NOT NULL
-                              AND NOT EXISTS (SELECT 1 FROM billing.diferencias_cobro dc JOIN billing.pagos pa ON pa.id = dc.pago_id
-                                               WHERE dc.nota_credito_id = xa.nota_id AND dc.pago_id = xa.pago_id AND pa.estado = 'anulado'))`,
+                     AND coalesce(c.modo, 'desactivada') = 'obligatoria')
+                 -- ninguna nota se anula por un pago (era H13)
+                 OR EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones xa WHERE xa.nota_id = x.nota_id AND xa.pago_id IS NOT NULL)`,
         )
     }
 
@@ -1486,66 +1477,51 @@ async function verificarLibroCon(
                   WHERE c.codigo = '${ESTIMACION}' AND a.empresa_id = p.empresa_id AND a.fecha <= p.fecha) > p.tope`,
     )
     await revisar(
-        '13.diferencia_de_cobro_mal_cerrada (una nota por el monto de la diferencia, de la factura del pago; base a 5.3.05 si es interna, a ventas si es NCRE)',
-        `WITH x AS (
-             SELECT d.*, n.monto AS monto_nota, n.factura_id AS factura_nota, n.subtotal,
-                    EXISTS (SELECT 1 FROM fiscal.dte o WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = n.id) AS ncre,
-                    (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
-                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                      WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = n.id AND a.reversa_de IS NULL
-                        AND c.codigo = '${DIFERENCIAS}') AS a_diferencias,
-                    EXISTS (SELECT 1 FROM billing.pagos_aplicaciones ap WHERE ap.pago_id = d.pago_id AND ap.factura_id = d.factura_id) AS aplicado
-               FROM billing.diferencias_cobro d JOIN billing.notas_credito n ON n.id = d.nota_credito_id
-              WHERE ${E('d.empresa_id')}
-         )
-         SELECT id, pago_id, factura_id, nota_credito_id, monto::text, monto_nota::text, ncre, a_diferencias::text, aplicado
-           FROM x
-          WHERE monto_nota <> monto OR factura_nota <> factura_id OR NOT aplicado
-             OR (NOT ncre AND a_diferencias <> subtotal) OR (ncre AND a_diferencias <> 0)`,
-    )
-    await revisar(
-        '13.diferencia_de_cobro_con_pago_anulado (H13 / H18: anular el pago anula la nota sin documento fiscal o, con DTE, devuelve la diferencia con un cargo; nunca las dos, nunca ninguna, nunca con el pago vivo)',
-        `SELECT d.id, d.pago_id, d.factura_id, d.nota_credito_id, d.monto::text, p.estado AS estado_pago,
-                ${anulada('n')} AS nota_anulada,
-                (SELECT count(*) FROM billing.diferencias_cobro_cargos c WHERE c.diferencia_id = d.id)::int AS cargos
-           FROM billing.diferencias_cobro d JOIN billing.pagos p ON p.id = d.pago_id
-           JOIN billing.notas_credito n ON n.id = d.nota_credito_id
-          WHERE ${E('d.empresa_id')}
-            AND CASE WHEN p.estado = 'anulado'
-                     THEN ${anulada('n')} = EXISTS (SELECT 1 FROM billing.diferencias_cobro_cargos c WHERE c.diferencia_id = d.id)
-                     ELSE EXISTS (SELECT 1 FROM billing.diferencias_cobro_cargos c WHERE c.diferencia_id = d.id) END`,
-    )
-    await revisar(
-        '13.cargo_de_diferencia_mal_formado (H18: factura cargo sin IVA ni aviso por el monto de la diferencia, de la factura, cliente y empresa de la nota, ligada al pago anulado; asiento CxC / 5.3.05 por el total y nada más; nunca a la cola FEL)',
+        '13.diferencia_de_cobro_mal_contabilizada (decisión B: un asiento diferencia_cobro de la diferencia, de la empresa de su factura: 5.3.05 debe = CxC haber = monto con el cliente de la factura, nada más)',
         `WITH mov AS (
-             SELECT a.origen_id AS factura_id, count(DISTINCT a.id) AS asientos,
-                    sum(CASE WHEN c.codigo = '${CXC}' THEN m.debe - m.haber ELSE 0 END) AS cxc,
-                    sum(CASE WHEN c.codigo = '${DIFERENCIAS}' THEN m.haber - m.debe ELSE 0 END) AS diferencias,
-                    count(*) FILTER (WHERE c.codigo NOT IN ('${CXC}', '${DIFERENCIAS}')) AS ajenos,
-                    bool_and(c.codigo <> '${CXC}' OR m.cliente_id IS NOT NULL) AS con_cliente,
-                    max(m.cliente_id) AS cliente_id
+             SELECT a.id, a.origen_id, a.empresa_id, a.reversa_de,
+                    sum(CASE WHEN c.codigo = '${DIFERENCIAS}' THEN m.debe - m.haber ELSE 0 END) AS gasto,
+                    sum(CASE WHEN c.codigo = '${CXC}' THEN m.haber - m.debe ELSE 0 END) AS cxc,
+                    count(*) FILTER (WHERE c.codigo NOT IN ('${DIFERENCIAS}', '${CXC}')) AS ajenos,
+                    max(CASE WHEN c.codigo = '${CXC}' THEN m.cliente_id END) AS cliente_max,
+                    min(CASE WHEN c.codigo = '${CXC}' THEN m.cliente_id END) AS cliente_min
                FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE a.origen_tipo = 'factura' AND a.reversa_de IS NULL
-              GROUP BY 1
+              WHERE a.origen_tipo = 'diferencia_cobro' AND ${E('a.empresa_id')}
+              GROUP BY a.id
          )
-         SELECT f.id, f.tipo, f.total::text, f.iva::text, f.aviso_cobro, f.factura_origen_id, c.diferencia_id,
-                d.monto::text AS diferencia, mov.cxc::text, mov.diferencias::text, mov.ajenos::int
-           FROM billing.facturas f
-           LEFT JOIN billing.diferencias_cobro_cargos c ON c.factura_id = f.id
-           LEFT JOIN billing.diferencias_cobro d ON d.id = c.diferencia_id
-           LEFT JOIN billing.facturas o ON o.id = d.factura_id
-           LEFT JOIN billing.pagos p ON p.id = c.pago_id
-           LEFT JOIN mov ON mov.factura_id = f.id
-          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
-            AND (f.tipo = 'cargo' OR c.id IS NOT NULL)
-            AND (f.tipo <> 'cargo' OR c.id IS NULL OR f.iva <> 0 OR f.subtotal <> f.total OR f.aviso_cobro
-                 OR f.total <> d.monto OR f.factura_origen_id IS DISTINCT FROM d.factura_id
-                 OR f.cliente_id <> o.cliente_id OR f.empresa_id <> o.empresa_id OR c.empresa_id <> f.empresa_id
-                 OR c.pago_id <> d.pago_id OR p.estado <> 'anulado'
-                 OR EXISTS (SELECT 1 FROM fiscal.dte e WHERE e.documento_id = f.id AND e.documento_tipo IN ('factura', 'nota_debito'))
-                 OR mov.factura_id IS NULL OR mov.asientos <> 1 OR mov.cxc <> f.total
-                 OR mov.diferencias <> f.total OR mov.ajenos <> 0 OR NOT mov.con_cliente OR mov.cliente_id <> f.cliente_id)`,
+         SELECT 'diferencia' AS que, d.id, d.monto::text, mov.gasto::text, mov.cxc::text, mov.ajenos::int
+           FROM billing.diferencias_cobro d JOIN billing.facturas f ON f.id = d.factura_id
+           LEFT JOIN mov ON mov.id = d.asiento_id
+          WHERE ${E('d.empresa_id')}
+            AND (mov.id IS NULL OR mov.reversa_de IS NOT NULL OR mov.origen_id <> d.id OR mov.empresa_id <> f.empresa_id
+                 OR d.empresa_id <> f.empresa_id OR mov.gasto <> d.monto OR mov.cxc <> d.monto OR mov.ajenos <> 0
+                 OR mov.cliente_max <> f.cliente_id OR mov.cliente_min <> f.cliente_id OR d.monto <= 0)
+         UNION ALL
+         -- todo asiento diferencia_cobro original es el de una diferencia (su reverso lo revisa 2.reverso_no_es_espejo)
+         SELECT 'asiento', mov.id, NULL, mov.gasto::text, mov.cxc::text, mov.ajenos::int
+           FROM mov
+          WHERE mov.reversa_de IS NULL
+            AND NOT EXISTS (SELECT 1 FROM billing.diferencias_cobro d WHERE d.asiento_id = mov.id AND d.id = mov.origen_id)`,
+    )
+    await revisar(
+        '13.diferencia_de_cobro_vigente (decisión B: vigente ⇒ factura pagada con pagado + Σ vigentes = total, su pago registrado y aplicado a la factura, y ningún pago anulado aplicado a ella después; revertida ⇒ un pago aplicado a la factura se anuló)',
+        `WITH d AS (
+             SELECT d.*, NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = d.asiento_id) AS vigente,
+                    (SELECT r.created_at FROM ledger.asientos r WHERE r.reversa_de = d.asiento_id) AS revertida_en,
+                    (SELECT a.created_at FROM ledger.asientos a WHERE a.id = d.asiento_id) AS cerrada_en
+               FROM billing.diferencias_cobro d WHERE ${E('d.empresa_id')}
+         )
+         SELECT d.id, d.factura_id, d.pago_id, d.monto::text, d.vigente, f.estado, f.total::text, f.pagado::text, p.estado AS estado_pago
+           FROM d JOIN billing.facturas f ON f.id = d.factura_id JOIN billing.pagos p ON p.id = d.pago_id
+          WHERE NOT EXISTS (SELECT 1 FROM billing.pagos_aplicaciones ap WHERE ap.pago_id = d.pago_id AND ap.factura_id = d.factura_id)
+             OR (d.vigente AND (f.estado <> 'pagada' OR p.estado <> 'registrado'
+                                OR f.pagado + (SELECT coalesce(sum(x.monto), 0) FROM d x WHERE x.factura_id = f.id AND x.vigente) <> f.total
+                                -- desvío (b): anular cualquier pago aplicado a la factura revierte sus diferencias vigentes
+                                OR EXISTS (SELECT 1 FROM billing.pagos_aplicaciones ap JOIN billing.pagos pa ON pa.id = ap.pago_id
+                                            WHERE ap.factura_id = f.id AND pa.estado = 'anulado' AND pa.anulado_en > d.cerrada_en)))
+             OR (NOT d.vigente AND NOT EXISTS (SELECT 1 FROM billing.pagos_aplicaciones ap JOIN billing.pagos pa ON pa.id = ap.pago_id
+                                                WHERE ap.factura_id = f.id AND pa.estado = 'anulado'))`,
     )
 
     /*
@@ -1728,19 +1704,6 @@ async function verificarLibroCon(
            FROM ledger.transitos_acreditados x
           WHERE ${E('x.empresa_id')} AND ${llegadaViva('x.tipo', 'x.documento_id')}
           GROUP BY x.linea_id HAVING count(*) > 1`,
-    )
-    await revisar(
-        '13.diferencia_sin_documento_rebaja_iva (decisión (f): sin NCRE, la nota de la diferencia no toca 2.1.02; todo a 5.3.05 o, en un aviso, el IVA a 2.1.11)',
-        `SELECT d.id, d.nota_credito_id, d.factura_id,
-                (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
-                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                  WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = d.nota_credito_id AND c.codigo = '${IVA}')::text AS iva_debito
-           FROM billing.diferencias_cobro d
-          WHERE ${E('d.empresa_id')}
-            AND NOT EXISTS (SELECT 1 FROM fiscal.dte o WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = d.nota_credito_id)
-            AND (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
-                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                  WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = d.nota_credito_id AND c.codigo = '${IVA}') <> 0`,
     )
 
     /*

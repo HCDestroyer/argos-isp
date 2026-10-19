@@ -78,10 +78,9 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
         assert.equal(p2.monto, '0.00', 'al 30-sep la reserva ya estaba en el tope')
     })
 
-    test('H13 · anular el pago deja viva la diferencia de cobro que ese pago cerró', async ({ assert }) => {
-        // Producto: app/billing/actions/anular_pago.ts no toca billing.diferencias_cobro ni su nota. La diferencia se
-        // justificó con un cobro que ya no existe: la factura queda con su saldo menos la nota (un descuento sin causa).
-        // En Odoo el write-off es parte del asiento del pago y se revierte con él.
+    test('decisión B (antes H13) · cerrar una diferencia es gasto 5.3.05 / CxC; anular el pago la revierte en espejo', async ({
+        assert,
+    }) => {
         const e = await prepararEmpresasGt()
         const s = await servicioFacturado(e.B, '2026-10-01', { instalacion: '2026-10-01' })
         const pago = await new RegistrarPago().execute(
@@ -95,9 +94,19 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
             e.ctx,
         )
         await new CerrarDiferenciaPago().execute({ pago_id: pago.id }, e.ctx)
+        let factura = await db.from('billing.facturas').where('id', s.facturas[0]!.id).firstOrFail()
+        assert.include(factura, { estado: 'pagada', pagado: '149.50' })
+        assert.equal(await saldoCuenta(e.B, '5.3.05'), '0.50')
+        assert.equal(Number(await saldoCuenta(e.B, CUENTAS.CXC_CLIENTES, s.clienteId)), 0)
+        assert.deepEqual(await verificarLibro(e.B), [])
         await new AnularPago().execute({ pago_id: pago.id, motivo: 'cheque rechazado' }, e.ctx)
-        assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
+        factura = await db.from('billing.facturas').where('id', s.facturas[0]!.id).firstOrFail()
+        assert.include(factura, { pagado: '0.00' })
+        assert.equal(Number(await saldoCuenta(e.B, '5.3.05')), 0)
+        assert.equal(await saldoCuenta(e.B, CUENTAS.CXC_CLIENTES, s.clienteId), factura.total)
+        assert.deepEqual(await verificarLibro(e.B), [])
     })
+
     test('H14 · una liquidación con solo contracargos (el proveedor debita el banco) no se puede registrar', async ({
         assert,
     }) => {
@@ -214,49 +223,33 @@ test.group('Auditor contable · hallazgos de la fase 4', (group) => {
         assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
     })
 
-    test('H18 · con DTE de la factura, anular el pago devuelve la diferencia como cargo interno CxC / 5.3.05 que cuadra en el auxiliar', async ({
+    test('decisión B (antes H18) · con DTE la diferencia no toca el documento; anular otro pago aplicado a la factura también la revierte (desvío b)', async ({
         assert,
     }) => {
-        // Producto: app/billing/actions/anular_pago.ts no anula la nota de la diferencia si la factura ya tiene DTE (el DTE
-        // se certificó por el neto). La decisión H13 dice que anular el pago revierte su diferencia; con documento
-        // fiscal haría falta un cargo o una NDEB por la diferencia. Hoy el cliente queda con Q0.50 descontados sin causa.
         const e = await empresasFel('obligatoria')
         const s = await servicioFel(e, 'pagar', '150.00', await crearClienteFila(datosNit()))
-        const pago = await new RegistrarPago().execute(
-            { cliente_id: s.clienteId, metodo: 'caja', monto: '149.50', empresa_id: e.B },
+        const f = s.facturas[0]!
+        const primero = await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '100.00', empresa_id: e.B, facturas: [f.id] },
             e.ctx,
         )
-        await new CerrarDiferenciaPago().execute({ pago_id: pago.id }, e.ctx)
-        await cola(e)
-        assert.equal(await dtesDe('factura', s.facturas[0]!.id).then((r) => r[0]?.estado), 'certificado')
-        await new AnularPago().execute({ pago_id: pago.id, motivo: 'cheque rechazado' }, e.ctx)
-        assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
-        // decisión H18: el DTE no se toca; el cliente vuelve a deber los Q0.50 con un cargo interno (CxC / 5.3.05)
-        assert.lengthOf(await dtesDe('factura', s.facturas[0]!.id), 1)
-        const cargos = (await db
-            .from('billing.facturas')
-            .where({ factura_origen_id: s.facturas[0]!.id, tipo: 'cargo' })
-            .select('id', 'total', 'iva', 'estado')) as Array<Record<string, string>>
-        assert.lengthOf(cargos, 1)
-        assert.include(cargos[0]!, { total: '0.50', iva: '0.00', estado: 'emitida' })
-        assert.equal(
-            await saldoCuenta(e.B, CUENTAS.CXC_CLIENTES, s.clienteId),
-            '150.00',
-            'auxiliar = 149.50 + cargo 0.50',
-        )
-        // la nota de la diferencia (decisión f, aviso) llevó la base 0.45 a 5.3.05 y el IVA 0.05 a 2.1.11, que el DTE
-        // ya reclasificó por su neto; el cargo, por decisión, abona los 0.50 enteros a 5.3.05: queda acreedora en 0.05
-        // (ingreso no fiscal). Opinión del auditor: aceptable por la decisión; confirmar con contador
-        assert.equal(await saldoCuenta(e.B, '5.3.05'), '-0.05', 'base de la nota (0.45) − cargo (0.50)')
-        // el cliente paga lo que debe: la factura y el cargo quedan pagados, el cargo nunca va a la cola FEL
-        await new RegistrarPago().execute(
-            { cliente_id: s.clienteId, metodo: 'caja', monto: '150.00', empresa_id: e.B },
+        const segundo = await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '49.50', empresa_id: e.B, facturas: [f.id] },
             e.ctx,
         )
+        await new CerrarDiferenciaPago().execute({ pago_id: segundo.id }, e.ctx)
         await cola(e)
-        assert.lengthOf(await dtesDe('factura', Number(cargos[0]!.id)), 0)
-        assert.equal(Number(await saldoCuenta(e.B, CUENTAS.CXC_CLIENTES, s.clienteId)), 0)
-        assert.equal(Number(await saldoCuenta(e.B, CUENTAS.ANTICIPOS_CLIENTES, s.clienteId)), 0)
-        assert.deepEqual(await verificarLibro(e.B, { incluirHallazgosAbiertos: true }), [])
+        const [dte] = await dtesDe('factura', f.id)
+        assert.include(dte!, { estado: 'certificado', total: '150.00' })
+        assert.deepEqual(await verificarLibro(e.B), [])
+        // se anula el otro pago (no el que cerró la diferencia): la diferencia se revierte y la factura debe 100.50
+        await new AnularPago().execute({ pago_id: primero.id, motivo: 'cheque rechazado' }, e.ctx)
+        const factura = await db.from('billing.facturas').where('id', f.id).firstOrFail()
+        assert.include(factura, { pagado: '49.50', estado: 'parcial' })
+        assert.equal(await saldoCuenta(e.B, CUENTAS.CXC_CLIENTES, s.clienteId), '100.50')
+        assert.lengthOf(await dtesDe('factura', f.id), 1, 'el DTE no se toca')
+        assert.equal(Number(await saldoCuenta(e.B, '5.3.05')), 0)
+        // la diferencia no se puede volver a cerrar con el pago que queda: ahora faltan 100.50
+        assert.deepEqual(await verificarLibro(e.B), [])
     })
 })
