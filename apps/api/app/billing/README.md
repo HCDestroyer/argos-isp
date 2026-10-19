@@ -88,6 +88,19 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 
 `actions/sustituir_factura.ts` (`facturas.sustituir`, `POST /facturas/:id/sustituir { motivo, cliente_fiscal? }`, contrato §10.9): para un dato mal emitido cuando el periodo ya está ocupado. Sin pagos (409 `sustitucion_no_permitida`). Sin DTE certificado anula la original; con DTE, la acredita con una NCRE por todo su saldo. Emite la nueva con las mismas líneas, periodo y vencimiento, `clave_unica = <clave>#s<n>` y el receptor corregido en su `reglas_snapshot`. `billing.sustituciones` (solo inserción) traza la relación; evento `factura.sustituida`.
 
+## Cargo único manual (`actions/emitir_cargo_unico.ts`, `cargos_unicos.ts`)
+
+`facturas.emitir_cargo_unico` (`POST /facturas/cargo-unico` + `Idempotency-Key`, 201 `FacturaDetalle`): factura de un cargo que no es de un periodo (instalación, equipo, visita técnica…).
+
+- `clave_unica = cargo-<uuid>` (nunca ocupa `servicio_id-periodo` ni `importada-`); `periodo` = primer día del mes de emisión; `cargo_unico: true` en la respuesta.
+- Cada línea sale de un **concepto de cargo** (`billing.conceptos_cargo`, por empresa): cuenta de ingreso (`cuenta_codigo`, guardada en `facturas_lineas.cuenta_codigo`), IVA (`gravable`) y bien/servicio (`tipo` `producto`/`otro`). Precio bruto con IVA (> 0) × `cantidad`; `descuentos[]` por línea como líneas `descuento` (IVA del neto, `5.1.01`). La cuenta no se adivina: sin una más fina, `4.1.03 Otros ingresos` (sembrado).
+- Con `servicio_id`: del servicio (empresa, cliente, días de gracia, `certificar_al`), y vencida cuenta para el corte. Sin él: del `cliente_id` en la empresa indicada o la activa, vence hoy salvo `vence_en`. Sin mora.
+- Total > 0: asiento `CxC + 5.1.01 / ingreso de cada concepto + IVA`, `factura.emitida`, anticipos, y certificación según el modo FEL. Concepto exento con FEL activa → 422 `concepto_exento_con_fel`.
+- **Total Q0**: `motivo_sin_costo_id` (catálogo activo de la empresa) + `motivo_sin_costo_texto` obligatorios; la ruta exige además `facturas.cargo_sin_costo` (403). Nace `pagada`, sin CxC y sin DTE cualquiera sea el modo FEL; asiento `5.1.01 / ingreso` por el bruto (neto 0). Un motivo con total > 0 → 422.
+- Catálogos: `GET/POST/PUT /conceptos-cargo[/:id]` (`facturas.configurar_conceptos`; la cuenta debe ser de ingreso, imputable y global o de la empresa) y `GET/POST/PUT /motivos-sin-costo[/:id]` (`facturas.configurar_motivos`). Lectura con `facturas.ver`. `version` (409), nombre único por empresa, `audit.cambios`, se desactivan (`activo`), nunca se borran. Un trigger los siembra con cada empresa nueva.
+- Notas de crédito: por línea y por monto debitan la cuenta de la línea (`cuentaIngresoDeLinea`) y el neto de sus descuentos.
+- Reporte `GET /reportes/facturas-sin-costo` (`reportes.ver`): facturas en Q0 sin anular por mes y motivo, con `valor_bruto`.
+
 ## Importación (para A6, sin endpoint)
 
 | Acción                             | Archivo                                 | Qué hace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -297,6 +310,11 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=343 node ace tes
 | GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`        | `facturas.ver`             |
 | POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte`   | `facturas.generar`         |
 | POST     | `/api/v1/facturas/:id/anular`                     | `facturas.anular`          |
+| POST     | `/api/v1/facturas/cargo-unico`                    | `facturas.emitir_cargo_unico` (Q0: + `facturas.cargo_sin_costo`) |
+| GET      | `/api/v1/conceptos-cargo`, `/api/v1/motivos-sin-costo` (y `/:id`) | `facturas.ver` |
+| POST/PUT | `/api/v1/conceptos-cargo[/:id]`                   | `facturas.configurar_conceptos` |
+| POST/PUT | `/api/v1/motivos-sin-costo[/:id]`                 | `facturas.configurar_motivos` |
+| GET      | `/api/v1/reportes/facturas-sin-costo`             | `reportes.ver`             |
 | GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`              | `pagos.ver`                |
 | GET      | `/api/v1/cobros/:id`                              | `pagos.ver`                |
 | POST     | `/api/v1/pagos`                                   | `pagos.registrar`          |

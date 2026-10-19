@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { aTexto, dec } from '#ledger/dinero'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { claveFactura, sumarDias, type PeriodoFacturable } from '#billing/periodos'
-import { lineaConIva, totalesDe, type LineaCalculada } from '#billing/facturas'
+import { aplicarDescuentos, lineaConIva, totalesDe, type LineaCalculada } from '#billing/facturas'
 import { bloquearCliente } from '#billing/cobros'
 import { emitirDocumento } from '#billing/emision'
 
@@ -17,7 +17,8 @@ import { emitirDocumento } from '#billing/emision'
  *   IVA incluido; el IVA se desglosa por línea (`lineaConIva`).
  * - Guarda `reglas_snapshot`: la configuración efectiva (plantilla + excepciones) y el precio con
  *   que se emitió. Vence `dias_gracia` días después del inicio del periodo.
- * - Asiento: `CxC (cliente) / Ingresos por internet + Otros ingresos + IVA débito`.
+ * - Asiento: `CxC (cliente) / Ingresos por internet + Otros ingresos + IVA débito`; con `descuentos`,
+ *   líneas `descuento` sobre la línea del plan (IVA del neto) y `5.1.01 Descuentos` al debe.
  * - Multiempresa: la factura (y su asiento) es de la empresa del servicio (`empresa_id`): sale con
  *   su NIT y va a su libro. El anticipo que se aplica es el de esa empresa.
  * - Emite `factura.emitida` y aplica el anticipo del cliente si tiene (excedentes de pagos).
@@ -29,6 +30,12 @@ import { emitirDocumento } from '#billing/emision'
 export interface EntradaEmitirFactura {
     servicio_id: number
     periodo: PeriodoFacturable
+    /**
+     * Descuentos sobre la línea del plan (con IVA incluido; contrato de localización fiscal §3.5): van
+     * como líneas `descuento` ligadas a ella, con el IVA del neto y `5.1.01 Descuentos` en el asiento.
+     * Nunca dejan la línea bajo cero ni cubren mora ni otros conceptos.
+     */
+    descuentos?: Array<{ concepto: string; monto: string }>
 }
 
 export interface ResultadoEmitirFactura {
@@ -94,9 +101,18 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
                 }),
             )
         }
-        const conMonto = lineas.filter((linea) => dec(linea.total).gt(0))
-        const totales = totalesDe(conMonto)
-        if (totales.total.lte(0)) return { factura_id: null, creada: false, motivo: 'monto_cero' }
+        const positivas = lineas.filter((linea) => dec(linea.total).gt(0))
+        if (totalesDe(positivas).total.lte(0)) {
+            return { factura_id: null, creada: false, motivo: 'monto_cero' }
+        }
+        const plan = positivas.findIndex((linea) => linea.tipo === 'servicio')
+        const conMonto =
+            plan >= 0 && input.descuentos && input.descuentos.length > 0
+                ? aplicarDescuentos(
+                      positivas,
+                      input.descuentos.map((d) => ({ indice: plan, concepto: d.concepto, monto: d.monto })),
+                  )
+                : positivas
 
         const venceEn = sumarDias(periodo, config.dias_gracia)
         const snapshot = {

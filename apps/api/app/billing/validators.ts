@@ -515,6 +515,16 @@ export const reporteEgresosValidator = vine.compile(
     }),
 )
 
+export const reporteSinCostoValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        formato,
+        ...rango,
+        motivo_id: idEntidad().optional().meta({ description: 'Solo un motivo (GET /motivos-sin-costo)' }),
+        cliente_id: idEntidad().optional(),
+    }),
+)
+
 /*
 |--------------------------------------------------------------------------
 | Pasarela en línea
@@ -575,5 +585,129 @@ export const simularPromesaValidator = vine.compile(
         evaluar_en: instanteIso()
             .optional()
             .meta({ description: 'Simular como si fuera este instante (por defecto ahora)' }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Cargo único manual y sus catálogos
+|--------------------------------------------------------------------------
+*/
+
+export const cargoUnicoValidator = vine.compile(
+    vine.object({
+        servicio_id: idEntidad().nullable().optional().meta({
+            description:
+                'Servicio del cargo (su empresa, cliente, días de gracia y modo FEL); vencido cuenta para el corte',
+        }),
+        cliente_id: idEntidad().nullable().optional().meta({
+            description:
+                'Cliente del cargo: obligatorio sin servicio; con servicio, si viene, debe ser su dueño',
+        }),
+        empresa_id: idEntidad().nullable().optional().meta({
+            description: 'Empresa del cargo sin servicio; por defecto la activa (X-Empresa-Id)',
+        }),
+        vence_en: fechaIso().nullable().optional().meta({
+            description: 'Hoy o después; por defecto hoy + días de gracia del servicio (sin servicio: hoy)',
+        }),
+        lineas: vine
+            .array(
+                vine.object({
+                    concepto_id: idEntidad().meta({
+                        description: 'Concepto del catálogo (GET /conceptos-cargo)',
+                    }),
+                    descripcion: vine.string().trim().maxLength(200).nullable().optional(),
+                    cantidad: vine
+                        .string()
+                        .trim()
+                        .regex(/^\d{1,6}(\.\d{1,4})?$/)
+                        .optional()
+                        .meta({ description: 'Por defecto 1' }),
+                    precio_unitario: vine
+                        .string()
+                        .trim()
+                        .regex(/^\d{1,12}(\.\d{1,2})?$/)
+                        .meta({
+                            description:
+                                'Precio bruto con IVA incluido (> 0), hasta 2 decimales; lo regalado va como descuento',
+                            examples: ['150.00'],
+                        }),
+                    descuentos: vine
+                        .array(
+                            vine.object({
+                                concepto: vine.string().trim().minLength(2).maxLength(200),
+                                monto: dinero(),
+                            }),
+                        )
+                        .maxLength(10)
+                        .optional()
+                        .meta({
+                            description: 'Descuentos de la línea (IVA incluido; juntos, hasta su bruto)',
+                        }),
+                }),
+            )
+            .minLength(1)
+            .maxLength(50),
+        motivo_sin_costo_id: idEntidad().nullable().optional().meta({
+            description:
+                'Solo con total Q0 (obligatorio entonces) y el permiso facturas.cargo_sin_costo (GET /motivos-sin-costo)',
+        }),
+        motivo_sin_costo_texto: vine.string().trim().maxLength(500).nullable().optional().meta({
+            description: 'Explicación del Q0 (obligatoria con motivo_sin_costo_id)',
+        }),
+    }),
+)
+
+export const crearConceptoCargoValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({
+            description: 'Empresa del catálogo; por defecto la activa (X-Empresa-Id)',
+        }),
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        tipo: vine
+            .enum(['producto', 'otro'] as const)
+            .optional()
+            .meta({ description: 'producto = bien, otro = servicio (DTE); por defecto otro' }),
+        cuenta_codigo: vine.string().trim().maxLength(20).meta({
+            description: 'Cuenta de ingreso imputable del plan (p. ej. 4.1.03)',
+        }),
+        gravable: vine.boolean().optional().meta({ description: 'Lleva IVA (por defecto sí)' }),
+        activo: vine.boolean().optional(),
+    }),
+)
+
+export const editarConceptoCargoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        tipo: vine.enum(['producto', 'otro'] as const).optional(),
+        cuenta_codigo: vine.string().trim().maxLength(20).optional(),
+        gravable: vine.boolean().optional(),
+        activo: vine.boolean().optional(),
+    }),
+)
+
+export const crearMotivoSinCostoValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional().meta({
+            description: 'Empresa del catálogo; por defecto la activa (X-Empresa-Id)',
+        }),
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        activo: vine.boolean().optional(),
+    }),
+)
+
+export const editarMotivoSinCostoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        activo: vine.boolean().optional(),
+    }),
+)
+
+export const listarCatalogoCargoValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        activo: vine.boolean().optional().meta({ description: 'Solo activos (true) o inactivos' }),
     }),
 )

@@ -3,7 +3,7 @@ import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
-import { totalesDe, type LineaCalculada } from '#billing/facturas'
+import { cuentaIngresoDeLinea, totalesDe, type LineaCalculada } from '#billing/facturas'
 import { aplicarAnticipos } from '#billing/cobros'
 import { cuentaIva, fechaContableAbierta } from '#billing/fel_facturas'
 import { configuracionFel, modoEmision, type CertificarAl, type ModoEmision } from '#fiscal/fel/configuracion'
@@ -30,30 +30,49 @@ import {
  * Con FEL desactivada (todas las empresas al migrar) todo queda como antes.
  */
 
-/** `CxC / Ingresos (servicio) + Otros ingresos + Recargos + IVA` (a `2.1.02` o `2.1.11`). */
+/**
+ * `CxC + Descuentos / Ingresos (servicio) + Otros ingresos + Recargos + IVA` (a `2.1.02` o `2.1.11`).
+ * Con líneas `descuento`: los ingresos van por el bruto, el descuento (sin IVA) al debe de `5.1.01` y el
+ * IVA es el del neto (lealtad §5: `CxC 150.00 + 5.1.01 44.64 / 4.1.01 178.57 + 2.1.02 16.07`).
+ * Cada línea acredita su cuenta (`cuentaIngresoDeLinea`: la de su concepto de cargo o la de su tipo).
+ * Total 0 (descuento del 100 %, cargo sin costo): sin CxC; queda `ingreso / 5.1.01` por el bruto.
+ */
 export function movimientosFactura(
     clienteId: number,
-    lineas: Array<Pick<LineaCalculada, 'tipo' | 'total' | 'iva'>>,
+    lineas: Array<Pick<LineaCalculada, 'tipo' | 'total' | 'iva' | 'cuenta_codigo'>>,
     total: Dec,
     avisoCobro: boolean,
 ): LineaAsiento[] {
-    let internet = CERO
-    let otros = CERO
-    let mora = CERO
+    const ingresos = new Map<string, Dec>()
+    let descuentos = CERO
     let iva = CERO
     for (const linea of lineas) {
         const subtotal = dec(linea.total).minus(linea.iva)
-        if (linea.tipo === 'servicio') internet = internet.plus(subtotal)
-        else if (linea.tipo === 'mora') mora = mora.plus(subtotal)
-        else otros = otros.plus(subtotal)
+        if (linea.tipo === 'descuento') descuentos = descuentos.minus(subtotal)
+        else {
+            const cuenta = cuentaIngresoDeLinea(linea)
+            ingresos.set(cuenta, (ingresos.get(cuenta) ?? CERO).plus(subtotal))
+        }
         iva = iva.plus(linea.iva)
     }
-    const movimientos: LineaAsiento[] = [
-        { cuenta: CUENTAS.CXC_CLIENTES, debe: aTexto(total), cliente_id: clienteId },
-    ]
-    if (internet.gt(0)) movimientos.push({ cuenta: CUENTAS.INGRESOS_INTERNET, haber: aTexto(internet) })
-    if (otros.gt(0)) movimientos.push({ cuenta: CUENTAS.OTROS_INGRESOS, haber: aTexto(otros) })
-    if (mora.gt(0)) movimientos.push({ cuenta: CUENTAS.RECARGOS_MORA, haber: aTexto(mora) })
+    const movimientos: LineaAsiento[] = []
+    if (total.gt(0)) {
+        movimientos.push({ cuenta: CUENTAS.CXC_CLIENTES, debe: aTexto(total), cliente_id: clienteId })
+    }
+    // descuento de la factura (lealtad, cargo único): la venta queda bruta en ingresos y el descuento en 5.1.01
+    if (descuentos.gt(0)) movimientos.push({ cuenta: CUENTAS.DESCUENTOS, debe: aTexto(descuentos) })
+    // orden estable: internet, recargos, otros ingresos y luego las demás cuentas por código
+    const orden = [CUENTAS.INGRESOS_INTERNET, CUENTAS.OTROS_INGRESOS, CUENTAS.RECARGOS_MORA] as string[]
+    const cuentas = [...ingresos.keys()].sort((a, b) => {
+        const ia = orden.indexOf(a)
+        const ib = orden.indexOf(b)
+        if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+        return a.localeCompare(b)
+    })
+    for (const cuenta of cuentas) {
+        const monto = ingresos.get(cuenta)!
+        if (monto.gt(0)) movimientos.push({ cuenta, haber: aTexto(monto) })
+    }
     if (iva.gt(0)) movimientos.push({ cuenta: cuentaIva(avisoCobro), haber: aTexto(iva) })
     return movimientos
 }
@@ -61,7 +80,8 @@ export function movimientosFactura(
 export interface DatosEmision {
     empresa_id: number
     cliente_id: number
-    servicio_id: number
+    /** null en un cargo único sin servicio */
+    servicio_id: number | null
     periodo: string
     clave_unica: string
     vence_en: string
@@ -72,6 +92,11 @@ export interface DatosEmision {
     descripcion: string
     /** receptor corregido (sustitución) */
     receptor?: ReceptorFiscal | null
+    /**
+     * Cargo único sin costo (total 0, `facturas.cargo_sin_costo`): motivo del catálogo y texto. La
+     * factura nace `pagada`, sin CxC y **sin DTE** cualquiera sea el modo FEL (decisión del líder).
+     */
+    sin_costo?: { motivo_id: number; texto: string } | null
 }
 
 export interface ResultadoEmision {
@@ -84,8 +109,13 @@ export interface ResultadoEmision {
 /** Inserta la factura (idempotente por `clave_unica`) y hace lo que su modo FEL pide. */
 export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Promise<ResultadoEmision> {
     const config = await configuracionFel(datos.empresa_id, t.trx)
-    const modo = modoEmision(config, datos.certificar_al)
     const totales = totalesDe(datos.lineas)
+    // motivo del cargo único en Q0 (solo con total 0)
+    const sinCosto = datos.sin_costo && totales.total.isZero() ? datos.sin_costo : null
+    // H21 (decisión del líder): ninguna factura de Q0 va a DTE, venga de donde venga (mes gratis de
+    // lealtad, descuento del 100 %, cargo sin costo) y sea cual sea el modo FEL: la SAT no certifica
+    // una FACT de Q0.00 (igual que H16). Nace `pagada`, sin CxC, con su asiento bruto / descuento
+    const modo: ModoEmision = totales.total.isZero() ? 'sin_fel' : modoEmision(config, datos.certificar_al)
     const avisoCobro = modo === 'aviso'
     const tipoDte = modo === 'sin_fel' ? null : await tipoFacturaDte(datos.empresa_id, hoyGuatemala(), t.trx)
 
@@ -100,7 +130,9 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
             periodo: datos.periodo,
             clave_unica: datos.clave_unica,
             vence_en: datos.vence_en,
-            estado: modo === 'por_certificar' ? 'por_certificar' : 'emitida',
+            // un descuento del 100 % (mes gratis) deja la factura en cero: nace pagada
+            estado:
+                modo === 'por_certificar' ? 'por_certificar' : totales.total.lte(0) ? 'pagada' : 'emitida',
             subtotal: aTexto(totales.subtotal),
             iva: aTexto(totales.iva),
             total: aTexto(totales.total),
@@ -108,6 +140,9 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
             aviso_cobro: avisoCobro,
             certificar_al: datos.certificar_al,
             tipo_dte: tipoDte,
+            ...(sinCosto
+                ? { motivo_sin_costo_id: sinCosto.motivo_id, motivo_sin_costo_texto: sinCosto.texto }
+                : {}),
         })
         .onConflict('clave_unica')
         .ignore()
@@ -122,10 +157,7 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
         return { factura_id: otra?.id ?? null, creada: false, modo, dte: null }
     }
     t.fijarEntidad('factura', facturaId)
-    await t.trx
-        .insertQuery()
-        .table('billing.facturas_lineas')
-        .multiInsert(datos.lineas.map((linea) => ({ ...linea, factura_id: facturaId })))
+    await insertarLineas(t, facturaId, datos.lineas)
 
     if (modo !== 'por_certificar') {
         await contabilizarFactura(t, {
@@ -179,6 +211,41 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
     return { factura_id: facturaId, creada: true, modo, dte }
 }
 
+/**
+ * Inserta las líneas en orden; cada `descuento` va ligado (`linea_id`) a la línea de su
+ * `linea_indice`, y esa línea guarda la suma de sus descuentos en `descuento`.
+ */
+export async function insertarLineas(
+    t: Transaccion,
+    facturaId: number,
+    lineas: LineaCalculada[],
+): Promise<number[]> {
+    const ids: number[] = []
+    const descontado = new Map<number, Dec>()
+    for (const { linea_indice: indice, ...linea } of lineas) {
+        let lineaId: number | null = null
+        if (linea.tipo === 'descuento') {
+            const objetivo = indice === undefined ? undefined : ids[indice]
+            if (objetivo === undefined) throw new Error('Línea de descuento sin la línea que descuenta antes')
+            lineaId = objetivo
+            descontado.set(objetivo, (descontado.get(objetivo) ?? CERO).minus(linea.total))
+        }
+        const [fila] = (await t.trx
+            .insertQuery()
+            .table('billing.facturas_lineas')
+            .insert({ ...linea, factura_id: facturaId, linea_id: lineaId })
+            .returning('id')) as Array<{ id: number }>
+        ids.push(Number(fila!.id))
+    }
+    for (const [id, monto] of descontado) {
+        await t.trx
+            .from('billing.facturas_lineas')
+            .where('id', id)
+            .update({ descuento: aTexto(monto) })
+    }
+    return ids
+}
+
 export interface FacturaParaContabilizar {
     id: number
     empresa_id: number
@@ -197,7 +264,9 @@ export async function contabilizarFactura(t: Transaccion, f: FacturaParaContabil
     const lineas = (await t.trx
         .from('billing.facturas_lineas')
         .where('factura_id', f.id)
-        .select('tipo', 'total', 'iva')) as Array<Pick<LineaCalculada, 'tipo' | 'total' | 'iva'>>
+        .select('tipo', 'total', 'iva', 'cuenta_codigo')) as Array<
+        Pick<LineaCalculada, 'tipo' | 'total' | 'iva' | 'cuenta_codigo'>
+    >
     await new RegistrarAsiento().execute(
         {
             empresa_id: f.empresa_id,

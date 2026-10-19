@@ -105,16 +105,32 @@ export const EstadoFactura = definirEsquema(
 
 export const FacturaLinea = definirEsquema(
     'FacturaLinea',
-    objeto({
-        id,
-        concepto: texto,
-        tipo: enumerado(['servicio', 'producto', 'mora', 'otro']),
-        cantidad: { type: 'string', description: 'Decimal con hasta 3 decimales' },
-        precio_unitario: Dinero,
-        gravable: booleano,
-        iva: Dinero,
-        total: Dinero,
-    }),
+    objeto(
+        {
+            id,
+            concepto: texto,
+            tipo: enumerado(['servicio', 'producto', 'mora', 'otro', 'descuento']),
+            cantidad: { type: 'string', description: 'Decimal con hasta 3 decimales' },
+            precio_unitario: Dinero,
+            gravable: booleano,
+            iva: {
+                ...Dinero,
+                description: 'En una línea descuento, negativo: el IVA de la factura es el del neto',
+            },
+            total: { ...Dinero, description: 'En una línea descuento, negativo' },
+            linea_id: {
+                ...nulable(id),
+                description: 'Solo en tipo descuento: la línea que descuenta (de la misma factura)',
+            },
+            descuento: { ...Dinero, description: 'Suma de los descuentos de esta línea (0.00 si no tiene)' },
+            cuenta_codigo: {
+                ...nulable(texto),
+                description:
+                    'Cuenta de ingreso de la línea (concepto de un cargo único); null = la de su tipo',
+            },
+        },
+        ['linea_id', 'descuento', 'cuenta_codigo'],
+    ),
 )
 
 export const Factura = definirEsquema(
@@ -172,6 +188,16 @@ export const Factura = definirEsquema(
             vencida_en: { ...nulable(instante), description: 'Cuándo se marcó vencida' },
             anulada_en: { ...nulable(instante), description: 'Cuándo se anuló' },
             motivo_anulacion: nulable(texto),
+            cargo_unico: {
+                ...booleano,
+                description: 'Cargo único manual (POST /facturas/cargo-unico, clave_unica cargo-<uuid>)',
+            },
+            motivo_sin_costo_id: {
+                ...nulable(id),
+                description: 'Cargo en Q0: motivo del catálogo (GET /motivos-sin-costo)',
+            },
+            motivo_sin_costo_nombre: nulable(texto),
+            motivo_sin_costo_texto: { ...nulable(texto), description: 'Explicación del cargo en Q0' },
             origen: {
                 ...nulable(texto),
                 description:
@@ -197,6 +223,10 @@ export const Factura = definirEsquema(
             'vencida_en',
             'anulada_en',
             'motivo_anulacion',
+            'cargo_unico',
+            'motivo_sin_costo_id',
+            'motivo_sin_costo_nombre',
+            'motivo_sin_costo_texto',
             'cliente_nombre',
             'acreditado',
             'origen',
@@ -210,6 +240,32 @@ export const Factura = definirEsquema(
             'tipo_dte',
         ],
     ),
+)
+
+export const ConceptoCargo = definirEsquema(
+    'ConceptoCargo',
+    objeto({
+        id,
+        empresa_id: id,
+        nombre: texto,
+        tipo: { ...enumerado(['producto', 'otro']), description: 'producto = bien, otro = servicio (DTE)' },
+        cuenta_codigo: { ...texto, description: 'Cuenta de ingreso del plan de cuentas' },
+        cuenta_nombre: nulable(texto),
+        gravable: { ...booleano, description: 'Lleva IVA (incluido en el precio)' },
+        activo: { ...booleano, description: 'Uno inactivo no se usa en cargos nuevos' },
+        ...auditable,
+    }),
+)
+
+export const MotivoSinCosto = definirEsquema(
+    'MotivoSinCosto',
+    objeto({
+        id,
+        empresa_id: id,
+        nombre: texto,
+        activo: { ...booleano, description: 'Uno inactivo no se usa en cargos nuevos' },
+        ...auditable,
+    }),
 )
 
 export const NotaCredito = definirEsquema(
