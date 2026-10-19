@@ -34,6 +34,13 @@ export const ORIGENES_ASIENTO = [
     'cierre_caja',
     'ajuste',
     'reclasificacion',
+    // fase 4 (§10.3, §10.9): cobros y bancos, cartera
+    'liquidacion_cobro',
+    'deposito',
+    'traslado',
+    'banco',
+    'provision',
+    'castigo',
     // pasivo del programa de lealtad (`contratos/lealtad.md` §6); origen_id = `lealtad.movimientos.id`
     'lealtad',
 ] as const
