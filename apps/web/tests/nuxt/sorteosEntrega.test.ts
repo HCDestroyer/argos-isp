@@ -1,5 +1,5 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
@@ -7,6 +7,7 @@ import { SORTEO_BORRADOR_ID, SORTEO_EJECUTADO_ID } from '~~/fixtures/sorteos/dat
 import SorteoEntregarModal from '~/components/SorteoEntregarModal.vue'
 import PaginaEgresos from '~/pages/egresos/index.vue'
 import PaginaSorteo from '~/pages/lealtad/sorteos/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Sorteos al día con `a3/sorteos` (b2f90b9): un bien se entrega con la línea de su compra (`compra`) o
@@ -84,17 +85,17 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
         const ganador = await ganadorDe('efectivo')
         await useSorteos().entregar(SORTEO_EJECUTADO_ID, ganador.id, { metodo: 'caja', caja_id: 2 }, nuevaClaveIdempotencia())
         const vista = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="sorteo-fuente-valor"]').text()).toContain('Lotería Santa Lucía')
         expect(vista.findAll('[data-prueba="anular-entrega"]')).toHaveLength(1)
         expect(vista.findAll('[data-prueba="entregar-premio"]')).toHaveLength(2)
         await vista.find('[data-prueba="anular-entrega"]').trigger('click')
-        await vi.waitFor(() => expect(document.querySelector('[data-prueba="anular-entrega-deshace"]')?.textContent).toContain(`anula el egreso #${880000 + ganador.id}`))
+        await esperar(() => expect(document.querySelector('[data-prueba="anular-entrega-deshace"]')?.textContent).toContain(`anula el egreso #${880000 + ganador.id}`))
         vista.unmount()
 
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'sorteos.entregar') }
         const sinPermiso = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(sinPermiso.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
+        await esperar(() => expect(sinPermiso.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
         expect(sinPermiso.find('[data-prueba="anular-entrega"]').exists()).toBe(false)
         sinPermiso.unmount()
     })
@@ -109,9 +110,9 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
             props: { open: false, sorteoId: SORTEO_EJECUTADO_ID, ganador, premio: premioDeGanador(sorteo.data, ganador), nombre: 'Ganador', empresaId: 1, lineasUsadas: [21] },
         })
         await modal.setProps({ open: true })
-        await vi.waitFor(() => expect(document.querySelector('[data-prueba="entrega-compra-linea"]')).not.toBeNull())
+        await esperar(() => expect(document.querySelector('[data-prueba="entrega-compra-linea"]')).not.toBeNull())
         const vm = modal.vm as unknown as { itemsLinea: { value: number }[], itemsCuentaActivo: { value: string }[] }
-        await vi.waitFor(() => expect(vm.itemsLinea.map(i => i.value)).toEqual([22, 11]))
+        await esperar(() => expect(vm.itemsLinea.map(i => i.value)).toEqual([22, 11]))
         expect(vm.itemsCuentaActivo.map(i => i.value)).toEqual(['1.1.14'])
         modal.unmount()
     })
@@ -142,7 +143,7 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
         expect(egresoAnulable({ estado: 'registrado', categoria: 'otros', compra_id: null })).toBe(true)
         expect(motivoNoAnulable({ estado: 'registrado', categoria: 'premios', compra_id: null })).toContain('Anular entrega')
         const vista = await mountSuspended(PaginaEgresos, { route: '/egresos' })
-        await vi.waitFor(() => expect(vista.findAll('[data-prueba="anular-egreso"]').length).toBeGreaterThan(0))
+        await esperar(() => expect(vista.findAll('[data-prueba="anular-egreso"]').length).toBeGreaterThan(0))
         vista.unmount()
     })
 })

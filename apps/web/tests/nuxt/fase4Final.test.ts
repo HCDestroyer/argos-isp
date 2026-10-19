@@ -1,5 +1,5 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
@@ -8,6 +8,7 @@ import { CAJA_SUR_ID, FACTURA_ACREDITADA_ID } from '~~/fixtures/facturacion/dato
 import PaginaCaja from '~/pages/caja/index.vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
 import PaginaPago from '~/pages/pagos/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Fase 4 final de A3: factura `acreditada` (H16, aviso cubierto por notas internas sin cobro),
@@ -52,7 +53,7 @@ describe('fase 4 final · acreditada, depósitos del cajero y proveedor del pago
 
     it('ficha de la acreditada: estado propio, aviso y sin botón Certificar (la API daría 409)', async () => {
         const vista = await mountSuspended(PaginaFactura, { route: `/facturas/${FACTURA_ACREDITADA_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="dte-sin"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="dte-sin"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="factura-estado"]').text()).toBe('Acreditada')
         expect(vista.find('[data-prueba="factura-no-fiscal"]').text()).toContain('no se certifica')
         expect(vista.find('[data-prueba="dte-sin"]').text()).toContain('acreditada por notas de crédito internas')
@@ -79,7 +80,7 @@ describe('fase 4 final · acreditada, depósitos del cajero y proveedor del pago
         await useCajas().depositar(1, { monto: '50.00', boleta: 'B-81', cuenta_id: 16 }, nuevaClaveIdempotencia())
         comoCajero()
         const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="depositos-turno"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="depositos-turno"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="depositos-turno"]').text()).toContain('boleta B-81')
         expect(vista.find('[data-prueba="depositos-turno"]').text()).not.toContain('B-4471')
         expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(false)
@@ -91,7 +92,7 @@ describe('fase 4 final · acreditada, depósitos del cajero y proveedor del pago
         expect(pago?.proveedor_cobro_nombre).toBe('Pasarela en línea')
         comoCajero()
         const vista = await mountSuspended(PaginaPago, { route: `/pagos/${pago?.id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="pago-proveedor"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="pago-proveedor"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="pago-proveedor"]').text()).toContain('Pasarela en línea')
         expect(vista.find('[data-prueba="pago-proveedor"]').text()).not.toContain('Proveedor #')
         vista.unmount()

@@ -13,6 +13,7 @@ import PaginaPerfil from '~/pages/perfil.vue'
 import PaginaServicios from '~/pages/servicios/index.vue'
 import ServicioHorus from '~/components/ServicioHorus.vue'
 import VerEnHorusBoton from '~/components/VerEnHorusBoton.vue'
+import { esperar } from '../ayudas/esperar'
 
 /** Integración con Horus (contrato 1.2.0): configuración, "Ver en Horus", autologin y seguridad. */
 
@@ -97,69 +98,69 @@ describe('horus · pantallas', () => {
 
     it('configuración: apagada por defecto; conectar con enlace de Horus la deja apagada; activarla', async () => {
         const vista = await mountSuspended(conApp(PaginaHorus), { route: '/configuracion/integraciones/horus' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="estado-conector"]').text()).toBe('Apagada'))
+        await esperar(() => expect(vista.find('[data-prueba="estado-conector"]').text()).toBe('Apagada'))
         expect(vista.get('[data-prueba="interruptor-horus"]').attributes('disabled')).toBeDefined()
 
         await vista.get('input[data-prueba="enlace-horus"]').setValue('https://horus.isp.gt/conectar#vencido123')
         await vista.get('form:has([data-prueba="enlace-horus"])').trigger('submit')
-        await vi.waitFor(() => expect(vista.text()).toContain('El enlace de Horus venció o ya se usó'))
+        await esperar(() => expect(vista.text()).toContain('El enlace de Horus venció o ya se usó'))
 
         await vista.get('input[data-prueba="enlace-horus"]').setValue('https://horus.isp.gt/conectar#abc123def456')
         await vista.get('form:has([data-prueba="enlace-horus"])').trigger('submit')
-        await vi.waitFor(() => expect(bd.horus.conector.version).toBe(1))
+        await esperar(() => expect(bd.horus.conector.version).toBe(1))
         expect(bd.horus.conector.activo).toBe(false)
         expect(bd.horus.conector.url_base).toBe('https://horus.isp.gt')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="estado-conector"]').text()).toBe('Apagada'))
+        await esperar(() => expect(vista.find('[data-prueba="estado-conector"]').text()).toBe('Apagada'))
         // El canje también emite el token atk_ de Horus (sin su valor en la lista).
-        await vi.waitFor(() => expect(vista.get('[data-prueba="tabla-tokens-horus"]').text()).toContain('Horus (enlace de conexión)'))
+        await esperar(() => expect(vista.get('[data-prueba="tabla-tokens-horus"]').text()).toContain('Horus (enlace de conexión)'))
 
         await vista.get('[data-prueba="interruptor-horus"]').trigger('click')
-        await vi.waitFor(() => expect(bd.horus.conector.activo).toBe(true))
-        await vi.waitFor(() => expect(vista.find('[data-prueba="estado-conector"]').text()).toBe('Activa'))
+        await esperar(() => expect(bd.horus.conector.activo).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="estado-conector"]').text()).toBe('Activa'))
         expect(useEstadoConectorHorus().value).toBe('activo')
         expect(bd.acciones.some(a => a.accion === 'horus.conectar_enlace')).toBe(true)
     })
 
     it('el enlace de conexión y el token atk_ se muestran una sola vez, con la caducidad visible', async () => {
         const vista = await mountSuspended(conApp(PaginaHorus), { route: '/configuracion/integraciones/horus' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="generar-enlace"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="generar-enlace"]').exists()).toBe(true))
         await vista.get('[data-prueba="generar-enlace"]').trigger('click')
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="valor-Enlace"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="valor-Enlace"]')).not.toBeNull())
         const enlace = document.body.querySelector('[data-prueba="valor-Enlace"]')?.textContent ?? ''
         expect(enlace).toMatch(/\/conectar#\w+/)
         expect(document.body.querySelector('[data-prueba="caducidad"]')?.textContent).toMatch(/Vence en (14:5\d|15:00)/)
         botonEnBody('Ya lo copié, cerrar')?.click()
-        await vi.waitFor(() => expect(cuerpo()).not.toContain(enlace))
+        await esperar(() => expect(cuerpo()).not.toContain(enlace))
 
         await vista.get('[data-prueba="generar-token-horus"]').trigger('click')
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="confirmar-token-horus"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="confirmar-token-horus"]')).not.toBeNull())
         document.body.querySelector<HTMLButtonElement>('[data-prueba="confirmar-token-horus"]')?.click()
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="valor-Token"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="valor-Token"]')).not.toBeNull())
         const token = document.body.querySelector('[data-prueba="valor-Token"]')?.textContent ?? ''
         expect(token).toMatch(/^atk_/)
         botonEnBody('Ya lo copié, cerrar')?.click()
-        await vi.waitFor(() => expect(cuerpo()).not.toContain(token))
+        await esperar(() => expect(cuerpo()).not.toContain(token))
         // La lista nunca trae el valor; revocar con confirmación.
-        await vi.waitFor(() => expect(vista.find('[data-prueba="revocar-token-1"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="revocar-token-1"]').exists()).toBe(true))
         expect(vista.html()).not.toContain(token)
         await vista.get('[data-prueba="revocar-token-1"]').trigger('click')
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="confirmar-accion"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="confirmar-accion"]')).not.toBeNull())
         document.body.querySelector<HTMLButtonElement>('[data-prueba="confirmar-accion"]')?.click()
-        await vi.waitFor(() => expect(bd.horus.tokens[0]?.revocado_en).not.toBeNull())
+        await esperar(() => expect(bd.horus.tokens[0]?.revocado_en).not.toBeNull())
     })
 
     it('sin conector legible: el error con "Reintentar", no un estado inventado', async () => {
         simularFalla('GET /api/v1/integraciones/horus', 500)
         const vista = await mountSuspended(conApp(PaginaHorus), { route: '/configuracion/integraciones/horus' })
-        await vi.waitFor(() => expect(vista.text()).toContain('Reintentar'))
+        await esperar(() => expect(vista.text()).toContain('Reintentar'))
         expect(vista.find('[data-prueba="estado-conector"]').exists()).toBe(false)
     })
 
     it('"Ver en Horus": deshabilitado con explicación si está apagado o falta el permiso', async () => {
         const apagado = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'cliente', idExterno: 1 }))
-        await vi.waitFor(() => expect(apagado.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeDefined())
+        await esperar(() => expect(apagado.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeDefined())
         await apagado.get('[data-prueba="por-que-horus"]').trigger('click')
-        await vi.waitFor(() => expect(cuerpo()).toContain(EXPLICACION_HORUS.apagado))
+        await esperar(() => expect(cuerpo()).toContain(EXPLICACION_HORUS.apagado))
 
         useEstadoConectorHorus().value = null
         bd.horus.conector.activo = true
@@ -167,13 +168,13 @@ describe('horus · pantallas', () => {
         const sinPermiso = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'cliente', idExterno: 1 }))
         expect(sinPermiso.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeDefined()
         await sinPermiso.get('[data-prueba="por-que-horus"]').trigger('click')
-        await vi.waitFor(() => expect(cuerpo()).toContain(EXPLICACION_HORUS.sinPermiso))
+        await esperar(() => expect(cuerpo()).toContain(EXPLICACION_HORUS.sinPermiso))
     })
 
     it('"Ver en Horus" se deshabilita antes del clic con `GET /integraciones/horus/estado` y con Horus en pausa', async () => {
         bd.horus.conector = { ...bd.horus.conector, activo: true, url_base: 'https://horus.isp.gt', token: '***' }
         const activo = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'cliente', idExterno: 1 }))
-        await vi.waitFor(() => expect(useEstadoConectorHorus().value).toBe('activo'))
+        await esperar(() => expect(useEstadoConectorHorus().value).toBe('activo'))
         expect(activo.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeUndefined()
 
         // Sin `horus.ver`: el estado sale igual del endpoint de `horus.abrir`.
@@ -181,9 +182,9 @@ describe('horus · pantallas', () => {
         bd.horus.conector = { ...bd.horus.conector, salud: { ...bd.horus.conector.salud, pausa_hasta: new Date(Date.now() + 5 * 60_000).toISOString() } }
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'horus.ver') }
         const enPausa = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'cliente', idExterno: 1 }))
-        await vi.waitFor(() => expect(enPausa.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeDefined())
+        await esperar(() => expect(enPausa.get('[data-prueba="ver-en-horus-cliente"]').attributes('disabled')).toBeDefined())
         await enPausa.get('[data-prueba="por-que-horus"]').trigger('click')
-        await vi.waitFor(() => expect(cuerpo()).toMatch(/Horus en pausa hasta las \d\d:\d\d/))
+        await esperar(() => expect(cuerpo()).toMatch(/Horus en pausa hasta las \d\d:\d\d/))
     })
 
     it('"Ver en Horus" abre la URL que da la API en otra pestaña (el navegador no pide el ticket)', async () => {
@@ -191,9 +192,9 @@ describe('horus · pantallas', () => {
         const ventana = { opener: {}, location: { replace: vi.fn() }, close: vi.fn() }
         const abrir = vi.spyOn(window, 'open').mockReturnValue(ventana as unknown as Window)
         const vista = await mountSuspended(conApp(VerEnHorusBoton, { tipo: 'servicio', idExterno: 1 }))
-        await vi.waitFor(() => expect(useEstadoConectorHorus().value).toBe('activo'))
+        await esperar(() => expect(useEstadoConectorHorus().value).toBe('activo'))
         await vista.get('[data-prueba="ver-en-horus-servicio"]').trigger('click')
-        await vi.waitFor(() => expect(ventana.location.replace).toHaveBeenCalled())
+        await esperar(() => expect(ventana.location.replace).toHaveBeenCalled())
         expect(abrir).toHaveBeenCalledWith('', '_blank')
         expect(ventana.opener).toBeNull()
         expect(ventana.location.replace.mock.calls[0]?.[0]).toMatch(/^https:\/\/horus\.example\.test\/sso\/entrar#tkt_servicio_1_/)
@@ -202,42 +203,41 @@ describe('horus · pantallas', () => {
     it('ficha del servicio: seguridad, hallazgo y "Dato de hace X"; sin dato, error con "Reintentar"; apagado, nada', async () => {
         bd.horus.conector.activo = true
         const uno = await mountSuspended(conApp(ServicioHorus, { servicioId: 1 }))
-        await vi.waitFor(() => expect(uno.find('[data-prueba="seguridad-horus"]').exists()).toBe(true))
+        await esperar(() => expect(uno.find('[data-prueba="seguridad-horus"]').exists()).toBe(true))
         expect(uno.get('[data-prueba="seguridad-horus"]').attributes('data-estado')).toBe('suspected')
         expect(uno.get('[data-prueba="seguridad-horus"]').text()).toContain('Sospechoso · 1 hallazgo abierto')
         expect(uno.get('[data-prueba="hallazgos-horus"]').text()).toContain('Escaneo saliente')
         expect(uno.find('[data-prueba="seguridad-dato-viejo"]').exists()).toBe(false)
 
         const dos = await mountSuspended(conApp(ServicioHorus, { servicioId: 2 }))
-        await vi.waitFor(() => expect(dos.find('[data-prueba="seguridad-dato-viejo"]').exists()).toBe(true))
+        await esperar(() => expect(dos.find('[data-prueba="seguridad-dato-viejo"]').exists()).toBe(true))
         expect(dos.get('[data-prueba="seguridad-dato-viejo"]').text()).toBe('Dato de hace 12 min')
         expect(dos.get('[data-prueba="horus-stale"]').text()).toContain('Horus respondió 503')
         expect(dos.get('[data-prueba="horus-pausa"]').text()).toMatch(/Horus en pausa hasta las \d\d:\d\d/)
         expect(uno.find('[data-prueba="horus-pausa"]').exists()).toBe(false)
 
         const tres = await mountSuspended(conApp(ServicioHorus, { servicioId: 3 }))
-        await vi.waitFor(() => expect(tres.find('[data-prueba="horus-sin-datos"]').exists()).toBe(true))
+        await esperar(() => expect(tres.find('[data-prueba="horus-sin-datos"]').exists()).toBe(true))
         expect(tres.text()).toContain('Reintentar')
         expect(tres.find('[data-prueba="seguridad-horus"]').exists()).toBe(false)
 
         bd.horus.conector.activo = false
         const apagado = await mountSuspended(conApp(ServicioHorus, { servicioId: 1 }))
-        await vi.waitFor(() => expect(apagado.find('[data-prueba="bloque-horus"]').exists()).toBe(false))
+        await esperar(() => expect(apagado.find('[data-prueba="bloque-horus"]').exists()).toBe(false))
     })
 
     it('lista de servicios: insignia de seguridad por fila solo con Horus activo', async () => {
         // La insignia sale de una cadena de peticiones: la lista (con routers, planes y zonas en
         // paralelo) y después `POST /seguridad` con los ids de la página. Con la máquina cargada
         // (suite completa, integración) eso pasa del segundo por defecto de `vi.waitFor`: se espera
-        // a que la lista pinte sus filas y luego a la insignia, con el margen de la prueba.
-        const margen = { timeout: 10_000 }
+        // a que la lista pinte sus filas y luego a la insignia (`esperar`, con el plazo holgado).
         // La lista va por id descendente: la primera fila es el servicio más nuevo.
         const masNuevo = [...bd.servicios].sort((a, b) => b.id - a.id)[0]?.user_ppp ?? ''
         const primero = bd.servicios.find(s => s.id === 1)?.user_ppp ?? ''
         expect([masNuevo, primero]).not.toContain('')
         const apagada = await mountSuspended(conApp(PaginaServicios), { route: '/servicios' })
         // Antes se comprobaba la ausencia con solo el encabezado pintado (sin filas): pasaba siempre.
-        await vi.waitFor(() => expect(apagada.text()).toContain(masNuevo), margen)
+        await esperar(() => expect(apagada.text()).toContain(masNuevo))
         await flushPromises()
         expect(apagada.find('[data-prueba="seguridad-horus"]').exists()).toBe(false)
         apagada.unmount()
@@ -245,8 +245,8 @@ describe('horus · pantallas', () => {
         bd.horus.conector.activo = true
         bd.servicios = bd.servicios.filter(s => s.id <= 3)
         const vista = await mountSuspended(conApp(PaginaServicios), { route: '/servicios' })
-        await vi.waitFor(() => expect(vista.text()).toContain(primero), margen)
-        await vi.waitFor(() => expect(vista.find('[data-estado="suspected"]').exists()).toBe(true), margen)
+        await esperar(() => expect(vista.text()).toContain(primero))
+        await esperar(() => expect(vista.find('[data-estado="suspected"]').exists()).toBe(true))
         expect(vista.find('[data-estado="clean"]').text()).toContain('Dato de hace 12 min')
         // El servicio 3 no tiene identidad en Horus: sin insignia (nunca un "Limpio" inventado).
         expect(vista.findAll('[data-prueba="seguridad-horus"]')).toHaveLength(2)
@@ -257,10 +257,10 @@ describe('horus · pantallas', () => {
         useUsuarioActual().value = null
         const navegar = vi.spyOn(useRouter(), 'replace')
         await mountSuspended(PaginaSso, { route: `/sso/entrar#${TICKET_VINCULADO}` })
-        await vi.waitFor(() => expect(useUsuarioActual().value?.email).toBe('admin@argos.test'))
+        await esperar(() => expect(useUsuarioActual().value?.email).toBe('admin@argos.test'))
         expect(window.location.hash).toBe('')
         expect(useCsrf().value).toMatch(/^csrf-/)
-        await vi.waitFor(() => expect(navegar.mock.calls.some(([destino]) => JSON.stringify(destino).includes('/servicios/1'))).toBe(true))
+        await esperar(() => expect(navegar.mock.calls.some(([destino]) => JSON.stringify(destino).includes('/servicios/1'))).toBe(true))
         // La navegación es real: se espera a que termine (carga en diferido de la ficha del servicio)
         // para que no siga viva cuando se desmonta el entorno de la prueba.
         await Promise.allSettled(navegar.mock.results.map(r => r.value))
@@ -272,24 +272,24 @@ describe('horus · pantallas', () => {
         useUsuarioActual().value = null
         const navegar = vi.spyOn(useRouter(), 'replace')
         const vista = await mountSuspended(PaginaSso, { route: `/sso/entrar#${TICKET_SIN_VINCULAR}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="sso-vincular"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="sso-vincular"]').exists()).toBe(true))
         expect(vista.text()).toContain('Luis Pérez (Horus)')
         expect(useUsuarioActual().value).toBeNull()
         await vista.get('input[type="email"]').setValue('admin@argos.test')
         await vista.get('input[type="password"]').setValue('cualquiera')
         await vista.get('form').trigger('submit')
-        await vi.waitFor(() => expect(useUsuarioActual().value?.email).toBe('admin@argos.test'))
+        await esperar(() => expect(useUsuarioActual().value?.email).toBe('admin@argos.test'))
         expect(bd.horus.vinculaciones.some(v => v.id_externo === 'u-42' && v.usuario_id === 1)).toBe(true)
         // Tras vincular, la página navega al destino del ticket (la ficha, con carga en diferido): se espera
         // a que termine para que no siga viva cuando se desmonta el entorno de la prueba.
-        await vi.waitFor(() => expect(navegar).toHaveBeenCalled())
+        await esperar(() => expect(navegar).toHaveBeenCalled())
         await Promise.allSettled(navegar.mock.results.map(r => r.value))
         await flushPromises()
 
         await useRouter().replace(`/sso/entrar#${TICKET_SIN_VINCULAR}`)
         window.history.replaceState(null, '', `/sso/entrar#${TICKET_SIN_VINCULAR}`)
         const otra = await mountSuspended(PaginaSso, { route: `/sso/entrar#${TICKET_SIN_VINCULAR}` })
-        await vi.waitFor(() => expect(otra.find('[data-prueba="sso-error"]').exists()).toBe(true))
+        await esperar(() => expect(otra.find('[data-prueba="sso-error"]').exists()).toBe(true))
         expect(otra.get('[data-prueba="sso-error"]').text()).toContain('El enlace venció')
         await Promise.allSettled(navegar.mock.results.map(r => r.value))
         await flushPromises()
@@ -297,11 +297,11 @@ describe('horus · pantallas', () => {
 
     it('Mi cuenta: lista y quita mis vinculaciones', async () => {
         const vista = await mountSuspended(conApp(PaginaPerfil), { route: '/perfil' })
-        await vi.waitFor(() => expect(vista.get('[data-prueba="tabla-vinculaciones"]').text()).toContain('Ana López (Horus)'))
+        await esperar(() => expect(vista.get('[data-prueba="tabla-vinculaciones"]').text()).toContain('Ana López (Horus)'))
         await vista.get('[data-prueba="quitar-vinculacion-1"]').trigger('click')
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="confirmar-accion"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="confirmar-accion"]')).not.toBeNull())
         document.body.querySelector<HTMLButtonElement>('[data-prueba="confirmar-accion"]')?.click()
-        await vi.waitFor(() => expect(bd.horus.vinculaciones[0]?.revocada_en).not.toBeNull())
-        await vi.waitFor(() => expect(vista.get('[data-prueba="tabla-vinculaciones"]').text()).toContain('Sin cuentas vinculadas'))
+        await esperar(() => expect(bd.horus.vinculaciones[0]?.revocada_en).not.toBeNull())
+        await esperar(() => expect(vista.get('[data-prueba="tabla-vinculaciones"]').text()).toContain('Sin cuentas vinculadas'))
     })
 })

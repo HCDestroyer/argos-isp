@@ -1,12 +1,13 @@
 import { createHash, createHmac } from 'node:crypto'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { SORTEO_ABIERTO_ID, SORTEO_BORRADOR_ID, SORTEO_CORTE_ID, SORTEO_EJECUTADO_ID, SORTEO_PUBLICADO_ID } from '~~/fixtures/sorteos/datos'
 import PaginaSorteo from '~/pages/lealtad/sorteos/[id].vue'
 import PaginaSorteos from '~/pages/lealtad/sorteos/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Sorteos (A3, `contratos/lealtad.md` §7, §8 y §15.3): estados y acciones por paso, checklist legal
@@ -208,7 +209,7 @@ describe('sorteos · pasos contra los fixtures', () => {
 
     it('ficha en corte cerrado: el aviso del checklist y el 422 del timbre legible en el modal de ejecutar', async () => {
         const vista = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_CORTE_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="sorteo-estado"]').text()).toBe('Corte cerrado'))
+        await esperar(() => expect(vista.find('[data-prueba="sorteo-estado"]').text()).toBe('Corte cerrado'))
         expect(vista.find('[data-prueba="sorteo-faltantes"]').text()).toContain('Timbre fiscal')
         expect(vista.find('[data-requisito="timbre_fiscal"] [data-prueba="requisito-estado"]').text()).toBe('Pendiente')
         expect(vista.find('[data-prueba="ejecutar-sorteo"]').exists()).toBe(true)
@@ -219,31 +220,31 @@ describe('sorteos · pasos contra los fixtures', () => {
 
     it('ficha ejecutada: titulares, suplentes, entregar y «Comprobar resultado» que reproduce el sorteo', async () => {
         const vista = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
         expect(vista.findAll('[data-ganador]')).toHaveLength(3)
         expect(vista.findAll('[data-suplente]')).toHaveLength(2)
         expect(vista.findAll('[data-prueba="entregar-premio"]')).toHaveLength(3)
         expect(vista.find('[data-prueba="enlace-verificacion"]').attributes('href')).toMatch(/\/api\/v1\/lealtad\/sorteos\/5\/verificacion$/)
         await vista.find('[data-prueba="comprobar-sorteo"]').trigger('click')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="resultado-comprobacion"]').text()).toContain('El resultado se reproduce'))
+        await esperar(() => expect(vista.find('[data-prueba="resultado-comprobacion"]').text()).toContain('El resultado se reproduce'))
         vista.unmount()
     })
 
     it('sin sorteos.entregar ni sorteos.ejecutar no hay botones de esos pasos', async () => {
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'sorteos.entregar' && p !== 'sorteos.ejecutar') }
         const ejecutada = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(ejecutada.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
+        await esperar(() => expect(ejecutada.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
         expect(ejecutada.find('[data-prueba="entregar-premio"]').exists()).toBe(false)
         ejecutada.unmount()
         const cerrado = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_CORTE_ID}` })
-        await vi.waitFor(() => expect(cerrado.find('[data-prueba="sorteo-estado"]').exists()).toBe(true))
+        await esperar(() => expect(cerrado.find('[data-prueba="sorteo-estado"]').exists()).toBe(true))
         expect(cerrado.find('[data-prueba="ejecutar-sorteo"]').exists()).toBe(false)
         cerrado.unmount()
     })
 
     it('la lista muestra estado y premios; «Nuevo sorteo» solo con sorteos.gestionar', async () => {
         const vista = await mountSuspended(PaginaSorteos, { route: '/lealtad/sorteos' })
-        await vi.waitFor(() => expect(vista.findAll('[data-prueba="tabla-sorteos"] tbody tr').length).toBe(7))
+        await esperar(() => expect(vista.findAll('[data-prueba="tabla-sorteos"] tbody tr').length).toBe(7))
         await flushPromises()
         expect(vista.find('[data-estado="ejecutado"]').text()).toBe('Ejecutado')
         expect(vista.text()).toContain('3 premios · Q 3,750.00')

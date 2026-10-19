@@ -1,9 +1,10 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaServicio from '~/pages/servicios/[id].vue'
 import PaginaServicios from '~/pages/servicios/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 const MAC = '4C:5E:0C:AA:BB:CC'
 
@@ -91,7 +92,7 @@ describe('semana 2 · servicios WISP', () => {
     it('la ficha de un servicio WISP muestra el tipo y oculta credenciales y sesión', async () => {
         const servicio = await crearWisp('ip_estatica')
         const vista = await mountSuspended(PaginaServicio, { route: `/servicios/${servicio.id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tipo-conexion"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="tipo-conexion"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="tipo-conexion"]').text()).toBe('IP estática')
         expect(vista.text()).not.toContain('Credenciales PPPoE')
         expect(vista.text()).not.toContain('Sesión activa')
@@ -100,7 +101,7 @@ describe('semana 2 · servicios WISP', () => {
         expect(vista.find('[data-prueba="editar-servicio"]').exists()).toBe(true)
 
         const pppoe = await mountSuspended(PaginaServicio, { route: '/servicios/1' })
-        await vi.waitFor(() => expect(pppoe.text()).toContain('Credenciales PPPoE'))
+        await esperar(() => expect(pppoe.text()).toContain('Credenciales PPPoE'))
         expect(pppoe.find('[data-prueba="tipo-conexion"]').text()).toBe('PPPoE')
     })
 
@@ -109,7 +110,7 @@ describe('semana 2 · servicios WISP', () => {
         const filtrados = await useServicios().listar({ tipo_conexion: 'ip_estatica' })
         expect(filtrados.ok && filtrados.data.data.map(s => s.id)).toEqual([servicio.id])
         const vista = await mountSuspended(PaginaServicios, { route: '/servicios?tipo=ip_estatica' })
-        await vi.waitFor(() => expect(vista.text()).toContain(servicio.ipv4 ?? ''))
+        await esperar(() => expect(vista.text()).toContain(servicio.ipv4 ?? ''))
         expect(vista.text()).toContain('IP estática')
     })
 })

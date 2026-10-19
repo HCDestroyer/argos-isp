@@ -1,11 +1,12 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import Decimal from 'decimal.js'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { cierresCaja, cobranzaDiaria, egresos } from '~~/fixtures/reportes/reportes'
 import PaginaReporte from '~/pages/reportes/[reporte].vue'
 import PaginaReportes from '~/pages/reportes/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('semana 2 · reportes', () => {
     beforeEach(() => {
@@ -105,8 +106,8 @@ describe('semana 2 · reportes', () => {
 
     it('la pantalla muestra la tabla con la fila de totales', async () => {
         const vista = await mountSuspended(PaginaReporte, { route: '/reportes/facturado-vs-cobrado' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-reporte"]').exists()).toBe(true))
-        await vi.waitFor(() => expect(vista.find('[data-prueba="total-facturado"]').text()).toBe('Q 288,450.00'))
+        await esperar(() => expect(vista.find('[data-prueba="tabla-reporte"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="total-facturado"]').text()).toBe('Q 288,450.00'))
         expect(vista.find('[data-prueba="total-cobrado"]').text()).toBe('Q 243,065.50')
         expect(vista.find('[data-prueba="total-cobranza_pct"]').text()).toBe('84.27 %')
         expect(vista.text()).toContain('octubre 2026')
@@ -116,7 +117,7 @@ describe('semana 2 · reportes', () => {
     it('con error muestra el aviso y no la tabla ni totales', async () => {
         simularFalla('GET /api/v1/reportes/iva', 500)
         const vista = await mountSuspended(PaginaReporte, { route: '/reportes/iva' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="reporte-error"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="reporte-error"]').exists()).toBe(true))
         expect(vista.text()).toContain('Reintentar')
         expect(vista.find('[data-prueba="tabla-reporte"]').exists()).toBe(false)
         expect(vista.text()).not.toContain('Q ')

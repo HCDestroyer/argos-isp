@@ -1,17 +1,17 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { SORTEO_CORTE_ID, SORTEO_EJECUTADO_ID } from '~~/fixtures/sorteos/datos'
 import PaginaSorteo from '~/pages/lealtad/sorteos/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Sorteos, resto de la segunda PR de A3 (`a3/sorteos-2`): evidencias del checklist como archivo,
  * cerrar el acta (PDF con su SHA-256), notificar a los ganadores, dar un premio por no reclamado (pasa
- * al siguiente suplente) y exportar los participantes (CSV y XLSX). Plazo de espera explícito: las
- * pantallas encadenan varias peticiones a los fixtures.
+ * al siguiente suplente) y exportar los participantes (CSV y XLSX). Las pantallas encadenan varias
+ * peticiones a los fixtures: se espera con `esperar` (plazo holgado).
  */
-const ESPERA = { timeout: 10_000, interval: 50 }
 const PDF = new TextEncoder().encode('%PDF-1.4\n% Resolución 412-2026\n%%EOF\n')
 
 function pdf(nombre = 'resolucion.pdf'): File {
@@ -71,7 +71,7 @@ describe('sorteos · evidencias, acta, notificación, no reclamado y exportació
         expect(bajado.ok && bajado.data.size).toBe(PDF.length)
 
         const vista = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_CORTE_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-requisito="timbre_fiscal"] [data-prueba="archivo-sorteo"]').text()).toBe('recibo-timbre.pdf'), ESPERA)
+        await esperar(() => expect(vista.find('[data-requisito="timbre_fiscal"] [data-prueba="archivo-sorteo"]').text()).toBe('recibo-timbre.pdf'))
         vista.unmount()
     })
 
@@ -95,7 +95,7 @@ describe('sorteos · evidencias, acta, notificación, no reclamado y exportació
         expect(!otraVez.ok && codigoProblema(otraVez.problema)).toBe('estado_sorteo')
 
         const vista = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="acta-hash"]').text()).toContain(cerrada.data.acta_hash ?? '-'), ESPERA)
+        await esperar(() => expect(vista.find('[data-prueba="acta-hash"]').text()).toContain(cerrada.data.acta_hash ?? '-'))
         expect(vista.find('[data-prueba="sorteo-estado"]').text()).toBe('Acta cerrada')
         expect(vista.find('[data-prueba="descargar-acta"]').exists()).toBe(true)
         expect(vista.find('[data-prueba="cerrar-acta"]').exists()).toBe(false)
@@ -143,7 +143,7 @@ describe('sorteos · evidencias, acta, notificación, no reclamado y exportació
         expect(entrega?.ok && entrega.data.ganadores.find(g => g.id === suplente?.id)?.contrapartida).toBe('canje')
 
         const vista = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-suplente="4"] [data-prueba="ganador-sustituye"]').text()).toContain('3.º puesto'), ESPERA)
+        await esperar(() => expect(vista.find('[data-suplente="4"] [data-prueba="ganador-sustituye"]').text()).toContain('3.º puesto'))
         expect(vista.find('[data-ganador="3"] [data-prueba="ganador-no-reclamado"]').text()).toContain('suplente 4.º')
         vista.unmount()
     })
@@ -169,7 +169,7 @@ describe('sorteos · evidencias, acta, notificación, no reclamado y exportació
 
     it('ficha ejecutada: notificar, no reclamado solo con el plazo vencido, cerrar acta y exportar, según el permiso', async () => {
         const vista = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="notificar-ganadores"]').text()).toBe('Notificar ganadores (2)'), ESPERA)
+        await esperar(() => expect(vista.find('[data-prueba="notificar-ganadores"]').text()).toBe('Notificar ganadores (2)'))
         expect(vista.findAll('[data-prueba="no-reclamado"]')).toHaveLength(1)
         expect(vista.find('[data-ganador="3"] [data-prueba="no-reclamado"]').exists()).toBe(true)
         expect(vista.find('[data-ganador="3"] [data-prueba="ganador-plazo"]').text()).toContain('el plazo venció')
@@ -179,7 +179,7 @@ describe('sorteos · evidencias, acta, notificación, no reclamado y exportació
 
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => !['sorteos.entregar', 'sorteos.ejecutar', 'sorteos.exportar'].includes(p)) }
         const lectura = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(lectura.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true), ESPERA)
+        await esperar(() => expect(lectura.find('[data-prueba="sorteo-resultado"]').exists()).toBe(true))
         for (const boton of ['notificar-ganadores', 'no-reclamado', 'cerrar-acta', 'exportar-participantes-csv', 'exportar-participantes-xlsx']) {
             expect(lectura.find(`[data-prueba="${boton}"]`).exists(), boton).toBe(false)
         }
@@ -187,7 +187,7 @@ describe('sorteos · evidencias, acta, notificación, no reclamado y exportació
 
         useUsuarioActual().value = meAdmin
         const corte = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_CORTE_ID}` })
-        await vi.waitFor(() => expect(corte.find('[data-prueba="exportar-participantes-xlsx"]').exists()).toBe(true), ESPERA)
+        await esperar(() => expect(corte.find('[data-prueba="exportar-participantes-xlsx"]').exists()).toBe(true))
         corte.unmount()
     })
 })

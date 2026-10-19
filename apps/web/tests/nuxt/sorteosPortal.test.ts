@@ -1,10 +1,11 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { SORTEO_ABIERTO_ID, SORTEO_BORRADOR_ID, SORTEO_EJECUTADO_ID } from '~~/fixtures/sorteos/datos'
 import { bytesBase64, IMAGENES_SEMILLA } from '~~/fixtures/sorteos/imagenes'
 import PaginaSorteo from '~/pages/lealtad/sorteos/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Sorteos, segunda PR de A3 (`a3/sorteos-2`), lo que toca al panel ahora: el interruptor
@@ -88,29 +89,29 @@ describe('sorteos · aviso en el portal e imagen de los premios', () => {
 
     it('ficha: el interruptor cambia el aviso; ejecutado o sin permiso solo se informa; «Subir imagen» solo en borrador', async () => {
         const abierto = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_ABIERTO_ID}` })
-        await vi.waitFor(() => expect(abierto.find('[data-prueba="interruptor-aviso-portal"]').exists()).toBe(true))
+        await esperar(() => expect(abierto.find('[data-prueba="interruptor-aviso-portal"]').exists()).toBe(true))
         const interruptor = abierto.find('[role="switch"]')
         expect(interruptor.attributes('aria-checked')).toBe('true')
         await interruptor.trigger('click')
-        await vi.waitFor(() => expect(abierto.find('[role="switch"]').attributes('aria-checked')).toBe('false'))
+        await esperar(() => expect(abierto.find('[role="switch"]').attributes('aria-checked')).toBe('false'))
         expect(abierto.find('[data-prueba="subir-imagen-premio"]').exists()).toBe(false)
         abierto.unmount()
 
         const ejecutado = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_EJECUTADO_ID}` })
-        await vi.waitFor(() => expect(ejecutado.find('[data-prueba="aviso-portal-estado"]').text()).toContain('Ya no se puede cambiar'))
+        await esperar(() => expect(ejecutado.find('[data-prueba="aviso-portal-estado"]').text()).toContain('Ya no se puede cambiar'))
         expect(ejecutado.find('[role="switch"]').exists()).toBe(false)
         // Las imágenes sembradas llegan por la API con la sesión, como URL de objeto.
-        await vi.waitFor(() => expect(ejecutado.findAll('[data-prueba="premio-imagen"]').length).toBe(3))
+        await esperar(() => expect(ejecutado.findAll('[data-prueba="premio-imagen"]').length).toBe(3))
         expect(ejecutado.find('[data-prueba="premio-imagen"]').attributes('src')).toMatch(/^blob:/)
         ejecutado.unmount()
 
         const borrador = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_BORRADOR_ID}` })
-        await vi.waitFor(() => expect(borrador.findAll('[data-prueba="subir-imagen-premio"]').map(b => b.text())).toEqual(['Subir imagen', 'Cambiar imagen']))
+        await esperar(() => expect(borrador.findAll('[data-prueba="subir-imagen-premio"]').map(b => b.text())).toEqual(['Subir imagen', 'Cambiar imagen']))
         borrador.unmount()
 
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'sorteos.gestionar') }
         const sinPermiso = await mountSuspended(PaginaSorteo, { route: `/lealtad/sorteos/${SORTEO_BORRADOR_ID}` })
-        await vi.waitFor(() => expect(sinPermiso.find('[data-prueba="aviso-portal-estado"]').text()).toContain('No se anuncia'))
+        await esperar(() => expect(sinPermiso.find('[data-prueba="aviso-portal-estado"]').text()).toContain('No se anuncia'))
         expect(sinPermiso.find('[data-prueba="subir-imagen-premio"]').exists()).toBe(false)
         expect(sinPermiso.find('[role="switch"]').exists()).toBe(false)
         sinPermiso.unmount()
