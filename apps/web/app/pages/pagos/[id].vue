@@ -23,6 +23,75 @@ const cargandoAsientos = ref(false)
 const problemaAsientos = ref<Problem | null>(null)
 
 const anularAbierto = ref(false)
+
+/*
+ * Fase 4: proveedor de cobro (pasarela, agente o débito con fecha de corte) y su liquidación. El
+ * nombre viene en el pago; la cuenta puente sale de `GET /cobros/proveedores` (`bancos.ver`).
+ */
+const proveedores = shallowRef<ProveedorCobro[]>([])
+const proveedor = computed(() => (pago.value?.proveedor_cobro_id ? proveedores.value.find(p => p.id === pago.value?.proveedor_cobro_id) ?? null : null))
+/** `Pago.proveedor_cobro_nombre` (lo ve cualquiera con `pagos.ver`); la cuenta puente, con `bancos.ver`. */
+const nombreProveedor = computed(() => {
+    const actual = pago.value
+    if (!actual?.proveedor_cobro_id) {
+        return ''
+    }
+    const nombre = actual.proveedor_cobro_nombre ?? proveedor.value?.nombre ?? `Proveedor #${actual.proveedor_cobro_id}`
+    return proveedor.value ? `${nombre} · ${proveedor.value.cuenta_codigo}` : nombre
+})
+
+/*
+ * Cerrar diferencia (`pagos.cerrar_diferencia`): el saldo pequeño que el pago dejó en sus facturas.
+ * Con `facturas.ver` se lee cuánto quedó; sin él, el botón se ofrece y la API decide.
+ */
+const saldosFacturas = ref<Record<number, Decimal> | null>(null)
+const pendienteFacturas = computed(() => (saldosFacturas.value ? Object.values(saldosFacturas.value).reduce((suma, saldo) => suma.plus(saldo), new Decimal(0)) : null))
+const diferenciaAbierta = ref(false)
+const diferenciaCerrada = shallowRef<DiferenciaCerrada | null>(null)
+const puedeCerrarDiferencia = computed(() => puede('pagos.cerrar_diferencia') && pago.value !== null && pago.value.estado === 'registrado'
+    && pago.value.aplicaciones.length > 0 && (pendienteFacturas.value === null || pendienteFacturas.value.gt(0)))
+
+async function cargarProveedores(actual: Pago) {
+    if (!actual.proveedor_cobro_id || !puede('bancos.ver')) {
+        return
+    }
+    const resultado = await useProveedoresCobro().listar()
+    proveedores.value = resultado.ok ? resultado.data : []
+}
+
+async function cargarSaldos(actual: Pago) {
+    saldosFacturas.value = null
+    if (!puede('facturas.ver') || actual.estado !== 'registrado' || !actual.aplicaciones.length) {
+        return
+    }
+    const ids = [...new Set(actual.aplicaciones.map(a => a.factura_id))]
+    const leidas = await Promise.all(ids.map(id => useFacturas().ver(id)))
+    if (leidas.some(r => !r.ok)) {
+        return
+    }
+    const saldos: Record<number, Decimal> = {}
+    leidas.forEach((r) => {
+        if (r.ok && ['emitida', 'parcial', 'vencida'].includes(r.data.estado)) {
+            saldos[r.data.id] = saldoFactura(r.data)
+        }
+    })
+    saldosFacturas.value = saldos
+}
+
+function cerrarDiferencia(motivo: string, clave: string) {
+    return usePagos().cerrarDiferencia(pagoId.value, motivo, clave)
+}
+
+function alCerrarDiferencia(resultado: DiferenciaCerrada) {
+    diferenciaCerrada.value = resultado
+    toast.add({
+        title: 'Diferencia cerrada',
+        description: `${formatearQuetzales(resultado.monto)} con ${resultado.notas.length} ${resultado.notas.length === 1 ? 'nota de crédito' : 'notas de crédito'} (tope ${formatearQuetzales(resultado.tope)})`,
+        icon: 'i-lucide-circle-check',
+        color: 'success',
+    })
+    void cargar()
+}
 /** Cómo quedaron los servicios tras anular (si la API lo devuelve). */
 const evaluados = shallowRef<ServicioEvaluado[]>([])
 
@@ -74,6 +143,8 @@ async function cargar() {
     pago.value = resultado.data
     void nombres.cargar([resultado.data.cliente_id])
     void cargarAsientos(resultado.data)
+    void cargarProveedores(resultado.data)
+    void cargarSaldos(resultado.data)
 }
 
 function anular(motivo: string, clave: string) {
@@ -167,21 +238,57 @@ onMounted(cargar)
                         {{ formatearFechaHora(pago.created_at) }} ·
                         <ULink
                             :to="enlace(`/clientes/${pago.cliente_id}?tab=cuenta`)"
-                            class="text-default hover:text-primary"
+                            class="text-default underline hover:text-primary"
                         >
                             {{ nombres.nombre(pago.cliente_id) }}
                         </ULink>
                     </p>
                 </div>
-                <UButton
-                    v-if="puedeAnular"
-                    label="Anular pago"
-                    icon="i-lucide-ban"
-                    color="error"
-                    variant="outline"
-                    @click="anularAbierto = true"
-                />
+                <div class="flex flex-wrap gap-2">
+                    <UButton
+                        v-if="puedeCerrarDiferencia"
+                        label="Cerrar diferencia"
+                        icon="i-lucide-scissors"
+                        color="neutral"
+                        variant="outline"
+                        data-prueba="abrir-cerrar-diferencia"
+                        @click="diferenciaAbierta = true"
+                    />
+                    <UButton
+                        v-if="puedeAnular"
+                        label="Anular pago"
+                        icon="i-lucide-ban"
+                        color="error"
+                        variant="outline"
+                        @click="anularAbierto = true"
+                    />
+                </div>
             </div>
+
+            <UAlert
+                v-if="diferenciaCerrada"
+                color="success"
+                variant="subtle"
+                icon="i-lucide-scissors"
+                :title="`Diferencia de ${formatearQuetzales(diferenciaCerrada.monto)} cerrada`"
+                data-prueba="resultado-diferencia"
+            >
+                <template #description>
+                    <ul class="flex flex-col gap-0.5">
+                        <li
+                            v-for="nota in diferenciaCerrada.notas"
+                            :key="nota.nota_credito_id"
+                        >
+                            Factura #{{ nota.factura_id }}:
+                            <ULink
+                                :to="enlace(`/notas-credito/${nota.nota_credito_id}`)"
+                                class="underline"
+                            >{{ nota.ncre ? 'NCRE' : 'nota de crédito interna' }} #{{ nota.nota_credito_id }}</ULink>
+                            por {{ formatearQuetzales(nota.monto) }}
+                        </li>
+                    </ul>
+                </template>
+            </UAlert>
 
             <UAlert
                 v-if="pago.estado === 'anulado'"
@@ -245,6 +352,45 @@ onMounted(cargar)
                         v-if="pago.pasarela"
                         etiqueta="Pasarela"
                         :valor="pago.pasarela"
+                    />
+                    <DatoFicha
+                        v-if="pago.proveedor_cobro_id"
+                        etiqueta="Proveedor de cobro"
+                        data-prueba="pago-proveedor"
+                    >
+                        <ULink
+                            :to="enlace('/configuracion/proveedores-cobro')"
+                            class="hover:text-primary"
+                        >
+                            {{ nombreProveedor }}
+                        </ULink>
+                    </DatoFicha>
+                    <DatoFicha
+                        v-if="pago.proveedor_cobro_id"
+                        etiqueta="Liquidación"
+                        data-prueba="pago-liquidacion"
+                    >
+                        <ULink
+                            v-if="pago.liquidacion_id"
+                            :to="enlace(`/cobros/liquidaciones/${pago.liquidacion_id}`)"
+                            class="hover:text-primary"
+                        >
+                            Liquidación #{{ pago.liquidacion_id }}
+                        </ULink>
+                        <UBadge
+                            v-else
+                            label="Por liquidar"
+                            icon="i-lucide-hourglass"
+                            color="warning"
+                            variant="subtle"
+                            size="sm"
+                        />
+                    </DatoFicha>
+                    <DatoFicha
+                        v-if="pendienteFacturas && pendienteFacturas.gt(0)"
+                        etiqueta="Saldo pendiente en sus facturas"
+                        :valor="formatearQuetzales(pendienteFacturas)"
+                        data-prueba="pago-saldo-facturas"
                     />
                     <DatoFicha
                         etiqueta="Registrado por"
@@ -334,6 +480,18 @@ onMounted(cargar)
                 </div>
             </section>
 
+            <AccionMotivoModal
+                v-model:open="diferenciaAbierta"
+                titulo="Cerrar diferencia"
+                :descripcion="`Pago #${pago.id} · ${pendienteFacturas ? `saldo ${formatearQuetzales(pendienteFacturas)} en sus facturas` : nombres.nombre(pago.cliente_id)}`"
+                efecto="Cierra con una nota de crédito por factura el saldo pequeño que dejó este pago, hasta el tope de la empresa (NCRE si la factura tiene DTE). Si el saldo supera el tope, la API no lo cierra."
+                confirmar="Cerrar diferencia"
+                icono="i-lucide-scissors"
+                color="warning"
+                placeholder="Ej.: el cliente pagó Q 0.33 de menos por redondeo"
+                :ejecutar="cerrarDiferencia"
+                @hecho="alCerrarDiferencia"
+            />
             <AccionMotivoModal
                 v-model:open="anularAbierto"
                 titulo="Anular pago"

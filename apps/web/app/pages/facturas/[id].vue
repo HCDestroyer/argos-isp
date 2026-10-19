@@ -85,10 +85,26 @@ const anulacionPendiente = computed(() => factura.value?.fel_estado === 'anulaci
 const puedeAnular = computed(() => puede('facturas.anular') && factura.value !== null && factura.value.estado !== 'anulada'
     && !anulacionPendiente.value && (!conDteCertificado.value || puede('fel.anular')))
 
-/** Sustituir (`facturas.sustituir`): una factura de servicio vigente. La API decide el resto (409). */
+const tipoVisual = computed(() => tipoFacturaVisual(factura.value?.tipo))
+
+/** Aviso de lo que no es una factura normal: cargo interno (H18) o acreditada por notas (H16). */
+const avisoNoFiscal = computed<string | null>(() => {
+    if (!factura.value) {
+        return null
+    }
+    if (factura.value.tipo === 'cargo') {
+        return TIPOS_FACTURA.cargo.descripcion
+    }
+    if (factura.value.estado === 'acreditada') {
+        return 'Cubierta entera por notas de crédito internas, sin ningún cobro: no es una venta y no se certifica en FEL.'
+    }
+    return null
+})
+
+/** Sustituir (`facturas.sustituir`): solo una factura de servicio vigente (ni mora ni cargo). La API decide el resto (409). */
 const sustituirAbierto = ref(false)
 const puedeSustituir = computed(() => puede('facturas.sustituir') && factura.value !== null && factura.value.estado !== 'anulada'
-    && factura.value.tipo !== 'mora' && !factura.value.sustituida_por)
+    && (factura.value.tipo ?? 'servicio') === 'servicio' && !factura.value.sustituida_por)
 
 function alSustituir(sustitucion: SustitucionFactura) {
     toast.add({
@@ -287,11 +303,12 @@ onMounted(cargar)
                             variant="outline"
                         />
                         <UBadge
-                            v-if="factura.tipo === 'mora'"
-                            label="Recargo por mora"
-                            icon="i-lucide-calendar-x"
-                            color="warning"
+                            v-if="tipoVisual"
+                            :label="tipoVisual.etiqueta"
+                            :icon="tipoVisual.icono"
+                            :color="tipoVisual.color"
                             variant="outline"
+                            :data-tipo="factura.tipo"
                         />
                     </div>
                     <p class="text-sm text-muted">
@@ -312,7 +329,7 @@ onMounted(cargar)
                             </ULink>
                         </template>
                         <template v-if="factura.factura_origen_id">
-                            · mora de la
+                            · {{ relacionOrigen(factura.tipo) }}
                             <ULink
                                 :to="`/facturas/${factura.factura_origen_id}`"
                                 class="text-default hover:text-primary"
@@ -362,6 +379,15 @@ onMounted(cargar)
                 </div>
             </div>
 
+            <UAlert
+                v-if="avisoNoFiscal"
+                :title="factura.tipo === 'cargo' ? 'Cargo interno no fiscal' : 'Factura acreditada'"
+                :description="avisoNoFiscal"
+                icon="i-lucide-info"
+                color="neutral"
+                variant="subtle"
+                data-prueba="factura-no-fiscal"
+            />
             <UAlert
                 v-if="porCertificar"
                 color="neutral"
@@ -476,7 +502,7 @@ onMounted(cargar)
             </div>
 
             <UPageCard
-                v-if="puede('fel.ver')"
+                v-if="puede('fel.ver') && factura.tipo !== 'cargo'"
                 :title="factura.tipo === 'mora' ? 'Certificación FEL (nota de débito)' : 'Certificación FEL'"
                 icon="i-lucide-badge-check"
                 variant="subtle"
@@ -486,7 +512,8 @@ onMounted(cargar)
                     tipo="factura"
                     :documento-id="factura.id"
                     :dte-id="factura.dte_id ?? null"
-                    :certificable="factura.estado !== 'anulada'"
+                    :certificable="factura.estado !== 'anulada' && factura.estado !== 'acreditada'"
+                    :sin-certificar="factura.estado === 'acreditada' ? 'Sin DTE: acreditada por notas de crédito internas, no es una venta y no se certifica.' : null"
                     :refrescar="`${factura.version}-${factura.estado}-${factura.fel_estado ?? ''}`"
                     @cambiado="alCambiarDte"
                 />

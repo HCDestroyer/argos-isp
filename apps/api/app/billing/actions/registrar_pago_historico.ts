@@ -11,6 +11,7 @@ import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_a
 import { aplicarAFacturas, bloquearClientes, duenosDeFacturas, facturasPendientes } from '#billing/cobros'
 import { claveImportacion, exigirPeriodoAbierto, textoClave } from '#billing/importacion'
 import { verPago, type PagoVista } from '#billing/pagos'
+import { guardarRecuperacion, movimientosRecuperacion, repartirRecuperacion } from '#ledger/cartera'
 
 /**
  * `pagos.registrar_historico` = `registrarPagoHistorico` (importador de A6, sin endpoint): un
@@ -173,10 +174,16 @@ export default class RegistrarPagoHistorico extends DomainAction<
         for (const [clienteId, aplicado] of [...porCliente].sort(([x], [y]) => x - y)) {
             movimientos.push({ cuenta: CUENTAS.CXC_CLIENTES, haber: aTexto(aplicado), cliente_id: clienteId })
         }
-        if (restante.gt(0)) {
+        // decisión (g) del líder, igual que registrarPago: con castigos por recuperar, lo que sobra es
+        // recuperación (4.2.03) antes que anticipo
+        // H17: la recuperación se parte en base (4.2.03) e IVA (2.1.11) en la proporción de cada castigo
+        const recuperacion = await repartirRecuperacion(t.trx, empresaId, input.cliente_id, restante)
+        movimientos.push(...movimientosRecuperacion(recuperacion, input.cliente_id))
+        const sobrante = recuperacion.reduce((a, r) => a.minus(r.monto), restante)
+        if (sobrante.gt(0)) {
             movimientos.push({
                 cuenta: CUENTAS.ANTICIPOS_CLIENTES,
-                haber: aTexto(restante),
+                haber: aTexto(sobrante),
                 cliente_id: input.cliente_id,
             })
         }
@@ -197,6 +204,7 @@ export default class RegistrarPagoHistorico extends DomainAction<
             t.ctx,
             { trx: t.trx },
         )
+        await guardarRecuperacion(t.trx, empresaId, pagoId, recuperacion)
 
         return { ...(await verPago(pagoId, t.trx)), creado: true }
     }

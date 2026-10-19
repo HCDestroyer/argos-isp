@@ -15,8 +15,19 @@ import { emisorDeFactura } from '#billing/empresa'
 export const TASA_IVA = new D('0.12')
 const DIVISOR_IVA = new D('1.12')
 
-export type EstadoFactura = 'por_certificar' | 'emitida' | 'parcial' | 'pagada' | 'vencida' | 'anulada'
-export type TipoFactura = 'servicio' | 'mora'
+export type EstadoFactura =
+    | 'por_certificar'
+    | 'emitida'
+    | 'parcial'
+    | 'pagada'
+    | 'vencida'
+    | 'anulada'
+    /** fase 4 (decisión g): castigo de cartera; `pagado` + castigado = total */
+    | 'castigada'
+    /** H16: aviso de cobro cubierto entero por notas internas, sin cobro: no es venta, no se certifica */
+    | 'acreditada'
+/** `cargo`: cargo interno no fiscal sin IVA (H18: diferencia de cobro que vuelve al anular su pago) */
+export type TipoFactura = 'servicio' | 'mora' | 'cargo'
 
 export interface LineaCalculada {
     concepto: string
