@@ -44,7 +44,7 @@ const columnas: TableColumn<MovimientoAsiento>[] = [
 ]
 
 const totales = computed(() => totalesPartida(props.asiento.movimientos))
-const origen = computed(() => ORIGENES_ASIENTO[props.asiento.origen_tipo])
+const origen = computed(() => origenAsiento(props.asiento.origen_tipo))
 const enlace = computed(() => (props.conOrigen ? rutaOrigen(props.asiento) : null))
 </script>
 

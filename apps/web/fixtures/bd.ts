@@ -7,9 +7,12 @@ import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
+import { versionFixture } from './version/rutas'
 import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
+import type { PlanAdicionalFixture } from './adicionales/datos'
+import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -45,6 +48,24 @@ export interface CobroFixture {
 }
 
 /** Cookie `argos_sesion` simulada: token, `csrf` y vencimientos (ISO, o `null` si no vence). */
+/**
+ * Fila de `billing.diferencias_cobro` (A3, decisión B): el saldo pequeño de una factura que dejó un
+ * pago, cerrado como gasto con un asiento `diferencia_cobro` (5.3.05 / CxC). `pagado` de la factura
+ * no cambia; anular el pago la revierte (`revertida_en`).
+ */
+export interface DiferenciaCobroFixture {
+    id: number
+    empresa_id: number
+    pago_id: number
+    factura_id: number
+    cliente_id: number
+    monto: string
+    asiento_id: number
+    fecha: string
+    descripcion: string
+    revertida_en: string | null
+}
+
 export interface SesionSimulada {
     token: string | null
     csrf: string | null
@@ -118,6 +139,8 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /** `GET /version` (A6): la versión instalada que ve el panel. */
+    version: Schema<'VersionInstalada'>
     /* Fase 4 · cobros y bancos (A3, §10.3 y §10.9). */
     proveedoresCobro: Schema<'ProveedorCobro'>[]
     liquidaciones: Schema<'LiquidacionCobro'>[]
@@ -133,10 +156,17 @@ interface BaseFixtures {
     reglasConciliacion: Schema<'ReglaConciliacion'>[]
     provisiones: Schema<'ProvisionCartera'>[]
     castigos: Schema<'CastigoCartera'>[]
-    /** Pago y factura con la diferencia ya cerrada (`billing.diferencias_cobro`). */
-    diferenciasCerradas: { pago_id: number, factura_id: number }[]
+    /** Diferencias de cobro cerradas como gasto (`billing.diferencias_cobro`, decisión B). */
+    diferenciasCerradas: DiferenciaCobroFixture[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
     programasLealtad: Schema<'ProgramaLealtad'>[]
+    /* Servicios adicionales (A1, `contratos/adicionales.md`). */
+    adicionales: Schema<'Adicional'>[]
+    motivosCortesia: Schema<'MotivoCortesia'>[]
+    adicionalesServicio: Schema<'AdicionalServicio'>[]
+    /** Credencial en claro por asignación (la API la guarda cifrada y nunca la lista). */
+    credencialesAdicionales: Record<number, string>
+    planesAdicionales: PlanAdicionalFixture[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
     movimientosPuntos: Schema<'MovimientoPuntos'>[]
     lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
@@ -195,6 +225,7 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        version: versionFixture,
         proveedoresCobro,
         liquidaciones,
         contracargosLiquidados: [],
@@ -212,6 +243,11 @@ function inicial(): BaseFixtures {
         fel: felInicial(),
         horus: horusInicial(),
         programasLealtad,
+        adicionales,
+        motivosCortesia,
+        adicionalesServicio,
+        credencialesAdicionales,
+        planesAdicionales,
         reglasLealtad,
         movimientosPuntos,
         lotesPuntos,

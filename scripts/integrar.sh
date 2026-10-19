@@ -17,6 +17,10 @@ subir="${2:-}"
 raiz="$(git rev-parse --show-toplevel)"
 dir="$(mktemp -d "${TMPDIR:-/tmp}/integrar-XXXXXX")"
 export DB_DATABASE="${DB_DATABASE:-argosisp_test_integracion}" PORT="${PORT:-3490}" AAA_PRUEBAS_DOCKER="${AAA_PRUEBAS_DOCKER:-0}"
+# Redis también se comparte: colas y claves AAA con prefijo propio, para que la limpieza de una
+# suite no borre las claves de otra que corre al mismo tiempo.
+export COLAS_PREFIJO="${COLAS_PREFIJO:-integracion}"
+export AAA_REDIS_PREFIJO="${AAA_REDIS_PREFIJO:-$COLAS_PREFIJO:aaa:user:}"
 
 git -C "$raiz" fetch -q origin
 git -C "$raiz" worktree add -q --detach "$dir" "origin/$rama"

@@ -39,6 +39,8 @@ test('crear promesa y ver la regla que aplicó', async ({ page }) => {
 
     // Segunda con la primera abierta: 409 `promesa_abierta` en el modal, sin evaluación.
     await page.getByRole('button', { name: 'Promesa de pago' }).click()
+    // El pendiente sugerido llega tras abrir: escribir antes lo mezclaba ("300.00150.00").
+    await expect(modal.getByLabel('Monto prometido')).toHaveValue('300.00')
     await modal.getByLabel('Monto prometido').fill('150.00')
     await modal.getByRole('button', { name: 'Crear promesa' }).click()
     await expect(modal).toContainText('ya tiene la promesa')

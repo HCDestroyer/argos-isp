@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
+import { sqlDiferenciasVigentes } from '#billing/diferencias'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
 import { aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
@@ -346,7 +347,8 @@ export async function facturadoVsCobrado(
             db.raw('count(*)::int as facturas'),
             db.raw('sum(f.total)::text as facturado'),
             db.raw(`sum(f.pagado - ${ACREDITADO})::text as cobrado`),
-            db.raw('sum(f.total - f.pagado)::text as pendiente'),
+            // B: lo cerrado como diferencia de cobro (gasto) no queda pendiente
+            db.raw(`sum(f.total - f.pagado - ${sqlDiferenciasVigentes('f')})::text as pendiente`),
             db.raw(`coalesce(sum(${ACREDITADO}), 0)::text as acreditado`),
             db.raw(
                 'coalesce(sum(f.total) filter (where f.clave_externa is not null), 0)::text as facturado_importado',
@@ -494,7 +496,7 @@ export async function cierresCaja(
             'uc.nombre as cerrado_por',
             't.fondo_inicial',
             db.raw(
-                `(select coalesce(sum(p.monto), 0) from billing.pagos p where p.turno_id = t.id and p.estado <> 'anulado')::text as cobrado`,
+                `(select coalesce(sum(p.monto - p.retenido), 0) from billing.pagos p where p.turno_id = t.id and p.estado <> 'anulado')::text as cobrado`,
             ),
             db.raw(
                 `(select coalesce(sum(e.monto), 0) from ledger.egresos e where e.turno_id = t.id

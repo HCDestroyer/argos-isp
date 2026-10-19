@@ -382,16 +382,16 @@ export const DiferenciaCerrada = definirEsquema(
         empresa_id: id,
         monto: Dinero,
         tope: { ...Dinero, description: 'diferencia_cobro_tope de la empresa' },
-        notas: lista(
-            objeto({
-                factura_id: id,
-                nota_credito_id: id,
-                monto: Dinero,
-                ncre: {
-                    ...booleano,
-                    description: 'true = NCRE (la factura tenía DTE); false = nota interna',
-                },
-            }),
-        ),
+        diferencias: {
+            ...lista(
+                objeto({
+                    factura_id: id,
+                    diferencia_id: id,
+                    monto: Dinero,
+                    asiento_id: { ...id, description: 'Asiento diferencia_cobro (5.3.05 / CxC)' },
+                }),
+            ),
+            description: 'Una por factura: el saldo cerrado como gasto, sin tocar IVA ni DTE',
+        },
     }),
 )

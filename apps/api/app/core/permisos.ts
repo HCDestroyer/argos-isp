@@ -33,6 +33,20 @@ export const PERMISOS = {
         'Programar un plan temporal (mejora de plan con fecha de fin; lo usa el canje de lealtad)',
     'servicios.cancelar_plan_temporal':
         'Cancelar un plan temporal programado o activo (el servicio vuelve a su plan base)',
+    'servicios.agregar_adicional':
+        'Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado',
+    'servicios.editar_adicional':
+        'Editar un adicional de un servicio (modalidad, identificador, credencial, precio)',
+    'servicios.quitar_adicional': 'Dar de baja un adicional de un servicio (con fecha; no se borra)',
+    'servicios.adicional_cortesia':
+        'Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar',
+    'servicios.ver_credencial_adicional': 'Ver la credencial de un adicional de un servicio (queda auditado)',
+    'adicionales.ver': 'Ver el catálogo de servicios adicionales y los motivos de cortesía',
+    'adicionales.crear': 'Crear servicios adicionales en el catálogo de la empresa',
+    'adicionales.editar': 'Editar servicios adicionales del catálogo',
+    'adicionales.desactivar': 'Desactivar un servicio adicional del catálogo (no se borra)',
+    'adicionales.crear_motivo': 'Crear motivos de cortesía de la empresa',
+    'adicionales.desactivar_motivo': 'Desactivar un motivo de cortesía (no se borra)',
 
     'routers.ver': 'Ver routers',
     'routers.crear': 'Crear routers',
@@ -144,6 +158,9 @@ export const PERMISOS = {
     'compras.registrar': 'Registrar compras, también desde un egreso',
     'compras.anular': 'Anular compras con asiento de reverso',
     'compras.pagar': 'Registrar y anular pagos a proveedores',
+    'activos.ver': 'Ver activos fijos, su depreciación y sus bajas',
+    'activos.registrar': 'Dar de alta activos fijos sin compra y registrar la depreciación pendiente',
+    'activos.dar_de_baja': 'Dar de baja (venta o retiro) un activo fijo con su asiento',
     'libros.ver': 'Ver los libros legales (vista previa) y sus habilitaciones',
     'libros.emitir': 'Emitir libros legales con folio sobre un periodo bloqueado',
     'libros.habilitar': 'Registrar habilitaciones de folios de libros',
@@ -217,7 +234,7 @@ const lectura = NOMBRES_PERMISOS.filter((p) => p.endsWith('.ver'))
 const PERMISOS_FISCALES = NOMBRES_PERMISOS.filter(
     (p) =>
         p === 'empresas.cambiar_pais' ||
-        /^(fiscal|fel|proveedores|compras|libros|declaraciones)\./.test(p) ||
+        /^(fiscal|fel|proveedores|compras|libros|declaraciones|activos)\./.test(p) ||
         /^libro\.(cerrar_ejercicio|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear)$/.test(p),
 )
 const SOLO_ADMIN_FISCAL: readonly Permiso[] = [
@@ -253,6 +270,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.quitar_responsable_pago',
             'zonas.ver',
             'servicios.ver',
+            'adicionales.ver',
             'planes.ver',
             'facturas.ver',
             'pagos.ver',
@@ -293,6 +311,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.quitar_limite',
             'servicios.desconectar',
             'servicios.ver_credenciales',
+            'servicios.agregar_adicional',
+            'servicios.editar_adicional',
+            'servicios.quitar_adicional',
+            'servicios.ver_credencial_adicional',
+            'adicionales.ver',
             'routers.ver',
             'redes.ver',
             'ipv6.ver',
@@ -325,6 +348,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.editar',
             'servicios.desconectar',
             'servicios.ver_credenciales',
+            'servicios.agregar_adicional',
+            'servicios.editar_adicional',
+            'servicios.quitar_adicional',
+            'servicios.ver_credencial_adicional',
+            'adicionales.ver',
             'routers.ver',
             'routers.crear',
             'routers.editar',
@@ -348,6 +376,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'clientes.estado_cuenta',
             'zonas.ver',
             'servicios.ver',
+            'adicionales.ver',
             'planes.ver',
             'plantillas.ver',
             'plantillas.crear',

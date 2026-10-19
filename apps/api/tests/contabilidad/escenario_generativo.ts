@@ -41,6 +41,17 @@ import AnularConciliacion from '#ledger/actions/anular_conciliacion'
 import RegistrarDesdeExtracto from '#ledger/actions/registrar_desde_extracto'
 import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
 import CastigarCartera from '#ledger/actions/castigar_cartera'
+import RegistrarCompra from '#ledger/actions/registrar_compra'
+import RegistrarCompraDesdeEgreso from '#ledger/actions/registrar_compra_desde_egreso'
+import AnularCompra from '#ledger/actions/anular_compra'
+import RegistrarPagoProveedor from '#ledger/actions/registrar_pago_proveedor'
+import AnularPagoProveedor from '#ledger/actions/anular_pago_proveedor'
+import RegistrarActivo from '#ledger/actions/registrar_activo'
+import DepreciarActivos from '#ledger/actions/depreciar_activos'
+import DarDeBajaActivo from '#ledger/actions/dar_de_baja_activo'
+import RegistrarDiferimiento from '#ledger/actions/registrar_diferimiento'
+import AmortizarDiferidos from '#ledger/actions/amortizar_diferidos'
+import { hacerAgenteRetencion, proveedorEn } from '#tests/ledger/ayudas_compras'
 import { Azar, centavosDe, texto } from '#tests/contabilidad/semilla'
 import {
     prepararEmpresas,
@@ -166,7 +177,31 @@ const PESOS_FASE4 = {
     castigar: 3,
 } as const
 
-type Accion = keyof typeof PESOS | keyof typeof PESOS_FEL | keyof typeof PESOS_FASE4
+/**
+ * Operaciones de la fase 5 de A3 (compras, proveedores, retenciones, activos y diferidos), solo con
+ * `{ fase5: true }` (que implica la fase 4): por empresa un proveedor general al crédito y un pequeño
+ * contribuyente; la empresa B es agente de retención de IVA.
+ */
+const PESOS_FASE5 = {
+    compra: 8,
+    ncre_compra: 2,
+    pagar_proveedor: 5,
+    anular_pago_proveedor: 2,
+    anular_compra: 2,
+    compra_desde_egreso: 3,
+    alta_activo: 2,
+    depreciar: 3,
+    baja_activo: 2,
+    diferir_factura: 2,
+    amortizar: 3,
+    pagar_con_retencion: 4,
+} as const
+
+/** Fechas de documento de las compras (fijas: la semilla reproduce lo mismo; las viejas pueden quedar fuera de la ventana). */
+const FECHAS_COMPRA = ['2026-08-10', '2026-09-15', '2026-10-05'] as const
+
+type Accion =
+    keyof typeof PESOS | keyof typeof PESOS_FEL | keyof typeof PESOS_FASE4 | keyof typeof PESOS_FASE5
 
 interface PorExtracto {
     tipo: 'deposito' | 'traslado' | 'liquidacion'
@@ -204,21 +239,31 @@ export class EscenarioGenerativo {
     private porExtracto: PorExtracto[] = []
     private lineasDoc = new Map<number, { tipo: string; id: number }>()
     private saldosExtracto = new Map<number, bigint>()
+    private readonly fase5: boolean
+    private proveedoresCompra = new Map<number, { general: number; pequeno: number }>()
 
     constructor(
         readonly semilla: number,
-        opciones: { fel?: boolean; fase4?: boolean; incluirHallazgosAbiertos?: boolean } = {},
+        opciones: {
+            fel?: boolean
+            fase4?: boolean
+            fase5?: boolean
+            incluirHallazgosAbiertos?: boolean
+        } = {},
     ) {
         this.azar = new Azar(semilla)
-        this.fase4 = opciones.fase4 ?? false
+        this.fase5 = opciones.fase5 ?? false
+        this.fase4 = (opciones.fase4 ?? false) || this.fase5
         this.fel = (opciones.fel ?? false) || this.fase4
         this.incluirHallazgosAbiertos = opciones.incluirHallazgosAbiertos ?? false
         this.pesos = (
-            this.fase4
-                ? { ...PESOS, ...PESOS_FEL, ...PESOS_FASE4 }
-                : this.fel
-                  ? { ...PESOS, ...PESOS_FEL }
-                  : PESOS
+            this.fase5
+                ? { ...PESOS, ...PESOS_FEL, ...PESOS_FASE4, ...PESOS_FASE5 }
+                : this.fase4
+                  ? { ...PESOS, ...PESOS_FEL, ...PESOS_FASE4 }
+                  : this.fel
+                    ? { ...PESOS, ...PESOS_FEL }
+                    : PESOS
         ) as Record<Accion, number>
     }
 
@@ -285,6 +330,7 @@ export class EscenarioGenerativo {
             }
         }
         if (this.fase4) await this.prepararFase4()
+        if (this.fase5) await this.prepararFase5()
         this.foto = await fotoLibro(this.empresas, this.marcas.acciones, this.marcas.outbox)
         if (this.fel) this.dtes = await this.estadosDte()
     }
@@ -813,8 +859,16 @@ export class EscenarioGenerativo {
             .from('billing.pagos')
             .where('turno_id', turno.id)
             .where('estado', 'registrado')
-            .select(db.raw('coalesce(sum(monto), 0)::text as total'))
+            .select(db.raw('coalesce(sum(monto - retenido), 0)::text as total'))
             .firstOrFail()
+        const aProveedores = (await db
+            .from('ledger.pagos_proveedores as pp')
+            .where('pp.turno_id', turno.id)
+            .whereNotExists((q) =>
+                q.from('ledger.pagos_proveedores_anulaciones as x').whereRaw('x.pago_id = pp.id'),
+            )
+            .select(db.raw('coalesce(sum(pp.monto), 0)::text as total'))
+            .firstOrFail()) as { total: string }
         const egresado = await db
             .from('ledger.egresos as e')
             .where('e.turno_id', turno.id)
@@ -830,7 +884,8 @@ export class EscenarioGenerativo {
             centavosDe(turno.fondo_inicial) +
             centavosDe(cobrado.total) -
             centavosDe(egresado.total) -
-            centavosDe(depositado.total)
+            centavosDe(depositado.total) -
+            centavosDe(aProveedores.total)
         const diferencia = this.azar.moneda(0.3) ? 0n : this.azar.centavos(-2500, 2500)
         const contado = esperado + diferencia < 0n ? 0n : esperado + diferencia
         const cerrado = await new CerrarCaja().execute(
@@ -1261,7 +1316,9 @@ export class EscenarioGenerativo {
         const cajaId = this.e.cajas.get(empresaId)!
         const { rows } = (await db.rawQuery(
             `SELECT t.id, (t.fondo_inicial
-                    + coalesce((SELECT sum(p.monto) FROM billing.pagos p WHERE p.turno_id = t.id AND p.estado = 'registrado'), 0)
+                    + coalesce((SELECT sum(p.monto - p.retenido) FROM billing.pagos p WHERE p.turno_id = t.id AND p.estado = 'registrado'), 0)
+                    - coalesce((SELECT sum(pp.monto) FROM ledger.pagos_proveedores pp WHERE pp.turno_id = t.id
+                                 AND NOT EXISTS (SELECT 1 FROM ledger.pagos_proveedores_anulaciones x WHERE x.pago_id = pp.id)), 0)
                     - coalesce((SELECT sum(e.monto) FROM ledger.egresos e WHERE e.turno_id = t.id
                                  AND NOT EXISTS (SELECT 1 FROM ledger.egresos_anulaciones x WHERE x.egreso_id = e.id)), 0)
                     - coalesce((SELECT sum(d.monto) FROM ledger.depositos d WHERE d.turno_id = t.id), 0))::text AS efectivo
@@ -1518,5 +1575,342 @@ export class EscenarioGenerativo {
             this.ctx,
         )
         return `castigo ${k.id} del cliente ${f.cliente_id} (empresa ${f.empresa_id}): facturas ${facturas.join(', ')}, ${k.monto} (IVA ${k.iva}, estimación ${k.estimacion}, gasto ${k.gasto})`
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fase 5 de A3: compras, proveedores, retenciones, activos y diferidos
+    |--------------------------------------------------------------------------
+    */
+
+    private async prepararFase5() {
+        for (const empresaId of this.empresas) {
+            const general = await proveedorEn(empresaId, this.ctx, { dias_credito: 30 })
+            const pequeno = await proveedorEn(empresaId, this.ctx, { tipo: 'pequeno_contribuyente' })
+            this.proveedoresCompra.set(empresaId, {
+                general: Number(general.id),
+                pequeno: Number(pequeno.id),
+            })
+        }
+        await hacerAgenteRetencion(this.e.B, this.ctx)
+    }
+
+    /** Medio de pago al contado de la empresa: su caja, su cuenta bancaria o la segunda. */
+    private medio(empresaId: number) {
+        const cual = this.azar.entero(0, 2)
+        if (cual === 0) return { metodo: 'caja' as const, caja_id: this.e.cajas.get(empresaId)! }
+        return {
+            metodo: 'cuenta_bancaria' as const,
+            cuenta_bancaria_id: cual === 1 ? this.e.cuentas.get(empresaId)! : this.segundas.get(empresaId)!,
+        }
+    }
+
+    /** Compra al crédito o al contado (FACT o FPEQ), con líneas de servicio, bien, activo fijo o gasto diferido. */
+    private async compra() {
+        const empresaId = this.azar.elegir(this.empresas)
+        const prov = this.proveedoresCompra.get(empresaId)!
+        const pequena = this.azar.moneda(0.2)
+        const credito = this.azar.moneda(0.6)
+        const lineas = Array.from({ length: this.azar.entero(1, 3) }, (_, i) => {
+            const total = texto(this.azar.centavos(500, 900000))
+            const tipo = this.azar.elegir(['servicio', 'bien', 'activo', 'diferido', 'exenta'] as const)
+            if (tipo === 'activo' && !pequena) {
+                return {
+                    descripcion: `auditoría: equipo ${i}`,
+                    tipo: 'activo_fijo' as const,
+                    clase_activo: 'equipo_red' as const,
+                    total,
+                }
+            }
+            if (tipo === 'diferido') {
+                return {
+                    descripcion: `auditoría: licencia ${i}`,
+                    tipo: 'servicio' as const,
+                    categoria: 'otros',
+                    total,
+                    diferir_meses: this.azar.entero(2, 12),
+                }
+            }
+            if (tipo === 'exenta' && !pequena) {
+                return {
+                    descripcion: `auditoría: exento ${i}`,
+                    tipo: 'servicio' as const,
+                    categoria: 'otros',
+                    total,
+                    exento: true,
+                }
+            }
+            return {
+                descripcion: `auditoría: ${tipo} ${i}`,
+                tipo: tipo === 'bien' ? ('bien' as const) : ('servicio' as const),
+                categoria: 'otros',
+                total,
+            }
+        })
+        const c = await new RegistrarCompra().execute(
+            {
+                proveedor_id: pequena ? prov.pequeno : prov.general,
+                tipo_documento: pequena ? 'FPEQ' : 'FACT',
+                numero: this.nuevaReferencia('C'),
+                fecha_documento: this.azar.elegir(FECHAS_COMPRA),
+                condicion: credito ? 'credito' : 'contado',
+                // B es agente de retención: sin lista, el producto sugiere las suyas
+                ...(empresaId === this.e.B && this.azar.moneda() ? {} : { retenciones: [] }),
+                ...(credito ? {} : this.medio(empresaId)),
+                lineas,
+            },
+            this.ctx,
+        )
+        return `compra ${c.id} ${c.tipo_documento} ${c.condicion} de la empresa ${empresaId}: total ${c.total}, IVA ${c.iva}, retenciones ${c.retencion_iva}/${c.retencion_isr}, ${lineas.length} líneas (${lineas.map((l) => l.tipo + ('diferir_meses' in l ? '/diferida' : '') + ('exento' in l ? '/exenta' : '')).join(', ')})`
+    }
+
+    private async comprasAlCredito() {
+        const { rows } = (await db.rawQuery(
+            `SELECT c.id, c.empresa_id, c.proveedor_id,
+                    (c.total - c.retencion_iva - c.retencion_isr
+                     - coalesce((SELECT sum(n.total) FROM ledger.compras n WHERE n.compra_referencia_id = c.id AND n.tipo_documento = 'NCRE'
+                                  AND NOT EXISTS (SELECT 1 FROM ledger.compras_anulaciones x WHERE x.compra_id = n.id)), 0)
+                     - coalesce((SELECT sum(a.monto) FROM ledger.pagos_proveedores_aplicaciones a WHERE a.compra_id = c.id
+                                  AND NOT EXISTS (SELECT 1 FROM ledger.pagos_proveedores_anulaciones x WHERE x.pago_id = a.pago_id)), 0))::text AS saldo
+               FROM ledger.compras c
+              WHERE c.empresa_id = ANY(?::bigint[]) AND c.condicion = 'credito' AND c.tipo_documento <> 'NCRE'
+                AND NOT EXISTS (SELECT 1 FROM ledger.compras_anulaciones x WHERE x.compra_id = c.id)
+              ORDER BY c.id`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number; empresa_id: number; proveedor_id: number; saldo: string }> }
+        return rows.filter((r) => centavosDe(r.saldo) > 0n)
+    }
+
+    private async ncre_compra() {
+        const todas = await this.comprasAlCredito()
+        const compras = todas.filter((c) => {
+            const p = this.proveedoresCompra.get(Number(c.empresa_id))
+            return p?.general === Number(c.proveedor_id)
+        })
+        if (compras.length === 0) return 'sin compras al crédito con saldo'
+        const c = this.azar.elegir(compras)
+        const total = this.azar.centavos(1, Number(centavosDe(c.saldo)))
+        const n = await new RegistrarCompra().execute(
+            {
+                proveedor_id: Number(c.proveedor_id),
+                tipo_documento: 'NCRE',
+                numero: this.nuevaReferencia('NC'),
+                fecha_documento: this.azar.elegir(FECHAS_COMPRA.slice(1)),
+                condicion: 'credito',
+                compra_referencia_id: Number(c.id),
+                lineas: [{ descripcion: 'auditoría: descuento', categoria: 'otros', total: texto(total) }],
+            },
+            this.ctx,
+        )
+        return `NCRE ${n.id} de ${n.total} a la compra ${c.id} (saldo ${c.saldo})`
+    }
+
+    private async pagar_proveedor() {
+        const compras = await this.comprasAlCredito()
+        if (compras.length === 0) return 'sin compras al crédito con saldo'
+        const c = this.azar.elegir(compras)
+        const mismas = compras.filter((x) => x.proveedor_id === c.proveedor_id)
+        const saldo = mismas.reduce((s, x) => s + centavosDe(x.saldo), 0n)
+        // a veces de más (el producto debe rechazarlo: no paga de más)
+        const monto = this.azar.moneda(0.1) ? saldo + 1n : this.azar.centavos(1, Number(saldo))
+        const empresaId = Number(c.empresa_id)
+        const p = await new RegistrarPagoProveedor().execute(
+            { proveedor_id: Number(c.proveedor_id), monto: texto(monto), ...this.medio(empresaId) },
+            this.ctx,
+        )
+        return `pago a proveedor ${p.id} de ${texto(monto)} (saldo ${texto(saldo)}) de la empresa ${empresaId}`
+    }
+
+    private async anular_pago_proveedor() {
+        const pagos = (await db
+            .from('ledger.pagos_proveedores as pp')
+            .whereIn('pp.empresa_id', this.empresas)
+            .whereNotExists((q) =>
+                q.from('ledger.pagos_proveedores_anulaciones as x').whereRaw('x.pago_id = pp.id'),
+            )
+            .orderBy('pp.id')
+            .select('pp.id')) as Array<{ id: number }>
+        if (pagos.length === 0) return 'sin pagos a proveedores'
+        const p = this.azar.elegir(pagos)
+        await new AnularPagoProveedor().execute(
+            { pago_id: Number(p.id), motivo: 'auditoría: cheque devuelto' },
+            this.ctx,
+        )
+        return `anula el pago a proveedor ${p.id}`
+    }
+
+    private async anular_compra() {
+        const compras = (await db
+            .from('ledger.compras as c')
+            .whereIn('c.empresa_id', this.empresas)
+            .whereNotExists((q) => q.from('ledger.compras_anulaciones as x').whereRaw('x.compra_id = c.id'))
+            .orderBy('c.id')
+            .select('c.id', 'c.tipo_documento')) as Array<{ id: number; tipo_documento: string }>
+        if (compras.length === 0) return 'sin compras'
+        const c = this.azar.elegir(compras)
+        await new AnularCompra().execute(
+            { compra_id: Number(c.id), motivo: 'auditoría: documento equivocado' },
+            this.ctx,
+        )
+        return `anula la compra ${c.id} (${c.tipo_documento})`
+    }
+
+    /** Un egreso de la caja (sin compra) pasa a compra con su factura (reclasificación del IVA). */
+    private async compra_desde_egreso() {
+        const egresos = (await db
+            .from('ledger.egresos as e')
+            .whereIn('e.empresa_id', this.empresas)
+            .whereNull('e.compra_id')
+            .whereNotExists((q) => q.from('ledger.egresos_anulaciones as x').whereRaw('x.egreso_id = e.id'))
+            .whereNotExists((q) =>
+                q
+                    .from('ledger.compras as c')
+                    .whereRaw('c.egreso_id = e.id')
+                    .whereNotExists((x) =>
+                        x.from('ledger.compras_anulaciones as y').whereRaw('y.compra_id = c.id'),
+                    ),
+            )
+            .orderBy('e.id')
+            .select(
+                'e.id',
+                'e.empresa_id',
+                'e.monto',
+                db.raw(`to_char(e.fecha, 'YYYY-MM-DD') as fecha`),
+            )) as Array<{
+            id: number
+            empresa_id: number
+            monto: string
+            fecha: string
+        }>
+        if (egresos.length === 0) return 'sin egresos sin compra'
+        const e = this.azar.elegir(egresos)
+        const c = await new RegistrarCompraDesdeEgreso().execute(
+            {
+                egreso_id: Number(e.id),
+                proveedor_id: this.proveedoresCompra.get(Number(e.empresa_id))!.general,
+                tipo_documento: 'FACT',
+                numero: this.nuevaReferencia('E'),
+                fecha_documento: e.fecha,
+                retenciones: [],
+                lineas: [{ descripcion: 'auditoría: gasto con factura', categoria: 'otros', total: e.monto }],
+            },
+            this.ctx,
+        )
+        return `compra ${c.id} desde el egreso ${e.id} (${e.monto}, IVA ${c.iva}, crédito ${c.credito_fiscal})`
+    }
+
+    /** Alta a mano (inventario inicial), a veces ya depreciado. */
+    private async alta_activo() {
+        const empresaId = this.azar.elegir(this.empresas)
+        const costo = this.azar.centavos(10000, 2000000)
+        const inicial = this.azar.moneda() ? this.azar.centavos(0, Number(costo / 2n)) : 0n
+        const residual = this.azar.moneda(0.3) ? this.azar.centavos(0, Number((costo - inicial) / 10n)) : 0n
+        const a = await new RegistrarActivo().execute(
+            {
+                empresa_id: empresaId,
+                clase: this.azar.elegir(['equipo_red', 'mobiliario', 'computacion', 'vehiculos'] as const),
+                descripcion: 'auditoría: activo inicial',
+                fecha_alta: `2026-0${this.azar.entero(1, 9)}-${String(this.azar.entero(1, 28)).padStart(2, '0')}`,
+                costo: texto(costo),
+                depreciacion_inicial: texto(inicial),
+                valor_residual: texto(residual),
+                tasa_anual: this.azar.moneda() ? null : this.azar.elegir(['3.33', '10', '7.77']),
+            },
+            this.ctx,
+        )
+        return `alta a mano del activo ${a.id} (${a.clase}) en la empresa ${empresaId}: costo ${a.costo}, inicial ${a.depreciacion_inicial}, residual ${a.valor_residual}, tasa ${a.tasa_anual}, desde ${a.inicio_depreciacion}`
+    }
+
+    private async depreciar() {
+        const r = await new DepreciarActivos().execute(
+            { empresa_id: this.azar.elegir(this.empresas) },
+            this.ctx,
+        )
+        return `depreciación hasta ${r.hasta}: ${r.cuotas} cuotas por ${r.monto}`
+    }
+
+    private async baja_activo() {
+        const activos = (await db
+            .from('ledger.activos as ac')
+            .whereIn('ac.empresa_id', this.empresas)
+            .whereNotExists((q) => q.from('ledger.activos_bajas as b').whereRaw('b.activo_id = ac.id'))
+            .orderBy('ac.id')
+            .select('ac.id', 'ac.empresa_id', 'ac.costo')) as Array<{
+            id: number
+            empresa_id: number
+            costo: string
+        }>
+        if (activos.length === 0) return 'sin activos vigentes'
+        const a = this.azar.elegir(activos)
+        const venta = this.azar.moneda()
+        const b = await new DarDeBajaActivo().execute(
+            {
+                activo_id: Number(a.id),
+                tipo: venta ? 'venta' : 'retiro',
+                motivo: 'auditoría: baja',
+                ...(venta
+                    ? {
+                          precio_venta: texto(this.azar.centavos(1, Number(centavosDe(a.costo)) * 2)),
+                          cuenta_bancaria_id: this.e.cuentas.get(Number(a.empresa_id))!,
+                      }
+                    : {}),
+            },
+            this.ctx,
+        )
+        return `baja (${b.baja!.tipo}) del activo ${a.id}: valor en libros ${b.baja!.valor_libros}, precio ${b.baja!.precio_venta}`
+    }
+
+    /** Ingreso diferido sobre una línea de una factura (plan pagado por adelantado). */
+    private async diferir_factura() {
+        const { rows } = (await db.rawQuery(
+            `SELECT l.id FROM billing.facturas_lineas l JOIN billing.facturas f ON f.id = l.factura_id
+              WHERE f.empresa_id = ANY(?::bigint[]) AND f.tipo = 'servicio' AND f.estado NOT IN ('anulada', 'por_certificar')
+                AND l.tipo = 'servicio'
+                AND NOT EXISTS (SELECT 1 FROM ledger.diferimientos d WHERE d.factura_linea_id = l.id)
+              ORDER BY l.id`,
+            [this.empresas],
+        )) as { rows: Array<{ id: number }> }
+        if (rows.length === 0) return 'sin líneas de factura'
+        const l = this.azar.elegir(rows)
+        const d = await new RegistrarDiferimiento().execute(
+            { origen: 'factura', factura_linea_id: Number(l.id), meses: this.azar.entero(2, 12) },
+            this.ctx,
+        )
+        return `diferimiento ${d.id} de la línea ${l.id}: ${d.total} en ${d.meses} meses desde ${d.inicio}`
+    }
+
+    private async amortizar() {
+        const r = await new AmortizarDiferidos().execute(
+            { empresa_id: this.azar.elegir(this.empresas) },
+            this.ctx,
+        )
+        return `amortización hasta ${r.hasta}: ${r.cuotas} cuotas por ${r.monto}`
+    }
+
+    /** Pago en caja con una constancia de retención de IVA o ISR (a veces sobre un castigo: H19). */
+    private async pagar_con_retencion() {
+        const clienteId = await this.clienteConDeuda()
+        const cliente =
+            clienteId === null
+                ? this.azar.elegir(this.clientes)
+                : this.clientes.find((c) => c.id === clienteId)!
+        const empresaId = this.azar.elegir(cliente.empresas)
+        const efectivo = this.azar.centavos(1000, 30000)
+        const retencion = this.azar.centavos(1, Number(efectivo / 10n))
+        const iva = this.azar.moneda()
+        const r = await this.pagar({
+            cliente_id: cliente.id,
+            metodo: 'caja',
+            monto: texto(efectivo),
+            empresa_id: empresaId,
+            retenciones: [
+                {
+                    codigo: iva ? 'RET_IVA_ESP' : 'RET_ISR_OPC',
+                    numero: this.nuevaReferencia(iva ? 'CI' : 'CR'),
+                    monto: texto(retencion),
+                },
+            ],
+        })
+        return `cliente ${cliente.id} paga ${texto(efectivo)} + constancia ${iva ? 'IVA' : 'ISR'} ${texto(retencion)} en la empresa ${empresaId} (pago ${r.pagos.map((p) => p.id).join(', ')})`
     }
 }

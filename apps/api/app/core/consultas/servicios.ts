@@ -1,4 +1,5 @@
 import { isIP } from 'node:net'
+import type { TipoPlan } from '#network/tipos_plan'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
@@ -52,6 +53,8 @@ export interface ServicioVista {
     ipv6_duid: string | null
     cliente_nombre: string
     plan_nombre: string
+    /** tipo del plan del servicio (solo lectura, derivado de `network.planes.tipo`) */
+    plan_tipo: TipoPlan
     router_nombre: string
     zona_nombre: string | null
     /** excepciones a la plantilla de facturación `{ campo: valor }` (tarea 11) */
@@ -117,6 +120,7 @@ function columnas(cliente: QueryClientContract) {
             `(SELECT c_n.nombre FROM core.clientes c_n WHERE c_n.id = s.cliente_id) AS cliente_nombre`,
         ),
         cliente.raw(`(SELECT p_n.nombre FROM network.planes p_n WHERE p_n.id = s.plan_id) AS plan_nombre`),
+        cliente.raw(`(SELECT p_t.tipo FROM network.planes p_t WHERE p_t.id = s.plan_id) AS plan_tipo`),
         cliente.raw(
             `(SELECT r_n.nombre FROM network.routers r_n WHERE r_n.id = s.router_id) AS router_nombre`,
         ),
@@ -168,6 +172,8 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     zona_id?: number
     /** alguna factura del servicio en estado `vencida` (true) o ninguna (false) */
     con_deuda_vencida?: boolean
+    /** tipo del plan del servicio */
+    tipo?: TipoPlan
 }
 
 /**
@@ -185,6 +191,14 @@ export async function listarServicios(
     if (filtros.plan_id) consulta.where('s.plan_id', filtros.plan_id)
     if (filtros.estado) consulta.where('s.estado', filtros.estado)
     if (filtros.tipo_conexion) consulta.where('s.tipo_conexion', filtros.tipo_conexion)
+    if (filtros.tipo) {
+        consulta.whereExists((c) =>
+            c
+                .from('network.planes as p_tf')
+                .whereRaw('p_tf.id = s.plan_id')
+                .where('p_tf.tipo', filtros.tipo!),
+        )
+    }
     if (filtros.zona_id) {
         consulta.whereExists((c) =>
             c

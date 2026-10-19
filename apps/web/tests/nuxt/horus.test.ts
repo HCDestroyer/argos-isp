@@ -226,8 +226,18 @@ describe('horus · pantallas', () => {
     })
 
     it('lista de servicios: insignia de seguridad por fila solo con Horus activo', async () => {
+        // La insignia sale de una cadena de peticiones: la lista (con routers, planes y zonas en
+        // paralelo) y después `POST /seguridad` con los ids de la página. Con la máquina cargada
+        // (suite completa, integración) eso pasa del segundo por defecto de `vi.waitFor`: se espera
+        // a que la lista pinte sus filas y luego a la insignia, con el margen de la prueba.
+        const margen = { timeout: 10_000 }
+        // La lista va por id descendente: la primera fila es el servicio más nuevo.
+        const masNuevo = [...bd.servicios].sort((a, b) => b.id - a.id)[0]?.user_ppp ?? ''
+        const primero = bd.servicios.find(s => s.id === 1)?.user_ppp ?? ''
+        expect([masNuevo, primero]).not.toContain('')
         const apagada = await mountSuspended(conApp(PaginaServicios), { route: '/servicios' })
-        await vi.waitFor(() => expect(apagada.text()).toContain('Servicio'))
+        // Antes se comprobaba la ausencia con solo el encabezado pintado (sin filas): pasaba siempre.
+        await vi.waitFor(() => expect(apagada.text()).toContain(masNuevo), margen)
         await flushPromises()
         expect(apagada.find('[data-prueba="seguridad-horus"]').exists()).toBe(false)
         apagada.unmount()
@@ -235,7 +245,8 @@ describe('horus · pantallas', () => {
         bd.horus.conector.activo = true
         bd.servicios = bd.servicios.filter(s => s.id <= 3)
         const vista = await mountSuspended(conApp(PaginaServicios), { route: '/servicios' })
-        await vi.waitFor(() => expect(vista.find('[data-estado="suspected"]').exists()).toBe(true))
+        await vi.waitFor(() => expect(vista.text()).toContain(primero), margen)
+        await vi.waitFor(() => expect(vista.find('[data-estado="suspected"]').exists()).toBe(true), margen)
         expect(vista.find('[data-estado="clean"]').text()).toContain('Dato de hace 12 min')
         // El servicio 3 no tiene identidad en Horus: sin insignia (nunca un "Limpio" inventado).
         expect(vista.findAll('[data-prueba="seguridad-horus"]')).toHaveLength(2)

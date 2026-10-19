@@ -228,6 +228,34 @@ services:
       <<: *node-healthcheck
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 
+  # API del portal (decisión del PM, 19 oct): el tráfico de los clientes (portal y página de corte)
+  # no compite con el panel. Mismo código, misma imagen, mismas variables y la MISMA base y Redis
+  # que `api`: es un segundo proceso HTTP, no una copia de datos. Sin migraciones (las corre
+  # `migrate`), workers, crons ni relay: arranca igual que `api` (sin command; RUN_MIGRATIONS=false
+  # en la imagen). Interruptor ARGOSISP_API_PORTAL del .env: `argosisp` activa el perfil y apunta
+  # el portal y el proxy aquí (ARGOSISP_API_PORTAL_DESTINO); sin el CLI todo va a `api`.
+  api-portal:
+    image: *imagen-api
+    profiles: [api-portal]
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      # Base y Redis salen del .env (por defecto, los de este compose): un nodo portal remoto
+      # (futuro, README) apunta a la IP del túnel WireGuard o a PgBouncer.
+      DB_HOST: ${API_PORTAL_DB_HOST:-postgres}
+      DB_PORT: ${API_PORTAL_DB_PORT:-5432}
+      REDIS_HOST: ${API_PORTAL_REDIS_HOST:-redis}
+      REDIS_PORT: ${API_PORTAL_REDIS_PORT:-6379}
+    volumes:
+      - comprobantes:/comprobantes
+    depends_on:
+      # Después de `api`: la siembra de arranque (notify) corre primero en un solo proceso.
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *node-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3333/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+
   relay:
     <<: *proceso-fondo
     command: [node, ace.js, eventos:relay]
@@ -329,13 +357,19 @@ services:
       HOST: 0.0.0.0
       PORT: '3001'
       NUXT_PUBLIC_API_BASE: ''
-      NUXT_API_BASE_INTERNAL: http://api:3333
+      # Nitro reenvía /api/v1/portal/** (CSRF, X-Canal: portal, X-Forwarded-For) a api-portal si
+      # está activo (ARGOSISP_API_PORTAL), si no a api. PORTAL_API_URL_INTERNA (.env) la fija a mano
+      # (nodo portal remoto, futuro).
+      NUXT_API_BASE_INTERNAL: ${PORTAL_API_URL_INTERNA:-http://${ARGOSISP_API_PORTAL_DESTINO:-api}:3333}
       # Destino de los 302 a /corte del portal cautivo
       NUXT_PORTAL_URL_PUBLICA: ${PORTAL_URL_PUBLICA:-https://${DOMINIO_PORTAL}}
       NUXT_PORTAL_HOSTS: ${PORTAL_HOSTS:-${DOMINIO_PORTAL}}
     depends_on:
       api:
         condition: service_healthy
+      api-portal:
+        condition: service_healthy
+        required: false
     healthcheck:
       <<: *node-healthcheck
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/',{redirect:'manual'}).then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))"]
@@ -424,8 +458,10 @@ services:
       <<: *node-healthcheck
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3200/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 
+  # FreeRADIUS 3.2.10 multi-arquitectura (infra/freeradius/Dockerfile): la oficial
+  # freeradius/freeradius-server solo existe para amd64. Misma receta, rutas y comandos.
   freeradius:
-    image: freeradius/freeradius-server:3.2.10
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-freeradius:${ARGOSISP_VERSION}
     restart: unless-stopped
     command: [-l, stdout]
     environment:
@@ -466,6 +502,9 @@ services:
       # `email <correo>` (Let's Encrypt avisa vencimientos) o `local_certs` (CA interna: pruebas)
       PROXY_TLS_GLOBAL: ${PROXY_TLS_GLOBAL:-}
       PORTAL_HSTS_MAX_AGE: ${PORTAL_HSTS_MAX_AGE:-300}
+      # /api/v1/portal/* del host de la API: api-portal si está activo, si no api.
+      # API_PORTAL_UPSTREAM (.env, host:puerto) lo fija a mano (nodo portal remoto, futuro).
+      API_PORTAL_DESTINO: ${API_PORTAL_UPSTREAM:-${ARGOSISP_API_PORTAL_DESTINO:-api}:3333}
     volumes:
       - ./config/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
@@ -476,6 +515,9 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      api-portal:
+        condition: service_healthy
+        required: false
       web:
         condition: service_started
       portal:

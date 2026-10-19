@@ -76,6 +76,8 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         // Como la API (día 3): nombres para pantallas sin permiso de ver routers, planes o zonas.
         cliente_nombre: cliente.nombre,
         plan_nombre: planes.find(p => p.id === plan)?.nombre ?? '',
+        // Tipo del plan (A1, solo lectura): la API siempre lo manda.
+        plan_tipo: planes.find(p => p.id === plan)?.tipo ?? 'residencial',
         router_nombre: routers.find(r => r.id === router)?.nombre ?? '',
         zona_nombre: zonas.find(z => z.id === cliente.zona_id)?.nombre ?? null,
         // Como la API (A1, día 4): siempre trae las excepciones a la plantilla (vacío si no hay).

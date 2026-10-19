@@ -1,0 +1,86 @@
+# ArgosIsp · compose de un NODO PORTAL (A6, distribución). Lo instala `instalar.sh --rol portal`
+# (docs/runbooks/instalacion.md, "Nodo portal") y lo maneja `argosisp`, igual que el principal.
+#
+# Solo el portal del cliente y Caddy para su dominio: sin Postgres, Redis, migraciones ni workers.
+# El nodo no tiene datos: todo /api/v1/portal/** va por HTTPS a la API central con el token del
+# nodo (NODO_PORTAL_TOKEN) y la IP real del cliente en una cabecera propia
+# (.claude/integration/contratos/nodo-portal.md). La API central solo cree esa IP con un token válido.
+#
+#   navegador → proxy (:80/:443) → portal (Nitro: CSRF, X-Canal) → proxy (:8081, solo la red
+#   interna) → https://NODO_CENTRAL_HOST (proxy del central) → api-portal (o api)
+
+name: argosisp-portal
+
+x-node-healthcheck: &node-healthcheck
+  interval: 10s
+  timeout: 3s
+  retries: 6
+  start_period: 60s
+  start_interval: 2s
+
+services:
+  portal:
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-portal:${ARGOSISP_VERSION:?Falta ARGOSISP_VERSION en .env}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '3001'
+      NUXT_PUBLIC_API_BASE: ''
+      # El reenvío de Nitro va al proxy local, que agrega el token y la IP real y sale al central
+      NUXT_API_BASE_INTERNAL: ${PORTAL_API_URL_INTERNA:-http://proxy:8081}
+      NUXT_PORTAL_URL_PUBLICA: ${PORTAL_URL_PUBLICA:-https://${DOMINIO_PORTAL:?Falta DOMINIO_PORTAL en .env}}
+      NUXT_PORTAL_HOSTS: ${PORTAL_HOSTS:-${DOMINIO_PORTAL}}
+      # El Caddy del nodo (red interna) es de confianza: Nitro reenvía su X-Forwarded-Proto y el
+      # :8081 lo manda al central como X-Argos-Cliente-Proto (cookie Secure; contrato nodo-portal §5)
+      NUXT_PORTAL_PROXIES_CONFIABLES: ${COMPOSE_SUBNET_V4:-172.31.0.0/24},${COMPOSE_SUBNET_V6:-fd00:a6:31::/64}
+    healthcheck:
+      <<: *node-healthcheck
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/',{redirect:'manual'}).then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))"]
+
+  proxy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      DOMINIO_PORTAL: ${DOMINIO_PORTAL}
+      PROXY_TLS_GLOBAL: ${PROXY_TLS_GLOBAL:-}
+      PORTAL_HSTS_MAX_AGE: ${PORTAL_HSTS_MAX_AGE:-300}
+      # API central: nombre (Host y SNI) y a dónde conectarse (por defecto, el mismo nombre en 443)
+      NODO_CENTRAL_HOST: ${NODO_CENTRAL_HOST:?Falta NODO_CENTRAL_HOST en .env}
+      NODO_CENTRAL_DIRECCION: ${NODO_CENTRAL_DIRECCION:-${NODO_CENTRAL_HOST}:443}
+      # Solo pruebas (CA interna del central): tls_insecure_skip_verify
+      NODO_CENTRAL_TLS_EXTRA: ${NODO_CENTRAL_TLS_EXTRA:-}
+      NODO_PORTAL_TOKEN: ${NODO_PORTAL_TOKEN:?Falta NODO_PORTAL_TOKEN en .env}
+      # Únicos que pueden usar el reenvío interno (:8081) y en cuyo X-Forwarded-For se confía
+      RED_INTERNA_V4: ${COMPOSE_SUBNET_V4:-172.31.0.0/24}
+      RED_INTERNA_V6: ${COMPOSE_SUBNET_V6:-fd00:a6:31::/64}
+    volumes:
+      - ./config/proxy/Caddyfile.nodo-portal:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    ports:
+      - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTP_PORT:-80}:80
+      - ${ARGOSISP_BIND_IP:-0.0.0.0}:${ARGOSISP_HTTPS_PORT:-443}:443
+    extra_hosts:
+      # Pruebas con el central en el mismo servidor (NODO_CENTRAL_DIRECCION=host.docker.internal:443)
+      - host.docker.internal:host-gateway
+    depends_on:
+      portal:
+        condition: service_started
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:2019/config/']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+networks:
+  default:
+    enable_ipv6: ${COMPOSE_IPV6:-false}
+    ipam:
+      config:
+        - subnet: ${COMPOSE_SUBNET_V4:-172.31.0.0/24}
+        - subnet: ${COMPOSE_SUBNET_V6:-fd00:a6:31::/64}
+
+volumes:
+  caddydata:
+  caddyconfig:
