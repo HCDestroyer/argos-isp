@@ -24,11 +24,22 @@ COPY apps/web apps/web
 RUN pnpm --filter @argosisp/web build
 
 FROM node:22-alpine AS runtime
+# Sin gestores de paquetes en la imagen final (solo node): ni npm, ni corepack, ni yarn.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/web/.output ./.output
+# Versión de la imagen (workflow imagenes.yml): la API la expone en GET /api/v1/version y
+# `argosisp actualizar` la compara con la publicada. Va al final para no invalidar la caché del build.
+ARG ARGOSISP_VERSION=desarrollo
+ARG ARGOSISP_COMMIT=
+ARG ARGOSISP_COMPILADA=
+ENV ARGOSISP_VERSION=$ARGOSISP_VERSION \
+    ARGOSISP_COMMIT=$ARGOSISP_COMMIT \
+    ARGOSISP_COMPILADA=$ARGOSISP_COMPILADA
 USER node
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]

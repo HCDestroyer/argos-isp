@@ -41,6 +41,8 @@ export const ORIGENES_ASIENTO = [
     'banco',
     'provision',
     'castigo',
+    // pasivo del programa de lealtad (`contratos/lealtad.md` §6); origen_id = `lealtad.movimientos.id`
+    'lealtad',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 

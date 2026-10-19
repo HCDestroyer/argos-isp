@@ -12,6 +12,7 @@ import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
 import SellarAsientos from '#ledger/actions/sellar_asientos'
 import VerificarIntegridad from '#ledger/actions/verificar_integridad'
 import { pendientesDeSellar } from '#ledger/sellos'
+import { cronAntiguedad, cronVencer } from '#lealtad/jobs'
 
 /**
  * Crons de facturación con BullMQ (`node ace billing:worker`).
@@ -27,6 +28,8 @@ import { pendientesDeSellar } from '#ledger/sellos'
  * | `conciliar` | 06:30 Guatemala | `ConciliarPasarela` (cobros en línea de ayer contra el proveedor) |
  * | `sellar` | 1 min | `SellarAsientos` (`ledger:sellar`: cadena de hash del libro, §10.10); sin asientos pendientes no llama la acción |
  * | `integridad` | 02:15 Guatemala | `VerificarIntegridad` (recalcula la cadena; `libro.integridad_rota` si no verifica) |
+ * | `lealtad:antiguedad` | 03:05 Guatemala | `OtorgarAntiguedad` (aniversarios pendientes hasta hoy, por empresa y lotes de 500) |
+ * | `lealtad:vencer` | 03:20 Guatemala | `VencerPuntos` (lotes vencidos hasta hoy y avisos de puntos por vencer) |
  *
  * Lock: el worker tiene concurrencia 1 y además cada job toma un advisory lock de Postgres
  * (`pg_try_advisory_xact_lock`) mientras corre; si otra instancia ya lo tiene, el disparo se
@@ -47,6 +50,8 @@ export const CRONS = {
 export const CRONS_DIARIOS = {
     conciliar: { pattern: '30 6 * * *', tz: 'America/Guatemala' },
     integridad: { pattern: '15 2 * * *', tz: 'America/Guatemala' },
+    'lealtad:antiguedad': { pattern: '5 3 * * *', tz: 'America/Guatemala' },
+    'lealtad:vencer': { pattern: '20 3 * * *', tz: 'America/Guatemala' },
 } as const
 export type NombreCron = keyof typeof CRONS | keyof typeof CRONS_DIARIOS
 
@@ -148,6 +153,10 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
             })
         case 'integridad':
             return conLock(nombre, () => new VerificarIntegridad().execute({}, ctx))
+        case 'lealtad:antiguedad':
+            return conLock(nombre, () => cronAntiguedad(ctx, ahora))
+        case 'lealtad:vencer':
+            return conLock(nombre, () => cronVencer(ctx, ahora))
         default:
             throw new Error(`Cron de billing desconocido: ${nombre}`)
     }

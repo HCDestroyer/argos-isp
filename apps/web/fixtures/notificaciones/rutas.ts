@@ -47,6 +47,9 @@ function guardar(solicitud: SolicitudFixture, empresaId: number | null): Respues
     if (typeof correo.remitente === 'string' && correo.remitente && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo.remitente)) {
         errores.push({ field: 'correo.remitente', message: 'Correo no válido', rule: 'email' })
     }
+    if (typeof correo.contabilidad === 'string' && !/^\s*(?:[^\s@,]+@[^\s@,]+\.[^\s@,]+\s*(?:,\s*|$))*$/.test(correo.contabilidad)) {
+        errores.push({ field: 'correo.contabilidad', message: 'El campo contabilidad no tiene un formato válido', rule: 'regex' })
+    }
     if (correo.puerto !== undefined && correo.puerto !== null && (typeof correo.puerto !== 'number' || correo.puerto < 1 || correo.puerto > 65535)) {
         errores.push({ field: 'correo.puerto', message: 'Puerto entre 1 y 65535', rule: 'range' })
     }

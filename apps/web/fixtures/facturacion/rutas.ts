@@ -23,6 +23,7 @@ import { asientoPago, asientoReverso } from '../libro/datos'
 import { nuevaSesion } from '../sesiones/datos'
 import { dinero, estadoFactura } from './datos'
 import { notasDeFactura, rutasNotasCredito } from './notasCredito'
+import { anularConFel, rutasFel } from '../fel/rutas'
 
 type Factura = Schema<'Factura'>
 type FacturaDetalle = Schema<'FacturaDetalle'>
@@ -40,7 +41,13 @@ const DATOS_POR_METODO: Partial<Record<Pago['metodo'], readonly ('referencia' | 
     remesa: ['cuenta_bancaria_id', 'referencia'],
 }
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
-const ESTADOS_FACTURA: readonly Factura['estado'][] = ['emitida', 'parcial', 'pagada', 'vencida', 'anulada']
+/** Todos los estados del contrato (el `Record` obliga a agregar los nuevos: `castigada`, `acreditada`). */
+const ESTADOS_FACTURA = Object.keys({
+    por_certificar: true, emitida: true, parcial: true, pagada: true, vencida: true, anulada: true, castigada: true, acreditada: true,
+} satisfies Record<Factura['estado'], true>)
+const TIPOS_FACTURA = Object.keys({ servicio: true, mora: true, cargo: true } satisfies Record<NonNullable<Factura['tipo']>, true>)
+/** Como `ESTADOS_PENDIENTES` de la API: solo estas tienen saldo por cobrar. */
+export const ESTADOS_PENDIENTES: readonly Factura['estado'][] = ['emitida', 'parcial', 'vencida']
 const ESTADOS_PAGO: readonly Pago['estado'][] = ['registrado', 'pendiente_verificacion', 'anulado']
 
 function usuarioDe(solicitud: SolicitudFixture): number | null {
@@ -245,7 +252,7 @@ function referenciaRepetida(cuerpo: Record<string, unknown>): RespuestaFixture |
 /** Facturas con saldo del cliente en el orden de `facturasPendientes` (vencimiento, periodo, id). */
 function pendientesDe(clienteId: number) {
     return bd.facturas
-        .filter(f => f.cliente_id === clienteId && f.estado !== 'pagada' && f.estado !== 'anulada')
+        .filter(f => f.cliente_id === clienteId && ESTADOS_PENDIENTES.includes(f.estado))
         .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.periodo.localeCompare(b.periodo) || a.id - b.id)
 }
 
@@ -272,7 +279,7 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
             evaluados.push({ ...base, motivo: 'suspensión manual' })
             continue
         }
-        const vencidas = bd.facturas.filter(f => f.servicio_id === servicio.id && f.estado === 'vencida').length
+        const vencidas = bd.facturas.filter(f => f.servicio_id === servicio.id && f.estado === 'vencida' && (f.tipo ?? 'servicio') === 'servicio').length
         if (vencidas > 0 || servicio.estado === 'activo') {
             evaluados.push({ ...base, motivo: vencidas ? `${vencidas} ${vencidas === 1 ? 'factura vencida' : 'facturas vencidas'}` : 'sin facturas vencidas' })
             continue
@@ -524,6 +531,7 @@ function empresaRecibo(id: number): Schema<'EmpresaRecibo'> {
 
 export const rutasFacturacion: RutasFixture = {
     ...rutasNotasCredito(evaluarServicios, detalle),
+    ...rutasFel(detalle),
 
     'POST /api/v1/pagos': conPermiso('pagos.registrar', conIdempotencia(procesarPago)),
 
@@ -579,14 +587,19 @@ export const rutasFacturacion: RutasFixture = {
         const servicio = numeroQuery(solicitud, 'servicio_id')
         const estado = solicitud.query.get('estado')
         const periodo = solicitud.query.get('periodo')
-        if (estado && !(ESTADOS_FACTURA as readonly string[]).includes(estado)) {
+        const tipo = solicitud.query.get('tipo')
+        if (estado && !ESTADOS_FACTURA.includes(estado)) {
             return datosInvalidos([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
+        }
+        if (tipo && !TIPOS_FACTURA.includes(tipo)) {
+            return datosInvalidos([{ field: 'tipo', message: 'Tipo inválido', rule: 'enum' }])
         }
         const filas = deLaEmpresa(bd.facturas, solicitud)
             .filter(f => cliente === undefined || f.cliente_id === cliente)
             .filter(f => servicio === undefined || f.servicio_id === servicio)
             .filter(f => !estado || f.estado === estado)
             .filter(f => !periodo || f.periodo === periodo)
+            .filter(f => !tipo || (f.tipo ?? 'servicio') === tipo)
             .sort((a, b) => b.id - a.id)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),
@@ -612,15 +625,23 @@ export const rutasFacturacion: RutasFixture = {
         if (factura.estado === 'anulada') {
             return conflicto('factura_anulada', 'Factura anulada', `La factura ${factura.id} ya está anulada`)
         }
-        if (new Decimal(factura.pagado).gt(0)) {
+        if (new Decimal(factura.pagado).minus(factura.acreditado ?? '0').gt(0)) {
             return conflicto('factura_con_pagos', 'Factura con pagos', `La factura ${factura.id} tiene pagos aplicados (factura ${factura.id}: Q${factura.pagado}); anula primero el pago`)
+        }
+        const revertir = () => {
+            const original = bd.asientos.find(a => a.origen_tipo === 'factura' && a.origen_id === factura.id && a.reversa_de === null)
+            if (original) {
+                bd.asientos.push(asientoReverso(siguienteId(bd.asientos), original, `Anulación de la factura ${factura.id} · ${motivo}`, ahora(), usuarioDe(solicitud)))
+            }
+        }
+        // FEL: con DTE certificado la anulación espera al certificador (`anulacion_pendiente`).
+        const conFel = anularConFel(factura, motivo, solicitud, revertir)
+        if (conFel) {
+            return conFel
         }
         const momento = ahora()
         Object.assign(factura, { estado: 'anulada', anulada_en: momento, motivo_anulacion: motivo, version: factura.version + 1, updated_at: momento })
-        const original = bd.asientos.find(a => a.origen_tipo === 'factura' && a.origen_id === factura.id && a.reversa_de === null)
-        if (original) {
-            bd.asientos.push(asientoReverso(siguienteId(bd.asientos), original, `Anulación de la factura ${factura.id} · ${motivo}`, momento, usuarioDe(solicitud)))
-        }
+        revertir()
         registrarAccion(solicitud, 'facturas.anular', { tipo: 'factura', id: factura.id }, { motivo })
         return { status: 200, cuerpo: factura }
     })),

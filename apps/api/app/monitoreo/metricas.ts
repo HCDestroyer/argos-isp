@@ -43,6 +43,8 @@ export const CRONS = [
     'facturas.generar',
     'facturas.vencer_pendientes',
     'servicios.corte',
+    'lealtad.otorgar_antiguedad',
+    'lealtad.vencer',
     'notificaciones.recordatorios',
     'notificaciones.vigilar_crons',
     'auditoria.crear_particiones',

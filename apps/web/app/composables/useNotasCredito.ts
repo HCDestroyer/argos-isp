@@ -26,5 +26,17 @@ export function useNotasCredito() {
         return resolver(api.GET('/api/v1/notas-credito/{id}', { params: { path: { id } } }))
     }
 
-    return { listar, ver }
+    /**
+     * `POST /notas-credito/:id/anular` (`facturas.anular_nota_credito`): solo una nota cuya NCRE la
+     * SAT rechazó en definitivo. Reverso espejo; el monto vuelve al saldo de la factura. 409
+     * `nota_anulada`, `ncre_certificada`, `dte_en_proceso`, `nota_sin_ncre_rechazada`.
+     */
+    function anular(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<NotaCredito>> {
+        return resolver(api.POST('/api/v1/notas-credito/{id}/anular', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { motivo },
+        }))
+    }
+
+    return { listar, ver, anular }
 }

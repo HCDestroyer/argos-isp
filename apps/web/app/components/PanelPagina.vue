@@ -45,6 +45,7 @@ withDefaults(defineProps<{
         </template>
 
         <template #body>
+            <AvisoFel />
             <slot />
         </template>
     </UDashboardPanel>

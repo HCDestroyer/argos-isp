@@ -79,7 +79,11 @@ function alEmitirNota(nota: NotaCreditoEmitida) {
     void cargar()
 }
 
-const puedeAnular = computed(() => puede('facturas.anular') && factura.value !== null && factura.value.estado !== 'anulada')
+/** Con DTE certificado, anular pide además `fel.anular` y va en dos pasos (`AnularFacturaModal`). */
+const conDteCertificado = computed(() => factura.value?.fel_estado === 'certificado')
+const anulacionPendiente = computed(() => factura.value?.fel_estado === 'anulacion_pendiente')
+const puedeAnular = computed(() => puede('facturas.anular') && factura.value !== null && factura.value.estado !== 'anulada'
+    && !anulacionPendiente.value && (!conDteCertificado.value || puede('fel.anular')))
 
 const tipoVisual = computed(() => tipoFacturaVisual(factura.value?.tipo))
 
@@ -97,7 +101,26 @@ const avisoNoFiscal = computed<string | null>(() => {
     return null
 })
 
-const pendiente = computed(() => (factura.value && factura.value.estado !== 'anulada' ? saldoFactura(factura.value) : null))
+/** Sustituir (`facturas.sustituir`): solo una factura de servicio vigente (ni mora ni cargo). La API decide el resto (409). */
+const sustituirAbierto = ref(false)
+const puedeSustituir = computed(() => puede('facturas.sustituir') && factura.value !== null && factura.value.estado !== 'anulada'
+    && (factura.value.tipo ?? 'servicio') === 'servicio' && !factura.value.sustituida_por)
+
+function alSustituir(sustitucion: SustitucionFactura) {
+    toast.add({
+        title: `Factura #${sustitucion.original.id} sustituida`,
+        description: sustitucion.tipo === 'nota_credito'
+            ? `Acreditada con la nota de crédito #${sustitucion.nota_credito_id ?? '—'} (NCRE) · nueva factura #${sustitucion.nueva.id}`
+            : `Anulada · nueva factura #${sustitucion.nueva.id}`,
+        icon: 'i-lucide-replace',
+        color: 'success',
+    })
+    void navigateTo(`/facturas/${sustitucion.nueva.id}`)
+}
+
+/** Por certificar (obligatoria + «al emitir»): aún no es deuda; el saldo no se muestra como pendiente. */
+const porCertificar = computed(() => factura.value?.estado === 'por_certificar')
+const pendiente = computed(() => (factura.value && factura.value.estado !== 'anulada' && !porCertificar.value ? saldoFactura(factura.value) : null))
 
 const columnasLineas: TableColumn<FacturaLinea>[] = [
     { accessorKey: 'concepto', header: 'Concepto', meta: { class: { td: 'whitespace-normal' } } },
@@ -190,12 +213,27 @@ function anular(motivo: string, clave: string) {
 }
 
 function alAnular(actualizada: Factura) {
-    toast.add({
-        title: 'Factura anulada',
-        description: `Factura #${actualizada.id} · se registró el asiento de reverso`,
-        icon: 'i-lucide-ban',
-        color: 'success',
-    })
+    if (actualizada.fel_estado === 'anulacion_pendiente') {
+        toast.add({
+            title: 'Anulación enviada al certificador',
+            description: `Factura #${actualizada.id} · se anula cuando la SAT lo confirme`,
+            icon: 'i-lucide-hourglass',
+            color: 'warning',
+        })
+    }
+    else {
+        toast.add({
+            title: 'Factura anulada',
+            description: `Factura #${actualizada.id} · se registró el asiento de reverso`,
+            icon: 'i-lucide-ban',
+            color: 'success',
+        })
+    }
+    void cargar()
+}
+
+/** El DTE cambió de estado (certificado, anulado…): se relee la factura. */
+function alCambiarDte() {
     void cargar()
 }
 
@@ -253,7 +291,17 @@ onMounted(cargar)
                         <h2 class="text-xl font-semibold text-highlighted">
                             Factura #{{ factura.id }}
                         </h2>
-                        <EstadoFacturaBadge :estado="factura.estado" />
+                        <EstadoFacturaBadge
+                            :estado="factura.estado"
+                            data-prueba="factura-estado"
+                        />
+                        <UBadge
+                            v-if="factura.tipo_dte"
+                            :label="factura.fel_estado === 'certificado' ? `${factura.tipo_dte} certificada` : (factura.aviso_cobro ? 'Aviso de cobro' : factura.tipo_dte)"
+                            :icon="factura.fel_estado === 'certificado' ? 'i-lucide-badge-check' : 'i-lucide-file-clock'"
+                            :color="factura.fel_estado === 'certificado' ? 'success' : 'neutral'"
+                            variant="outline"
+                        />
                         <UBadge
                             v-if="tipoVisual"
                             :label="tipoVisual.etiqueta"
@@ -311,11 +359,21 @@ onMounted(cargar)
                         @click="notaAbierta = true"
                     />
                     <UButton
+                        v-if="puedeSustituir"
+                        label="Sustituir"
+                        icon="i-lucide-replace"
+                        color="neutral"
+                        variant="outline"
+                        data-prueba="abrir-sustituir"
+                        @click="sustituirAbierto = true"
+                    />
+                    <UButton
                         v-if="puedeAnular"
                         label="Anular"
                         icon="i-lucide-ban"
                         color="error"
                         variant="outline"
+                        data-prueba="abrir-anular"
                         @click="anularAbierto = true"
                     />
                 </div>
@@ -329,6 +387,43 @@ onMounted(cargar)
                 color="neutral"
                 variant="subtle"
                 data-prueba="factura-no-fiscal"
+            />
+            <UAlert
+                v-if="porCertificar"
+                color="neutral"
+                variant="subtle"
+                icon="i-lucide-file-clock"
+                title="Por certificar: todavía no es deuda"
+                description="La FEL de la empresa es obligatoria y esta factura se certifica al emitirse: no tiene asiento, no se cobra ni cuenta para el corte hasta que la SAT la autorice."
+                data-prueba="factura-por-certificar"
+            />
+            <UAlert
+                v-if="factura.sustituida_por"
+                color="neutral"
+                variant="subtle"
+                icon="i-lucide-replace"
+                :title="`Sustituida por la factura #${factura.sustituida_por}`"
+                description="Esta factura se reemplazó por otra del mismo periodo (anulada o acreditada con una NCRE por su saldo)."
+                :actions="[{ label: `Ver factura #${factura.sustituida_por}`, to: `/facturas/${factura.sustituida_por}`, color: 'neutral', variant: 'outline', icon: 'i-lucide-arrow-right' }]"
+                data-prueba="factura-sustituida-por"
+            />
+            <UAlert
+                v-if="factura.sustituye_a"
+                color="info"
+                variant="subtle"
+                icon="i-lucide-replace"
+                :title="`Sustituye a la factura #${factura.sustituye_a}`"
+                :actions="[{ label: `Ver factura #${factura.sustituye_a}`, to: `/facturas/${factura.sustituye_a}`, color: 'neutral', variant: 'outline', icon: 'i-lucide-arrow-left' }]"
+                data-prueba="factura-sustituye-a"
+            />
+            <UAlert
+                v-if="anulacionPendiente"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-hourglass"
+                title="Anulación pendiente con el certificador"
+                description="La factura se anula cuando la SAT lo confirme. Mientras tanto no recibe pagos ni notas de crédito."
+                data-prueba="factura-anulacion-pendiente"
             />
 
             <div class="grid gap-4 lg:grid-cols-2">
@@ -356,7 +451,7 @@ onMounted(cargar)
                         />
                         <DatoFicha
                             etiqueta="Pendiente"
-                            :valor="pendiente ? formatearQuetzales(pendiente) : 'Anulada'"
+                            :valor="pendiente ? formatearQuetzales(pendiente) : (porCertificar ? 'Por certificar' : 'Anulada')"
                         />
                         <DatoFicha
                             v-if="factura.acreditado && factura.acreditado !== '0.00'"
@@ -374,7 +469,7 @@ onMounted(cargar)
                 </UPageCard>
 
                 <UPageCard
-                    title="Fechas y certificación"
+                    title="Fechas"
                     icon="i-lucide-calendar"
                     variant="subtle"
                 >
@@ -393,20 +488,9 @@ onMounted(cargar)
                             :valor="formatearFechaHora(factura.vencida_en)"
                         />
                         <DatoFicha
-                            etiqueta="FEL"
-                            :valor="felDeFactura(factura)"
-                        />
-                        <DatoFicha
-                            v-if="factura.fel_uuid"
-                            etiqueta="UUID FEL"
-                            :valor="factura.fel_uuid"
-                            mono
-                        />
-                        <DatoFicha
-                            v-if="factura.fel_serie || factura.fel_numero"
-                            etiqueta="Serie y número"
-                            :valor="`${factura.fel_serie ?? '—'} · ${factura.fel_numero ?? '—'}`"
-                            mono
+                            v-if="factura.certificar_al"
+                            etiqueta="Certificar"
+                            :valor="CERTIFICAR_AL[factura.certificar_al].etiqueta"
                         />
                         <DatoFicha
                             etiqueta="Clave"
@@ -416,6 +500,24 @@ onMounted(cargar)
                     </dl>
                 </UPageCard>
             </div>
+
+            <UPageCard
+                v-if="puede('fel.ver') && factura.tipo !== 'cargo'"
+                :title="factura.tipo === 'mora' ? 'Certificación FEL (nota de débito)' : 'Certificación FEL'"
+                icon="i-lucide-badge-check"
+                variant="subtle"
+                data-prueba="factura-fel"
+            >
+                <DteDocumento
+                    tipo="factura"
+                    :documento-id="factura.id"
+                    :dte-id="factura.dte_id ?? null"
+                    :certificable="factura.estado !== 'anulada' && factura.estado !== 'acreditada'"
+                    :sin-certificar="factura.estado === 'acreditada' ? 'Sin DTE: acreditada por notas de crédito internas, no es una venta y no se certifica.' : null"
+                    :refrescar="`${factura.version}-${factura.estado}-${factura.fel_estado ?? ''}`"
+                    @cambiado="alCambiarDte"
+                />
+            </UPageCard>
 
             <section class="flex flex-col gap-2">
                 <h3 class="text-sm font-semibold text-highlighted">
@@ -575,12 +677,22 @@ onMounted(cargar)
                         class="flex flex-wrap items-start justify-between gap-2 px-3 py-2"
                     >
                         <div class="flex min-w-0 flex-col">
-                            <ULink
-                                :to="`/notas-credito/${nota.id}`"
-                                class="text-sm font-medium text-highlighted hover:text-primary"
-                            >
-                                Nota #{{ nota.id }} · {{ formatearFecha(nota.fecha) }}
-                            </ULink>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <ULink
+                                    :to="`/notas-credito/${nota.id}`"
+                                    class="text-sm font-medium text-highlighted hover:text-primary"
+                                >
+                                    Nota #{{ nota.id }} · {{ formatearFecha(nota.fecha) }}
+                                </ULink>
+                                <UBadge
+                                    v-if="nota.anulada_en"
+                                    label="Anulada"
+                                    icon="i-lucide-ban"
+                                    color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                />
+                            </div>
                             <span class="text-xs text-muted">{{ nota.motivo }}<template v-if="nota.created_by_nombre"> · {{ nota.created_by_nombre }}</template></span>
                         </div>
                         <div class="flex flex-col items-end">
@@ -598,7 +710,23 @@ onMounted(cargar)
                 @hecho="alEmitirNota"
             />
 
+            <SustituirFacturaModal
+                v-if="puedeSustituir"
+                v-model:open="sustituirAbierto"
+                :factura="factura"
+                @hecho="alSustituir"
+            />
+
+            <AnularFacturaModal
+                v-if="conDteCertificado"
+                v-model:open="anularAbierto"
+                :factura="factura"
+                @hecho="alAnular"
+                @nota-credito="notaAbierta = true"
+            />
+
             <AccionMotivoModal
+                v-else
                 v-model:open="anularAbierto"
                 titulo="Anular factura"
                 :descripcion="`Factura #${factura.id} · ${formatearQuetzales(factura.total)}`"

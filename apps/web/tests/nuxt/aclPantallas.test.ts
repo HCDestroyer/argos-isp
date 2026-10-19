@@ -120,6 +120,12 @@ function rutasDePaginas(): Map<string, string> {
  * debe comprobar el permiso antes. Para cada uno, el permiso y quién lo abre.
  */
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = {
+    'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
+    'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },
+    'DteFicha.vue': { permisos: ['fel.ver'], desde: ['components/DteDocumento.vue', 'pages/dte/[id].vue'] },
+    'FelCertificarAl.vue': { permisos: ['plantillas.ver'], desde: ['pages/configuracion/fel.vue'] },
+    'FelCredencialesModal.vue': { permisos: ['fel.configurar'], desde: ['pages/configuracion/fel.vue'] },
+    'SustituirFacturaModal.vue': { permisos: ['facturas.sustituir'], desde: ['pages/facturas/[id].vue'] },
     'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
     'CajaDepositoModal.vue': { permisos: ['cajas.depositar'], desde: ['pages/caja/index.vue'] },
     'CarteraCastigoModal.vue': { permisos: ['cartera.castigar', 'facturas.ver'], desde: ['pages/cartera/index.vue'] },
@@ -132,6 +138,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'ProveedorCobroModal.vue': { permisos: ['cobros.configurar'], desde: ['pages/configuracion/proveedores-cobro.vue'] },
     'ReglaConciliacionModal.vue': { permisos: ['bancos.conciliar'], desde: ['pages/bancos/reglas.vue'] },
     'TrasladoModal.vue': { permisos: ['bancos.trasladar'], desde: ['pages/bancos/transito.vue'] },
+    'ClientePuntos.vue': { permisos: ['lealtad.ver'], desde: ['pages/clientes/[id]/index.vue'] },
+    'ProgramaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
+    'PuntosAjusteModal.vue': { permisos: ['lealtad.ajustar'], desde: ['components/ClientePuntos.vue'] },
+    'ReglaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
     'CajaCierreModal.vue': { permisos: ['cajas.cerrar'], desde: ['pages/caja/index.vue'] },
     'CajaCrearModal.vue': { permisos: ['cajas.crear'], desde: ['pages/caja/index.vue'] },
     'ClienteEstadoCuenta.vue': { permisos: ['clientes.estado_cuenta'], desde: ['pages/clientes/[id]/index.vue'] },
@@ -143,6 +153,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'EmpresaLogoModal.vue': { permisos: ['empresas.cambiar_logo'], desde: ['pages/configuracion/empresas.vue'] },
     'LibroCierres.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LibroEstadoFinanciero.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'LibroDiarios.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
+    'LibroIntegridad.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id].vue'] },
     'NotaCreditoModal.vue': { permisos: ['facturas.nota_credito'], desde: ['pages/facturas/[id].vue'] },
     'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue'] },
@@ -163,7 +175,9 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
 
     it('cada página declara su permiso; el menú pide el mismo que la página', () => {
         const sinPermiso = PAGINAS
-            .filter(archivo => !/\/(login|sin-permiso|index)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
+            // Sin permiso a propósito: login, autologin desde Horus (`sso/entrar`), la explicación del
+            // enlace de conexión (`conectar`) y "Mi cuenta" (`perfil`, cualquier usuario con sesión).
+            .filter(archivo => !/\/(login|sin-permiso|index|conectar|perfil|sso\/entrar)\.vue$/.test(archivo) || /pages\/\w[\w-]*\/index\.vue$/.test(archivo))
             .filter(archivo => !permisoDePagina(leer(archivo)))
             .map(relativo)
         expect(sinPermiso).toEqual([])

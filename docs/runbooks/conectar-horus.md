@@ -50,6 +50,8 @@ Un solo paste: cada lado emite su token y su secreto y se los intercambian de se
 
 1. **Probar conexión**: debe decir `ok`. Si no, el mensaje es el error real:
    - `ECONNREFUSED` / `ENOTFOUND`: URL o red; `Horus respondió 401`: código revocado o vencido.
+   - `Horus respondió 403` en `routers/status`: el código se emitió antes de que la plantilla
+     ArgosISP llevara `devices.read` (contrato 1.7.0); genera un enlace o un código nuevo.
    - `webhook: HTTP 401`: el secreto del receptor de Horus no coincide.
 2. Enciende el interruptor y guarda.
 3. Abre la ficha de un servicio activo: el bloque Horus muestra consumo, salud y seguridad, sin

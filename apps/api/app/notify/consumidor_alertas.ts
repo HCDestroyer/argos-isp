@@ -7,7 +7,9 @@ import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
 
 /**
  * Consumidor de alertas internas (grupo `notify` del bus, junto a `ConsumidorNotify`): `aaa.caido`,
- * `aaa.recuperado`, `coa.fallido` y `caja.cerrada` con diferencia. La lógica está en la acción
+ * `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada` con diferencia y los avisos
+ * fiscales (`libro.integridad_rota`, `dte.rechazado`, `fel.contingencia_cambiada`,
+ * `nota_credito.anulada`). La lógica está en la acción
  * `RegistrarAlerta` (idempotente por `outbox:<id>`). Si falla, lanza y el evento se reintenta.
  */
 export class ConsumidorAlertas implements ConsumidorEventos {

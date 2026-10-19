@@ -6,11 +6,13 @@ import {
     abrirIncidente,
     cerrarIncidente,
     crearAlerta,
+    crearAlertas,
     duracion,
     instanteLocal,
     type Incidente,
 } from '#notify/alertas'
 import { quetzales } from '#notify/formato'
+import { numeroDeFactura } from '#notify/variables'
 
 /** Eventos del catálogo que generan alertas internas. */
 export const EVENTOS_ALERTA = [
@@ -19,11 +21,19 @@ export const EVENTOS_ALERTA = [
     'coa.fallido',
     'routeros.fallido',
     'caja.cerrada',
+    // Fiscales (contrato de localización fiscal §14): al equipo (Telegram) y a contabilidad (correo)
+    'libro.integridad_rota',
+    'dte.rechazado',
+    'fel.contingencia_cambiada',
+    'nota_credito.anulada',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',
     'horus.router_estado_cambiado',
     'horus.servicio_infra_cambiado',
 ] as const
+
+/** Rechazos de DTE de la misma empresa y clase dentro de esta ventana son el mismo incidente. */
+export const VENTANA_DTE_MIN = 60
 export type EventoAlerta = (typeof EVENTOS_ALERTA)[number]
 
 /** Severidades de Horus que avisan al equipo; las demás solo quedan en la línea de tiempo. */
@@ -73,6 +83,14 @@ function texto(valor: unknown): string {
  * | `routeros.fallido` | `routeros:<router_id>`, termina tras 30 min sin fallos | al abrir |
  * | `routeros.fallido` con `operacion = validar velocidad (...)` | `routeros-velocidad:<router_id>:<validación>`, aparte del de caída | al abrir |
  * | `caja.cerrada` con diferencia ≠ 0 | `caja:<caja_id>`, puntual | siempre |
+ * | `libro.integridad_rota` | `libro:<empresa_id>:<sello>`, puntual, una vez por sello | siempre (urgente) |
+ * | `dte.rechazado` | `dte:<empresa_id>:definitivo\|agotado`, termina tras 60 min sin rechazos | al abrir |
+ * | `fel.contingencia_cambiada` (`activa`) | `fel-contingencia:<empresa_id>`, abierto hasta desactivarla | al abrir |
+ * | `fel.contingencia_cambiada` (`!activa`) | cierra `fel-contingencia:<empresa_id>` | siempre ("desactivada") |
+ * | `nota_credito.anulada` | `nota-credito:<nota_credito_id>`, puntual, una vez por nota | siempre |
+ *
+ * Los fiscales usan la configuración de canales de la empresa del evento (`empresa_id`): Telegram
+ * al chat del equipo y correo a `correo.contabilidad`.
  * | `horus.hallazgo_abierto` (severidad high o critical) | `horus-hallazgo:<id>`, hasta `horus.hallazgo_resuelto` | al abrir y al resolver; con la configuración de la empresa del servicio |
  * | `horus.router_estado_cambiado` | `horus-router:<id>`, abierto mientras no esté `online` | al abrir y al recuperar |
  * | `horus.servicio_infra_cambiado` | `horus-infra:<id>`, abierto mientras no esté bien | al abrir y al recuperar |
@@ -149,7 +167,131 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             }
         }
 
+        const empresaId = enteroPositivo(p.empresa_id)
+        const avisarFiscal = async (
+            incidente: Incidente,
+            fase: 'abierto' | 'cerrado',
+            evento: string,
+            alerta: Record<string, unknown>,
+        ): Promise<ResultadoAlerta> => {
+            const envios = await crearAlertas(t.trx, {
+                incidente,
+                fase,
+                evento,
+                alerta,
+                requestId: t.ctx.requestId,
+                empresaId,
+                canales: ['telegram', 'correo'],
+            })
+            return {
+                duplicado: false,
+                incidenteId: incidente.id,
+                alerta: envios.length > 0,
+                encolar: envios.filter((e) => e.estado === 'encolado').map((e) => e.id),
+            }
+        }
+
         switch (input.evento) {
+            case 'libro.integridad_rota': {
+                // Una vez por empresa y sello (A3 ya lo emite así; `unico` cubre una reemisión).
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `libro:${empresaId ?? '-'}:${texto(p.sello)}`,
+                    tipo: 'libro_integridad',
+                    detalle: {
+                        empresa_id: empresaId,
+                        sello: p.sello ?? null,
+                        asiento_id: p.asiento_id ?? null,
+                    },
+                    ahora,
+                    puntual: true,
+                    unico: true,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(incidente, 'abierto', 'alerta.libro.integridad_rota', {
+                    sello: texto(p.sello),
+                    asiento_id: texto(p.asiento_id),
+                    esperado: texto(p.esperado),
+                    obtenido: texto(p.obtenido),
+                })
+            }
+            case 'dte.rechazado': {
+                // definitivo: lo rechazaron la SAT o el certificador; si no, se agotaron los reintentos
+                const definitivo = p.definitivo !== false
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `dte:${empresaId ?? '-'}:${definitivo ? 'definitivo' : 'agotado'}`,
+                    tipo: 'fel_dte',
+                    detalle: { empresa_id: empresaId, primer_dte_id: p.dte_id ?? null, definitivo },
+                    ahora,
+                    ventanaMin: VENTANA_DTE_MIN,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(incidente, 'abierto', 'alerta.dte.rechazado', {
+                    dte_id: texto(p.dte_id),
+                    documento: documentoFiscal(p.documento_tipo, p.documento_id),
+                    ...(await datosDte(t, p.dte_id)),
+                    error: texto(p.error),
+                    definitivo,
+                    ventana_min: VENTANA_DTE_MIN,
+                })
+            }
+            case 'fel.contingencia_cambiada': {
+                const clave = `fel-contingencia:${empresaId ?? '-'}`
+                const detalle = { empresa_id: empresaId, motivo: texto(p.motivo) || null }
+                if (p.activa === true) {
+                    const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                        clave,
+                        tipo: 'fel_contingencia',
+                        detalle,
+                        ahora,
+                    })
+                    if (!nuevo) return sinAlerta(incidente)
+                    return avisarFiscal(incidente, 'abierto', 'alerta.fel.contingencia_activada', {
+                        motivo: texto(p.motivo),
+                        desde: instanteLocal(ahora),
+                    })
+                }
+                // Desactivada: cierra el incidente; si no había (se activó antes de este aviso), igual avisa.
+                const cerrado = await cerrarIncidente(t.trx, clave, ahora)
+                const suelto = cerrado
+                    ? null
+                    : await abrirIncidente(t.trx, {
+                          clave,
+                          tipo: 'fel_contingencia',
+                          detalle,
+                          ahora,
+                          puntual: true,
+                      })
+                const incidente = cerrado ?? suelto!.incidente
+                return avisarFiscal(incidente, 'cerrado', 'alerta.fel.contingencia_desactivada', {
+                    motivo: texto(p.motivo),
+                    desde: cerrado ? instanteLocal(cerrado.abierto_en) : '',
+                    hasta: instanteLocal(ahora),
+                    duracion: cerrado ? duracion(cerrado.abierto_en, ahora.toJSDate()) : '',
+                })
+            }
+            case 'nota_credito.anulada': {
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `nota-credito:${texto(p.nota_credito_id)}`,
+                    tipo: 'nota_credito',
+                    detalle: {
+                        empresa_id: empresaId,
+                        nota_credito_id: p.nota_credito_id ?? null,
+                        factura_id: p.factura_id ?? null,
+                    },
+                    ahora,
+                    puntual: true,
+                    unico: true,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                const facturaId = enteroPositivo(p.factura_id)
+                return avisarFiscal(incidente, 'abierto', 'alerta.nota_credito.anulada', {
+                    nota_credito_id: texto(p.nota_credito_id),
+                    factura: facturaId ? await numeroDeFactura(t.trx, facturaId) : texto(p.factura_id),
+                    cliente: await nombreCliente(t, p.cliente_id),
+                    monto_q: quetzales(texto(p.monto) || '0'),
+                    motivo: texto(p.motivo),
+                })
+            }
             case 'aaa.caido': {
                 const nodo = texto(p.nodo) || 'aaa'
                 const desde = texto(p.desde) || ahora.toISO()!
@@ -256,8 +398,6 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             case 'horus.hallazgo_resuelto': {
                 const hallazgo = (p.hallazgo ?? {}) as Record<string, unknown>
                 const clave = `horus-hallazgo:${texto(hallazgo.id) || texto(p.webhook_id)}`
-                const empresaId =
-                    Number.isInteger(Number(p.empresa_id)) && p.empresa_id ? Number(p.empresa_id) : null
                 if (empresaId) t.fijarEmpresa(empresaId)
                 const variables = {
                     tipo: texto(hallazgo.tipo) || 'hallazgo',
@@ -354,6 +494,50 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
 /** `routeros.fallido` por una validación de velocidad (configuración inválida, no router caído). */
 export function esValidacionVelocidad(operacion: string): boolean {
     return /^validar velocidad\b/i.test(operacion.trim())
+}
+
+function enteroPositivo(valor: unknown): number | null {
+    const n = Number(valor)
+    return valor !== null && valor !== '' && Number.isInteger(n) && n > 0 ? n : null
+}
+
+const DOCUMENTOS: Record<string, string> = {
+    factura: 'Factura',
+    nota_credito: 'Nota de crédito',
+    nota_debito: 'Nota de débito',
+}
+
+/** "Factura 123", "Nota de crédito 5". */
+function documentoFiscal(tipo: unknown, id: unknown): string {
+    return `${DOCUMENTOS[texto(tipo)] ?? (texto(tipo) || 'Documento')} ${texto(id)}`.trim()
+}
+
+/** Receptor y total del DTE (`fiscal.dte`, A3), solo para el texto de la alerta. */
+async function datosDte(t: Transaccion, dteId: unknown): Promise<{ receptor: string; total_q: string }> {
+    const id = enteroPositivo(dteId)
+    const fila = id
+        ? ((await t.trx.from('fiscal.dte').where('id', id).select('receptor', 'total').first()) as {
+              receptor: { tipo?: string; id?: string; nombre?: string } | null
+              total: string | null
+          } | null)
+        : null
+    if (!fila) return { receptor: '', total_q: '' }
+    const r = fila.receptor ?? {}
+    const documento = r.tipo === 'cf' ? 'CF' : [r.tipo?.toUpperCase(), r.id].filter(Boolean).join(' ')
+    return {
+        receptor: [r.nombre, documento].filter(Boolean).join(' · '),
+        total_q: fila.total ? quetzales(fila.total) : '',
+    }
+}
+
+/** "María López (#12)" o "#12" si no existe. Solo para el texto de la alerta. */
+async function nombreCliente(t: Transaccion, clienteId: unknown): Promise<string> {
+    const id = enteroPositivo(clienteId)
+    if (!id) return ''
+    const fila = (await t.trx.from('core.clientes').where('id', id).select('nombre').first()) as {
+        nombre: string
+    } | null
+    return fila ? `${fila.nombre} (#${id})` : `#${id}`
 }
 
 /** "#812 (flopez)" o "" si no hay servicio. Solo para el texto de la alerta. */

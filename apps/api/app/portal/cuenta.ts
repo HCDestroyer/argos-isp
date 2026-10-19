@@ -15,6 +15,15 @@ import {
     marcasDeEmpresas,
     type MarcaEmpresa,
 } from '#portal/marca'
+import {
+    COLUMNAS_DTE,
+    dteDeFila,
+    joinDteFactura,
+    numeroDocumento,
+    sinColumnasDte,
+    type ColumnasDte,
+    type DtePortal,
+} from '#portal/fel'
 
 /**
  * Lecturas del portal autenticado (sesión por código). TODAS reciben el `clienteId` de la sesión
@@ -78,7 +87,14 @@ export interface CuentaPortal {
     empresas: CuentaEmpresaPortal[]
 }
 
-export type DocumentoFactura = 'aviso_cobro' | 'factura'
+/** «Factura» (o «Nota de débito» para una mora) solo con su DTE certificado; si no, aviso de cobro. */
+export type DocumentoFactura = 'aviso_cobro' | 'factura' | 'nota_debito'
+
+/** Otra factura de una sustitución (`billing.sustituciones`), si el cliente la puede ver. */
+export interface ReferenciaFactura {
+    id: number
+    numero: string
+}
 
 export interface FacturaPortal {
     id: number
@@ -94,10 +110,16 @@ export interface FacturaPortal {
     iva: string
     total: string
     pagado: string
+    /** parte de `pagado` que viene de notas de crédito vigentes */
+    acreditado: string
     saldo: string
     fel_uuid: string | null
     fel_serie: string | null
     fel_numero: string | null
+    dte: DtePortal | null
+    sustituida: boolean
+    sustituida_por: ReferenciaFactura | null
+    sustituye_a: ReferenciaFactura | null
     empresa: MarcaEmpresa
 }
 
@@ -243,14 +265,53 @@ function columnasFacturaPortal(cliente: QueryClientContract) {
         'f.iva',
         'f.total',
         'f.pagado',
-        'f.fel_uuid',
-        'f.fel_serie',
-        'f.fel_numero',
+        cliente.raw(
+            `(SELECT coalesce(sum(n.monto), 0) FROM billing.notas_credito n WHERE n.factura_id = f.id
+               AND NOT EXISTS (SELECT 1 FROM billing.notas_credito_anulaciones x WHERE x.nota_id = n.id)) as acreditado`,
+        ),
+        cliente.raw(
+            '(SELECT x.nueva_id FROM billing.sustituciones x WHERE x.original_id = f.id) as sustituida_por_id',
+        ),
+        cliente.raw(
+            '(SELECT x.original_id FROM billing.sustituciones x WHERE x.nueva_id = f.id) as sustituye_a_id',
+        ),
+        ...COLUMNAS_DTE,
         cliente.raw(`${SQL_EMPRESA_FACTURA} as empresa_id`),
     ]
 }
 
-type FilaFactura = Omit<FacturaPortal, 'numero' | 'documento' | 'saldo' | 'empresa'> & { empresa_id: number }
+/**
+ * Facturas que el portal muestra: todas las del cliente menos las `por_certificar` (FEL
+ * obligatoria con `emitir`: todavía no son deuda ni documento; contrato §8.3).
+ */
+function facturasVisibles(cliente: QueryClientContract, clienteId: number) {
+    return cliente
+        .from('billing.facturas as f')
+        .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
+        .joinRaw(joinDteFactura('f'))
+        .where('f.cliente_id', clienteId)
+        .whereNot('f.estado', 'por_certificar')
+}
+
+type FilaFactura = ColumnasDte &
+    Omit<
+        FacturaPortal,
+        | 'numero'
+        | 'documento'
+        | 'saldo'
+        | 'empresa'
+        | 'fel_uuid'
+        | 'fel_serie'
+        | 'fel_numero'
+        | 'dte'
+        | 'sustituida'
+        | 'sustituida_por'
+        | 'sustituye_a'
+    > & {
+        empresa_id: number
+        sustituida_por_id: number | null
+        sustituye_a_id: number | null
+    }
 
 /** Serie-número FEL cuando la factura está certificada; si no, el número interno del aviso. */
 export function numeroFactura(f: {
@@ -258,24 +319,76 @@ export function numeroFactura(f: {
     fel_serie: string | null
     fel_numero: string | null
 }): string {
-    return f.fel_serie && f.fel_numero ? `${f.fel_serie}-${f.fel_numero}` : String(f.id)
+    return numeroDocumento(f.id, { serie: f.fel_serie, numero: f.fel_numero })
 }
 
 function aFacturaPortal(
-    { empresa_id: empresaId, ...fila }: FilaFactura,
+    fila: FilaFactura,
     marcas: Map<number, MarcaEmpresa>,
+    referencias: Map<number, string>,
 ): FacturaPortal {
-    const id = Number(fila.id)
-    const saldo = fila.estado === 'anulada' ? new D(0) : dec(fila.total).minus(dec(fila.pagado))
+    const dte = dteDeFila(fila)
+    const {
+        empresa_id: empresaId,
+        sustituida_por_id: sustituidaPor,
+        sustituye_a_id: sustituyeA,
+        ...resto
+    } = sinColumnasDte(fila)
+    const id = Number(resto.id)
+    const saldo = resto.estado === 'anulada' ? new D(0) : dec(resto.total).minus(dec(resto.pagado))
+    const referencia = (otra: number | null): ReferenciaFactura | null => {
+        if (otra === null) return null
+        const numero = referencias.get(Number(otra))
+        return numero === undefined ? null : { id: Number(otra), numero }
+    }
     return {
-        ...fila,
+        ...resto,
         empresa: marcas.get(Number(empresaId))!,
         id,
-        servicio_id: fila.servicio_id === null ? null : Number(fila.servicio_id),
-        numero: numeroFactura({ ...fila, id }),
-        documento: fila.fel_uuid ? 'factura' : 'aviso_cobro',
+        servicio_id: resto.servicio_id === null ? null : Number(resto.servicio_id),
+        numero: numeroDocumento(id, dte),
+        documento: dte ? (resto.tipo === 'mora' ? 'nota_debito' : 'factura') : 'aviso_cobro',
+        acreditado: aTexto(resto.acreditado),
         saldo: aTexto(saldo.isNegative() ? new D(0) : saldo),
+        fel_uuid: dte?.autorizacion ?? null,
+        fel_serie: dte?.serie ?? null,
+        fel_numero: dte?.numero ?? null,
+        dte,
+        sustituida: sustituidaPor !== null,
+        sustituida_por: referencia(sustituidaPor),
+        sustituye_a: referencia(sustituyeA),
     }
+}
+
+/**
+ * Números de las facturas de las sustituciones (la original y la nueva) que el cliente puede ver.
+ * Una sustituta aún `por_certificar` no sale: la original queda `sustituida` sin enlace.
+ */
+async function numerosVisibles(
+    cliente: QueryClientContract,
+    clienteId: number,
+    filas: FilaFactura[],
+): Promise<Map<number, string>> {
+    const ids = filas
+        .flatMap((f) => [f.sustituida_por_id, f.sustituye_a_id])
+        .filter((v): v is number => v !== null)
+        .map(Number)
+    const numeros = new Map<number, string>()
+    if (ids.length === 0) return numeros
+    const otras = (await facturasVisibles(cliente, clienteId)
+        .whereIn('f.id', [...new Set(ids)])
+        .select('f.id', 'dte.dte_serie', 'dte.dte_numero')) as Array<{
+        id: number
+        dte_serie: string | null
+        dte_numero: string | null
+    }>
+    for (const otra of otras) {
+        numeros.set(
+            Number(otra.id),
+            numeroDocumento(Number(otra.id), { serie: otra.dte_serie, numero: otra.dte_numero }),
+        )
+    }
+    return numeros
 }
 
 export async function facturasPortal(
@@ -283,14 +396,15 @@ export async function facturasPortal(
     opciones: OpcionesPaginacion,
 ): Promise<Pagina<FacturaPortal>> {
     // la empresa de cada factura es la que la emitió (`SQL_EMPRESA_FACTURA`)
-    const consulta = db
-        .from('billing.facturas as f')
-        .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
-        .where('f.cliente_id', clienteId)
-        .select(...columnasFacturaPortal(db.connection()))
+    const conexion = db.connection()
+    const consulta = facturasVisibles(conexion, clienteId).select(...columnasFacturaPortal(conexion))
     const pagina = await paginar<FilaFactura>(consulta, opciones, { columna: 'f.id' })
     const marcas = await marcasConPrincipal(pagina.data.map((f) => Number(f.empresa_id)))
-    return { data: pagina.data.map((f) => aFacturaPortal(f, marcas)), nextCursor: pagina.nextCursor }
+    const referencias = await numerosVisibles(conexion, clienteId, pagina.data)
+    return {
+        data: pagina.data.map((f) => aFacturaPortal(f, marcas, referencias)),
+        nextCursor: pagina.nextCursor,
+    }
 }
 
 export async function facturaPortal(
@@ -298,11 +412,8 @@ export async function facturaPortal(
     facturaId: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<FacturaPortalDetalle> {
-    const fila = (await cliente
-        .from('billing.facturas as f')
-        .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
+    const fila = (await facturasVisibles(cliente, clienteId)
         .where('f.id', facturaId)
-        .where('f.cliente_id', clienteId)
         .select(...columnasFacturaPortal(cliente))
         .first()) as FilaFactura | null
     if (!fila) throw new NoEncontrado(`La factura ${facturaId} no existe`)
@@ -318,7 +429,8 @@ export async function facturaPortal(
             'total',
         )) as LineaFacturaPortal[]
     const marcas = await marcasConPrincipal([Number(fila.empresa_id)], cliente)
-    return { ...aFacturaPortal(fila, marcas), lineas }
+    const referencias = await numerosVisibles(cliente, clienteId, [fila])
+    return { ...aFacturaPortal(fila, marcas, referencias), lineas }
 }
 
 /** Marcas de las empresas pedidas; una que ya no existe cae en la principal (nunca sin marca). */

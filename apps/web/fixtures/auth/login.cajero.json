@@ -27,7 +27,10 @@
       "comprobantes.ver",
       "comprobantes.aprobar",
       "comprobantes.rechazar",
-      "cajas.depositar"
+      "cajas.depositar",
+      "fel.ver",
+      "lealtad.ver",
+      "lealtad.canjear"
     ],
     "alcance_global": false,
     "empresas": [

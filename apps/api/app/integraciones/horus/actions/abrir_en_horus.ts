@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { configHorus } from '#integraciones/horus/configuracion'
+import { configHorus, errorUrl } from '#integraciones/horus/configuracion'
 import { ErrorHorus, llamarHorus, reintentarEnDe } from '#integraciones/horus/cliente'
 import { ConectorNoDisponible, HorusRespondioError } from '#integraciones/horus/errores'
 import { usuarioDelActor } from '#shared/contexto'
@@ -24,8 +24,8 @@ export interface SalidaAbrirEnHorus {
  * sesión (`id_externo` = `u-<id>`, correo y nombre) y el destino, y devuelve al panel solo la URL.
  * El navegador nunca pide el ticket. Horus aplica su propio ACL al entrar.
  *
- * Auditada (quién, a qué recurso). La URL devuelta debe ser de la misma URL base de Horus
- * configurada (no se abre otra cosa).
+ * Auditada (quién, a qué recurso). La URL devuelta solo se acepta si tiene la forma del contrato
+ * (`https://<panel de Horus>/sso/entrar#<ticket>`, ver `urlEntradaValida`).
  */
 export default class AbrirEnHorus extends DomainAction<EntradaAbrirEnHorus, SalidaAbrirEnHorus> {
     readonly nombre = 'horus.abrir'
@@ -65,9 +65,30 @@ export default class AbrirEnHorus extends DomainAction<EntradaAbrirEnHorus, Sali
                 reintentarEnDe(error),
             )
         }
-        if (!datos.url || !datos.url.startsWith(`${config.urlBase}/`)) {
-            throw new HorusRespondioError('Horus devolvió una URL de ticket que no es de su URL base')
+        if (!datos.url || !urlEntradaValida(datos.url)) {
+            throw new HorusRespondioError(
+                'Horus devolvió una URL de autologin que no es https://<panel>/sso/entrar#<ticket>',
+            )
         }
         return { url: datos.url, expira_en: datos.expira_en ?? null }
     }
+}
+
+/**
+ * La URL de autologin que devuelve Horus la abre el navegador del usuario (contrato §1.5, 1.5.0):
+ * https (http solo en laboratorio), sin credenciales ni consulta, con la ruta `/sso/entrar` y el
+ * ticket en el fragmento. Su origen es el del panel de Horus, que puede no ser el de su API.
+ */
+export function urlEntradaValida(valor: string): boolean {
+    if (valor.length > 4096 || errorUrl(valor)) return false
+    const url = new URL(valor)
+    const ticket = url.hash.replace(/^#/, '')
+    return (
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        url.pathname.replace(/\/+$/, '') === '/sso/entrar' &&
+        ticket.length >= 16 &&
+        ticket.length <= 512
+    )
 }

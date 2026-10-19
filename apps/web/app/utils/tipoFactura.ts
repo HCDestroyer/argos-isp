@@ -1,8 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import type { BadgeProps } from '@nuxt/ui'
 
-type FacturaApi = Schema<'Factura'>
-export type TipoFactura = NonNullable<FacturaApi['tipo']>
+export type TipoFactura = NonNullable<Schema<'Factura'>['tipo']>
 
 interface TipoVisual {
     etiqueta: string
@@ -51,21 +50,4 @@ export function relacionOrigen(tipo: string | null | undefined): string {
         return 'diferencia de cobro de la'
     }
     return tipo === 'mora' ? 'mora de la' : 'originada por la'
-}
-
-/**
- * Estado FEL para la ficha: un cargo interno y una factura acreditada sin DTE no se certifican
- * (certificar a mano da 409 `factura_acreditada`), así que no se muestran como "Sin certificar".
- */
-export function felDeFactura(factura: Pick<FacturaApi, 'tipo' | 'estado' | 'fel_estado'>): string {
-    if (factura.fel_estado) {
-        return factura.fel_estado
-    }
-    if (factura.tipo === 'cargo') {
-        return 'No se certifica (cargo interno)'
-    }
-    if (factura.estado === 'acreditada') {
-        return 'No se certifica (acreditada)'
-    }
-    return 'Sin certificar'
 }

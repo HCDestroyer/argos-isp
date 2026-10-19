@@ -1,6 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
+import { paisesFiscales } from '../fiscal/datos'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, problemaTipado, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
 
 type Empresa = Schema<'EmpresaGrupo'>
@@ -88,6 +89,9 @@ export const rutasEmpresas: RutasFixture = {
         return { status: 200, cuerpo: filas }
     }),
 
+    /** Selector de país (A1): los países con paquete de localización. Antes de `:id` (gana la primera ruta). */
+    'GET /api/v1/empresas/paises': conPermiso('empresas.ver', () => ({ status: 200, cuerpo: paisesFiscales })),
+
     'GET /api/v1/empresas/:id': conPermiso('empresas.ver', (solicitud) => {
         const empresa = bd.empresas.find(e => e.id === idDe(solicitud))
         if (!empresa) {
@@ -128,6 +132,7 @@ export const rutasEmpresas: RutasFixture = {
             color_marca: null,
             regimen_isr: null,
             codigo_establecimiento: null,
+            pais: typeof cuerpo.pais === 'string' ? cuerpo.pais.toUpperCase() : 'GT',
             logo_url: null,
             logo_tipo: null,
             activa: true,
@@ -191,6 +196,40 @@ export const rutasEmpresas: RutasFixture = {
         empresa.version += 1
         empresa.updated_at = ahora()
         registrarAccion(solicitud, 'empresas.desactivar', { tipo: 'empresa', id: empresa.id }, cuerpo)
+        return { status: 200, cuerpo: empresa }
+    })),
+
+    /**
+     * Como `CambiarPaisEmpresa` (A1): 422 `pais_no_soportado`, mismo país = 200 sin cambios, 409 si
+     * cambió la `version` o si la empresa ya tiene documentos (`empresa_con_documentos`).
+     */
+    'POST /api/v1/empresas/:id/cambiar-pais': conPermiso('empresas.cambiar_pais', conIdempotencia((solicitud) => {
+        const empresa = bd.empresas.find(e => e.id === idDe(solicitud))
+        if (!empresa) {
+            return noEncontrado('la empresa')
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        const pais = typeof cuerpo.pais === 'string' ? cuerpo.pais.toUpperCase() : ''
+        if (!/^[A-Z]{2}$/.test(pais)) {
+            return datosInvalidos([{ field: 'pais', message: 'El campo pais no tiene un formato válido', rule: 'regex' }])
+        }
+        if (!paisesFiscales.some(p => p.codigo === pais)) {
+            return problemaTipado(422, 'pais_no_soportado', 'País no soportado', `No hay localización fiscal para ${pais}; países disponibles: ${paisesFiscales.map(p => p.codigo).join(', ')}`, [{ field: 'pais', message: `País sin localización fiscal: ${pais}`, rule: 'pais_no_soportado' }])
+        }
+        if (cuerpo.version !== empresa.version) {
+            return versionCambiada()
+        }
+        if (empresa.pais === pais) {
+            return { status: 200, cuerpo: empresa }
+        }
+        const conDocumentos = [bd.facturas, bd.pagos, bd.asientos, bd.egresos, bd.notasCredito].some(filas => filas.some(f => (f.empresa_id ?? 1) === empresa.id))
+        if (conDocumentos) {
+            return problemaTipado(409, 'empresa_con_documentos', 'Conflicto', `La empresa ya tiene documentos con la localización ${empresa.pais ?? 'GT'}; su país no puede cambiar`)
+        }
+        empresa.pais = pais
+        empresa.version += 1
+        empresa.updated_at = ahora()
+        registrarAccion(solicitud, 'empresas.cambiar_pais', { tipo: 'empresa', id: empresa.id }, cuerpo)
         return { status: 200, cuerpo: empresa }
     })),
 

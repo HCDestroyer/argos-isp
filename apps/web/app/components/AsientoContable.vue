@@ -59,6 +59,20 @@ const enlace = computed(() => (props.conOrigen ? rutaOrigen(props.asiento) : nul
                 <p class="text-sm font-medium text-highlighted">
                     Asiento #{{ asiento.id }} · {{ formatearFecha(asiento.fecha) }}
                 </p>
+                <p
+                    v-if="asiento.diario || asiento.partida"
+                    class="font-mono text-xs text-muted"
+                    data-prueba="asiento-numeracion"
+                >
+                    <template v-if="asiento.diario">
+                        {{ asiento.diario }}<template v-if="asiento.numero">
+                            {{ asiento.fecha.slice(0, 4) }}-{{ String(asiento.numero).padStart(6, '0') }}
+                        </template>
+                    </template>
+                    <template v-if="asiento.partida">
+                        · partida {{ asiento.partida }}
+                    </template>
+                </p>
                 <p class="text-xs text-muted break-words">
                     {{ asiento.descripcion }}
                 </p>

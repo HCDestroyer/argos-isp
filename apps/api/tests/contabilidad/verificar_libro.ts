@@ -121,6 +121,10 @@ const llegadaViva = (tipo: string, id: string) => `EXISTS (
        AND NOT EXISTS (SELECT 1 FROM ledger.asientos lr WHERE lr.reversa_de = lv.id))`
 const CAJA_O_BANCO = (col: string) =>
     `(${col} LIKE '${CUENTAS.CAJAS}.%' OR ${col} LIKE '${CUENTAS.BANCOS}.%')`
+/** programa de lealtad (`contratos/lealtad.md` §6): pasivo y las dos cuentas de ingreso */
+const PASIVO_LEALTAD = '2.1.10'
+const DIFERIDOS_LEALTAD = '4.1.05'
+const INGRESOS_PUNTOS = '4.1.06'
 const ESTADOS_PENDIENTES = `('emitida', 'parcial', 'vencida')`
 
 /** Empresas sobre las que se verifica: la pedida (o las pedidas) o todas. */
@@ -685,7 +689,7 @@ async function verificarLibroCon(
           WHERE ${E('a.empresa_id')}
             AND a.origen_tipo NOT IN ('factura', 'mora', 'pago', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
                                       'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
-                                      'provision', 'castigo')`,
+                                      'provision', 'castigo', 'lealtad')`,
     )
 
     /*
@@ -1737,6 +1741,98 @@ async function verificarLibroCon(
             AND (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                    JOIN ledger.cuentas c ON c.id = m.cuenta_id
                   WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = d.nota_credito_id AND c.codigo = '${IVA}') <> 0`,
+    )
+
+    /*
+    | 14 · Programa de lealtad, fase 1 (`contratos/lealtad.md` §3, §4 y §6)
+    */
+    await revisar(
+        '14.pasivo_de_lealtad_distinto (por empresa: 2.1.10 = Σ valor vivo de los lotes = valor − Σ consumos)',
+        `WITH esperado AS (
+             SELECT l.empresa_id,
+                    sum(l.valor - coalesce((SELECT sum(c.valor) FROM lealtad.consumos c WHERE c.lote_id = l.id), 0)) AS monto
+               FROM lealtad.movimientos l WHERE l.puntos > 0 AND ${E('l.empresa_id')} GROUP BY 1
+         ), libro AS (
+             SELECT a.empresa_id, sum(m.haber - m.debe) AS monto
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${PASIVO_LEALTAD}' AND ${E('a.empresa_id')}
+              GROUP BY 1
+         )
+         SELECT coalesce(e.empresa_id, l.empresa_id) AS empresa_id, coalesce(e.monto, 0)::text AS lotes,
+                coalesce(l.monto, 0)::text AS libro
+           FROM esperado e FULL JOIN libro l ON l.empresa_id = e.empresa_id
+          WHERE coalesce(e.monto, 0) <> coalesce(l.monto, 0)`,
+    )
+    await revisar(
+        '14.movimiento_de_lealtad_mal_contabilizado (con valor: un asiento lealtad de su empresa por el valor; acumulación y ajuste+ 4.1.05 / 2.1.10, vencimiento (y canje, fase 2) 2.1.10 / 4.1.06, reverso y ajuste− 2.1.10 / 4.1.05; sin valor, sin asiento)',
+        `WITH x AS (
+             SELECT lm.id, lm.empresa_id, lm.tipo, lm.puntos, lm.valor, lm.asiento_id, a.empresa_id AS empresa_asiento,
+                    a.origen_tipo, a.origen_id,
+                    (SELECT count(*) FROM ledger.movimientos m WHERE m.asiento_id = a.id) AS n,
+                    (SELECT coalesce(sum(m.debe), 0) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE m.asiento_id = a.id AND c.codigo = CASE WHEN lm.puntos > 0 THEN '${DIFERIDOS_LEALTAD}' ELSE '${PASIVO_LEALTAD}' END) AS debe,
+                    (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE m.asiento_id = a.id AND c.codigo = CASE WHEN lm.puntos > 0 THEN '${PASIVO_LEALTAD}'
+                                                                     WHEN lm.tipo IN ('vencimiento', 'canje') THEN '${INGRESOS_PUNTOS}'
+                                                                     ELSE '${DIFERIDOS_LEALTAD}' END) AS haber,
+                    (SELECT count(*) FROM ledger.asientos o WHERE o.origen_tipo = 'lealtad' AND o.origen_id = lm.id) AS asientos
+               FROM lealtad.movimientos lm LEFT JOIN ledger.asientos a ON a.id = lm.asiento_id
+              WHERE ${E('lm.empresa_id')}
+         )
+         SELECT id, tipo, puntos, valor::text, asiento_id, empresa_asiento, n::int, debe::text, haber::text, asientos::int
+           FROM x
+          WHERE (valor = 0 AND (asiento_id IS NOT NULL OR asientos <> 0))
+             OR (valor > 0 AND (asiento_id IS NULL OR asientos <> 1 OR origen_tipo <> 'lealtad' OR origen_id <> id
+                                OR empresa_asiento <> empresa_id OR n <> 2 OR debe <> valor OR haber <> valor))`,
+    )
+    await revisar(
+        '14.asiento_de_lealtad_sin_movimiento (todo asiento lealtad es el de un movimiento de puntos)',
+        `SELECT a.id, a.origen_id FROM ledger.asientos a
+          WHERE a.origen_tipo = 'lealtad' AND ${E('a.empresa_id')}
+            AND NOT EXISTS (SELECT 1 FROM lealtad.movimientos lm WHERE lm.id = a.origen_id AND lm.asiento_id = a.id)`,
+    )
+    await revisar(
+        '14.salida_distinta_de_sus_consumos (salida: −puntos = Σ consumos y valor = Σ valor de consumos; un lote no se consume de más; reverso solo de su lote)',
+        `WITH s AS (
+             SELECT lm.id, lm.tipo, lm.puntos, lm.valor, lm.reversa_de,
+                    coalesce((SELECT sum(c.puntos) FROM lealtad.consumos c WHERE c.movimiento_id = lm.id), 0) AS puntos_consumos,
+                    coalesce((SELECT sum(c.valor) FROM lealtad.consumos c WHERE c.movimiento_id = lm.id), 0) AS valor_consumos,
+                    (SELECT count(*) FROM lealtad.consumos c WHERE c.movimiento_id = lm.id
+                       AND (lm.reversa_de IS NULL OR c.lote_id <> lm.reversa_de)) AS ajenos
+               FROM lealtad.movimientos lm WHERE ${E('lm.empresa_id')}
+         ), lotes AS (
+             SELECT l.id, l.puntos, l.valor, coalesce(sum(c.puntos), 0) AS usados, coalesce(sum(c.valor), 0) AS valor_usado
+               FROM lealtad.movimientos l LEFT JOIN lealtad.consumos c ON c.lote_id = l.id
+              WHERE l.puntos > 0 AND ${E('l.empresa_id')} GROUP BY l.id, l.puntos, l.valor
+         )
+         SELECT 'salida' AS que, id, tipo, puntos, valor::text, puntos_consumos::int, valor_consumos::text
+           FROM s
+          WHERE (puntos < 0 AND (-puntos <> puntos_consumos OR valor <> valor_consumos))
+             OR (puntos > 0 AND puntos_consumos <> 0)
+             OR (tipo = 'reverso' AND ajenos <> 0)
+         UNION ALL
+         SELECT 'lote', id, null, puntos, valor::text, usados::int, valor_usado::text
+           FROM lotes
+          WHERE usados > puntos OR valor_usado > valor OR (usados = puntos AND valor_usado <> valor)`,
+    )
+    await revisar(
+        '14.lealtad_mezcla_empresas (movimiento, programa, servicio, asiento y lotes consumidos de la misma empresa y cliente)',
+        `SELECT lm.id, lm.empresa_id, p.empresa_id AS empresa_programa, sv.empresa_id AS empresa_servicio,
+                sv.cliente_id AS cliente_servicio, lm.cliente_id
+           FROM lealtad.movimientos lm
+           JOIN lealtad.programas p ON p.id = lm.programa_id
+           LEFT JOIN core.servicios sv ON sv.id = lm.servicio_id
+          WHERE ${E('lm.empresa_id')}
+            AND (p.empresa_id <> lm.empresa_id OR sv.empresa_id <> lm.empresa_id OR sv.cliente_id <> lm.cliente_id
+                 OR EXISTS (SELECT 1 FROM lealtad.consumos c JOIN lealtad.movimientos l ON l.id = c.lote_id
+                             WHERE c.movimiento_id = lm.id AND (l.empresa_id <> lm.empresa_id OR l.cliente_id <> lm.cliente_id)))`,
+    )
+    await revisar(
+        '14.lote_revertido_dos_veces (a lo sumo un reverso por lote; el reverso nunca es lote)',
+        `SELECT reversa_de, count(*)::int AS reversos FROM lealtad.movimientos
+          WHERE reversa_de IS NOT NULL AND ${E('empresa_id')}
+          GROUP BY reversa_de HAVING count(*) > 1 OR bool_or(puntos > 0)`,
     )
 
     /*

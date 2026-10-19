@@ -38,6 +38,10 @@ const PANTALLAS = [
     ['reporte de conciliación', '/bancos/conciliacion'],
     ['cartera', '/cartera'],
     ['pago con proveedor de cobro', '/pagos/7003'],
+    // Lealtad, fase 1.
+    ['lealtad', '/lealtad'],
+    ['puntos del cliente', '/clientes/2?tab=puntos'],
+    ['reporte de lealtad', '/reportes/lealtad'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
