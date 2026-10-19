@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { NoEncontrado, ReglaNegocio } from '#shared/errores'
+import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import type { MetodoPago } from '#shared/eventos'
 import { dec } from '#ledger/dinero'
@@ -14,6 +14,8 @@ import {
     type FacturaPendiente,
 } from '#billing/cobros'
 import { verPago, type PagoVista } from '#billing/pagos'
+import { crearCargoDiferencia } from '#billing/cargos'
+import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import type { ResultadoRegistrarPago } from '#billing/actions/registrar_pago'
 
@@ -108,6 +110,21 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                 'pagado',
                 'vencida_en',
             )) as FacturaPendiente[]
+        const castigadas = (await t.trx
+            .from('ledger.castigos_facturas')
+            .whereIn(
+                'factura_id',
+                facturas.map((f) => f.id),
+            )
+            .select('factura_id')) as Array<{ factura_id: number }>
+        if (castigadas.length > 0) {
+            throw new Conflicto(
+                `El pago ${pago.id} se aplicó a facturas ya castigadas (${castigadas.map((c) => c.factura_id).join(', ')}): ` +
+                    'el castigo cerró su saldo; corrige con un asiento de ajuste',
+                'factura_castigada',
+                'Factura castigada',
+            )
+        }
         for (const factura of facturas) {
             const aplicado = aplicaciones.find((a) => a.factura_id === factura.id)!
             await sumarAPagado(t.trx, factura, dec(aplicado.monto).negated())
@@ -144,6 +161,64 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
+
+        // H13 / H18: la diferencia de cobro que este pago cerró se justificaba con él. Sin documento fiscal
+        // (nota interna y la factura sin DTE vivo) su nota se anula con un reverso espejo; con DTE (la nota
+        // quedó en el neto del DTE o salió como NCRE) el documento no se toca y el cliente vuelve a deber la
+        // diferencia con un cargo interno no fiscal (`CxC / 5.3.05`, contrato §18)
+        const diferencias = (await t.trx
+            .from('billing.diferencias_cobro as d')
+            .join('billing.notas_credito as n', 'n.id', 'd.nota_credito_id')
+            .where('d.pago_id', pago.id)
+            .whereNotExists((q) =>
+                q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = d.nota_credito_id'),
+            )
+            .whereNotExists((q) =>
+                q.from('billing.diferencias_cobro_cargos as c').whereRaw('c.diferencia_id = d.id'),
+            )
+            .orderBy('d.id')
+            .select(
+                'd.id',
+                'd.pago_id',
+                'd.factura_id',
+                'd.monto',
+                'd.nota_credito_id',
+                t.trx.raw(
+                    `EXISTS (SELECT 1 FROM fiscal.dte e WHERE e.documento_tipo = 'nota_credito' AND e.documento_id = d.nota_credito_id)
+                  OR EXISTS (SELECT 1 FROM fiscal.dte e JOIN billing.facturas f ON f.id = n.factura_id
+                              WHERE e.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                                AND e.documento_id = f.id
+                                AND e.estado IN ('pendiente', 'error_temporal', 'contingencia', 'certificado', 'anulacion_pendiente'))
+                  AS con_documento`,
+                ),
+            )) as Array<{
+            id: number
+            pago_id: number
+            factura_id: number
+            monto: string
+            nota_credito_id: number
+            con_documento: boolean
+        }>
+        for (const d of diferencias) {
+            if (d.con_documento) {
+                await crearCargoDiferencia(t, {
+                    id: Number(d.id),
+                    pago_id: Number(d.pago_id),
+                    factura_id: Number(d.factura_id),
+                    monto: d.monto,
+                })
+                continue
+            }
+            await new AnularNotaCredito().execute(
+                {
+                    nota_id: Number(d.nota_credito_id),
+                    motivo: `anulación del pago ${pago.id}: ${input.motivo}`,
+                    pago_id: pago.id,
+                },
+                t.ctx,
+                { trx: t.trx },
+            )
+        }
 
         await t.emit('pago.anulado', {
             pago_id: pago.id,

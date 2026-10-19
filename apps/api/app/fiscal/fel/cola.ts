@@ -28,6 +28,8 @@ export async function avisosPorCertificar(limite = 500, facturas?: number[]): Pr
         .where('f.aviso_cobro', true)
         .where('f.estado', 'pagada')
         .if(facturas !== undefined, (q) => q.whereIn('f.id', facturas!))
+        // castigo de cartera (§10.9): cubierta por el castigo, no por un cobro; no genera DTE
+        .whereNotExists((q) => q.from('ledger.castigos_facturas as cf').whereRaw('cf.factura_id = f.id'))
         .whereNotExists((q) =>
             q
                 .from('fiscal.dte as d')

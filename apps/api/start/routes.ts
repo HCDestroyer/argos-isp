@@ -36,7 +36,10 @@ router.get('/conectar', async ({ response }) => {
 for (const ruta of registroRutas) {
     const seguridad = ruta.seguridad ?? 'sesion'
     const cadena = []
-    if (seguridad === 'sesion') {
+    if (seguridad === 'sesion' && ruta.nodoPortal) {
+        // sesión (auth + empresa) o, sin ella, el token de un nodo portal (contrato nodo-portal.md)
+        cadena.push(middleware.sesionONodo())
+    } else if (seguridad === 'sesion') {
         cadena.push(middleware.auth())
         // multiempresa: `X-Empresa-Id` → ctx.empresa (403 empresa_no_permitida)
         cadena.push(middleware.empresa())
