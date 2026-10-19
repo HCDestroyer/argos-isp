@@ -3,25 +3,25 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { cuadreCompras } from '#fiscal/libros'
 import type { Violacion } from '#tests/contabilidad/verificar_libro'
-import { SUPERADOS_POR_FASE4, verificarLibroFase4 } from '#tests/ledger/verificar_bancos'
+import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
  * A3 · fase 5 (compras, proveedores, retenciones, activos y diferidos): verificación del libro en
  * las pruebas de `tests/ledger/` y `tests/billing/` que usan las piezas nuevas.
  *
- * Corre el auditor completo con los reemplazos de la fase 4 (`verificarLibroFase4`) y, para los
- * invariantes que suponen el mundo anterior a la fase 5, su versión ampliada. Nada se relaja: cada
+ * Corre el auditor completo (`verificarLibro`) y, para los cuatro invariantes que suponen el mundo
+ * anterior a la fase 5, su versión ampliada (copia del SQL del auditor más los documentos nuevos). Nada se relaja: cada
  * reemplazo revisa lo mismo que el original **más** los documentos nuevos. La lista va en el
  * reporte al líder y al auditor.
  */
 export const SUPERADOS_POR_FASE5: Record<string, string> = {
-    'F4.origen_de_asiento_desconocido':
+    '9.origen_de_asiento_desconocido':
         'orígenes de la fase 5: compra, pago_proveedor, depreciacion, baja_activo, diferido, alta_activo',
-    'F4.saldo_de_caja_o_banco_distinto_de_sus_documentos':
+    '4.saldo_de_caja_o_banco_distinto_de_sus_documentos':
         'los pagos a proveedores sacan dinero de caja y bancos; un pago con retenciones recibidas entra neto de ellas',
-    'F4.caja_cerrada_no_cuadra':
+    '4.caja_cerrada_no_cuadra':
         'el egreso de una compra al contado tiene el asiento de la compra (origen compra); los pagos a proveedores en efectivo y las retenciones recibidas bajan el esperado',
-    'F4.pago_vigente_mal_contabilizado':
+    '5.pago_vigente_mal_contabilizado':
         'un pago con constancias de retención recibidas entra a caja o banco por monto − comisión − retenido',
 }
 
@@ -102,7 +102,9 @@ export async function invariantesFase5(empresas: number[]): Promise<Violacion[]>
                     sum(CASE WHEN c.codigo LIKE '${PUENTE}.%' THEN m.debe - m.haber ELSE 0 END) AS puente,
                     sum(CASE WHEN c.codigo = '${CUENTAS.COMISIONES_PASARELAS}' THEN m.debe - m.haber ELSE 0 END) AS comision,
                     sum(CASE WHEN c.codigo IN ('${CUENTAS_GT.IVA_RETENIDO_CLIENTES}', '${CUENTAS_GT.ISR_RETENIDO_CLIENTES}') THEN m.debe - m.haber ELSE 0 END) AS retenido,
+                    sum(CASE WHEN c.codigo = '${CUENTAS.SALDOS_APERTURA}' THEN m.debe - m.haber ELSE 0 END) AS apertura,
                     bool_or(EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)) AS revertido,
+                    count(DISTINCT CASE WHEN c.codigo LIKE '${PUENTE}.%' THEN m.cuenta_id END) AS puentes,
                     max(CASE WHEN c.codigo LIKE '${PUENTE}.%' THEN m.cuenta_id END) AS cuenta_puente
                FROM ledger.asientos a
                JOIN ledger.movimientos m ON m.asiento_id = a.id
@@ -110,38 +112,48 @@ export async function invariantesFase5(empresas: number[]): Promise<Violacion[]>
               WHERE a.origen_tipo = 'pago' AND a.reversa_de IS NULL
               GROUP BY 1
          )
-         SELECT p.id, p.metodo, p.monto::text, p.comision::text, ${retenido}::text AS retenido, p.proveedor_cobro_id,
+         SELECT p.id, p.metodo, p.historico, p.monto::text, p.comision::text, ${retenido}::text AS retenido, p.proveedor_cobro_id,
                 mov.dinero::text, mov.puente::text, mov.comision::text AS comision_libro, mov.retenido::text AS retenido_libro,
-                mov.revertido
+                mov.apertura::text, mov.revertido
            FROM billing.pagos p LEFT JOIN mov ON mov.pago_id = p.id
            LEFT JOIN ledger.proveedores_cobro pc ON pc.id = p.proveedor_cobro_id
-          WHERE ${E('p.empresa_id')} AND p.estado = 'registrado' AND NOT p.historico
+          WHERE ${E('p.empresa_id')} AND p.estado = 'registrado'
             AND (mov.pago_id IS NULL OR mov.revertido OR mov.retenido <> ${retenido}
-                 OR (p.proveedor_cobro_id IS NULL AND (mov.dinero <> p.monto - p.comision - ${retenido}
-                     OR mov.comision <> p.comision OR mov.puente <> 0))
-                 OR (p.proveedor_cobro_id IS NOT NULL AND (mov.puente <> p.monto OR mov.dinero <> 0 OR mov.comision <> 0
-                                                           OR p.comision <> 0 OR ${retenido} <> 0
-                                                           OR mov.cuenta_puente <> pc.cuenta_id)))`,
+                 OR (p.historico AND (mov.apertura <> p.monto OR mov.dinero <> 0 OR mov.puente <> 0 OR ${retenido} <> 0))
+                 OR (NOT p.historico AND p.proveedor_cobro_id IS NULL
+                     AND (mov.dinero <> p.monto - p.comision - ${retenido} OR mov.comision <> p.comision OR mov.puente <> 0))
+                 OR (NOT p.historico AND p.proveedor_cobro_id IS NOT NULL
+                     AND (mov.puente <> p.monto OR mov.dinero <> 0 OR mov.comision <> 0 OR p.comision <> 0 OR ${retenido} <> 0
+                          OR mov.puentes <> 1 OR mov.cuenta_puente <> pc.cuenta_id OR pc.empresa_id <> p.empresa_id
+                          OR pc.metodo <> p.metodo
+                          OR (p.created_at AT TIME ZONE 'America/Guatemala')::date < pc.desde)))`,
     )
 
     // R1 · mayor de cada caja y banco = sus documentos (+ pagos a proveedores, − retenciones recibidas)
+    const llegadaViva = (tipo: string, id: string) => `EXISTS (
+        SELECT 1 FROM ledger.asientos lv JOIN ledger.movimientos lm ON lm.asiento_id = lv.id
+          JOIN ledger.cuentas lc ON lc.id = lm.cuenta_id
+         WHERE lv.origen_tipo = ${tipo} AND lv.origen_id = ${id} AND lv.reversa_de IS NULL
+           AND lc.codigo = '${CUENTAS_GT.FONDOS_EN_TRANSITO}' AND lm.haber > 0
+           AND NOT EXISTS (SELECT 1 FROM ledger.asientos lr WHERE lr.reversa_de = lv.id))`
     const depositos = conDepositos
         ? `UNION ALL
              SELECT d.empresa_id, -d.monto, cj.cuenta_id FROM ledger.depositos d JOIN ledger.cajas cj ON cj.id = d.caja_id
               WHERE ${E('d.empresa_id')}
              UNION ALL
              SELECT d.empresa_id, d.monto, d.cuenta_id FROM ledger.depositos d
-              WHERE ${E('d.empresa_id')} AND EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'deposito' AND x.documento_id = d.id)
+              WHERE ${E('d.empresa_id')} AND ${llegadaViva("'deposito'", 'd.id')}
              UNION ALL
              SELECT t.empresa_id, -t.monto, t.cuenta_origen_id FROM ledger.traslados t WHERE ${E('t.empresa_id')}
              UNION ALL
              SELECT t.empresa_id, t.monto, t.cuenta_destino_id FROM ledger.traslados t
-              WHERE ${E('t.empresa_id')} AND EXISTS (SELECT 1 FROM ledger.transitos_acreditados x WHERE x.tipo = 'traslado' AND x.documento_id = t.id)`
+              WHERE ${E('t.empresa_id')} AND ${llegadaViva("'traslado'", 't.id')}`
         : ''
     const extracto = conExtractos
         ? `UNION ALL
              SELECT el.empresa_id, el.monto, el.cuenta_id FROM ledger.extractos_lineas el
-              WHERE ${E('el.empresa_id')} AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo = 'banco' AND a.origen_id = el.id AND a.reversa_de IS NULL)`
+              WHERE ${E('el.empresa_id')} AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo = 'banco' AND a.origen_id = el.id AND a.reversa_de IS NULL
+                                 AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))`
         : ''
     const pagosProveedores = conCompras
         ? `UNION ALL
@@ -529,9 +541,9 @@ export async function invariantesFase5(empresas: number[]): Promise<Violacion[]>
     return violaciones
 }
 
-/** Auditor completo con los reemplazos de las fases 4 y 5. */
+/** Auditor completo con los reemplazos de la fase 5. */
 export async function verificarLibroFase5(empresas: number[]): Promise<Violacion[]> {
-    const todas = await verificarLibroFase4(empresas)
+    const todas = await verificarLibro(empresas)
     const superados = Object.keys(SUPERADOS_POR_FASE5)
     const vigentes = todas.filter((v) => !superados.some((clave) => v.invariante.startsWith(clave)))
     return [...vigentes, ...(await invariantesFase5(empresas))]
@@ -548,5 +560,3 @@ export async function afirmarLibroFase5(
         `Invariantes contables rotos (fase 5, empresas ${empresas.join(', ')}):\n${JSON.stringify(violaciones, null, 2)}`,
     )
 }
-
-export { SUPERADOS_POR_FASE4 }

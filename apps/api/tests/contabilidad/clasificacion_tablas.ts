@@ -60,6 +60,8 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.depositos': 'depósito de caja a banco (§10.3)',
     'ledger.traslados': 'traslado entre cuentas propias (§10.3)',
     'ledger.transitos_acreditados': 'llegada al banco de un depósito o traslado, al conciliar (§10.3)',
+    'ledger.transitos_reatribuciones':
+        'llegada reatribuida a otro documento (reverso y llegada nueva, §18 desvío c)',
     // fase 4 (A3): cartera y diferencias de cobro (§10.9)
     'ledger.provisiones_cartera': 'estimación para cuentas incobrables (§10.9)',
     'ledger.castigos': 'castigo de cartera (§10.9)',

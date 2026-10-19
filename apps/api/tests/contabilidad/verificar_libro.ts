@@ -8,6 +8,7 @@ import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
 import { resumenDelMes } from '#ledger/cierres'
 import { carteraVencida } from '#billing/reportes/reportes'
 import { verificarCadena } from '#ledger/sellos'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
  * Auditor contable · `verificarLibro(empresaId?)`.
@@ -100,6 +101,26 @@ const IVA = CUENTAS.IVA_DEBITO
 /** `2.1.11 IVA por certificar` (localización fiscal §10.1): el IVA de los avisos de cobro sin DTE */
 const IVA_TRANSICION = '2.1.11'
 const APERTURA = CUENTAS.SALDOS_APERTURA
+/** fase 4 (§10.3, §10.9) */
+const PUENTE = CUENTAS_GT.COBROS_POR_LIQUIDAR
+const TRANSITO = CUENTAS_GT.FONDOS_EN_TRANSITO
+const ESTIMACION = CUENTAS_GT.ESTIMACION_INCOBRABLES
+const INCOBRABLES = CUENTAS_GT.CUENTAS_INCOBRABLES
+const DIFERENCIAS = CUENTAS_GT.DIFERENCIAS_COBRO
+const COMISIONES = CUENTAS.COMISIONES_PASARELAS
+/**
+ * El documento (depósito o traslado) tiene su llegada al banco viva: un asiento de su origen que
+ * acredita 1.1.11, sin reverso (una llegada reatribuida, decisión (c), queda revertida y el documento
+ * vuelve a tránsito).
+ */
+const llegadaViva = (tipo: string, id: string) => `EXISTS (
+    SELECT 1 FROM ledger.asientos lv JOIN ledger.movimientos lm ON lm.asiento_id = lv.id
+      JOIN ledger.cuentas lc ON lc.id = lm.cuenta_id
+     WHERE lv.origen_tipo = ${tipo} AND lv.origen_id = ${id} AND lv.reversa_de IS NULL
+       AND lc.codigo = '${CUENTAS_GT.FONDOS_EN_TRANSITO}' AND lm.haber > 0
+       AND NOT EXISTS (SELECT 1 FROM ledger.asientos lr WHERE lr.reversa_de = lv.id))`
+const CAJA_O_BANCO = (col: string) =>
+    `(${col} LIKE '${CUENTAS.CAJAS}.%' OR ${col} LIKE '${CUENTAS.BANCOS}.%')`
 const ESTADOS_PENDIENTES = `('emitida', 'parcial', 'vencida')`
 
 /** Empresas sobre las que se verifica: la pedida (o las pedidas) o todas. */
@@ -320,7 +341,7 @@ async function verificarLibroCon(
     | 5 · Pagos y facturas
     */
     await revisar(
-        '5.factura_pagado_inconsistente (pagado ≠ Σ aplicaciones vigentes + notas + saldos a favor, o fuera de [0, total])',
+        '5.factura_pagado_inconsistente (pagado ≠ Σ aplicaciones vigentes + notas + saldos a favor + castigos, o fuera de [0, total])',
         `WITH apl AS (
              SELECT a.factura_id, sum(a.monto) AS monto
                FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
@@ -332,17 +353,21 @@ async function verificarLibroCon(
                FROM billing.saldos_iniciales_aplicaciones a
                JOIN billing.saldos_iniciales s ON s.id = a.saldo_inicial_id
               WHERE s.anulado_en IS NULL GROUP BY 1
+         ), cas AS (
+             -- fase 4 (§10.9): el castigo de cartera cubre la factura
+             SELECT factura_id, sum(monto) AS monto FROM ledger.castigos_facturas GROUP BY 1
          ), con_asiento AS (
              SELECT DISTINCT origen_id FROM ledger.asientos
               WHERE origen_tipo IN ('factura', 'mora') AND reversa_de IS NULL
          ), x AS (
              SELECT f.id, f.estado, f.total, f.pagado,
-                    coalesce(apl.monto, 0) + coalesce(nc.monto, 0) + coalesce(si.monto, 0) AS cubierto,
+                    coalesce(apl.monto, 0) + coalesce(nc.monto, 0) + coalesce(si.monto, 0) + coalesce(cas.monto, 0) AS cubierto,
                     f.id IN (SELECT origen_id FROM con_asiento) AS tiene_asiento
                FROM billing.facturas f
                LEFT JOIN apl ON apl.factura_id = f.id
                LEFT JOIN nc ON nc.factura_id = f.id
                LEFT JOIN si ON si.factura_id = f.id
+               LEFT JOIN cas ON cas.factura_id = f.id
               WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado <> 'anulada'
          )
          SELECT id, estado, total::text, pagado::text, cubierto::text, tiene_asiento FROM x
@@ -355,7 +380,7 @@ async function verificarLibroCon(
         '5.factura_estado_inconsistente (estadoSegunPago)',
         `SELECT f.id, f.estado, f.total::text, f.pagado::text, f.vencida_en IS NOT NULL AS vencida
            FROM billing.facturas f
-          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado NOT IN ('anulada', 'por_certificar')
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado NOT IN ('anulada', 'por_certificar', 'castigada')
             AND f.estado <> CASE
                     WHEN f.pagado = f.total THEN 'pagada'
                     WHEN f.vencida_en IS NOT NULL THEN 'vencida'
@@ -399,27 +424,37 @@ async function verificarLibroCon(
           GROUP BY p.id HAVING sum(a.monto) > p.monto`,
     )
     await revisar(
-        '5.pago_vigente_mal_contabilizado (débito a caja/bancos ≠ monto − comisión, o asiento revertido)',
+        '5.pago_vigente_mal_contabilizado (caja/banco = monto − comisión; con proveedor de cobro, su 1.1.10.NN por el bruto y nada más)',
         `WITH mov AS (
              SELECT a.origen_id AS pago_id,
-                    sum(CASE WHEN c.codigo LIKE '${CUENTAS.CAJAS}.%' OR c.codigo LIKE '${CUENTAS.BANCOS}.%'
-                             THEN m.debe - m.haber ELSE 0 END) AS dinero,
-                    sum(CASE WHEN c.codigo = '${CUENTAS.COMISIONES_PASARELAS}' THEN m.debe - m.haber ELSE 0 END) AS comision,
+                    sum(CASE WHEN ${CAJA_O_BANCO('c.codigo')} THEN m.debe - m.haber ELSE 0 END) AS dinero,
+                    sum(CASE WHEN c.codigo LIKE '${PUENTE}.%' THEN m.debe - m.haber ELSE 0 END) AS puente,
+                    sum(CASE WHEN c.codigo = '${COMISIONES}' THEN m.debe - m.haber ELSE 0 END) AS comision,
                     sum(CASE WHEN c.codigo = '${APERTURA}' THEN m.debe - m.haber ELSE 0 END) AS apertura,
-                    bool_or(EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)) AS revertido
+                    bool_or(EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)) AS revertido,
+                    count(DISTINCT CASE WHEN c.codigo LIKE '${PUENTE}.%' THEN m.cuenta_id END) AS puentes,
+                    max(CASE WHEN c.codigo LIKE '${PUENTE}.%' THEN m.cuenta_id END) AS cuenta_puente
                FROM ledger.asientos a
                JOIN ledger.movimientos m ON m.asiento_id = a.id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
               WHERE a.origen_tipo = 'pago' AND a.reversa_de IS NULL
               GROUP BY 1
          )
-         SELECT p.id, p.metodo, p.historico, p.monto::text, p.comision::text,
-                mov.dinero::text, mov.comision::text AS comision_libro, mov.apertura::text, mov.revertido
+         SELECT p.id, p.metodo, p.historico, p.monto::text, p.comision::text, p.proveedor_cobro_id,
+                mov.dinero::text, mov.puente::text, mov.comision::text AS comision_libro, mov.apertura::text, mov.revertido
            FROM billing.pagos p LEFT JOIN mov ON mov.pago_id = p.id
+           LEFT JOIN ledger.proveedores_cobro pc ON pc.id = p.proveedor_cobro_id
           WHERE ${E('p.empresa_id')} AND ${C('p.cliente_id')} AND p.estado = 'registrado'
             AND (mov.pago_id IS NULL OR mov.revertido
-                 OR (p.historico AND (mov.apertura <> p.monto OR mov.dinero <> 0))
-                 OR (NOT p.historico AND (mov.dinero <> p.monto - p.comision OR mov.comision <> p.comision)))`,
+                 OR (p.historico AND (mov.apertura <> p.monto OR mov.dinero <> 0 OR mov.puente <> 0))
+                 OR (NOT p.historico AND p.proveedor_cobro_id IS NULL
+                     AND (mov.dinero <> p.monto - p.comision OR mov.comision <> p.comision OR mov.puente <> 0))
+                 -- fase 4 (§10.3): el bruto a la cuenta puente del proveedor del pago; sin comisión ni banco
+                 OR (NOT p.historico AND p.proveedor_cobro_id IS NOT NULL
+                     AND (mov.puente <> p.monto OR mov.dinero <> 0 OR mov.comision <> 0 OR p.comision <> 0
+                          OR mov.puentes <> 1 OR mov.cuenta_puente <> pc.cuenta_id OR pc.empresa_id <> p.empresa_id
+                          OR pc.metodo <> p.metodo
+                          OR (p.created_at AT TIME ZONE 'America/Guatemala')::date < pc.desde)))`,
     )
     await revisar(
         '5.pago_anulado_sin_reverso (anular deja todo como estaba: cada asiento del pago revertido)',
@@ -608,14 +643,15 @@ async function verificarLibroCon(
         `SELECT a.id, a.origen_tipo FROM ledger.asientos a
           WHERE ${E('a.empresa_id')}
             AND a.origen_tipo NOT IN ('factura', 'mora', 'pago', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
-                                      'reclasificacion')`,
+                                      'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
+                                      'provision', 'castigo')`,
     )
 
     /*
     | 4 · Cajas y bancos
     */
     await revisar(
-        '4.caja_cerrada_no_cuadra (esperado = fondo + cobros − egresos del turno; diferencia = contado − esperado)',
+        '4.caja_cerrada_no_cuadra (esperado = fondo + cobros − egresos − depósitos del turno; diferencia = contado − esperado)',
         `WITH t AS (
              SELECT t.*, cj.cuenta_id, cj.empresa_id FROM ledger.cajas_turnos t JOIN ledger.cajas cj ON cj.id = t.caja_id
               WHERE t.cerrado_en IS NOT NULL AND ${E('cj.empresa_id')}
@@ -625,7 +661,9 @@ async function verificarLibroCon(
                FROM t
                JOIN ledger.asientos a ON a.created_at <= t.cerrado_en
                     AND ((a.origen_tipo = 'pago' AND a.origen_id IN (SELECT id FROM billing.pagos WHERE turno_id = t.id))
-                      OR (a.origen_tipo = 'egreso' AND a.origen_id IN (SELECT id FROM ledger.egresos WHERE turno_id = t.id)))
+                      OR (a.origen_tipo = 'egreso' AND a.origen_id IN (SELECT id FROM ledger.egresos WHERE turno_id = t.id))
+                      -- fase 4 (§10.3): el depósito al banco baja el efectivo esperado del turno
+                      OR (a.origen_tipo = 'deposito' AND a.origen_id IN (SELECT id FROM ledger.depositos WHERE turno_id = t.id)))
                JOIN ledger.movimientos m ON m.asiento_id = a.id AND m.cuenta_id = t.cuenta_id
               GROUP BY t.id
          ), dif AS (
@@ -648,45 +686,65 @@ async function verificarLibroCon(
           WHERE t.cerrado_en IS NULL AND ${E('cj.empresa_id')} GROUP BY caja_id HAVING count(*) > 1`,
     )
     await revisar(
-        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos − egresos ± diferencias de cierre)',
-        `WITH destino_pago AS (
-             SELECT p.empresa_id, p.monto - p.comision AS monto,
-                    coalesce(cj.cuenta_id, cb.cuenta_id,
-                             CASE WHEN p.metodo IN ('pasarela', 'agente', 'debito')
-                                  THEN (SELECT id FROM ledger.cuentas WHERE codigo = '${CUENTAS.BANCO_PRINCIPAL}') END) AS cuenta_id
-               FROM billing.pagos p
-               LEFT JOIN ledger.cajas cj ON cj.id = p.caja_id
-               LEFT JOIN billing.cuentas_bancarias cb ON cb.id = p.cuenta_bancaria_id
-              WHERE p.estado = 'registrado' AND NOT p.historico AND ${E('p.empresa_id')}
-         ), destino_egreso AS (
-             SELECT e.empresa_id, -e.monto AS monto, coalesce(cj.cuenta_id, b.cuenta_id, cb.cuenta_id) AS cuenta_id
-               FROM ledger.egresos e
-               LEFT JOIN ledger.cajas cj ON cj.id = e.caja_id
-               LEFT JOIN ledger.bancos b ON b.id = e.banco_id
-               LEFT JOIN billing.cuentas_bancarias cb ON cb.id = e.cuenta_bancaria_id
-              WHERE ${E('e.empresa_id')} AND NOT EXISTS (SELECT 1 FROM ledger.egresos_anulaciones x WHERE x.egreso_id = e.id)
-         ), destino_cierre AS (
-             SELECT cj.empresa_id, t.diferencia AS monto, cj.cuenta_id
-               FROM ledger.cajas_turnos t JOIN ledger.cajas cj ON cj.id = t.caja_id
-              WHERE t.cerrado_en IS NOT NULL AND ${E('cj.empresa_id')}
-         ), destino_ajuste AS (
-             -- asientos manuales (ajuste) contra caja o bancos y sus reversos: son su propio documento
-             SELECT a.empresa_id, m.debe - m.haber AS monto, m.cuenta_id
-               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
-               JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE a.origen_tipo = 'ajuste' AND ${E('a.empresa_id')}
-                AND (c.codigo LIKE '${CUENTAS.CAJAS}.%' OR c.codigo LIKE '${CUENTAS.BANCOS}.%')
-         ), docs AS (
+        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos − egresos ± diferencias de cierre + liquidaciones ± depósitos, traslados y partidas del extracto)',
+        `WITH docs AS (
              SELECT empresa_id, cuenta_id, sum(monto) AS saldo FROM (
-                 SELECT * FROM destino_pago UNION ALL SELECT * FROM destino_egreso UNION ALL SELECT * FROM destino_cierre
-                 UNION ALL SELECT * FROM destino_ajuste
-             ) x GROUP BY 1, 2
+                 SELECT p.empresa_id, p.monto - p.comision AS monto,
+                        coalesce(cj.cuenta_id, cb.cuenta_id,
+                                 CASE WHEN p.metodo IN ('pasarela', 'agente', 'debito')
+                                      THEN (SELECT id FROM ledger.cuentas WHERE codigo = '${CUENTAS.BANCO_PRINCIPAL}') END) AS cuenta_id
+                   FROM billing.pagos p
+                   LEFT JOIN ledger.cajas cj ON cj.id = p.caja_id
+                   LEFT JOIN billing.cuentas_bancarias cb ON cb.id = p.cuenta_bancaria_id
+                  WHERE p.estado = 'registrado' AND NOT p.historico AND p.proveedor_cobro_id IS NULL AND ${E('p.empresa_id')}
+                 UNION ALL
+                 SELECT e.empresa_id, -e.monto, coalesce(cj.cuenta_id, b.cuenta_id, cb.cuenta_id)
+                   FROM ledger.egresos e
+                   LEFT JOIN ledger.cajas cj ON cj.id = e.caja_id
+                   LEFT JOIN ledger.bancos b ON b.id = e.banco_id
+                   LEFT JOIN billing.cuentas_bancarias cb ON cb.id = e.cuenta_bancaria_id
+                  WHERE ${E('e.empresa_id')} AND NOT EXISTS (SELECT 1 FROM ledger.egresos_anulaciones x WHERE x.egreso_id = e.id)
+                 UNION ALL
+                 SELECT cj.empresa_id, t.diferencia, cj.cuenta_id
+                   FROM ledger.cajas_turnos t JOIN ledger.cajas cj ON cj.id = t.caja_id
+                  WHERE t.cerrado_en IS NOT NULL AND ${E('cj.empresa_id')}
+                 UNION ALL
+                 -- asientos manuales (ajuste) contra caja o bancos y sus reversos: son su propio documento
+                 SELECT a.empresa_id, m.debe - m.haber, m.cuenta_id
+                   FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE a.origen_tipo = 'ajuste' AND ${E('a.empresa_id')} AND ${CAJA_O_BANCO('c.codigo')}
+                 UNION ALL
+                 -- fase 4: la liquidación del proveedor entra al banco por el neto
+                 SELECT l.empresa_id, l.neto, l.cuenta_id FROM ledger.liquidaciones_cobro l WHERE ${E('l.empresa_id')}
+                 UNION ALL
+                 -- depósito: sale de la caja al depositar; entra al banco del documento cuando llega (al conciliar)
+                 SELECT d.empresa_id, -d.monto, cj.cuenta_id FROM ledger.depositos d JOIN ledger.cajas cj ON cj.id = d.caja_id
+                  WHERE ${E('d.empresa_id')}
+                 UNION ALL
+                 SELECT d.empresa_id, d.monto, d.cuenta_id FROM ledger.depositos d
+                  WHERE ${E('d.empresa_id')}
+                    AND ${llegadaViva("'deposito'", 'd.id')}
+                 UNION ALL
+                 SELECT t.empresa_id, -t.monto, t.cuenta_origen_id FROM ledger.traslados t WHERE ${E('t.empresa_id')}
+                 UNION ALL
+                 SELECT t.empresa_id, t.monto, t.cuenta_destino_id FROM ledger.traslados t
+                  WHERE ${E('t.empresa_id')}
+                    AND ${llegadaViva("'traslado'", 't.id')}
+                 UNION ALL
+                 -- partida del extracto sin documento (comisión, interés): el monto de su línea en su cuenta
+                 SELECT el.empresa_id, el.monto, el.cuenta_id FROM ledger.extractos_lineas el
+                  WHERE ${E('el.empresa_id')}
+                    AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo = 'banco' AND a.origen_id = el.id
+                                 AND a.reversa_de IS NULL
+                                 AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))
+             ) x (empresa_id, monto, cuenta_id) GROUP BY 1, 2
          ), libro AS (
              SELECT a.empresa_id, m.cuenta_id, sum(m.debe - m.haber) AS saldo
                FROM ledger.movimientos m
                JOIN ledger.asientos a ON a.id = m.asiento_id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE (c.codigo LIKE '${CUENTAS.CAJAS}.%' OR c.codigo LIKE '${CUENTAS.BANCOS}.%') AND ${E('a.empresa_id')}
+              WHERE ${CAJA_O_BANCO('c.codigo')} AND ${E('a.empresa_id')}
               GROUP BY 1, 2
          )
          SELECT coalesce(libro.empresa_id, docs.empresa_id) AS empresa_id,
@@ -734,10 +792,12 @@ async function verificarLibroCon(
     | 12 · FEL (localización fiscal §8.3 y §10.1)
     */
     await revisar(
-        '12.iva_por_certificar_distinto (2.1.11 = Σ IVA de avisos sin DTE certificado − notas internas)',
+        '12.iva_por_certificar_distinto (2.1.11 = Σ IVA de avisos sin DTE certificado − notas internas − IVA castigado)',
         `WITH esperado AS (
              SELECT f.empresa_id,
-                    sum(f.iva - coalesce((SELECT sum(n.iva) FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')}), 0)) AS monto
+                    sum(f.iva - coalesce((SELECT sum(n.iva) FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')}), 0)
+                        -- fase 4 (§10.1, §10.9): lo castigado de un aviso sin DTE sale de 2.1.11
+                        - coalesce((SELECT sum(cf.iva) FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id), 0)) AS monto
                FROM billing.facturas f
               WHERE f.aviso_cobro AND f.estado <> 'anulada' AND ${E('f.empresa_id')}
                 AND NOT EXISTS (SELECT 1 FROM fiscal.dte d
@@ -789,10 +849,11 @@ async function verificarLibroCon(
     */
     const DOC_DTE = `CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END`
     await revisar(
-        '12.iva_por_certificar_del_documento (por aviso: 2.1.11 propio = iva − notas internas sin DTE certificado; 0 si certificado o anulado)',
+        '12.iva_por_certificar_del_documento (por aviso: 2.1.11 propio = iva − notas internas − IVA castigado sin DTE certificado; 0 si certificado o anulado)',
         `WITH x AS (
              SELECT f.id, f.estado, f.iva,
                     coalesce((SELECT sum(n.iva) FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')}), 0) AS iva_notas,
+                    coalesce((SELECT sum(cf.iva) FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id), 0) AS iva_castigado,
                     EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_id = f.id AND d.documento_tipo = ${DOC_DTE}
                               AND d.estado IN ('certificado', 'anulacion_pendiente')) AS certificado,
                     (SELECT coalesce(sum(m.haber - m.debe), 0)
@@ -808,9 +869,12 @@ async function verificarLibroCon(
                FROM billing.facturas f
               WHERE f.aviso_cobro AND ${E('f.empresa_id')} AND ${C('f.cliente_id')}
          )
-         SELECT id, estado, certificado, iva::text, iva_notas::text, libro::text AS iva_por_certificar_libro
+         -- el asiento del castigo es de varias facturas: a cada una le toca su castigos_facturas.iva (su
+         -- total lo revisa 13.castigo_mal_contabilizado)
+         SELECT id, estado, certificado, iva::text, iva_notas::text, iva_castigado::text,
+                (libro - iva_castigado)::text AS iva_por_certificar_libro
            FROM x
-          WHERE libro <> CASE WHEN estado = 'anulada' OR certificado THEN 0 ELSE iva - iva_notas END`,
+          WHERE libro - iva_castigado <> CASE WHEN estado = 'anulada' OR certificado THEN 0 ELSE iva - iva_notas - iva_castigado END`,
     )
     await revisar(
         '12.movimiento_en_2.1.11_de_origen_inesperado (solo avisos, sus notas y su reclasificación)',
@@ -822,6 +886,10 @@ async function verificarLibroCon(
            LEFT JOIN billing.facturas fn ON fn.id = n.factura_id
           WHERE c.codigo = '${IVA_TRANSICION}' AND ${E('a.empresa_id')}
             AND NOT (a.origen_tipo = 'reclasificacion'
+                     -- fase 4: el castigo de un aviso sin DTE debita 2.1.11 por su IVA
+                     OR (a.origen_tipo = 'castigo' AND m.debe > 0
+                         AND EXISTS (SELECT 1 FROM ledger.castigos_facturas cf JOIN billing.facturas fc ON fc.id = cf.factura_id
+                                      WHERE cf.castigo_id = a.origen_id AND cf.iva > 0 AND fc.aviso_cobro))
                      OR (a.origen_tipo IN ('factura', 'mora') AND f.aviso_cobro)
                      OR (a.origen_tipo = 'nota_credito' AND fn.aviso_cobro))`,
     )
@@ -1010,6 +1078,471 @@ async function verificarLibroCon(
             AND f.estado IN ${ESTADOS_PENDIENTES} AND f.total > f.pagado
             AND EXISTS (SELECT 1 FROM fiscal.dte_intentos i
                          WHERE i.dte_id = d.id AND i.operacion = 'anular' AND i.resultado = 'rechazado')`,
+    )
+
+    /*
+    | 13 · Fase 4: cobros por liquidar, depósitos y traslados, extractos y conciliación, cartera
+    |      (localización fiscal §10.3 y §10.9)
+    */
+    await revisar(
+        '13.cobros_por_liquidar_distinto (por proveedor: 1.1.10.NN = Σ pagos vigentes sin liquidar − contracargos pendientes)',
+        `WITH esperado AS (
+             SELECT pc.id, pc.empresa_id, pc.cuenta_id,
+                    coalesce(sum(CASE
+                        WHEN p.estado = 'registrado'
+                             AND NOT EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro')
+                             THEN p.monto
+                        WHEN p.estado = 'anulado'
+                             AND EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro')
+                             AND NOT EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'contracargo')
+                             THEN -p.monto
+                        ELSE 0 END), 0) AS monto
+               FROM ledger.proveedores_cobro pc LEFT JOIN billing.pagos p ON p.proveedor_cobro_id = pc.id
+              WHERE ${E('pc.empresa_id')}
+              GROUP BY 1, 2, 3
+         ), libro AS (
+             SELECT a.empresa_id, m.cuenta_id, sum(m.debe - m.haber) AS monto
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo LIKE '${PUENTE}.%' AND ${E('a.empresa_id')}
+              GROUP BY 1, 2
+         )
+         SELECT coalesce(e.empresa_id, l.empresa_id) AS empresa_id,
+                (SELECT codigo FROM ledger.cuentas WHERE id = coalesce(e.cuenta_id, l.cuenta_id)) AS cuenta,
+                coalesce(e.monto, 0)::text AS esperado, coalesce(l.monto, 0)::text AS libro
+           FROM esperado e FULL JOIN libro l ON l.cuenta_id = e.cuenta_id AND l.empresa_id = e.empresa_id
+          WHERE coalesce(e.monto, 0) <> coalesce(l.monto, 0)`,
+    )
+    await revisar(
+        '13.liquidacion_de_pago_inconsistente (cada cobro por el monto del pago, del mismo proveedor y empresa; contracargo solo de un pago liquidado y anulado)',
+        `SELECT lp.id, lp.liquidacion_id, lp.pago_id, lp.tipo, lp.monto::text, p.monto::text AS monto_pago, p.estado,
+                p.proveedor_cobro_id, l.proveedor_cobro_id AS proveedor_liquidacion
+           FROM ledger.liquidaciones_pagos lp
+           JOIN ledger.liquidaciones_cobro l ON l.id = lp.liquidacion_id
+           JOIN billing.pagos p ON p.id = lp.pago_id
+          WHERE ${E('l.empresa_id')}
+            AND (lp.monto <> p.monto OR p.proveedor_cobro_id IS DISTINCT FROM l.proveedor_cobro_id
+                 OR p.empresa_id <> l.empresa_id
+                 OR (lp.tipo = 'contracargo' AND (p.estado <> 'anulado' OR NOT EXISTS (
+                        SELECT 1 FROM ledger.liquidaciones_pagos c WHERE c.pago_id = p.id AND c.tipo = 'cobro'
+                           AND c.liquidacion_id <> lp.liquidacion_id))))`,
+    )
+    await revisar(
+        '13.liquidacion_mal_contabilizada (Banco neto + 5.1.02 comisión / 1.1.10.NN bruto y nada más; bruto = Σ cobros − Σ contracargos; fecha de la liquidación)',
+        `WITH mov AS (
+             SELECT a.origen_id AS id, min(a.fecha) AS fecha, count(DISTINCT a.id) AS asientos,
+                    sum(CASE WHEN m.cuenta_id = l.cuenta_id THEN m.debe - m.haber ELSE 0 END) AS banco,
+                    sum(CASE WHEN c.codigo = '${COMISIONES}' THEN m.debe - m.haber ELSE 0 END) AS comision,
+                    sum(CASE WHEN m.cuenta_id = pc.cuenta_id THEN m.haber - m.debe ELSE 0 END) AS puente,
+                    count(*) FILTER (WHERE m.cuenta_id NOT IN (l.cuenta_id, pc.cuenta_id) AND c.codigo <> '${COMISIONES}') AS ajenos
+               FROM ledger.asientos a
+               JOIN ledger.liquidaciones_cobro l ON l.id = a.origen_id
+               JOIN ledger.proveedores_cobro pc ON pc.id = l.proveedor_cobro_id
+               JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo = 'liquidacion_cobro' AND a.reversa_de IS NULL AND a.empresa_id = l.empresa_id
+              GROUP BY 1
+         ), pagos AS (
+             SELECT liquidacion_id, sum(CASE WHEN tipo = 'cobro' THEN monto ELSE -monto END) AS bruto
+               FROM ledger.liquidaciones_pagos GROUP BY 1
+         )
+         SELECT l.id, l.bruto::text, l.comision::text, l.neto::text, mov.banco::text, mov.comision::text AS comision_libro,
+                mov.puente::text, mov.ajenos::int, pagos.bruto::text AS bruto_pagos
+           FROM ledger.liquidaciones_cobro l
+           JOIN ledger.proveedores_cobro pc ON pc.id = l.proveedor_cobro_id
+           LEFT JOIN mov ON mov.id = l.id LEFT JOIN pagos ON pagos.liquidacion_id = l.id
+          WHERE ${E('l.empresa_id')}
+            AND (mov.id IS NULL OR mov.asientos <> 1 OR mov.banco <> l.neto OR mov.comision <> l.comision
+                 OR mov.puente <> l.bruto OR mov.ajenos <> 0 OR mov.fecha <> l.fecha
+                 OR pagos.bruto IS DISTINCT FROM l.bruto OR l.neto <> l.bruto - l.comision
+                 OR pc.empresa_id <> l.empresa_id)`,
+    )
+    await revisar(
+        '13.fondos_en_transito_distinto (1.1.11 = Σ depósitos y traslados sin acreditar)',
+        `WITH esperado AS (
+             SELECT empresa_id, sum(monto) AS monto FROM (
+                 SELECT d.empresa_id, d.monto FROM ledger.depositos d
+                  WHERE ${E('d.empresa_id')}
+                    AND NOT ${llegadaViva("'deposito'", 'd.id')}
+                 UNION ALL
+                 SELECT t.empresa_id, t.monto FROM ledger.traslados t
+                  WHERE ${E('t.empresa_id')}
+                    AND NOT ${llegadaViva("'traslado'", 't.id')}
+             ) x GROUP BY 1
+         ), libro AS (
+             SELECT a.empresa_id, sum(m.debe - m.haber) AS monto
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${TRANSITO}' AND ${E('a.empresa_id')}
+              GROUP BY 1
+         )
+         SELECT coalesce(e.empresa_id, l.empresa_id) AS empresa_id, coalesce(e.monto, 0)::text AS esperado,
+                coalesce(l.monto, 0)::text AS libro
+           FROM esperado e FULL JOIN libro l ON l.empresa_id = e.empresa_id
+          WHERE coalesce(e.monto, 0) <> coalesce(l.monto, 0)`,
+    )
+    await revisar(
+        '13.transito_mal_contabilizado (depósito 1.1.11 / Caja del turno; traslado 1.1.11 / Banco origen; llegada Banco destino / 1.1.11 en la cuenta de su línea, con su fecha o la del documento si es posterior)',
+        `WITH doc AS (
+             SELECT 'deposito' AS tipo, d.id, d.empresa_id, d.monto, cj.cuenta_id AS sale, d.cuenta_id AS llega, d.fecha,
+                    tu.id IS NOT NULL AS turno_ok
+               FROM ledger.depositos d JOIN ledger.cajas cj ON cj.id = d.caja_id
+               LEFT JOIN ledger.cajas_turnos tu ON tu.id = d.turno_id AND tu.caja_id = d.caja_id
+              WHERE ${E('d.empresa_id')}
+             UNION ALL
+             SELECT 'traslado', t.id, t.empresa_id, t.monto, t.cuenta_origen_id, t.cuenta_destino_id, t.fecha, true
+               FROM ledger.traslados t WHERE ${E('t.empresa_id')}
+         ), mov AS (
+             -- por documento: lo que su(s) asiento(s) movieron en cada cuenta
+             SELECT a.origen_tipo AS tipo, a.origen_id AS id, m.cuenta_id, c.codigo, sum(m.debe - m.haber) AS neto,
+                    count(DISTINCT a.id) AS asientos
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo IN ('deposito', 'traslado') AND ${E('a.empresa_id')}
+              GROUP BY 1, 2, 3, 4
+         ), x AS (
+             SELECT doc.*, x.cuenta_id AS acreditada_en, x.linea_id, to_char(x.fecha, 'YYYY-MM-DD') AS fecha_llegada,
+                    el.cuenta_id AS cuenta_linea, to_char(el.fecha, 'YYYY-MM-DD') AS fecha_linea, el.monto AS monto_linea,
+                    -- asientos vivos del documento: ni reversos ni revertidos (una llegada reatribuida no cuenta)
+                    (SELECT count(DISTINCT a.id) FROM ledger.asientos a
+                      WHERE a.origen_tipo = doc.tipo AND a.origen_id = doc.id AND a.reversa_de IS NULL
+                        AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)) AS asientos,
+                    ${llegadaViva('doc.tipo', 'doc.id')} AS llegada_viva,
+                    coalesce((SELECT sum(neto) FROM mov WHERE mov.tipo = doc.tipo AND mov.id = doc.id AND mov.codigo = '${TRANSITO}'), 0) AS transito,
+                    coalesce((SELECT sum(neto) FROM mov WHERE mov.tipo = doc.tipo AND mov.id = doc.id AND mov.cuenta_id = doc.sale), 0) AS salida,
+                    coalesce((SELECT sum(neto) FROM mov WHERE mov.tipo = doc.tipo AND mov.id = doc.id AND mov.cuenta_id = doc.llega), 0) AS llegada,
+                    coalesce((SELECT sum(abs(neto)) FROM mov WHERE mov.tipo = doc.tipo AND mov.id = doc.id
+                               AND mov.codigo <> '${TRANSITO}' AND mov.cuenta_id NOT IN (doc.sale, doc.llega)), 0) AS ajeno,
+                    (SELECT to_char(max(a.fecha), 'YYYY-MM-DD') FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                      WHERE a.origen_tipo = doc.tipo AND a.origen_id = doc.id AND a.reversa_de IS NULL
+                        AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)
+                        AND m.cuenta_id = doc.llega) AS fecha_asiento_llegada
+               FROM doc
+               LEFT JOIN ledger.transitos_acreditados x ON x.tipo = doc.tipo AND x.documento_id = doc.id
+               LEFT JOIN ledger.extractos_lineas el ON el.id = x.linea_id
+         )
+         SELECT tipo, id, monto::text, asientos::int, transito::text, salida::text, llegada::text, ajeno::text,
+                acreditada_en, cuenta_linea, fecha_llegada, fecha_linea
+           FROM x
+          WHERE ajeno <> 0 OR salida <> -monto OR NOT turno_ok
+             OR (NOT llegada_viva AND (asientos <> 1 OR transito <> monto OR llegada <> 0))
+             OR (llegada_viva AND acreditada_en IS NULL)
+             OR (llegada_viva AND (asientos <> 2 OR transito <> 0 OR llegada <> monto
+                 OR acreditada_en <> llega OR linea_id IS NULL OR cuenta_linea <> llega
+                 -- la llegada lleva la fecha de la línea (o la del documento, si es posterior)
+                 OR fecha_llegada <> greatest(to_char(fecha, 'YYYY-MM-DD'), fecha_linea)
+                 OR fecha_asiento_llegada <> fecha_llegada))`,
+    )
+    await revisar(
+        '13.extracto_descuadrado (Σ líneas = saldo final − saldo inicial; líneas de la cuenta y empresa del extracto)',
+        `SELECT e.id, e.saldo_inicial::text, e.saldo_final::text, coalesce(sum(l.monto), 0)::text AS lineas,
+                bool_and(l.cuenta_id = e.cuenta_id AND l.empresa_id = e.empresa_id) AS misma_cuenta
+           FROM ledger.extractos e LEFT JOIN ledger.extractos_lineas l ON l.extracto_id = e.id
+          WHERE ${E('e.empresa_id')}
+          GROUP BY e.id
+         HAVING coalesce(sum(l.monto), 0) <> e.saldo_final - e.saldo_inicial
+             OR NOT coalesce(bool_and(l.cuenta_id = e.cuenta_id AND l.empresa_id = e.empresa_id), true)`,
+    )
+    await revisar(
+        '13.partida_de_extracto_mal_contabilizada (registrar desde el extracto: un asiento nuevo con el monto de la línea en su cuenta, su fecha y una contrapartida)',
+        `WITH a AS (
+             SELECT a.id, a.origen_id AS linea_id, a.fecha,
+                    sum(CASE WHEN m.cuenta_id = el.cuenta_id THEN m.debe - m.haber ELSE 0 END) AS banco,
+                    count(*) AS movimientos
+               FROM ledger.asientos a JOIN ledger.extractos_lineas el ON el.id = a.origen_id
+               JOIN ledger.movimientos m ON m.asiento_id = a.id
+              WHERE a.origen_tipo = 'banco' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+              GROUP BY a.id, a.origen_id, a.fecha
+         )
+         SELECT a.id, a.linea_id, a.banco::text, el.monto::text, a.movimientos::int,
+                to_char(a.fecha, 'YYYY-MM-DD') AS fecha, to_char(el.fecha, 'YYYY-MM-DD') AS fecha_linea
+           FROM a JOIN ledger.extractos_lineas el ON el.id = a.linea_id
+          WHERE a.banco <> el.monto OR a.movimientos <> 2 OR a.fecha <> el.fecha
+             OR (SELECT count(*) FROM ledger.asientos o WHERE o.origen_tipo = 'banco' AND o.origen_id = a.linea_id
+                  AND o.reversa_de IS NULL) <> 1`,
+    )
+    await revisar(
+        '13.conciliacion_descuadrada (un grupo = una línea; Σ movimientos vigentes = línea; cada fila = neto del movimiento en la cuenta de la línea)',
+        `WITH vig AS (
+             SELECT c.* FROM ledger.conciliaciones c
+              WHERE ${E('c.empresa_id')}
+                AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones x WHERE x.conciliacion_id = c.id)
+         )
+         SELECT v.grupo, min(v.linea_id) AS linea_id, count(DISTINCT v.linea_id)::int AS lineas,
+                sum(v.monto)::text AS conciliado, max(el.monto)::text AS linea
+           FROM vig v JOIN ledger.extractos_lineas el ON el.id = v.linea_id
+           JOIN ledger.movimientos m ON m.id = v.movimiento_id JOIN ledger.asientos a ON a.id = m.asiento_id
+          GROUP BY v.grupo
+         HAVING count(DISTINCT v.linea_id) <> 1 OR sum(v.monto) <> max(el.monto)
+             OR NOT bool_and(v.monto = m.debe - m.haber AND m.cuenta_id = el.cuenta_id AND v.cuenta_id = el.cuenta_id
+                             AND a.empresa_id = el.empresa_id AND v.empresa_id = el.empresa_id)`,
+    )
+    await revisar(
+        '13.conciliacion_duplicada (un movimiento o una línea en dos conciliaciones vigentes; un grupo anulado a medias)',
+        `WITH vig AS (
+             SELECT c.* FROM ledger.conciliaciones c
+              WHERE ${E('c.empresa_id')}
+                AND NOT EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones x WHERE x.conciliacion_id = c.id)
+         )
+         SELECT 'movimiento' AS que, movimiento_id::text AS id, count(DISTINCT grupo)::int AS grupos FROM vig
+          GROUP BY movimiento_id HAVING count(DISTINCT grupo) > 1
+         UNION ALL
+         SELECT 'linea', linea_id::text, count(DISTINCT grupo)::int FROM vig GROUP BY linea_id HAVING count(DISTINCT grupo) > 1
+         UNION ALL
+         SELECT 'grupo_a_medias', c.grupo::text, count(*)::int FROM ledger.conciliaciones c
+          WHERE ${E('c.empresa_id')}
+          GROUP BY c.grupo
+         HAVING count(*) FILTER (WHERE EXISTS (SELECT 1 FROM ledger.conciliaciones_anulaciones x WHERE x.conciliacion_id = c.id))
+                NOT IN (0, count(*))`,
+    )
+    await revisar(
+        '13.castigo_mal_contabilizado (2.1.11 debe = Σ IVA castigado; 1.1.12 = estimación; 5.3.02 = gasto; CxC haber = Σ facturas; IVA de cada factura según su aviso)',
+        `WITH mov AS (
+             SELECT a.origen_id AS id, count(DISTINCT a.id) AS asientos,
+                    sum(CASE WHEN c.codigo = '${CXC}' THEN m.haber - m.debe ELSE 0 END) AS cxc,
+                    sum(CASE WHEN c.codigo = '${IVA_TRANSICION}' THEN m.debe - m.haber ELSE 0 END) AS iva,
+                    sum(CASE WHEN c.codigo = '${ESTIMACION}' THEN m.debe - m.haber ELSE 0 END) AS estimacion,
+                    sum(CASE WHEN c.codigo = '${INCOBRABLES}' THEN m.debe - m.haber ELSE 0 END) AS gasto,
+                    count(*) FILTER (WHERE c.codigo NOT IN ('${CXC}', '${IVA_TRANSICION}', '${ESTIMACION}', '${INCOBRABLES}')) AS ajenos,
+                    bool_and(c.codigo <> '${CXC}' OR m.cliente_id IS NOT NULL) AS con_cliente
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo = 'castigo' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+              GROUP BY 1
+         ), doc AS (
+             SELECT castigo_id, sum(monto) AS monto, sum(iva) AS iva FROM ledger.castigos_facturas GROUP BY 1
+         )
+         SELECT k.id, k.monto::text, k.iva::text, k.estimacion::text, k.gasto::text, doc.monto::text AS facturas,
+                doc.iva::text AS iva_facturas, mov.cxc::text, mov.iva::text AS iva_libro, mov.estimacion::text AS estimacion_libro,
+                mov.gasto::text AS gasto_libro, mov.ajenos::int
+           FROM ledger.castigos k JOIN doc ON doc.castigo_id = k.id LEFT JOIN mov ON mov.id = k.id
+          WHERE ${E('k.empresa_id')}
+            AND (mov.id IS NULL OR mov.asientos <> 1 OR mov.cxc <> doc.monto OR mov.iva <> doc.iva OR mov.iva <> k.iva
+                 OR mov.estimacion <> k.estimacion OR mov.gasto <> k.gasto OR mov.ajenos <> 0 OR NOT mov.con_cliente
+                 OR k.monto <> doc.monto OR k.iva <> doc.iva
+                 OR (SELECT count(DISTINCT m.cliente_id) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                      WHERE a.origen_tipo = 'castigo' AND a.origen_id = k.id AND m.cliente_id IS NOT NULL) <> 1
+                 OR EXISTS (SELECT 1 FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                             WHERE a.origen_tipo = 'castigo' AND a.origen_id = k.id AND m.cliente_id <> k.cliente_id))`,
+    )
+    await revisar(
+        '13.castigo_de_factura_mal_calculado (saldo pendiente; IVA = proporcional al aviso sin DTE, 0 con DTE o sin aviso; factura cubierta y sin DTE posterior)',
+        `WITH x AS (
+             SELECT cf.*, f.total, f.pagado, f.iva AS iva_factura, f.aviso_cobro, f.estado, k.created_at AS castigado_en,
+                    coalesce((SELECT sum(n.monto) FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')}), 0) AS notas,
+                    coalesce((SELECT sum(n.iva) FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')}), 0) AS iva_notas,
+                    EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_id = f.id
+                              AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                              AND d.estado <> 'rechazado' AND d.created_at <= k.created_at) AS con_dte,
+                    EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_id = f.id
+                              AND d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
+                              AND d.estado <> 'rechazado' AND d.created_at > k.created_at) AS dte_posterior
+               FROM ledger.castigos_facturas cf JOIN ledger.castigos k ON k.id = cf.castigo_id
+               JOIN billing.facturas f ON f.id = cf.factura_id
+              WHERE ${E('k.empresa_id')}
+         ), y AS (
+             SELECT x.*, CASE WHEN NOT aviso_cobro OR con_dte THEN 0
+                              WHEN monto = total - notas THEN iva_factura - iva_notas
+                              ELSE least(iva_factura - iva_notas, round(monto * (iva_factura - iva_notas) / (total - notas), 2)) END AS iva_esperado
+               FROM x
+         )
+         SELECT factura_id, castigo_id, monto::text, iva::text, iva_esperado::text, total::text, pagado::text, estado,
+                dte_posterior
+           FROM y
+          -- hoy (desvío g de A3) la castigada queda pagada con pagado = total; con la decisión (g), estado castigada
+          -- y pagado = solo lo cobrado (pagado + castigado = total)
+          WHERE iva <> iva_esperado OR dte_posterior
+             OR NOT ((estado = 'pagada' AND pagado = total) OR (estado = 'castigada' AND pagado + monto = total))`,
+    )
+    await revisar(
+        '13.estimacion_incobrables (1.1.12 = Σ provisiones − Σ estimación usada en castigos, nunca deudora; cada provisión = falta hasta el tope)',
+        `WITH libro AS (
+             SELECT a.empresa_id, sum(m.haber - m.debe) AS saldo
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${ESTIMACION}' AND ${E('a.empresa_id')}
+              GROUP BY 1
+         ), doc AS (
+             SELECT empresa_id, sum(monto) AS saldo FROM (
+                 SELECT empresa_id, monto FROM ledger.provisiones_cartera WHERE ${E('empresa_id')}
+                 UNION ALL
+                 SELECT empresa_id, -estimacion FROM ledger.castigos WHERE ${E('empresa_id')}
+             ) x GROUP BY 1
+         )
+         SELECT coalesce(l.empresa_id, d.empresa_id) AS empresa_id, coalesce(l.saldo, 0)::text AS libro,
+                coalesce(d.saldo, 0)::text AS documentos
+           FROM libro l FULL JOIN doc d ON d.empresa_id = l.empresa_id
+          WHERE coalesce(l.saldo, 0) <> coalesce(d.saldo, 0) OR coalesce(l.saldo, 0) < 0`,
+    )
+    await revisar(
+        '13.provision_mal_contabilizada (5.3.02 / 1.1.12 por el monto, fecha del corte; monto = máx(0, tope − saldo anterior); tope = base × %)',
+        `WITH mov AS (
+             SELECT a.origen_id AS id, min(a.fecha) AS fecha, count(DISTINCT a.id) AS asientos,
+                    sum(CASE WHEN c.codigo = '${INCOBRABLES}' THEN m.debe - m.haber ELSE 0 END) AS gasto,
+                    sum(CASE WHEN c.codigo = '${ESTIMACION}' THEN m.haber - m.debe ELSE 0 END) AS estimacion,
+                    count(*) FILTER (WHERE c.codigo NOT IN ('${INCOBRABLES}', '${ESTIMACION}')) AS ajenos
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo = 'provision' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+              GROUP BY 1
+         )
+         SELECT p.id, p.base::text, p.porcentaje, p.tope::text, p.saldo_anterior::text, p.monto::text,
+                mov.gasto::text, mov.estimacion::text, mov.ajenos::int
+           FROM ledger.provisiones_cartera p LEFT JOIN mov ON mov.id = p.id
+          WHERE ${E('p.empresa_id')}
+            AND (p.tope <> round(p.base * p.porcentaje::numeric / 100, 2)
+                 OR p.monto <> greatest(0, p.tope - p.saldo_anterior)
+                 OR (p.monto = 0 AND mov.id IS NOT NULL)
+                 OR (p.monto > 0 AND (mov.id IS NULL OR mov.asientos <> 1 OR mov.gasto <> p.monto
+                                      OR mov.estimacion <> p.monto OR mov.ajenos <> 0 OR mov.fecha <> p.fecha)))`,
+    )
+    await revisar(
+        '13.provision_sobre_el_tope (H12: la reserva en 1.1.12 al corte no supera el tope de su provisión)',
+        `SELECT p.id, to_char(p.fecha, 'YYYY-MM-DD') AS fecha, p.tope::text,
+                (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE c.codigo = '${ESTIMACION}' AND a.empresa_id = p.empresa_id AND a.fecha <= p.fecha)::text AS reserva_al_corte
+           FROM ledger.provisiones_cartera p
+          WHERE ${E('p.empresa_id')} AND p.monto > 0
+            AND (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE c.codigo = '${ESTIMACION}' AND a.empresa_id = p.empresa_id AND a.fecha <= p.fecha) > p.tope`,
+    )
+    await revisar(
+        '13.diferencia_de_cobro_mal_cerrada (una nota por el monto de la diferencia, de la factura del pago; base a 5.3.05 si es interna, a ventas si es NCRE)',
+        `WITH x AS (
+             SELECT d.*, n.monto AS monto_nota, n.factura_id AS factura_nota, n.subtotal,
+                    EXISTS (SELECT 1 FROM fiscal.dte o WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = n.id) AS ncre,
+                    (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = n.id AND a.reversa_de IS NULL
+                        AND c.codigo = '${DIFERENCIAS}') AS a_diferencias,
+                    EXISTS (SELECT 1 FROM billing.pagos_aplicaciones ap WHERE ap.pago_id = d.pago_id AND ap.factura_id = d.factura_id) AS aplicado
+               FROM billing.diferencias_cobro d JOIN billing.notas_credito n ON n.id = d.nota_credito_id
+              WHERE ${E('d.empresa_id')}
+         )
+         SELECT id, pago_id, factura_id, nota_credito_id, monto::text, monto_nota::text, ncre, a_diferencias::text, aplicado
+           FROM x
+          WHERE monto_nota <> monto OR factura_nota <> factura_id OR NOT aplicado
+             OR (NOT ncre AND a_diferencias <> subtotal) OR (ncre AND a_diferencias <> 0)`,
+    )
+    await revisar(
+        '13.diferencia_de_cobro_con_pago_anulado (H13: anular el pago deja viva la diferencia que cerró)',
+        `SELECT d.id, d.pago_id, d.factura_id, d.nota_credito_id, d.monto::text
+           FROM billing.diferencias_cobro d JOIN billing.pagos p ON p.id = d.pago_id
+           JOIN billing.notas_credito n ON n.id = d.nota_credito_id
+          WHERE ${E('d.empresa_id')} AND p.estado = 'anulado' AND NOT ${anulada('n')}`,
+    )
+
+    /*
+    | 13 · Decisiones del líder sobre la fase 4 (en HALLAZGOS_ABIERTOS hasta que A3 las suba)
+    */
+    await revisar(
+        '5.factura_pagado_sin_castigo (decisión (g): pagado = solo dinero y notas; el castigo se lee de castigos_facturas y nunca suma a pagado)',
+        `WITH x AS (
+             SELECT f.id, f.estado, f.total, f.pagado,
+                    coalesce((SELECT sum(a.monto) FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
+                               WHERE a.factura_id = f.id AND p.estado = 'registrado'), 0)
+                  + coalesce((SELECT sum(n.monto) FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')}), 0)
+                  + coalesce((SELECT sum(a.monto) FROM billing.saldos_iniciales_aplicaciones a
+                               JOIN billing.saldos_iniciales s ON s.id = a.saldo_inicial_id
+                              WHERE a.factura_id = f.id AND s.anulado_en IS NULL), 0) AS cobrado,
+                    EXISTS (SELECT 1 FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id) AS castigada
+               FROM billing.facturas f
+              WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado <> 'anulada'
+         )
+         SELECT id, estado, total::text, pagado::text, cobrado::text FROM x WHERE castigada AND pagado <> cobrado`,
+    )
+    await revisar(
+        '5.factura_castigada_inconsistente (decisión (g): estado castigada ⇔ castigo; pagado + castigado = total; fuera de cartera y del corte)',
+        `SELECT f.id, f.estado, f.total::text, f.pagado::text,
+                (SELECT sum(cf.monto) FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id)::text AS castigado
+           FROM billing.facturas f
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+            AND ((f.estado = 'castigada') <> EXISTS (SELECT 1 FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id)
+                 OR (f.estado = 'castigada'
+                     AND f.pagado + (SELECT sum(cf.monto) FROM ledger.castigos_facturas cf WHERE cf.factura_id = f.id) <> f.total))`,
+    )
+    // la cuenta de recuperación la agrega A3 al paquete GT; se busca por su nombre
+    const [recuperacion] = await filas(
+        `SELECT string_agg(codigo, ',') AS codigos FROM ledger.cuentas
+          WHERE pais = 'GT' AND nombre ILIKE 'Recuperaci%n de cuentas incobrables%' AND imputable`,
+    )
+    const cuentasRecuperacion = String(recuperacion?.codigos ?? '')
+        .split(',')
+        .filter((c) => /^[0-9.]+$/.test(c))
+    if (cuentasRecuperacion.length > 0 || opciones.incluirHallazgosAbiertos) {
+        const lista =
+            cuentasRecuperacion.length > 0 ? cuentasRecuperacion.map((c) => `'${c}'`).join(', ') : "''"
+        await revisar(
+            '13.recuperacion_de_castigada (decisión (g): lo cobrado después de un castigo es recuperación, nunca aplicación a la factura ni anticipo eterno; recuperado ≤ castigado)',
+            `WITH castigado AS (
+                 SELECT k.empresa_id, k.cliente_id, sum(k.monto) AS monto, min(k.created_at) AS desde
+                   FROM ledger.castigos k WHERE ${E('k.empresa_id')} GROUP BY 1, 2
+             ), recuperado AS (
+                 SELECT a.empresa_id, m.cliente_id, sum(m.haber - m.debe) AS monto
+                   FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE c.codigo IN (${lista}) AND ${E('a.empresa_id')}
+                  GROUP BY 1, 2
+             ), anticipo AS (
+                 SELECT a.empresa_id, m.cliente_id, sum(m.haber - m.debe) AS saldo
+                   FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE c.codigo = '${ANTICIPOS}' AND ${E('a.empresa_id')}
+                  GROUP BY 1, 2
+             )
+             SELECT k.empresa_id, k.cliente_id, k.monto::text AS castigado, coalesce(r.monto, 0)::text AS recuperado,
+                    coalesce(an.saldo, 0)::text AS anticipo,
+                    (SELECT count(*) FROM billing.pagos_aplicaciones ap JOIN ledger.castigos_facturas cf ON cf.factura_id = ap.factura_id
+                       JOIN ledger.castigos kk ON kk.id = cf.castigo_id
+                      WHERE kk.cliente_id = k.cliente_id AND kk.empresa_id = k.empresa_id AND ap.created_at > kk.created_at)::int AS aplicaciones_posteriores
+               FROM castigado k
+               LEFT JOIN recuperado r ON r.empresa_id = k.empresa_id AND r.cliente_id = k.cliente_id
+               LEFT JOIN anticipo an ON an.empresa_id = k.empresa_id AND an.cliente_id = k.cliente_id
+              WHERE coalesce(r.monto, 0) > k.monto OR coalesce(r.monto, 0) < 0
+                 -- con algo por recuperar, el dinero del cliente no se queda como anticipo
+                 OR (coalesce(r.monto, 0) < k.monto AND coalesce(an.saldo, 0) > 0
+                     AND NOT EXISTS (SELECT 1 FROM billing.facturas f WHERE f.empresa_id = k.empresa_id
+                                      AND f.cliente_id = k.cliente_id AND f.estado IN ${ESTADOS_PENDIENTES}))
+                 OR EXISTS (SELECT 1 FROM billing.pagos_aplicaciones ap JOIN ledger.castigos_facturas cf ON cf.factura_id = ap.factura_id
+                              JOIN ledger.castigos kk ON kk.id = cf.castigo_id
+                             WHERE kk.cliente_id = k.cliente_id AND kk.empresa_id = k.empresa_id AND ap.created_at > kk.created_at)`,
+        )
+    }
+    await revisar(
+        '13.llegada_reatribuida (decisión (c): a lo sumo una llegada viva por documento y por línea; la reatribuida tiene su reverso espejo)',
+        `WITH llegadas AS (
+             SELECT a.id, a.origen_tipo AS tipo, a.origen_id AS documento_id,
+                    NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id) AS viva,
+                    (SELECT count(*) FROM ledger.asientos r WHERE r.reversa_de = a.id) AS reversos
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.origen_tipo IN ('deposito', 'traslado') AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+                AND c.codigo = '${TRANSITO}' AND m.haber > 0
+         )
+         SELECT 'documento' AS que, tipo || ' ' || documento_id AS id, count(*) FILTER (WHERE viva)::int AS vivas,
+                max(reversos)::int AS reversos
+           FROM llegadas GROUP BY tipo, documento_id
+         HAVING count(*) FILTER (WHERE viva) > 1 OR max(reversos) > 1
+         UNION ALL
+         SELECT 'linea', x.linea_id::text, count(*)::int, 0
+           FROM ledger.transitos_acreditados x
+          WHERE ${E('x.empresa_id')} AND ${llegadaViva('x.tipo', 'x.documento_id')}
+          GROUP BY x.linea_id HAVING count(*) > 1`,
+    )
+    await revisar(
+        '13.diferencia_sin_documento_rebaja_iva (decisión (f): sin NCRE, la nota de la diferencia no toca 2.1.02; todo a 5.3.05 o, en un aviso, el IVA a 2.1.11)',
+        `SELECT d.id, d.nota_credito_id, d.factura_id,
+                (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = d.nota_credito_id AND c.codigo = '${IVA}')::text AS iva_debito
+           FROM billing.diferencias_cobro d
+          WHERE ${E('d.empresa_id')}
+            AND NOT EXISTS (SELECT 1 FROM fiscal.dte o WHERE o.documento_tipo = 'nota_credito' AND o.documento_id = d.nota_credito_id)
+            AND (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = d.nota_credito_id AND c.codigo = '${IVA}') <> 0`,
     )
 
     /*

@@ -3,6 +3,8 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
+import { dec, type Dec } from '#ledger/dinero'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
  * Estimación y castigo de cartera (contrato de localización fiscal §10.9): lectura.
@@ -134,4 +136,23 @@ export async function listarCastigos(filtros: OpcionesPaginacion, empresas: numb
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('k.empresa_id', ids))
     const pagina = await paginar<Omit<CastigoVista, 'facturas'>>(consulta, filtros, { columna: 'k.id' })
     return { ...pagina, data: (await conFacturas(cliente, pagina.data)) as CastigoVista[] }
+}
+
+/**
+ * Lo que falta recuperar de los castigos del cliente en la empresa (decisión g del líder): Σ castigado −
+ * Σ recuperado en `4.2.03 Recuperación de cuentas incobrables` (movimientos con su `cliente_id`).
+ */
+export async function porRecuperar(
+    cliente: QueryClientContract,
+    empresaId: number,
+    clienteId: number,
+): Promise<Dec> {
+    const r = (await cliente.rawQuery(
+        `SELECT (SELECT coalesce(sum(k.monto), 0) FROM ledger.castigos k WHERE k.empresa_id = ? AND k.cliente_id = ?)
+              - (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.movimientos m
+                   JOIN ledger.asientos a ON a.id = m.asiento_id JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE c.codigo = ? AND a.empresa_id = ? AND m.cliente_id = ?) AS falta`,
+        [empresaId, clienteId, CUENTAS_GT.RECUPERACION_INCOBRABLES, empresaId, clienteId],
+    )) as { rows: Array<{ falta: string }> }
+    return dec(r.rows[0]!.falta)
 }

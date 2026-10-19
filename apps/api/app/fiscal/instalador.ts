@@ -3,7 +3,7 @@ import type { QueryClientContract, TransactionClientContract } from '@adonisjs/l
 import { NoEncontrado } from '#shared/errores'
 import { PaisNoSoportado } from '#fiscal/errores'
 import { DESDE_PAQUETE } from '#fiscal/l10n/gt/parametros'
-import { PAQUETE_GT_2026_1 } from '#fiscal/l10n/gt/index'
+import { PAQUETE_GT_2026_1, PAQUETE_GT_2026_2 } from '#fiscal/l10n/gt/index'
 import type {
     DatosEmpresaInstalacion,
     OpcionesInstalacion,
@@ -32,11 +32,12 @@ import type {
 /** Versiones publicadas, por código. */
 export const PAQUETES: Readonly<Record<string, PaqueteLocalizacion>> = {
     [PAQUETE_GT_2026_1.codigo]: PAQUETE_GT_2026_1,
+    [PAQUETE_GT_2026_2.codigo]: PAQUETE_GT_2026_2,
 }
 
 /** Versión más reciente del paquete de cada país (la que instala el núcleo al crear la empresa). */
 export const ULTIMO_PAQUETE: Readonly<Record<string, PaqueteLocalizacion>> = {
-    GT: PAQUETE_GT_2026_1,
+    GT: PAQUETE_GT_2026_2,
 }
 
 /** Países con paquete, en el orden del selector. */

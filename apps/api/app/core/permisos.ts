@@ -95,6 +95,8 @@ export const PERMISOS = {
     'bancos.importar_extracto': 'Importar extractos bancarios (solo inserción, con detección de duplicados)',
     'bancos.conciliar':
         'Conciliar líneas del extracto con el libro, registrar comisiones del extracto, deshacer conciliaciones y editar reglas',
+    'bancos.reatribuir_llegada':
+        'Corregir la llegada al banco atribuida al depósito o traslado equivocado (reverso y llegada nueva)',
     'cartera.provisionar': 'Registrar la estimación para cuentas incobrables (hasta el tope legal)',
     'cartera.castigar': 'Castigar facturas incobrables con motivo y evidencia de gestión de cobro',
     'pagos.cerrar_diferencia': 'Cerrar el saldo pequeño que deja un pago (hasta diferencia_cobro_tope)',
@@ -352,6 +354,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'bancos.trasladar',
             'bancos.importar_extracto',
             'bancos.conciliar',
+            'bancos.reatribuir_llegada',
             'cartera.provisionar',
             'cartera.castigar',
             'pagos.cerrar_diferencia',

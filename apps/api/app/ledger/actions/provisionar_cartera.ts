@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { ValidacionFallida } from '#shared/errores'
+import { Problema, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { CERO, aTexto, dec, redondear } from '#ledger/dinero'
@@ -17,8 +17,9 @@ import RegistrarAsiento from '#ledger/actions/registrar_asiento'
  *
  * - Base: Σ de los **saldos deudores** de los clientes en `1.1.03` al corte (`fecha`, por defecto el
  *   31 de diciembre del año, o hoy si el año está en curso).
- * - Tope: base × `reserva_incobrables_max` (3 % por defecto). La reserva acumulada en `1.1.12`
- *   nunca lo supera: se registra solo lo que falta (`5.3.02 / 1.1.12`, origen `provision`, fecha
+ * - Tope: base × `reserva_incobrables_max` (3 % por defecto). La reserva de `1.1.12` **al corte**
+ *   (H12) nunca lo supera; un corte anterior al de la última estimación responde 422
+ *   `provision_fuera_de_orden`. Se registra solo lo que falta (`5.3.02 / 1.1.12`, origen `provision`, fecha
  *   del corte). Si ya está en el tope o lo supera, queda la fila con monto 0 y sin asiento.
  * - Si la base incluye el IVA de los avisos sin DTE y cómo se suman varios años: contador.
  */
@@ -50,6 +51,29 @@ export default class ProvisionarCartera extends DomainAction<EntradaProvisionarC
         }
         // una a la vez por empresa: el tope se calcula sobre lo ya registrado
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(3012, ?::int)', [empresaId])
+        // H12: la reserva se mide al corte; una estimación con corte anterior a la última ya registrada
+        // podría dejar la reserva de esa fecha posterior sobre su tope
+        const ultima = (await t.trx
+            .from('ledger.provisiones_cartera')
+            .where('empresa_id', empresaId)
+            .select(t.trx.raw(`to_char(max(fecha), 'YYYY-MM-DD') as fecha`))
+            .first()) as { fecha: string | null } | undefined
+        const ultimaFecha = ultima?.fecha ?? null
+        if (ultimaFecha && fecha < ultimaFecha) {
+            throw new Problema(
+                422,
+                'provision_fuera_de_orden',
+                'Estimación fuera de orden',
+                `Ya hay una estimación con corte ${ultimaFecha}: el corte nuevo no puede ser anterior`,
+                [
+                    {
+                        field: 'fecha',
+                        message: `Corte mínimo ${ultimaFecha}`,
+                        rule: 'provision_fuera_de_orden',
+                    },
+                ],
+            )
+        }
 
         const base = (await t.trx.rawQuery(
             `SELECT coalesce(sum(s), 0)::text AS base FROM (
@@ -65,8 +89,8 @@ export default class ProvisionarCartera extends DomainAction<EntradaProvisionarC
             `SELECT coalesce(sum(m.haber - m.debe), 0)::text AS saldo
                FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE c.codigo = ? AND a.empresa_id = ?`,
-            [CUENTAS_GT.ESTIMACION_INCOBRABLES, empresaId],
+              WHERE c.codigo = ? AND a.empresa_id = ? AND a.fecha <= ?`,
+            [CUENTAS_GT.ESTIMACION_INCOBRABLES, empresaId, fecha],
         )) as { rows: Array<{ saldo: string }> }
         const porcentaje = dec(
             String(await valorParametro<string>(empresaId, 'reserva_incobrables_max', fecha, t.trx)),

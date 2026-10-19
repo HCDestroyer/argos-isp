@@ -15,8 +15,8 @@ import {
     saldoCuenta,
     servicioFacturado,
 } from '#tests/contabilidad/ayudas_contabilidad'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
-import { afirmarLibroFase4 } from '#tests/ledger/verificar_bancos'
 
 /**
  * Fase 4 (§10.3): depósitos de caja y traslados vía 1.1.11 Fondos en tránsito.
@@ -103,7 +103,7 @@ test.group('Fase 4 · depósitos de caja y traslados (1.1.11)', (group) => {
             ),
         )
         assert.equal(sinTurno.codigo, 'sin_turno_abierto')
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('traslado entre cuentas propias: 1.1.11 / Banco A; nunca entre empresas', async ({ assert }) => {
@@ -164,6 +164,6 @@ test.group('Fase 4 · depósitos de caja y traslados (1.1.11)', (group) => {
         const [resumen] = await resumenFondosEnTransito([e.B])
         assert.equal(resumen!.pendiente, '75.50')
         assert.isTrue(resumen!.cuadra)
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

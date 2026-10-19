@@ -26,6 +26,8 @@ import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/act
 import { exigirReferenciaLibre, validarDatosBancarios, type DatosBancarios } from '#billing/datos_bancarios'
 import { resumenEmpresas } from '#billing/empresa'
 import { proveedorParaPago } from '#ledger/cobros_liquidar'
+import { porRecuperar } from '#ledger/cartera'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import {
     insertarConstanciasRecibidas,
@@ -617,10 +619,25 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
                 cliente_id: clienteId,
             })
         }
-        if (restante.gt(0)) {
+        // decisión (g) del líder: con castigos por recuperar, lo que sobra es recuperación (4.2.03), nunca un
+        // anticipo eterno ni una aplicación a la factura castigada
+        let sobrante = restante
+        if (sobrante.gt(0)) {
+            const falta = await porRecuperar(t.trx, parte.empresaId, input.cliente_id)
+            const recuperado = falta.gt(0) ? (falta.lt(sobrante) ? falta : sobrante) : CERO
+            if (recuperado.gt(0)) {
+                movimientos.push({
+                    cuenta: CUENTAS_GT.RECUPERACION_INCOBRABLES,
+                    haber: aTexto(recuperado),
+                    cliente_id: input.cliente_id,
+                })
+                sobrante = sobrante.minus(recuperado)
+            }
+        }
+        if (sobrante.gt(0)) {
             movimientos.push({
                 cuenta: CUENTAS.ANTICIPOS_CLIENTES,
-                haber: aTexto(restante),
+                haber: aTexto(sobrante),
                 cliente_id: input.cliente_id,
             })
         }

@@ -111,6 +111,15 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 'Factura anulada',
             )
         }
+        // desvío (g) de la fase 4: el castigo cerró su saldo en el libro; anularla lo dejaría colgado
+        const castigadas = facturas.filter((f) => f.estado === 'castigada')
+        if (castigadas.length > 0) {
+            throw new Conflicto(
+                `La factura ${factura.id} está castigada (${castigadas.map((f) => `factura ${f.id}`).join(', ')}); se corrige con un ajuste`,
+                'factura_castigada',
+                'Factura castigada',
+            )
+        }
         const conNotas = await t.trx
             .from('billing.notas_credito as n')
             .whereIn(

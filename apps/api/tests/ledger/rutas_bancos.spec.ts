@@ -4,8 +4,8 @@ import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayu
 import { CABECERA_FIRMA, PasarelaFalsa } from '#billing/pasarelas/falsa'
 import { hoyGuatemala } from '#ledger/fechas'
 import { saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
-import { afirmarLibroFase4 } from '#tests/ledger/verificar_bancos'
 
 /**
  * Fase 4 por HTTP: permisos exactos, Idempotency-Key y el webhook de pasarela con proveedor de
@@ -83,7 +83,7 @@ test.group('Fase 4 · rutas de cobros y bancos', (group) => {
             200,
         )
         assert.isTrue(resumen.body()[0].cuadra)
-        await afirmarLibroFase4(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('permisos: el cajero deposita su caja pero no liquida, no concilia ni castiga', async ({
@@ -132,6 +132,6 @@ test.group('Fase 4 · rutas de cobros y bancos', (group) => {
                 403,
             )
         }
-        await afirmarLibroFase4(assert, [e.B])
+        await afirmarLibro(assert, [e.B])
     })
 })
