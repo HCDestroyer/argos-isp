@@ -22,11 +22,11 @@ import RevertirCanje from '#lealtad/actions/revertir_canje'
  * motivo «Canje de lealtad», su asiento interno `5.1.01 / 4.1.01` por la base (sin CxC ni IVA), el
  * periodo ocupado y el canje aplicado a ella.
  *
- * El inv. 9 del auditor aún no conoce el origen `bonificacion`: estas pruebas comprueban que no hay
- * otras violaciones; `tests/billing/cargo_unico.spec.ts` lleva el `.fails` «H-bonificacion».
+ * El inv. 9 del auditor conoce el origen `bonificacion` y `9.bonificacion_mal_contabilizada` revisa su
+ * asiento (antes `.fails` «H-bonificacion»): no queda nada pendiente del auditor.
  */
 
-const PENDIENTES_DEL_AUDITOR = ['9.origen_de_asiento_desconocido', '9.descuento_del_asiento_distinto']
+const PENDIENTES_DEL_AUDITOR: string[] = []
 
 async function otrasViolaciones(empresas: number[]) {
     const violaciones = await verificarLibro(empresas)
@@ -171,5 +171,5 @@ test.group('Facturación · bonificaciones (nunca una factura de Q0)', (group) =
         )
         await generar(s.servicioId, '2026-10-01')
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails('H-bonificacion: el inv. 9 del auditor aún no conoce el origen de asiento bonificacion')
+    })
 })

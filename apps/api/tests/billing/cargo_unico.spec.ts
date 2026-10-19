@@ -42,11 +42,8 @@ async function motivo(empresaId: number, nombre: string) {
     return { id: Number(fila.id), version: Number(fila.version) }
 }
 
-/**
- * El inv. 9 del auditor aún no conoce el origen `bonificacion` (decisión del PM, 19 oct): ni en la lista de
- * orígenes ni en el 5.1.01 que solo admite desde el asiento de una factura.
- */
-const PENDIENTES_DEL_AUDITOR = ['9.origen_de_asiento_desconocido', '9.descuento_del_asiento_distinto']
+/** El inv. 9 del auditor ya conoce el origen `bonificacion` (antes `.fails` «H-bonificacion»). */
+const PENDIENTES_DEL_AUDITOR: string[] = []
 
 async function otrasViolaciones(empresas: number[]) {
     const violaciones = await verificarLibro(empresas)
@@ -640,5 +637,5 @@ test.group('Facturas · cargo único manual', (group) => {
             e.ctx,
         )
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails('H-bonificacion: el inv. 9 del auditor aún no conoce el origen de asiento bonificacion')
+    })
 })
