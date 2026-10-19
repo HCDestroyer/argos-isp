@@ -342,7 +342,7 @@ export interface paths {
         };
         /**
          * Depósitos de caja (en tránsito o acreditados)
-         * @description Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.
+         * @description Permiso bancos.ver o cajas.ver. Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.
          */
         get: operations["bancosDepositos"];
         put?: never;
@@ -1607,7 +1607,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar egresos */
+        /**
+         * Listar egresos
+         * @description Permiso egresos.ver o cajas.ver. Con egresos.ver, los de sus empresas y su alcance (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero, para el esperado provisional de /caja), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.
+         */
         get: operations["egresosListar"];
         put?: never;
         /**
@@ -3785,7 +3788,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)
-         * @description Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.
+         * @description El saldo de cada factura del pago se cierra como gasto: asiento diferencia_cobro 5.3.05 Diferencias de cobro / CxC, sin tocar IVA ni DTE (el DTE va por el total). pagado no cambia (solo dinero cobrado); la factura queda pagada porque pagado + diferencias vigentes = total. Emite pago.diferencia_cerrada y re-evalúa los servicios. Anular el pago revierte la diferencia. 422 diferencia_sobre_tope; 409 sin_diferencia, pago_anulado o anulacion_en_proceso.
          */
         post: operations["pagosCerrarDiferencia"];
         delete?: never;
@@ -6131,7 +6134,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -7180,12 +7183,13 @@ export interface components {
             monto: components["schemas"]["Dinero"];
             /** @description diferencia_cobro_tope de la empresa */
             tope: components["schemas"]["Dinero"];
-            notas: {
+            /** @description Una por factura: el saldo cerrado como gasto, sin tocar IVA ni DTE */
+            diferencias: {
                 factura_id: number;
-                nota_credito_id: number;
+                diferencia_id: number;
                 monto: components["schemas"]["Dinero"];
-                /** @description true = NCRE (la factura tenía DTE); false = nota interna */
-                ncre: boolean;
+                /** @description Asiento diferencia_cobro (5.3.05 / CxC) */
+                asiento_id: number;
             }[];
         };
         Diferimiento: {
@@ -7773,11 +7777,11 @@ export interface components {
             /** @description FACT, FPEQ… (null sin FEL) */
             tipo_dte?: string | null;
             /**
-             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)
+             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura
              * @enum {string}
              */
-            tipo?: "servicio" | "mora" | "cargo";
-            /** @description Factura que originó la mora o el cargo */
+            tipo?: "servicio" | "mora";
+            /** @description Factura que originó la mora */
             factura_origen_id?: number | null;
             /**
              * Format: date-time
@@ -8360,8 +8364,11 @@ export interface components {
             empresa_id?: number;
             /** Format: date */
             fecha: string;
-            /** @enum {string} */
-            tipo: "factura" | "pago" | "mora" | "nota_credito" | "ajuste";
+            /**
+             * @description diferencia_cobro = saldo pequeño de un pago cerrado como gasto (abono sin cobro)
+             * @enum {string}
+             */
+            tipo: "factura" | "pago" | "mora" | "nota_credito" | "diferencia_cobro" | "ajuste";
             referencia_id: number;
             descripcion: string;
             cargo: components["schemas"]["Dinero"];
@@ -12437,15 +12444,6 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso cajas.ver */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17760,7 +17758,10 @@ export interface operations {
                 categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
                 estado?: "registrado" | "anulado";
+                /** @description Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja) */
                 caja_id?: number;
+                /** @description Solo los de este turno de caja (alternativa a caja_id sin egresos.ver) */
+                turno_id?: number;
                 cuenta_bancaria_id?: number;
             };
             header?: never;
@@ -17783,15 +17784,6 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso egresos.ver */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -18789,7 +18781,7 @@ export interface operations {
                 estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
                 periodo?: string;
                 /** @description servicio = factura del periodo; mora = recargo por vencimiento */
-                tipo?: "servicio" | "mora" | "cargo";
+                tipo?: "servicio" | "mora";
             };
             header?: never;
             path?: never;
@@ -23524,7 +23516,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };

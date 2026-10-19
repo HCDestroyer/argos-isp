@@ -2359,7 +2359,7 @@
       "get": {
         "operationId": "bancosDepositos",
         "summary": "Depósitos de caja (en tránsito o acreditados)",
-        "description": "Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.",
+        "description": "Permiso bancos.ver o cajas.ver. Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.",
         "tags": [
           "bancos"
         ],
@@ -2477,16 +2477,6 @@
               }
             }
           },
-          "403": {
-            "description": "Sin el permiso cajas.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -2498,7 +2488,6 @@
             }
           }
         },
-        "x-permiso": "cajas.ver",
         "x-implementado": true
       }
     },
@@ -12653,6 +12642,7 @@
       "get": {
         "operationId": "egresosListar",
         "summary": "Listar egresos",
+        "description": "Permiso egresos.ver o cajas.ver. Con egresos.ver, los de sus empresas y su alcance (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero, para el esperado provisional de /caja), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.",
         "tags": [
           "egresos"
         ],
@@ -12763,6 +12753,17 @@
             "name": "caja_id",
             "in": "query",
             "required": false,
+            "description": "Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "turno_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los de este turno de caja (alternativa a caja_id sin egresos.ver)",
             "schema": {
               "type": "integer",
               "minimum": 1
@@ -12817,16 +12818,6 @@
               }
             }
           },
-          "403": {
-            "description": "Sin el permiso egresos.ver",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Datos inválidos",
             "content": {
@@ -12838,7 +12829,6 @@
             }
           }
         },
-        "x-permiso": "egresos.ver",
         "x-implementado": true
       },
       "post": {
@@ -14688,8 +14678,7 @@
               "type": "string",
               "enum": [
                 "servicio",
-                "mora",
-                "cargo"
+                "mora"
               ]
             }
           }
@@ -23065,6 +23054,7 @@
                 "banco",
                 "provision",
                 "castigo",
+                "diferencia_cobro",
                 "compra",
                 "pago_proveedor",
                 "depreciacion",
@@ -27586,7 +27576,7 @@
       "post": {
         "operationId": "pagosCerrarDiferencia",
         "summary": "Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)",
-        "description": "Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.",
+        "description": "El saldo de cada factura del pago se cierra como gasto: asiento diferencia_cobro 5.3.05 Diferencias de cobro / CxC, sin tocar IVA ni DTE (el DTE va por el total). pagado no cambia (solo dinero cobrado); la factura queda pagada porque pagado + diferencias vigentes = total. Emite pago.diferencia_cerrada y re-evalúa los servicios. Anular el pago revierte la diferencia. 422 diferencia_sobre_tope; 409 sin_diferencia, pago_anulado o anulacion_en_proceso.",
         "tags": [
           "pagos"
         ],
@@ -44753,6 +44743,7 @@
               "banco",
               "provision",
               "castigo",
+              "diferencia_cobro",
               "compra",
               "pago_proveedor",
               "depreciacion",
@@ -48777,7 +48768,7 @@
           "empresa_id",
           "monto",
           "tope",
-          "notas"
+          "diferencias"
         ],
         "properties": {
           "pago_id": {
@@ -48795,34 +48786,36 @@
             "$ref": "#/components/schemas/Dinero",
             "description": "diferencia_cobro_tope de la empresa"
           },
-          "notas": {
+          "diferencias": {
             "type": "array",
             "items": {
               "type": "object",
               "required": [
                 "factura_id",
-                "nota_credito_id",
+                "diferencia_id",
                 "monto",
-                "ncre"
+                "asiento_id"
               ],
               "properties": {
                 "factura_id": {
                   "type": "integer",
                   "minimum": 1
                 },
-                "nota_credito_id": {
+                "diferencia_id": {
                   "type": "integer",
                   "minimum": 1
                 },
                 "monto": {
                   "$ref": "#/components/schemas/Dinero"
                 },
-                "ncre": {
-                  "type": "boolean",
-                  "description": "true = NCRE (la factura tenía DTE); false = nota interna"
+                "asiento_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Asiento diferencia_cobro (5.3.05 / CxC)"
                 }
               }
-            }
+            },
+            "description": "Una por factura: el saldo cerrado como gasto, sin tocar IVA ni DTE"
           }
         }
       },
@@ -51239,10 +51232,9 @@
             "type": "string",
             "enum": [
               "servicio",
-              "mora",
-              "cargo"
+              "mora"
             ],
-            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)"
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura"
           },
           "factura_origen_id": {
             "type": [
@@ -51250,7 +51242,7 @@
               "null"
             ],
             "minimum": 1,
-            "description": "Factura que originó la mora o el cargo"
+            "description": "Factura que originó la mora"
           },
           "vencida_en": {
             "type": [
@@ -53394,8 +53386,10 @@
               "pago",
               "mora",
               "nota_credito",
+              "diferencia_cobro",
               "ajuste"
-            ]
+            ],
+            "description": "diferencia_cobro = saldo pequeño de un pago cerrado como gasto (abono sin cobro)"
           },
           "referencia_id": {
             "type": "integer",

@@ -122,6 +122,7 @@ export const Asiento = definirEsquema(
                 'banco',
                 'provision',
                 'castigo',
+                'diferencia_cobro',
                 'compra',
                 'pago_proveedor',
                 'depreciacion',
