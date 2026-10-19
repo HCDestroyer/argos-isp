@@ -170,6 +170,15 @@ export default class SolicitarCertificacion extends DomainAction<
 
         // H5/H11: todo documento con notas internas (aviso o no) se certifica por el neto
         const neto = await netoParaDte(t.trx, factura.id)
+        // H21: acreditada entera por notas internas antes del DTE, el neto es Q0.00: no hay venta que certificar
+        if (neto.total.lte(0)) {
+            if (input.automatico) return omitir('en_cero')
+            throw new Conflicto(
+                `La factura ${factura.id} quedó en Q0.00 por sus notas de crédito: no se certifica`,
+                'factura_en_cero',
+                'Factura en cero',
+            )
+        }
         const receptor = await receptorDe(t.trx, factura.cliente_id, factura.reglas_snapshot?.receptor)
         const falta = await receptorFaltante(empresaId, receptor, aTexto(neto.total), hoy, t.trx)
         if (falta && !input.automatico) {
