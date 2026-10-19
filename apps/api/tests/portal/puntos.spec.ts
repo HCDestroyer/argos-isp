@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, unico } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { sesionDirecta } from '#tests/portal/ayudas_portal'
 import { prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { programaConReglas } from '#tests/lealtad/ayudas_lealtad'
@@ -65,6 +65,8 @@ async function encender(programaId: number, e: Empresas, cambios: Record<string,
 }
 
 test.group('Portal: puntos de lealtad', (group) => {
+    // las empresas de `prepararEmpresas` no deben quedar activas para las pruebas que siguen
+    group.each.teardown(() => soloEmpresaPrincipal())
     group.each.setup(() => {
         const previo = Object.fromEntries(VARIABLES.map((v) => [v, process.env[v]]))
         process.env.PORTAL_PROXIES_CONFIABLES = '127.0.0.1/32, ::1'
