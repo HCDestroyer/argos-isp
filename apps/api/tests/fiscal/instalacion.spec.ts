@@ -5,7 +5,10 @@ import { CUENTAS_AGREGADAS_GT, CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { PARAMETROS_GT } from '#fiscal/l10n/gt/parametros'
 import { IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
 import { instalarPaquete, paqueteDePais } from '#fiscal/instalador'
-import { PAQUETE_GT_2026_1 } from '#fiscal/l10n/gt/index'
+import { PAQUETE_GT_2026_2 } from '#fiscal/l10n/gt/index'
+
+/** versión vigente del paquete (fase 4: gt-2026.2, con 4.2.03 Recuperación de cuentas incobrables) */
+const ULTIMA = PAQUETE_GT_2026_2.codigo
 import { parametro } from '#fiscal/parametros'
 import { hoyFiscal } from '#fiscal/comun'
 import { crearEmpresaFila } from '#tests/core/fabricas'
@@ -110,7 +113,7 @@ test.group('Localización fiscal · instalación', (group) => {
 
         // el paquete aplicado directo (como la migración) tampoco agrega nada
         await db.transaction((trx) =>
-            instalarPaquete(trx, PAQUETE_GT_2026_1, 1, { instaladaPor: null, hoy: hoyFiscal() }),
+            instalarPaquete(trx, PAQUETE_GT_2026_2, 1, { instaladaPor: null, hoy: hoyFiscal() }),
         )
         assert.deepEqual(await conteos(), antes)
 
@@ -147,13 +150,13 @@ test.group('Localización fiscal · instalación', (group) => {
             client
                 .post(`/api/v1/fiscal/empresas/${empresaId}/actualizar-localizacion`)
                 .bearerToken(token)
-                .json({ codigo: 'gt-2026.1' }),
+                .json({ codigo: ULTIMA }),
             200,
         )
         const cuerpo = respuesta.body()
         assert.isFalse(cuerpo.resumen.ya_instalada)
         assert.isTrue(cuerpo.instalada)
-        assert.equal(cuerpo.codigo, 'gt-2026.1')
+        assert.equal(cuerpo.codigo, ULTIMA)
         assert.lengthOf(cuerpo.resumen.establecimientos, 1)
         // solo se agregó lo de la empresa: el catálogo y los valores del paquete ya estaban
         const despues = await conteos()
@@ -185,12 +188,12 @@ test.group('Localización fiscal · instalación', (group) => {
         )
 
         const [evento] = await eventos('fiscal.localizacion_instalada', 'empresa_id', empresaId)
-        assert.deepEqual(evento, { empresa_id: empresaId, pais: 'GT', codigo: 'gt-2026.1', de_codigo: null })
+        assert.deepEqual(evento, { empresa_id: empresaId, pais: 'GT', codigo: ULTIMA, de_codigo: null })
         const cambio = await db
             .from('audit.cambios')
             .where({ entidad_tipo: 'empresa', entidad_id: empresaId, campo: 'localizacion' })
             .first()
-        assert.equal(cambio.despues, 'gt-2026.1')
+        assert.equal(cambio.despues, ULTIMA)
 
         // segunda vez: nada
         const otra = await conteos()
@@ -233,7 +236,7 @@ test.group('Localización fiscal · instalación', (group) => {
         const { token } = await usuarioConRoles(['lectura'])
         const todos = await esquemas()
         const lista = await estado(client.get('/api/v1/fiscal/localizaciones').bearerToken(token), 200)
-        const gt = lista.body().find((l: { codigo: string }) => l.codigo === 'gt-2026.1')
+        const gt = lista.body().find((l: { codigo: string }) => l.codigo === ULTIMA)
         exigirCampos(assert, todos.LocalizacionFiscal!, gt, 'LocalizacionFiscal')
         assert.isTrue(gt.mas_reciente)
         const empresa = await estado(
@@ -241,7 +244,7 @@ test.group('Localización fiscal · instalación', (group) => {
             200,
         )
         exigirCampos(assert, todos.LocalizacionEmpresa!, empresa.body(), 'LocalizacionEmpresa')
-        assert.equal(empresa.body().codigo, 'gt-2026.1')
+        assert.equal(empresa.body().codigo, ULTIMA)
         // catálogo de tipos de DTE del paquete (para el selector de frases, A4)
         const codigos = empresa.body().tipos_dte.map((t: { codigo: string }) => t.codigo)
         assert.includeMembers(codigos, ['FACT', 'FPEQ', 'NCRE', 'NDEB'])
@@ -283,13 +286,13 @@ test.group('Localización fiscal · instalación', (group) => {
         )
         assert.include(vista.body(), {
             instalada: true,
-            codigo: 'gt-2026.1',
+            codigo: ULTIMA,
             actualizacion_disponible: false,
         })
         const regimen = await parametro(empresaId, 'regimen', hoyFiscal())
         assert.include(regimen, { valor: 'opcional_simplificado', nivel: 'instalacion' })
         const [evento] = await eventos('fiscal.localizacion_instalada', 'empresa_id', empresaId)
-        assert.deepEqual(evento, { empresa_id: empresaId, pais: 'GT', codigo: 'gt-2026.1', de_codigo: null })
+        assert.deepEqual(evento, { empresa_id: empresaId, pais: 'GT', codigo: ULTIMA, de_codigo: null })
         const auditoria = await db
             .from('audit.acciones')
             .where({ accion: 'fiscal.instalar', entidad_id: empresaId })

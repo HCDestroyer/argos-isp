@@ -5,6 +5,7 @@ export type MetodoPago = Pago['metodo']
 export type EstadoPago = Pago['estado']
 /** Cuerpo exacto de `POST /pagos` según `packages/contracts` (A3). */
 export type DatosPago = paths['/api/v1/pagos']['post']['requestBody']['content']['application/json']
+export type DiferenciaCerrada = Schema<'DiferenciaCerrada'>
 export type FiltrosPagos = Omit<NonNullable<paths['/api/v1/pagos']['get']['parameters']['query']>, 'cursor'>
 
 export const LIMITE_PAGOS = 25
@@ -65,5 +66,17 @@ export function usePagos() {
         return { ok: true, data: resultado.data.data.filter(p => p.aplicaciones.some(a => a.factura_id === facturaId)) }
     }
 
-    return { registrar, ver, listar, anular, deFactura, cobro }
+    /**
+     * `POST /pagos/:id/cerrar-diferencia` (`pagos.cerrar_diferencia`): cierra con una nota de
+     * crédito por factura el saldo pequeño que dejó el pago, hasta `diferencia_cobro_tope`. 422
+     * `diferencia_sobre_tope`, 409 `sin_diferencia` y `pago_anulado`.
+     */
+    function cerrarDiferencia(id: number, motivo: string | null, claveIdempotencia: string): Promise<Resultado<DiferenciaCerrada>> {
+        return resolver(api.POST('/api/v1/pagos/{id}/cerrar-diferencia', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: motivo ? { motivo } : {},
+        }))
+    }
+
+    return { registrar, ver, listar, anular, deFactura, cobro, cerrarDiferencia }
 }

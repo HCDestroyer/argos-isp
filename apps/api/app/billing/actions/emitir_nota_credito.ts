@@ -64,6 +64,13 @@ export interface EntradaNotaCredito {
      * (`a_favor`) y se aplica a sus facturas por `aplicarAnticipos`. La usa el canje de lealtad.
      */
     excedente_a_anticipos?: boolean
+    /**
+     * interno (`pagos.cerrar_diferencia`, §10.9): en una nota interna la base va a esta cuenta
+     * (`5.3.05 Diferencias de cobro`) en lugar de reducir el ingreso; en un aviso sin DTE su IVA sale de
+     * 2.1.11 y sin documento fiscal (no aviso, sin DTE) todo va a esta cuenta. Con DTE no aplica: la
+     * NCRE reduce la venta.
+     */
+    cuenta_base?: string | null
 }
 
 export type ServicioEvaluadoNota = Pick<
@@ -199,6 +206,21 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             lineasNota = r.lineas
         } else {
             debitos = repartirProporcional(await this.lineasAcreditadas(t, factura, certificada), monto)
+            if (input.cuenta_base && !certificada) {
+                // sin documento fiscal (FEL desactivada, no es aviso): no hay IVA que corregir, todo es
+                // pérdida (decisión del líder, desvío f de §18); en un aviso, su IVA sale de 2.1.11
+                const esIva = (codigo: string) =>
+                    factura.aviso_cobro && (codigo === CUENTAS.IVA_DEBITO || codigo === IVA_POR_CERTIFICAR)
+                const base = debitos
+                    .filter((d) => !esIva(d.cuenta_codigo))
+                    .reduce((s, d) => s.plus(d.debe), CERO)
+                debitos = [
+                    ...(base.gt(0)
+                        ? [{ cuenta_id: input.cuenta_base, cuenta_codigo: input.cuenta_base, debe: base }]
+                        : []),
+                    ...debitos.filter((d) => esIva(d.cuenta_codigo)),
+                ]
+            }
         }
         const iva = debitos
             .filter((d) => d.cuenta_codigo === CUENTAS.IVA_DEBITO || d.cuenta_codigo === IVA_POR_CERTIFICAR)

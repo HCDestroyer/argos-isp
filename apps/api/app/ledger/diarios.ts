@@ -125,6 +125,13 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     egreso: 'COM',
     cierre_caja: 'VAR',
     ajuste: 'VAR',
+    // fase 4 (§10.3, §10.9): si tocan una caja o una cuenta bancaria propia caen en su CAJ-n o BAN-n
+    liquidacion_cobro: 'COB',
+    deposito: 'VAR',
+    traslado: 'VAR',
+    banco: 'VAR',
+    provision: 'VAR',
+    castigo: 'VAR',
 }
 
 export interface DiarioAsiento {

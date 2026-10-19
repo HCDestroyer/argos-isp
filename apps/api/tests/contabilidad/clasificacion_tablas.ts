@@ -53,6 +53,20 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.extractos_lineas': 'línea de extracto (§10.3)',
     'ledger.conciliaciones': 'conciliación; deshacer = conciliaciones_anulaciones (§10.3)',
     'ledger.conciliaciones_anulaciones': 'anulación de conciliación (§10.3)',
+    // fase 4 (A3): cobros por liquidar (§10.3)
+    'ledger.liquidaciones_cobro': 'liquidación de un proveedor de cobro (§10.3)',
+    'ledger.liquidaciones_pagos': 'pago o contracargo incluido en una liquidación (§10.3)',
+    'ledger.depositos': 'depósito de caja a banco (§10.3)',
+    'ledger.traslados': 'traslado entre cuentas propias (§10.3)',
+    'ledger.transitos_acreditados': 'llegada al banco de un depósito o traslado, al conciliar (§10.3)',
+    'ledger.transitos_reatribuciones':
+        'llegada reatribuida a otro documento (reverso y llegada nueva, §18 desvío c)',
+    'ledger.recuperaciones_castigo': 'recuperación de un castigo, base e IVA (§18, H17)',
+    // fase 4 (A3): cartera y diferencias de cobro (§10.9)
+    'ledger.provisiones_cartera': 'estimación para cuentas incobrables (§10.9)',
+    'ledger.castigos': 'castigo de cartera (§10.9)',
+    'ledger.castigos_facturas': 'factura castigada (§10.9)',
+    'billing.diferencias_cobro': 'diferencia de cobro cerrada con su nota (§10.9)',
     // §10.10 integridad, activos y diferidos
     'ledger.asientos_sellos': 'cadena de hash de asientos (§10.10)',
     'ledger.activos': 'activo fijo; la baja es activos_bajas (§10.10)',
@@ -82,6 +96,8 @@ export const MUTABLES: Record<string, string> = {
     'ledger.secuencias': 'contador del correlativo (`ultimo`) tomado con FOR UPDATE (§10.7)',
     'ledger.proveedores': 'catálogo de proveedores con version (§3.4)',
     'ledger.reglas_conciliacion': 'configuración con version y audit.cambios (§10.3)',
+    'ledger.proveedores_cobro':
+        'fase 4 (A3): configuración del proveedor de cobro (nombre, banco, activo) con version y audit.cambios (§10.3)',
     'lealtad.programas': 'configuración del programa con version y audit.cambios (lealtad §3)',
     'lealtad.reglas':
         'reglas para ganar con version y audit.cambios; se desactivan, no se borran (lealtad §3)',

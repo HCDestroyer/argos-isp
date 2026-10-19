@@ -112,40 +112,36 @@ test.group('Auditor contable · línea de descuento', (group) => {
     })
 
     for (const certificarAl of ['pagar', 'emitir'] as const) {
-        const prueba =
-            test(`mes gratis (descuento del 100 %) con certificar_al = ${certificarAl}: factura en cero pagada, sin CxC, sin cobro ni DTE de Q0.00`, async ({
-                assert,
-            }) => {
-                // H21: con «emitir», app/billing/emision.ts deja la factura en cero por_certificar y la cola certifica una FACT
-                // de Q0.00 (después queda «emitida» con total 0, no «pagada»); con «pagar», el aviso en cero nace pagado y
-                // la cola (app/fiscal/fel/cola.ts) también lo certifica por Q0.00. Con H16 el líder decidió que un documento sin
-                // venta no se certifica: un mes gratis no es venta (o, si la SAT lo pide, que el contador lo confirme).
-                const e = await empresasFel('obligatoria')
-                const f = await facturaCon(
-                    e.B,
-                    '150.00',
-                    [{ concepto: 'Mes gratis', monto: '150.00' }],
-                    { certificar_al: certificarAl },
-                    e.ctx,
-                )
-                await cola(e)
-                assert.deepEqual(await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true }), [])
-                const factura = await db.from('billing.facturas').where('id', f.facturaId).firstOrFail()
-                const dtes = await dtesDe('factura', f.facturaId)
-                assert.lengthOf(
-                    dtes,
-                    0,
-                    `DTE ${dtes[0]?.id} por Q${dtes[0]?.total} (${dtes[0]?.estado}); factura ${factura.estado}`,
-                )
-                assert.include(factura, { total: '0.00', iva: '0.00', estado: 'pagada' })
-                assert.deepEqual(await lineas('factura', f.facturaId), [
-                    ['5.1.01', '133.93', '0.00'],
-                    ['4.1.01', '0.00', '133.93'],
-                ])
-            })
-        prueba.fails(
-            `H21: mes gratis (certificar_al = ${certificarAl}) certifica una FACT de Q0.00 (12.dte_de_documento_en_cero)`,
-        )
+        test(`mes gratis (descuento del 100 %) con certificar_al = ${certificarAl}: factura en cero pagada, sin CxC, sin cobro ni DTE de Q0.00`, async ({
+            assert,
+        }) => {
+            // H21: con «emitir», app/billing/emision.ts deja la factura en cero por_certificar y la cola certifica una FACT
+            // de Q0.00 (después queda «emitida» con total 0, no «pagada»); con «pagar», el aviso en cero nace pagado y
+            // la cola (app/fiscal/fel/cola.ts) también lo certifica por Q0.00. Con H16 el líder decidió que un documento sin
+            // venta no se certifica: un mes gratis no es venta (o, si la SAT lo pide, que el contador lo confirme).
+            const e = await empresasFel('obligatoria')
+            const f = await facturaCon(
+                e.B,
+                '150.00',
+                [{ concepto: 'Mes gratis', monto: '150.00' }],
+                { certificar_al: certificarAl },
+                e.ctx,
+            )
+            await cola(e)
+            assert.deepEqual(await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true }), [])
+            const factura = await db.from('billing.facturas').where('id', f.facturaId).firstOrFail()
+            const dtes = await dtesDe('factura', f.facturaId)
+            assert.lengthOf(
+                dtes,
+                0,
+                `DTE ${dtes[0]?.id} por Q${dtes[0]?.total} (${dtes[0]?.estado}); factura ${factura.estado}`,
+            )
+            assert.include(factura, { total: '0.00', iva: '0.00', estado: 'pagada' })
+            assert.deepEqual(await lineas('factura', f.facturaId), [
+                ['5.1.01', '133.93', '0.00'],
+                ['4.1.01', '0.00', '133.93'],
+            ])
+        })
     }
 
     test('nota por línea en una factura con otro concepto: la línea con descuento solo admite su neto aunque la factura dé para más', async ({

@@ -174,6 +174,10 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `dte.certificado` / `dte.rechazado` / `dte.anulado` | fiscal (FEL) | dte_id, empresa_id, documento_tipo, documento_id; certificado: tipo_dte, autorizacion, serie, numero, contingencia; rechazado: error, definitivo; anulado: motivo |
 | `fel.contingencia_cambiada` | fiscal (FEL) | empresa_id, activa, motivo |
 | `factura.sustituida` | billing | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo |
+| `cobros.liquidados` | ledger | liquidacion_id, empresa_id, proveedor, bruto, comision, neto, pagos[] |
+| `caja.depositada` | ledger | deposito_id, empresa_id, caja_id, cuenta_bancaria_id, cuenta_id, monto |
+| `banco.extracto_importado` / `banco.conciliado` | ledger | extracto_id o conciliacion_id, empresa_id, cuenta_bancaria_id, cuenta_id, lineas, monto; conciliado: linea_id |
+| `cartera.castigada` | ledger | castigo_id, empresa_id, cliente_id, facturas[], monto |
 | `lealtad.programa_cambiado` | lealtad | programa_id, empresa_id, campos[] |
 | `lealtad.puntos_acumulados` | lealtad | movimiento_id, empresa_id, cliente_id, servicio_id, regla_id, puntos, vence_en |
 | `lealtad.puntos_revertidos` | lealtad | movimiento_id, empresa_id, cliente_id, puntos, origen_tipo, origen_id |

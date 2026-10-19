@@ -109,6 +109,13 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
                 'Solo se sustituyen facturas de servicio (una mora se anula con su factura)',
             )
         }
+        if (f.estado === 'castigada') {
+            throw new Conflicto(
+                `La factura ${f.id} está castigada; se corrige con un ajuste`,
+                'factura_castigada',
+                'Factura castigada',
+            )
+        }
         if (f.estado === 'anulada') {
             throw new Conflicto(`La factura ${f.id} está anulada`, 'factura_anulada', 'Factura anulada')
         }

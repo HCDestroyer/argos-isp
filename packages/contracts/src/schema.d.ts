@@ -121,6 +121,284 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bancos/conciliaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conciliar una línea del extracto con movimientos, depósitos o traslados del libro
+         * @description Nunca reescribe un asiento: liga la línea con lo que ya está en el libro. Un depósito o traslado en tránsito llega con un asiento nuevo Banco / 1.1.11. Σ = monto de la línea (422 conciliacion_descuadrada); 409 linea_conciliada o movimiento_conciliado. Emite banco.conciliado.
+         */
+        post: operations["bancosConciliar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/conciliaciones/{id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deshacer una conciliación (fila de anulación; el libro no cambia) */
+        post: operations["bancosAnularConciliacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/depositos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Depósitos de caja (en tránsito o acreditados)
+         * @description Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.
+         */
+        get: operations["bancosDepositos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Extractos importados */
+        get: operations["bancosExtractos"];
+        put?: never;
+        /**
+         * Importar un extracto bancario (neutral al origen; solo inserción)
+         * @description Líneas con signo dentro de desde..hasta; Σ líneas = saldo_final − saldo_inicial (422 extracto_descuadrado). El saldo inicial encadena con el final anterior (422 extracto_no_encadena; se fuerza con motivo_no_encadena). Una línea ya importada (huella por cuenta) responde 409 extracto_duplicado. Los adaptadores por banco (CSV, XLSX) son de A6. Emite banco.extracto_importado.
+         */
+        post: operations["bancosImportarExtracto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver extracto */
+        get: operations["bancosVerExtracto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/{id}/aplicar-reglas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Aplicar las reglas de conciliación a las líneas sin conciliar del extracto */
+        post: operations["bancosAplicarReglas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/{id}/lineas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Líneas del extracto con su conciliación */
+        get: operations["bancosLineasExtracto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/extractos/lineas/{id}/registrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar una partida del extracto sin documento (asiento nuevo) y conciliarla
+         * @description Cargo: contrapartida (por defecto 5.3.07 Gastos y comisiones bancarias) / Banco; abono: Banco / contrapartida (obligatoria). Origen banco, fecha de la línea. 409 linea_registrada.
+         */
+        post: operations["bancosRegistrarDesdeExtracto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/fondos-en-transito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check fondos_transito: 1.1.11 = depósitos y traslados sin acreditar, por empresa */
+        get: operations["bancosFondosEnTransito"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/llegadas/reatribuir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Corregir la llegada al banco atribuida al depósito o traslado equivocado
+         * @description Solo inserción: deshace la conciliación de la línea, revierte el asiento de llegada (el documento original vuelve a 1.1.11) y registra la llegada del documento correcto con la misma línea. 404 sin llegada vigente; 422 conciliacion_descuadrada si el monto no coincide.
+         */
+        post: operations["bancosReatribuirLlegada"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/movimientos-sin-conciliar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Movimientos del libro en una cuenta bancaria sin conciliación vigente
+         * @description De la empresa activa o, sin ella, de la empresa dueña de la cuenta.
+         */
+        get: operations["bancosMovimientosSinConciliar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/reglas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reglas de conciliación */
+        get: operations["bancosReglas"];
+        put?: never;
+        /** Crear regla de conciliación */
+        post: operations["bancosCrearRegla"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/reglas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Editar regla de conciliación (con version) */
+        put: operations["bancosEditarRegla"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/trasladar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trasladar fondos entre cuentas propias de la empresa (1.1.11 / Banco A)
+         * @description La llegada a la cuenta de destino (Banco B / 1.1.11) la registra la conciliación de su línea del extracto. Las dos cuentas son de la misma empresa (422 cuenta_de_otra_empresa). 409 traslado_duplicado.
+         */
+        post: operations["bancosTrasladar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bancos/traslados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Traslados entre cuentas propias (en tránsito o acreditados) */
+        get: operations["bancosTraslados"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bitacora/acciones": {
         parameters: {
             query?: never;
@@ -216,6 +494,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cajas/{id}/depositar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Depositar al banco efectivo del turno abierto (1.1.11 Fondos en tránsito / Caja)
+         * @description Baja el esperado del turno como un egreso; no puede superar el efectivo del turno (422 deposito_excede_efectivo). Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 sin_turno_abierto, 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.
+         */
+        post: operations["cajasDepositar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cajas/{id}/turnos": {
         parameters: {
             query?: never;
@@ -225,6 +523,64 @@ export interface paths {
         };
         /** Turnos de una caja */
         get: operations["cajasTurnos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cartera/castigos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Castigos de cartera */
+        get: operations["carteraCastigos"];
+        put?: never;
+        /**
+         * Castigar facturas incobrables de un cliente (2.1.11 + 1.1.12 o 5.3.02 / CxC)
+         * @description Motivo y evidencia de la gestión de cobro obligatorios (422 castigo_sin_evidencia). El IVA de los avisos sin DTE sale de 2.1.11; el resto contra la estimación disponible y luego 5.3.02. La factura queda cubierta y no se certifica. Emite cartera.castigada.
+         */
+        post: operations["carteraCastigar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cartera/provisionar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimación para cuentas incobrables hasta el tope legal (5.3.02 / 1.1.12)
+         * @description Tope = Σ saldos deudores al corte × reserva_incobrables_max (3 %); se registra solo lo que falta para llegar al tope (monto 0 sin asiento si ya está).
+         */
+        post: operations["carteraProvisionar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cartera/provisiones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estimaciones para cuentas incobrables registradas */
+        get: operations["carteraProvisiones"];
         put?: never;
         post?: never;
         delete?: never;
@@ -419,6 +775,105 @@ export interface paths {
          */
         get: operations["cobrosVer"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobros/liquidaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liquidaciones de proveedores de cobro */
+        get: operations["cobrosLiquidaciones"];
+        put?: never;
+        /**
+         * Registrar la liquidación de un proveedor (Banco neto + Comisión / 1.1.10.NN bruto)
+         * @description bruto = Σ pagos − Σ contracargos (422 liquidacion_descuadrada); neto = bruto − comisión. Cada pago se liquida una vez (409 pago_ya_liquidado); referencia única por proveedor (409 liquidacion_duplicada). Emite cobros.liquidados.
+         */
+        post: operations["cobrosLiquidar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobros/liquidaciones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver liquidación */
+        get: operations["cobrosVerLiquidacion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobros/por-liquidar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cobros por liquidar por proveedor: puente 1.1.10.NN vs pagos pendientes y antigüedad
+         * @description Check cobros_por_liquidar (§10.3): saldo de 1.1.10.NN = Σ pagos sin liquidar − contracargos; anomalias = pagos más antiguos que cobros_liquidar_dias.
+         */
+        get: operations["cobrosPorLiquidar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobros/proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proveedores de cobro (pasarelas, agentes, débito) con su cuenta puente 1.1.10.NN */
+        get: operations["cobrosProveedores"];
+        put?: never;
+        /**
+         * Dar de alta un proveedor de cobro (crea su subcuenta 1.1.10.NN)
+         * @description Desde `desde` (fecha de corte, hoy o futura) los pagos de ese proveedor van a su 1.1.10.NN por el bruto y la comisión sale de la liquidación. Los anteriores quedan contra el banco (§12.11). 409 proveedor_cobro_duplicado.
+         */
+        post: operations["cobrosCrearProveedor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobros/proveedores/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Editar nombre, banco de liquidación o activo de un proveedor de cobro
+         * @description Con version (409 si cambió). La fecha de corte no se edita (422 campo_solo_lectura).
+         */
+        put: operations["cobrosEditarProveedor"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1938,6 +2393,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/internal/nodos-portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar nodos portal (CLI)
+         * @description Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4.
+         */
+        get: operations["internoNodosPortalListar"];
+        put?: never;
+        /**
+         * Dar de alta un nodo portal desde el CLI (el token se muestra una sola vez)
+         * @description Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4. 409 `nodo_portal_existe` si el nombre ya se usó.
+         */
+        post: operations["internoNodosPortalCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/nodos-portal/{nombre}/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revocar un nodo portal por nombre (CLI)
+         * @description Token interno (`INTERNAL_TOKEN`); lo usa `argosisp nodo-portal`. Contrato `nodo-portal.md` §4.
+         */
+        post: operations["internoNodosPortalRevocar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ip/{ip}": {
         parameters: {
             query?: never;
@@ -2589,6 +3088,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodos-portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar nodos portal remotos */
+        get: operations["nodosPortalListar"];
+        put?: never;
+        /**
+         * Dar de alta un nodo portal remoto (el token se muestra una sola vez)
+         * @description El token `argn_…` va en `X-Argos-Nodo-Token`. Solo sirve en `/api/v1/portal/**` y `GET /version`; con él la API toma la IP del cliente de `X-Argos-Cliente-Ip`. Mismas acciones que `POST /internal/nodos-portal` (CLI). 409 `nodo_portal_existe` si el nombre ya se usó.
+         */
+        post: operations["nodosPortalCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodos-portal/{id}/revocar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revocar el token de un nodo portal (401 desde su siguiente petición) */
+        post: operations["nodosPortalRevocar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notas-credito": {
         parameters: {
             query?: never;
@@ -2888,6 +3425,26 @@ export interface paths {
          * @description Revierte los asientos del pago, descuenta lo aplicado de cada factura y re-evalúa los servicios de todos los dueños. La respuesta siempre trae servicios[] (ServicioEvaluado: de, estado final, cambiado, motivo); vacío si el pago no tocó facturas. 422 pago_anulado si ya lo estaba.
          */
         post: operations["pagosAnular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pagos/{id}/cerrar-diferencia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)
+         * @description Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.
+         */
+        post: operations["pagosCerrarDiferencia"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3918,6 +4475,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/conciliacion-bancaria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumen de conciliación por cuenta y fecha: libro, extracto y partidas en tránsito
+         * @description Por cuenta con extractos: saldo del libro, saldo del extracto, partidas en tránsito de cada lado y diferencia (0 = saldo del extracto = libro ± partidas en tránsito).
+         */
+        get: operations["reportesConciliacionBancaria"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reportes/egresos": {
         parameters: {
             query?: never;
@@ -4738,7 +5315,7 @@ export interface paths {
         };
         /**
          * Versión instalada de ArgosIsp y qué cambió en ella
-         * @description Cualquier usuario con sesión (sin permiso del ACL, como `/me`). `cambios` es la sección de la versión en CHANGELOG.md (Markdown); `notas_url`, la página de GitHub Releases.
+         * @description Cualquier usuario con sesión (sin permiso del ACL, como `/me`) o un nodo portal con su `X-Argos-Nodo-Token`. `cambios` es la sección de la versión en CHANGELOG.md (Markdown); `notas_url`, la página de GitHub Releases.
          */
         get: operations["versionInstalada"];
         put?: never;
@@ -4907,7 +5484,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "lealtad";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "lealtad";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -5157,6 +5734,33 @@ export interface components {
                 };
             } | null;
         };
+        CastigoCartera: {
+            id: number;
+            empresa_id: number;
+            cliente_id: number;
+            cliente_nombre: string;
+            /** Format: date */
+            fecha: string;
+            motivo: string;
+            /** @description Gestión de cobro documentada */
+            evidencia: string;
+            monto: components["schemas"]["Dinero"];
+            /** @description IVA de avisos sin DTE que sale de 2.1.11 */
+            iva: components["schemas"]["Dinero"];
+            /** @description Contra 1.1.12 Estimación para cuentas incobrables */
+            estimacion: components["schemas"]["Dinero"];
+            /** @description Contra 5.3.02 Cuentas incobrables (lo que no cubrió la estimación) */
+            gasto: components["schemas"]["Dinero"];
+            asiento_id: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            facturas: {
+                factura_id: number;
+                monto: components["schemas"]["Dinero"];
+                iva: components["schemas"]["Dinero"];
+            }[];
+        };
         CategoriaEgreso: {
             id: number;
             /** @enum {string} */
@@ -5374,6 +5978,22 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        Conciliacion: {
+            /** @description Primera fila del grupo */
+            id: number;
+            grupo: string;
+            empresa_id: number;
+            cuenta_id: number;
+            linea_id: number;
+            monto: components["schemas"]["Dinero"];
+            regla_id: number | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            anulada: boolean;
+            motivo_anulacion: string | null;
+            movimientos: components["schemas"]["MovimientoConciliado"][];
         };
         ConciliacionPasarela: {
             id: number;
@@ -5775,6 +6395,37 @@ export interface components {
              */
             estado_servicio: "activo" | "limitado" | "suspendido" | "retirado" | null;
         };
+        Deposito: {
+            id: number;
+            empresa_id: number;
+            caja_id: number;
+            caja_nombre: string;
+            /** @description Turno del que salió el efectivo (baja su esperado) */
+            turno_id: number;
+            /** @description Subcuenta 1.1.02.NN que recibe el depósito */
+            cuenta_id: number;
+            cuenta_codigo: string;
+            cuenta_nombre: string;
+            cuenta_bancaria_id: number | null;
+            banco_id: number | null;
+            monto: components["schemas"]["Dinero"];
+            boleta: string;
+            /** Format: date */
+            fecha: string;
+            /**
+             * @description en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino
+             * @enum {string}
+             */
+            estado: "en_transito" | "acreditado";
+            /**
+             * Format: date
+             * @description Fecha de la línea del extracto que lo concilió
+             */
+            acreditado_en: string | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         DeudaEvaluada: {
             pendiente: components["schemas"]["Dinero"];
             vencida: components["schemas"]["Dinero"];
@@ -5804,6 +6455,20 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        DiferenciaCerrada: {
+            pago_id: number;
+            empresa_id: number;
+            monto: components["schemas"]["Dinero"];
+            /** @description diferencia_cobro_tope de la empresa */
+            tope: components["schemas"]["Dinero"];
+            notas: {
+                factura_id: number;
+                nota_credito_id: number;
+                monto: components["schemas"]["Dinero"];
+                /** @description true = NCRE (la factura tenía DTE); false = nota interna */
+                ncre: boolean;
+            }[];
         };
         /**
          * @description Monto en quetzales con 2 decimales, como string
@@ -6137,7 +6802,7 @@ export interface components {
             empresas?: components["schemas"]["SeccionEstadoCuenta"][];
         };
         /** @enum {string} */
-        EstadoFactura: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
+        EstadoFactura: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
         EstadoPortal: {
             /** @description false si la IP de origen no pertenece a ningún servicio */
             identificado: boolean;
@@ -6261,6 +6926,30 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        Extracto: {
+            id: number;
+            empresa_id: number;
+            /** @description Subcuenta 1.1.02.NN del extracto */
+            cuenta_id: number;
+            cuenta_codigo: string;
+            cuenta_nombre: string;
+            cuenta_bancaria_id: number | null;
+            /** Format: date */
+            desde: string;
+            /** Format: date */
+            hasta: string;
+            saldo_inicial: components["schemas"]["Dinero"];
+            saldo_final: components["schemas"]["Dinero"];
+            archivo: string | null;
+            sha256: string | null;
+            /** @description Motivo con el que se forzó un saldo inicial distinto del final anterior */
+            motivo_no_encadena: string | null;
+            lineas: number;
+            conciliadas: number;
+            importado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         Factura: {
             id: number;
             /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
@@ -6302,11 +6991,11 @@ export interface components {
             /** @description FACT, FPEQ… (null sin FEL) */
             tipo_dte?: string | null;
             /**
-             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura
+             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)
              * @enum {string}
              */
-            tipo?: "servicio" | "mora";
-            /** @description Factura que originó la mora */
+            tipo?: "servicio" | "mora" | "cargo";
+            /** @description Factura que originó la mora o el cargo */
             factura_origen_id?: number | null;
             /**
              * Format: date-time
@@ -6648,6 +7337,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        LineaExtracto: {
+            id: number;
+            extracto_id: number;
+            empresa_id: number;
+            cuenta_id: number;
+            orden: number;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            referencia: string | null;
+            /** @description + entra a la cuenta, − sale */
+            monto: components["schemas"]["Dinero"];
+            saldo: components["schemas"]["Dinero"] | null;
+            /** @description Única por cuenta: detecta líneas ya importadas */
+            huella: string;
+            conciliada: boolean;
+            /** @description Para anularla: POST /bancos/conciliaciones/:id/anular */
+            conciliacion_id: number | null;
+            movimientos: components["schemas"]["MovimientoConciliado"][];
+        };
         LineaMayor: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
             empresa_id?: number;
@@ -6660,6 +7369,35 @@ export interface components {
             haber: components["schemas"]["Dinero"];
             saldo: components["schemas"]["Dinero"];
             cliente_id: number | null;
+        };
+        LiquidacionCobro: {
+            id: number;
+            empresa_id: number;
+            proveedor_cobro_id: number;
+            proveedor_codigo: string;
+            proveedor_nombre: string;
+            /** Format: date */
+            fecha: string;
+            referencia: string;
+            bruto: components["schemas"]["Dinero"];
+            comision: components["schemas"]["Dinero"];
+            neto: components["schemas"]["Dinero"];
+            /** @description Banco que recibió el neto */
+            cuenta_id: number;
+            cuenta_codigo: string;
+            asiento_id: number;
+            archivo: string | null;
+            sha256: string | null;
+            nota: string | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            pagos: {
+                pago_id: number;
+                /** @enum {string} */
+                tipo: "cobro" | "contracargo";
+                monto: components["schemas"]["Dinero"];
+            }[];
         };
         LocalizacionEmpresa: {
             empresa_id: number;
@@ -6798,6 +7536,19 @@ export interface components {
             /** @description Etiqueta de impuesto (base o cuota) para cuadrar lo declarado con el libro */
             cuadricula?: string | null;
         };
+        MovimientoConciliado: {
+            /** @description Fila de ledger.conciliaciones */
+            conciliacion_id: number;
+            movimiento_id: number;
+            asiento_id: number;
+            origen_tipo: string;
+            origen_id: number | null;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            /** @description Neto del movimiento en la cuenta (debe − haber) */
+            monto: components["schemas"]["Dinero"];
+        };
         MovimientoEstadoCuenta: {
             /** @description Empresa (libro) del asiento */
             empresa_id?: number;
@@ -6839,6 +7590,60 @@ export interface components {
             creado_por: number | null;
             /** Format: date-time */
             created_at: string;
+        };
+        MovimientoSinConciliar: {
+            movimiento_id: number;
+            asiento_id: number;
+            origen_tipo: string;
+            origen_id: number | null;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            /** @description debe − haber en la cuenta */
+            monto: components["schemas"]["Dinero"];
+        };
+        NodoPortal: {
+            id: number;
+            /** @description Identificador del nodo (`^[a-z0-9][a-z0-9-]{0,62}$`) */
+            nombre: string;
+            /**
+             * Format: date-time
+             * @description Última petición del nodo (se actualiza cada minuto)
+             */
+            ultimo_uso: string | null;
+            /** @description IP desde la que llamó el nodo la última vez */
+            ultima_ip: string | null;
+            /** Format: date-time */
+            revocado_en: string | null;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        NodoPortalCreado: {
+            /** @description Se muestra una sola vez; va en NODO_PORTAL_TOKEN del nodo (cabecera X-Argos-Nodo-Token) */
+            token: string;
+            datos: components["schemas"]["NodoPortal"];
+        };
+        NodoPortalInterno: {
+            nombre: string;
+            /** Format: date-time */
+            creado_en: string;
+            /** Format: date-time */
+            ultimo_uso_en: string | null;
+            /** Format: date-time */
+            revocado_en: string | null;
+        };
+        NodoPortalInternoCreado: {
+            nombre: string;
+            /** @description Se muestra una sola vez */
+            token: string;
+            /** Format: date-time */
+            creado_en: string;
+        };
+        NodoPortalInternoRevocado: {
+            nombre: string;
+            /** Format: date-time */
+            revocado_en: string;
         };
         NotaCredito: {
             id: number;
@@ -6946,6 +7751,12 @@ export interface components {
             cuenta_bancaria_id?: number | null;
             /** @description Banco y alias de la cuenta de destino */
             cuenta_bancaria_nombre?: string | null;
+            /** @description Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco */
+            proveedor_cobro_id?: number | null;
+            /** @description Nombre del proveedor de cobro; null sin proveedor */
+            proveedor_cobro_nombre?: string | null;
+            /** @description Liquidación del proveedor que incluyó el pago; null = sin liquidar */
+            liquidacion_id?: number | null;
             /** @description Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos */
             historico?: boolean;
             /** @description Sistema de origen del pago histórico (mikrowisp, smartisp, csv…); null si es de ArgosIsp */
@@ -6958,6 +7769,21 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        PagoPorLiquidar: {
+            pago_id: number;
+            /**
+             * @description contracargo = pago liquidado y luego anulado (resta)
+             * @enum {string}
+             */
+            tipo: "cobro" | "contracargo";
+            cliente_id: number;
+            monto: components["schemas"]["Dinero"];
+            referencia: string | null;
+            /** Format: date */
+            fecha: string;
+            /** @description Días desde el pago */
+            dias: number;
         };
         PaisLocalizacion: {
             /** @description ISO 3166-1 alfa-2 */
@@ -7008,6 +7834,13 @@ export interface components {
             pais: string;
             localizacion: string;
             parametros: components["schemas"]["ParametroFiscal"][];
+        };
+        PartidaEnTransito: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            descripcion: string;
+            monto: components["schemas"]["Dinero"];
         };
         Permiso: {
             id: number;
@@ -7706,6 +8539,34 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        ProveedorCobro: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            metodo: "pasarela" | "agente" | "debito";
+            /** @description Nombre normalizado de la pasarela, o el método */
+            codigo: string;
+            nombre: string;
+            /** @description Subcuenta 1.1.10.NN Cobros por liquidar del proveedor */
+            cuenta_id: number;
+            cuenta_codigo: string;
+            /** @description Banco donde deposita las liquidaciones */
+            cuenta_liquidacion_id: number;
+            cuenta_liquidacion_codigo: string;
+            cuenta_liquidacion_nombre: string;
+            /**
+             * Format: date
+             * @description Fecha de corte: sus pagos desde este día van a 1.1.10.NN
+             */
+            desde: string;
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         ProveedorFelCatalogo: {
             /** @description proveedor de PUT /fel/configuracion y /fel/credenciales */
             codigo: string;
@@ -7723,6 +8584,30 @@ export interface components {
                 consulta_nit: boolean;
                 pdf: boolean;
             };
+        };
+        ProvisionCartera: {
+            id: number;
+            empresa_id: number;
+            anio: number;
+            /**
+             * Format: date
+             * @description Corte de los saldos deudores
+             */
+            fecha: string;
+            /** @description Σ saldos deudores de clientes en 1.1.03 al corte */
+            base: components["schemas"]["Dinero"];
+            /** @description reserva_incobrables_max vigente (%) */
+            porcentaje: string;
+            /** @description base × porcentaje: la reserva en 1.1.12 nunca lo supera */
+            tope: components["schemas"]["Dinero"];
+            /** @description Saldo de 1.1.12 antes de esta estimación */
+            saldo_anterior: components["schemas"]["Dinero"];
+            /** @description Registrado (5.3.02 / 1.1.12); 0 si ya estaba en el tope */
+            monto: components["schemas"]["Dinero"];
+            asiento_id: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
         };
         PuntosCliente: {
             cliente_id: number;
@@ -7822,6 +8707,31 @@ export interface components {
             } | null;
             valor_id: number;
             frases: components["schemas"]["FraseFiscal"][];
+        };
+        ReglaConciliacion: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            /** @description Solo esta cuenta bancaria; null = todas */
+            cuenta_id: number | null;
+            /** @enum {string} */
+            tipo_condicion: "contiene" | "regex";
+            patron: string;
+            monto_min: components["schemas"]["Dinero"] | null;
+            monto_max: components["schemas"]["Dinero"] | null;
+            /** @enum {string} */
+            accion: "contrapartida" | "cliente";
+            contrapartida_cuenta_id: number | null;
+            /** @description Código de la contrapartida */
+            contrapartida: string | null;
+            prioridad: number;
+            activa: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         ReglaEvaluada: {
             /**
@@ -8337,6 +9247,19 @@ export interface components {
             /** @description Uno por IP pedida, en el mismo orden */
             resultados: (components["schemas"]["IpResueltaHorus"] | components["schemas"]["IpNoEncontradaHorus"])[];
         };
+        ResultadoAplicarReglas: {
+            extracto_id: number;
+            conciliadas: {
+                linea_id: number;
+                regla_id: number;
+                /** @enum {string} */
+                accion: "contrapartida" | "cliente";
+                conciliacion_id: number;
+            }[];
+            /** @description Líneas con regla cliente sin un pago único que coincida */
+            sin_pago: number[];
+            sin_regla: number[];
+        };
         ResultadoCorte: {
             /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
             horas: string[];
@@ -8465,6 +9388,27 @@ export interface components {
             /** @description cobro_desconocido o cobro_ya_pagado */
             ignorado?: string;
         };
+        ResumenCobrosPorLiquidar: {
+            proveedor_cobro_id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            metodo: "pasarela" | "agente" | "debito";
+            codigo: string;
+            nombre: string;
+            cuenta_codigo: string;
+            /** @description Saldo de 1.1.10.NN en el libro de la empresa */
+            saldo_libro: components["schemas"]["Dinero"];
+            /** @description Σ pagos sin liquidar − Σ contracargos pendientes */
+            pendiente: components["schemas"]["Dinero"];
+            /** @description saldo_libro − pendiente (0 = el puente cuadra) */
+            diferencia: components["schemas"]["Dinero"];
+            cuadra: boolean;
+            /** @description cobros_liquidar_dias de la empresa */
+            dias_limite: number;
+            pagos: components["schemas"]["PagoPorLiquidar"][];
+            /** @description Pagos sin liquidar más antiguos que dias_limite */
+            anomalias: components["schemas"]["PagoPorLiquidar"][];
+        };
         ResumenComprobantes: {
             /** @description Comprobantes que cumplen todos los filtros (todas las páginas) */
             total: number;
@@ -8474,6 +9418,34 @@ export interface components {
             pendientes: number;
             /** @description Suma de los montos pendientes */
             monto_pendiente: components["schemas"]["Dinero"];
+        };
+        ResumenConciliacionBancaria: {
+            empresa_id: number;
+            cuenta_id: number;
+            cuenta_codigo: string;
+            cuenta_nombre: string;
+            /** Format: date */
+            fecha: string;
+            /** @description Saldo de la cuenta en el libro de la empresa al día */
+            saldo_libro: components["schemas"]["Dinero"];
+            /** @description Saldo inicial del primer extracto + Σ líneas al día */
+            saldo_extracto: components["schemas"]["Dinero"] | null;
+            /**
+             * Format: date
+             * @description Primer día cubierto por extractos
+             */
+            desde: string | null;
+            /** @description Saldo inicial del primer extracto − libro antes de esa fecha */
+            diferencia_apertura: components["schemas"]["Dinero"];
+            /** @description Movimientos del libro sin conciliar al día (id = movimiento) */
+            libro_en_transito: components["schemas"]["PartidaEnTransito"][];
+            total_libro_en_transito: components["schemas"]["Dinero"];
+            /** @description Líneas del extracto sin conciliar al día (id = línea) */
+            extracto_en_transito: components["schemas"]["PartidaEnTransito"][];
+            total_extracto_en_transito: components["schemas"]["Dinero"];
+            /** @description saldo_extracto − (saldo_libro − libro en tránsito + extracto en tránsito); 0 = cuadra */
+            diferencia: components["schemas"]["Dinero"];
+            cuadra: boolean;
         };
         ResumenDashboard: {
             servicios: {
@@ -8532,6 +9504,19 @@ export interface components {
                 /** Format: date-time */
                 resumen_promesas: string | null;
             };
+        };
+        ResumenFondosEnTransito: {
+            empresa_id: number;
+            /** @description Saldo de 1.1.11 en el libro de la empresa */
+            saldo_libro: components["schemas"]["Dinero"];
+            /** @description Σ depósitos y traslados sin acreditar */
+            pendiente: components["schemas"]["Dinero"];
+            diferencia: components["schemas"]["Dinero"];
+            cuadra: boolean;
+            /** @description Depósitos en tránsito */
+            depositos: number;
+            /** @description Traslados en tránsito */
+            traslados: number;
         };
         ResumenSesionesRouter: {
             router_id: number;
@@ -8940,6 +9925,28 @@ export interface components {
             fin: string | null;
             /** @description alta, edicion: <campos>, retiro: <motivo> o inicial (migración) */
             motivo: string | null;
+        };
+        Traslado: {
+            id: number;
+            empresa_id: number;
+            cuenta_origen_id: number;
+            cuenta_origen_codigo: string;
+            cuenta_destino_id: number;
+            cuenta_destino_codigo: string;
+            monto: components["schemas"]["Dinero"];
+            /** Format: date */
+            fecha: string;
+            referencia: string;
+            /**
+             * @description en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino
+             * @enum {string}
+             */
+            estado: "en_transito" | "acreditado";
+            /** Format: date */
+            acreditado_en: string | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
         };
         Usuario: {
             id: number;
@@ -9381,6 +10388,1186 @@ export interface operations {
             };
         };
     };
+    bancosConciliar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    linea_id: number;
+                    /** @description Movimientos del libro en la cuenta del extracto (GET /bancos/movimientos-sin-conciliar) */
+                    movimientos?: number[] | null;
+                    /** @description Depósitos de caja en tránsito que llegan con esta línea (asiento Banco / 1.1.11) */
+                    depositos?: number[] | null;
+                    /** @description Traslados en tránsito que llegan a esta cuenta con esta línea */
+                    traslados?: number[] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosAnularConciliacion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación anulada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosDepositos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "en_transito" | "acreditado";
+                /** @description Solo los de esta caja (obligatoria sin bancos.ver: el cajero ve su caja) */
+                caja_id?: number;
+                /** @description Solo los de este turno */
+                turno_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de depósitos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Deposito"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cajas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosExtractos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cuenta_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de extractos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Extracto"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosImportarExtracto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    /** @description Cuenta del extracto: cuenta bancaria propia (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Cuenta del extracto: banco del libro (GET /libro/bancos) */
+                    banco_id?: number | null;
+                    /** @description Cuenta del extracto: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                    cuenta_id?: number | null;
+                    /** Format: date */
+                    desde: string;
+                    /** Format: date */
+                    hasta: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    saldo_inicial: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    saldo_final: string;
+                    archivo?: string | null;
+                    /** @description sha256 del archivo original (lo calcula quien lo leyó) */
+                    sha256?: string | null;
+                    /** @description Fuerza un saldo inicial distinto del final del extracto anterior */
+                    motivo_no_encadena?: string | null;
+                    lineas: {
+                        /** Format: date */
+                        fecha: string;
+                        descripcion: string;
+                        referencia?: string | null;
+                        /**
+                         * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                         * @example -15.00
+                         */
+                        monto: string;
+                        /**
+                         * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                         * @example -15.00
+                         */
+                        saldo?: string | null;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Extracto importado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Extracto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.importar_extracto; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosVerExtracto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Extracto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Extracto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosAplicarReglas: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resultado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultadoAplicarReglas"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosLineasExtracto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Líneas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineaExtracto"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosRegistrarDesdeExtracto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Código de la contrapartida; por defecto 5.3.07 Gastos y comisiones bancarias en un cargo (obligatoria en un abono) */
+                    cuenta?: string | null;
+                    descripcion?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación con el asiento nuevo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosFondosEnTransito: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen por empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenFondosEnTransito"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosReatribuirLlegada: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    tipo: "deposito" | "traslado";
+                    /** @description Depósito o traslado al que se atribuyó la llegada por error */
+                    documento_id: number;
+                    /** @enum {string} */
+                    nuevo_tipo: "deposito" | "traslado";
+                    /** @description Depósito o traslado en tránsito que en verdad llegó */
+                    nuevo_documento_id: number;
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Conciliación nueva */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.reatribuir_llegada; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosMovimientosSinConciliar: {
+        parameters: {
+            query: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                cuenta_id: number;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Movimientos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovimientoSinConciliar"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosReglas: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reglas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaConciliacion"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosCrearRegla: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    nombre: string;
+                    /** @description Solo en esta cuenta bancaria; null = todas */
+                    cuenta_id?: number | null;
+                    /** @enum {string} */
+                    tipo_condicion: "contiene" | "regex";
+                    patron: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_min?: string | null;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_max?: string | null;
+                    /** @enum {string} */
+                    accion: "contrapartida" | "cliente";
+                    /** @description Código de la cuenta (acción contrapartida) */
+                    contrapartida?: string | null;
+                    prioridad?: number;
+                    activa?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Regla */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaConciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosEditarRegla: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre: string;
+                    /** @description Solo en esta cuenta bancaria; null = todas */
+                    cuenta_id?: number | null;
+                    /** @enum {string} */
+                    tipo_condicion: "contiene" | "regex";
+                    patron: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_min?: string | null;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    monto_max?: string | null;
+                    /** @enum {string} */
+                    accion: "contrapartida" | "cliente";
+                    /** @description Código de la cuenta (acción contrapartida) */
+                    contrapartida?: string | null;
+                    prioridad?: number;
+                    activa?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Regla */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaConciliacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosTrasladar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /**
+                     * Format: date
+                     * @description Por defecto hoy; no futura
+                     */
+                    fecha?: string | null;
+                    referencia: string;
+                    origen: {
+                        /** @description Cuenta de la que sale: cuenta bancaria propia (GET /cuentas-bancarias) */
+                        cuenta_bancaria_id?: number | null;
+                        /** @description Cuenta de la que sale: banco del libro (GET /libro/bancos) */
+                        banco_id?: number | null;
+                        /** @description Cuenta de la que sale: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                        cuenta_id?: number | null;
+                    };
+                    destino: {
+                        /** @description Cuenta a la que llega: cuenta bancaria propia (GET /cuentas-bancarias) */
+                        cuenta_bancaria_id?: number | null;
+                        /** @description Cuenta a la que llega: banco del libro (GET /libro/bancos) */
+                        banco_id?: number | null;
+                        /** @description Cuenta a la que llega: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                        cuenta_id?: number | null;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Traslado registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Traslado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.trasladar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bancosTraslados: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "en_transito" | "acreditado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de traslados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Traslado"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     bitacoraAcciones: {
         parameters: {
             query?: {
@@ -9789,6 +11976,99 @@ export interface operations {
             };
         };
     };
+    cajasDepositar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    monto: string;
+                    /** @description Número de la boleta */
+                    boleta: string;
+                    /**
+                     * Format: date
+                     * @description Por defecto hoy; no futura
+                     */
+                    fecha?: string | null;
+                    /** @description Cuenta que recibe el depósito: cuenta bancaria propia (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Cuenta que recibe el depósito: banco del libro (GET /libro/bancos) */
+                    banco_id?: number | null;
+                    /** @description Cuenta que recibe el depósito: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                    cuenta_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Depósito registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deposito"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cajas.depositar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     cajasTurnos: {
         parameters: {
             query?: {
@@ -9837,6 +12117,259 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraCastigos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CastigoCartera"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraCastigar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    facturas: number[];
+                    motivo: string;
+                    /** @description Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT */
+                    evidencia: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Castigo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CastigoCartera"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cartera.castigar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraProvisionar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    anio: number;
+                    /**
+                     * Format: date
+                     * @description Corte de los saldos deudores; por defecto el 31-dic del año (o hoy si es el año en curso)
+                     */
+                    fecha?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Estimación */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisionCartera"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cartera.provisionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    carteraProvisiones: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProvisionCartera"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10715,6 +13248,486 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cobrosLiquidaciones: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                proveedor_cobro_id?: number;
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de liquidaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["LiquidacionCobro"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cobrosLiquidar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    proveedor_cobro_id: number;
+                    /**
+                     * Format: date
+                     * @description Fecha del depósito; por defecto hoy
+                     */
+                    fecha?: string | null;
+                    referencia: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    bruto: string;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    comision: string;
+                    /**
+                     * @description Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale
+                     * @example -15.00
+                     */
+                    neto?: string | null;
+                    pagos: number[];
+                    /** @description Pagos ya liquidados y después anulados que el proveedor descuenta */
+                    contracargos?: number[] | null;
+                    archivo?: string | null;
+                    /** @description sha256 del archivo original (lo calcula quien lo leyó) */
+                    sha256?: string | null;
+                    nota?: string | null;
+                    /** @description Banco donde se depositó el neto (por defecto el del proveedor): cuenta bancaria propia (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Banco donde se depositó el neto (por defecto el del proveedor): banco del libro (GET /libro/bancos) */
+                    banco_id?: number | null;
+                    /** @description Banco donde se depositó el neto (por defecto el del proveedor): subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                    cuenta_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Liquidación registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionCobro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cobros.liquidar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cobrosVerLiquidacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Liquidación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionCobro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cobrosPorLiquidar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenCobrosPorLiquidar"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cobrosProveedores: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proveedores */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorCobro"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso bancos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cobrosCrearProveedor: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number | null;
+                    /** @enum {string} */
+                    metodo: "pasarela" | "agente" | "debito";
+                    /** @description Solo pasarela: el nombre que trae el pago (falsa, recurrente…) */
+                    pasarela?: string | null;
+                    nombre: string;
+                    /**
+                     * Format: date
+                     * @description Fecha de corte (por defecto hoy; no anterior a hoy)
+                     */
+                    desde?: string | null;
+                    /** @description Banco que recibe las liquidaciones: cuenta bancaria propia (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Banco que recibe las liquidaciones: banco del libro (GET /libro/bancos) */
+                    banco_id?: number | null;
+                    /** @description Banco que recibe las liquidaciones: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                    cuenta_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Proveedor creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorCobro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cobros.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cobrosEditarProveedor: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string | null;
+                    activo?: boolean | null;
+                    /**
+                     * Format: date
+                     * @description No se edita (422 campo_solo_lectura)
+                     */
+                    desde?: string | null;
+                    /** @description Banco que recibe las liquidaciones: cuenta bancaria propia (GET /cuentas-bancarias) */
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Banco que recibe las liquidaciones: banco del libro (GET /libro/bancos) */
+                    banco_id?: number | null;
+                    /** @description Banco que recibe las liquidaciones: subcuenta 1.1.02.NN del libro (una sola de las tres formas) */
+                    cuenta_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Proveedor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorCobro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso cobros.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13038,10 +16051,10 @@ export interface operations {
                 limit?: number;
                 cliente_id?: number;
                 servicio_id?: number;
-                estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada";
+                estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
                 periodo?: string;
                 /** @description servicio = factura del periodo; mora = recargo por vencimiento */
-                tipo?: "servicio" | "mora";
+                tipo?: "servicio" | "mora" | "cargo";
             };
             header?: never;
             path?: never;
@@ -16198,6 +19211,136 @@ export interface operations {
             };
         };
     };
+    internoNodosPortalListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de nodos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["NodoPortalInterno"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    internoNodosPortalCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Nodo creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodoPortalInternoCreado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    internoNodosPortalRevocar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                nombre: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nodo revocado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodoPortalInternoRevocado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     ipResolver: {
         parameters: {
             query?: never;
@@ -18198,7 +21341,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "lealtad";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "lealtad";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };
@@ -18804,6 +21947,163 @@ export interface operations {
                 };
             };
             /** @description CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    nodosPortalListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de nodos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["NodoPortal"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso nodos_portal.administrar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    nodosPortalCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    nombre: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Nodo creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodoPortalCreado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso nodos_portal.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    nodosPortalRevocar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nodo revocado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodoPortal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso nodos_portal.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -20028,6 +23328,82 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso pagos.anular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pagosCerrarDiferencia: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Diferencia cerrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiferenciaCerrada"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso pagos.cerrar_diferencia; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -23560,6 +26936,59 @@ export interface operations {
             };
         };
     };
+    reportesConciliacionBancaria: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                cuenta_id?: number;
+                /** @description Al día (por defecto hoy, Guatemala) */
+                fecha?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen por cuenta */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenConciliacionBancaria"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     reportesEgresos: {
         parameters: {
             query?: {
@@ -23962,7 +27391,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -24020,7 +27449,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -26696,7 +30125,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.ver" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];
