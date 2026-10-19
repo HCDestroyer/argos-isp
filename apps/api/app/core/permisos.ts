@@ -40,8 +40,7 @@ export const PERMISOS = {
     'servicios.quitar_adicional': 'Dar de baja un adicional de un servicio (con fecha; no se borra)',
     'servicios.adicional_cortesia':
         'Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar',
-    'servicios.ver_credencial_adicional':
-        'Ver la credencial de un adicional de un servicio (queda auditado)',
+    'servicios.ver_credencial_adicional': 'Ver la credencial de un adicional de un servicio (queda auditado)',
     'adicionales.ver': 'Ver el catálogo de servicios adicionales y los motivos de cortesía',
     'adicionales.crear': 'Crear servicios adicionales en el catálogo de la empresa',
     'adicionales.editar': 'Editar servicios adicionales del catálogo',

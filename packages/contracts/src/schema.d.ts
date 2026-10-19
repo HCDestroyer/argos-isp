@@ -5052,6 +5052,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        Advertencia: {
+            /** @enum {string} */
+            codigo: "plan_dedicado_asimetrico" | "plan_dedicado_compartido" | "servicio_cliente_cf";
+            mensaje: string;
+        };
         AjustePuntos: {
             movimiento: components["schemas"]["MovimientoPuntos"];
             saldo: number;
@@ -7183,6 +7188,11 @@ export interface components {
             dual_stack: "ambos" | "v4" | "v6";
             /** @enum {integer} */
             tamano_prefijo_delegado: 64 | 56 | 48;
+            /**
+             * @description residencial (por defecto), empresarial o dedicado
+             * @enum {string}
+             */
+            tipo?: "residencial" | "empresarial" | "dedicado";
             global: boolean;
             activo: boolean;
             /** @description Control optimista: envíala al editar */
@@ -7191,6 +7201,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Solo al crear o editar: advertencias del tipo de plan (nunca bloquean) */
+            warnings?: components["schemas"]["Advertencia"][];
         };
         PlanEfectivo: {
             id: number;
@@ -7238,6 +7250,11 @@ export interface components {
             pool_ipv6_delegacion: string | null;
             local_address: string | null;
             no_crear_reglas: boolean;
+            /**
+             * @description Tipo del plan (residencial, empresarial, dedicado)
+             * @enum {string}
+             */
+            tipo?: "residencial" | "empresarial" | "dedicado";
         };
         PlanRouter: {
             id: number;
@@ -8819,6 +8836,11 @@ export interface components {
             ipv6_duid: string | null;
             cliente_nombre: string;
             plan_nombre: string;
+            /**
+             * @description Tipo del plan del servicio (solo lectura; se cambia en el plan)
+             * @enum {string}
+             */
+            plan_tipo?: "residencial" | "empresarial" | "dedicado";
             router_nombre: string;
             zona_nombre: string | null;
             excepciones: components["schemas"]["ExcepcionesServicio"];
@@ -8846,6 +8868,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Solo al crear o editar: advertencias del tipo de plan (nunca bloquean) */
+            warnings?: components["schemas"]["Advertencia"][];
         };
         ServicioEvaluado: {
             servicio_id: number;
@@ -20693,6 +20717,7 @@ export interface operations {
                 limit?: number;
                 activo?: boolean;
                 router_id?: number;
+                tipo?: "residencial" | "empresarial" | "dedicado";
             };
             header?: never;
             path?: never;
@@ -20779,6 +20804,11 @@ export interface operations {
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
                     tamano_prefijo_delegado?: 64 | 56 | 48;
+                    /**
+                     * @description residencial (por defecto), empresarial o dedicado; solo advierte, nunca bloquea
+                     * @enum {string}
+                     */
+                    tipo?: "residencial" | "empresarial" | "dedicado";
                     global?: boolean;
                     activo?: boolean;
                 };
@@ -20914,6 +20944,8 @@ export interface operations {
                     dual_stack?: "ambos" | "v4" | "v6";
                     /** @enum {integer} */
                     tamano_prefijo_delegado?: 64 | 56 | 48;
+                    /** @enum {string} */
+                    tipo?: "residencial" | "empresarial" | "dedicado";
                     global?: boolean;
                     activo?: boolean;
                 };
@@ -25231,6 +25263,8 @@ export interface operations {
                 zona_id?: number;
                 /** @description true: el servicio tiene alguna factura vencida; false: ninguna */
                 con_deuda_vencida?: boolean;
+                /** @description Tipo del plan del servicio: residencial, empresarial o dedicado */
+                tipo?: "residencial" | "empresarial" | "dedicado";
             };
             header?: never;
             path?: never;

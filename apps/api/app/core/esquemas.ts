@@ -17,7 +17,8 @@ import {
 import type { EsquemaJson } from '#shared/openapi/esquemas'
 import { CAMPOS_EXCEPCION, type CampoExcepcion } from '#billing/excepciones'
 import { ReglasPromesa } from '#billing/esquemas'
-import { PlanEfectivo } from '#network/esquemas'
+import { Advertencia, PlanEfectivo } from '#network/esquemas'
+import { TIPOS_PLAN } from '#network/tipos_plan'
 import { TIPOS_ACTOR } from '#shared/contexto'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
@@ -355,6 +356,10 @@ export const Servicio = definirEsquema(
             // nombres de solo lectura (la API siempre los envía; obligatorios desde la semana 3)
             cliente_nombre: texto,
             plan_nombre: texto,
+            plan_tipo: {
+                ...enumerado(TIPOS_PLAN),
+                description: 'Tipo del plan del servicio (solo lectura; se cambia en el plan)',
+            },
             router_nombre: texto,
             zona_nombre: nulable(texto),
             excepciones: ExcepcionesServicio,
@@ -377,9 +382,14 @@ export const Servicio = definirEsquema(
                     'el temporal (RADIUS, RouterOS y facturación lo usan) y vuelve a `plan_original_id` al terminar',
             },
             ...auditable,
+            warnings: {
+                ...lista(Advertencia),
+                description: 'Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)',
+            },
         },
-        // opcional en el esquema hasta que los fixtures del panel lo tengan; la API siempre lo envía
-        ['plan_temporal'],
+        // opcionales en el esquema hasta que los fixtures del panel los tengan (la API siempre los
+        // envía); `warnings` solo viene al crear o editar
+        ['plan_temporal', 'plan_tipo', 'warnings'],
     ),
 )
 

@@ -21,6 +21,7 @@ import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
 import { MODALIDADES_ADICIONAL } from '#shared/eventos'
+import { TIPOS_PLAN } from '#network/tipos_plan'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -363,6 +364,10 @@ export const listarServiciosValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: el servicio tiene alguna factura vencida; false: ninguna' }),
+        tipo: vine
+            .enum(TIPOS_PLAN)
+            .optional()
+            .meta({ description: 'Tipo del plan del servicio: residencial, empresarial o dedicado' }),
     }),
 )
 

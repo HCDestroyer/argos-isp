@@ -20732,6 +20732,19 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "residencial",
+                "empresarial",
+                "dedicado"
+              ]
+            }
           }
         ],
         "responses": {
@@ -20917,6 +20930,15 @@
                       48
                     ],
                     "type": "integer"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "residencial",
+                      "empresarial",
+                      "dedicado"
+                    ],
+                    "description": "residencial (por defecto), empresarial o dedicado; solo advierte, nunca bloquea"
                   },
                   "global": {
                     "type": "boolean"
@@ -21191,6 +21213,14 @@
                       48
                     ],
                     "type": "integer"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "residencial",
+                      "empresarial",
+                      "dedicado"
+                    ]
                   },
                   "global": {
                     "type": "boolean"
@@ -29592,6 +29622,20 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "description": "Tipo del plan del servicio: residencial, empresarial o dedicado",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "residencial",
+                "empresarial",
+                "dedicado"
+              ]
+            }
           }
         ],
         "responses": {
@@ -35437,6 +35481,26 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "Advertencia": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "mensaje"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "enum": [
+              "plan_dedicado_asimetrico",
+              "plan_dedicado_compartido",
+              "servicio_cliente_cf"
+            ]
+          },
+          "mensaje": {
+            "type": "string"
           }
         }
       },
@@ -43661,6 +43725,15 @@
               48
             ]
           },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial",
+              "dedicado"
+            ],
+            "description": "residencial (por defecto), empresarial o dedicado"
+          },
           "global": {
             "type": "boolean"
           },
@@ -43679,6 +43752,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Advertencia"
+            },
+            "description": "Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)"
           }
         }
       },
@@ -43871,6 +43951,15 @@
           },
           "no_crear_reglas": {
             "type": "boolean"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial",
+              "dedicado"
+            ],
+            "description": "Tipo del plan (residencial, empresarial, dedicado)"
           }
         }
       },
@@ -50304,6 +50393,15 @@
           "plan_nombre": {
             "type": "string"
           },
+          "plan_tipo": {
+            "type": "string",
+            "enum": [
+              "residencial",
+              "empresarial",
+              "dedicado"
+            ],
+            "description": "Tipo del plan del servicio (solo lectura; se cambia en el plan)"
+          },
           "router_nombre": {
             "type": "string"
           },
@@ -50395,6 +50493,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Advertencia"
+            },
+            "description": "Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)"
           }
         }
       },
