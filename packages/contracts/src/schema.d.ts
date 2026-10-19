@@ -11163,9 +11163,9 @@ export interface operations {
                     /** @description `https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`) */
                     boton_url?: string | null;
                     /** Format: date-time */
-                    inicio?: string;
+                    inicio?: string | null;
                     /** Format: date-time */
-                    fin?: string;
+                    fin?: string | null;
                     /** @enum {string} */
                     audiencia?: "todos" | "suspendidos" | "con_puntos" | "al_dia";
                     lugares?: ("portal_inicio" | "pagina_corte")[];
@@ -11285,9 +11285,9 @@ export interface operations {
                     /** @description `https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`) */
                     boton_url?: string | null;
                     /** Format: date-time */
-                    inicio?: string;
+                    inicio?: string | null;
                     /** Format: date-time */
-                    fin?: string;
+                    fin?: string | null;
                     /** @enum {string} */
                     audiencia?: "todos" | "suspendidos" | "con_puntos" | "al_dia";
                     lugares?: ("portal_inicio" | "pagina_corte")[];

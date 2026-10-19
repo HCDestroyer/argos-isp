@@ -1198,11 +1198,17 @@
                     "description": "`https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`)"
                   },
                   "inicio": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "format": "date-time"
                   },
                   "fin": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "format": "date-time"
                   },
                   "audiencia": {
@@ -1430,11 +1436,17 @@
                     "description": "`https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`)"
                   },
                   "inicio": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "format": "date-time"
                   },
                   "fin": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "format": "date-time"
                   },
                   "audiencia": {
