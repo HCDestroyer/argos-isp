@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import db from '@adonisjs/lucid/services/db'
 import { generar } from '#tests/billing/ayudas_billing'
 import { facturasDelServicio, prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
@@ -14,7 +15,7 @@ import { crearClienteFila } from '#tests/core/fabricas'
 import RechazarReferido from '#lealtad/actions/rechazar_referido'
 import { ejecutarCron } from '#billing/jobs'
 import {
-    afirmarLibroLealtad,
+    afirmarPasivoLealtad,
     entregar,
     entregarEvento,
     movimientosDe,
@@ -77,7 +78,8 @@ test.group('Lealtad · reglas para ganar', (group) => {
                 [`pago_a_tiempo:factura:${facturas[1]!.id}`, 10],
             ],
         )
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('racha sin tope: bono cada N; anular el pago revierte la factura y su bono', async ({ assert }) => {
@@ -103,7 +105,8 @@ test.group('Lealtad · reglas para ganar', (group) => {
         await new AnularPago().execute({ pago_id: pagoDic.id, motivo: 'cheque rechazado' }, e.ctx)
         await entregarEvento('pago.anulado', 'pago_id', pagoDic.id)
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 10)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
 
         // vuelve a pagar a tiempo: gana de nuevo con la clave siguiente (`#2`), sin duplicar
         await pagarFactura(e, s.clienteId, dic!)
@@ -115,7 +118,8 @@ test.group('Lealtad · reglas para ganar', (group) => {
             `pago_a_tiempo:racha:factura:${dic!.id}#2`,
         ])
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 70)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('pago adelantado: el excedente cubre N mensualidades; anular el pago lo revierte', async ({
@@ -152,7 +156,8 @@ test.group('Lealtad · reglas para ganar', (group) => {
         await new AnularPago().execute({ pago_id: pago.id, motivo: 'duplicado' }, e.ctx)
         await entregarEvento('pago.anulado', 'pago_id', pago.id)
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 0)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('antigüedad: cada 12 meses desde la instalación, sin retroactivo y sin duplicar', async ({
@@ -178,7 +183,8 @@ test.group('Lealtad · reglas para ganar', (group) => {
             [[`antiguedad:servicio:${s.servicioId}:2`, 100, '10.00']],
         )
         assert.lengthOf(await movimientosDe(e.B, suspendido.clienteId), 0)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('antigüedad: no otorga si el servicio pasó por suspendido en el ciclo', async ({ assert }) => {
@@ -202,7 +208,8 @@ test.group('Lealtad · reglas para ganar', (group) => {
         })
         await new OtorgarAntiguedad().execute({ empresa_id: e.B, hoy }, contextoPrueba())
         assert.lengthOf(await movimientosDe(e.B, s.clienteId), 0)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('referido: califica con las facturas pagadas mínimas, bono al referido; rechazar revierte', async ({
@@ -263,7 +270,8 @@ test.group('Lealtad · reglas para ganar', (group) => {
             .where('evento', 'lealtad.referido_calificado')
             .whereRaw(`(payload->>'referido_id')::bigint = ?`, [referido.id])
         assert.lengthOf(calificados, 1)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
 
         const rechazado = await new RechazarReferido().execute(
             { id: referido.id, motivo: 'alta falsa' },
@@ -272,6 +280,7 @@ test.group('Lealtad · reglas para ganar', (group) => {
         assert.equal(rechazado.estado, 'rechazado')
         assert.equal(await saldoPuntos(db.connection(), e.B, referidor.clienteId), 0)
         assert.equal(await saldoPuntos(db.connection(), e.B, nuevo.clienteId), 0)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

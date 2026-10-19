@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { errorDe, prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
@@ -11,7 +12,7 @@ import CrearRegla from '#lealtad/actions/crear_regla'
 import EditarRegla from '#lealtad/actions/editar_regla'
 import AjustarPuntos from '#lealtad/actions/ajustar_puntos'
 import { hashTerminos } from '#lealtad/programas'
-import { afirmarLibroLealtad, programaConReglas } from '#tests/lealtad/ayudas_lealtad'
+import { afirmarPasivoLealtad, programaConReglas } from '#tests/lealtad/ayudas_lealtad'
 
 /**
  * Lealtad · programa, reglas, endpoints y multiempresa (contrato §2, §3, §9, §11, §14 y §15).
@@ -88,7 +89,8 @@ test.group('Lealtad · programa y reglas', (group) => {
         )
         assert.isFalse(desactivado.activo)
         assert.isTrue(await new ActivarPrograma().execute({ id: otro.id }, e.ctx).then((p) => p.activo))
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('reglas: condiciones por tipo con valores por defecto; 422 por campo; solo puntos en la fase 1', async ({
@@ -156,7 +158,8 @@ test.group('Lealtad · programa y reglas', (group) => {
             ),
         )
         assert.equal(invalida.status, 422)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('HTTP: programa, reglas (unión por tipo), ajuste, puntos del cliente, reporte y permisos', async ({
@@ -293,7 +296,8 @@ test.group('Lealtad · programa y reglas', (group) => {
                 .json({ cliente_id: s.clienteId, puntos: 30, motivo: 'no autorizado' }),
             403,
         )
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('multiempresa: los puntos de una empresa no se ajustan en otra; consolidado solo con alcance global', async ({
@@ -343,6 +347,7 @@ test.group('Lealtad · programa y reglas', (group) => {
                 .json({ cliente_id: s.clienteId, puntos: 5, motivo: 'otra empresa' }),
             403,
         )
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

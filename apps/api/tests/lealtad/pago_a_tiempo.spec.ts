@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { generar } from '#tests/billing/ayudas_billing'
@@ -13,7 +14,7 @@ import AnularPago from '#billing/actions/anular_pago'
 import DesactivarPrograma from '#lealtad/actions/desactivar_programa'
 import { saldoPuntos } from '#lealtad/puntos'
 import {
-    afirmarLibroLealtad,
+    afirmarPasivoLealtad,
     asientoLealtad,
     asientosLealtad,
     entregarEvento,
@@ -83,7 +84,8 @@ test.group('Lealtad · pago a tiempo', (group) => {
         assert.equal(await asientosLealtad(e.B), 1)
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 10)
         assert.equal(await saldoCuenta(e.B, '2.1.10'), '-0.80')
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('pago después del vencimiento: sin puntos', async ({ assert }) => {
@@ -105,7 +107,8 @@ test.group('Lealtad · pago a tiempo', (group) => {
         await entregarEvento('pago.registrado', 'pago_id', pago.id)
         assert.lengthOf(await movimientosDe(e.B, s.clienteId), 0)
         assert.equal(await asientosLealtad(e.B), 0)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('pago anulado: reverso espejo con su asiento; repetir la anulación no duplica', async ({
@@ -149,7 +152,8 @@ test.group('Lealtad · pago a tiempo', (group) => {
         ])
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 0)
         assert.equal(await saldoCuenta(e.B, '2.1.10'), '0.00')
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('programa desactivado: no otorga, pero el reverso por un pago anulado se aplica igual', async ({
@@ -195,7 +199,8 @@ test.group('Lealtad · pago a tiempo', (group) => {
         )
         await entregarEvento('pago.registrado', 'pago_id', pago2.id)
         assert.lengthOf(await movimientosDe(e.B, s.clienteId), 2)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('sin diferimiento (por defecto): puntos como indicador, sin asientos', async ({ assert }) => {
@@ -220,7 +225,8 @@ test.group('Lealtad · pago a tiempo', (group) => {
         assert.isNull(movimiento!.asiento_id)
         assert.equal(await asientosLealtad(e.B), 0)
         assert.equal(await saldoCuenta(e.B, '2.1.10'), '0')
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('empresa sin programa: el consumidor no evalúa nada', async ({ assert }) => {
@@ -246,6 +252,7 @@ test.group('Lealtad · pago a tiempo', (group) => {
             .firstOrFail()
         assert.equal(Number(auditadas.n), 0)
         assert.lengthOf(await movimientosDe(e.B), 0)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

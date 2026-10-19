@@ -4,7 +4,7 @@ import { bloquearClienteLealtad, vencerLote } from '#lealtad/puntos'
 
 /**
  * `lealtad.vencer` (cron `lealtad:vencer`, §6.1): procesa **todo lo vencido hasta hoy** (no "lo de
- * hoy"), por lotes de `limite`:
+ * hoy") de una empresa, por lotes de `limite`:
  *
  * - cada lote con `vence_en <= hoy` y puntos vivos sale con un movimiento `vencimiento` (clave
  *   `vencimiento:lote:<id>`, repetir no duplica) y, si tenía valor, el asiento `2.1.10 / 4.1.06`;
@@ -16,6 +16,11 @@ import { bloquearClienteLealtad, vencerLote } from '#lealtad/puntos'
  */
 
 export interface EntradaVencer {
+    /**
+     * una empresa por ejecución (así la usa `cronVencer`: un periodo cerrado en una no detiene a las
+     * demás); sin ella, todas las empresas en la misma transacción
+     */
+    empresa_id?: number | null
     /** YYYY-MM-DD (Guatemala); por defecto hoy */
     hoy?: string
     limite?: number
@@ -35,11 +40,13 @@ export default class VencerPuntos extends DomainAction<EntradaVencer, ResultadoV
     protected async handle(input: EntradaVencer, t: Transaccion): Promise<ResultadoVencer> {
         const hoy = input.hoy ?? hoyGuatemala()
         const limite = Math.min(Math.max(input.limite ?? 500, 1), 5000)
-        t.fijarEmpresa(null)
+        const empresaId = input.empresa_id ?? null
+        t.fijarEmpresa(empresaId)
 
         const vencidos = (await t.trx
             .from('lealtad.movimientos as l')
             .leftJoin('lealtad.consumos as c', 'c.lote_id', 'l.id')
+            .if(empresaId !== null, (q) => q.where('l.empresa_id', empresaId!))
             .where('l.puntos', '>', 0)
             .whereNotNull('l.vence_en')
             .where('l.vence_en', '<=', hoy)
@@ -80,6 +87,7 @@ export default class VencerPuntos extends DomainAction<EntradaVencer, ResultadoV
             .from('lealtad.movimientos as l')
             .join('lealtad.programas as p', 'p.id', 'l.programa_id')
             .leftJoin('lealtad.consumos as c', 'c.lote_id', 'l.id')
+            .if(empresaId !== null, (q) => q.where('l.empresa_id', empresaId!))
             .where('l.puntos', '>', 0)
             .whereNotNull('l.vence_en')
             .where('l.vence_en', '>', hoy)

@@ -243,5 +243,5 @@ test.group('Auditor contable · lealtad, fase 1', (group) => {
         assert.isFalse(ra && rb, 'las dos salidas de 30 puntos de un lote de 50 pasaron el trigger')
         const v = await verificarLibro(e.B)
         assert.deepEqual(v, [])
-    }).fails('H15: el trigger de consumos no bloquea el lote')
+    })
 })

@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, soloEmpresaPrincipal } from '#tests/ayudas'
 import { errorDe, prepararEmpresas, saldoCuenta, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
@@ -8,9 +9,10 @@ import { sumarMeses } from '#lealtad/condiciones'
 import AjustarPuntos from '#lealtad/actions/ajustar_puntos'
 import EditarPrograma from '#lealtad/actions/editar_programa'
 import VencerPuntos from '#lealtad/actions/vencer_puntos'
+import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import { ejecutarCron } from '#billing/jobs'
 import {
-    afirmarLibroLealtad,
+    afirmarPasivoLealtad,
     asientoLealtad,
     movimientosDe,
     programaConReglas,
@@ -47,14 +49,15 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
             ['4.1.05', '8.00', '0.00'],
             ['2.1.10', '0.00', '8.00'],
         ])
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
 
         // 20 días antes: aviso una sola vez aunque el cron corra dos veces
         const aviso = new Date(new Date(`${vence}T12:00:00Z`).getTime() - 20 * 86_400_000)
             .toISOString()
             .slice(0, 10)
-        await new VencerPuntos().execute({ hoy: aviso }, contextoPrueba())
-        await new VencerPuntos().execute({ hoy: aviso }, contextoPrueba())
+        await new VencerPuntos().execute({ empresa_id: e.B, hoy: aviso }, contextoPrueba())
+        await new VencerPuntos().execute({ empresa_id: e.B, hoy: aviso }, contextoPrueba())
         const avisos = await db
             .from('audit.outbox')
             .where('evento', 'lealtad.puntos_por_vencer')
@@ -65,8 +68,8 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
         assert.lengthOf(await movimientosDe(e.B, s.clienteId), 1)
 
         // el día del vencimiento (y después: todo lo vencido hasta hoy) sale el lote, una sola vez
-        await new VencerPuntos().execute({ hoy: vence }, contextoPrueba())
-        await new VencerPuntos().execute({ hoy: sumarMeses(vence, 1) }, contextoPrueba())
+        await new VencerPuntos().execute({ empresa_id: e.B, hoy: vence }, contextoPrueba())
+        await new VencerPuntos().execute({ empresa_id: e.B, hoy: sumarMeses(vence, 1) }, contextoPrueba())
         const movimientos = await movimientosDe(e.B, s.clienteId)
         assert.deepEqual(
             movimientos.map((m) => [m.tipo, m.puntos, m.valor, m.clave_unica]),
@@ -87,7 +90,8 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 0)
         assert.equal(await saldoCuenta(e.B, '2.1.10'), '0.00')
         assert.equal(programa.vencimiento_meses, 12)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('el lote que vence antes sale primero; cambiar el vencimiento solo afecta a los lotes nuevos', async ({
@@ -114,7 +118,8 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
         const hoy = hoyGuatemala()
         assert.equal(largo.movimiento.vence_en, sumarMeses(hoy, 12))
         assert.equal(corto.movimiento.vence_en, sumarMeses(hoy, 3))
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
 
         // el ajuste negativo consume primero el lote corto (vence antes) y revierte su diferimiento
         const descuento = await new AjustarPuntos().execute(
@@ -134,7 +139,8 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
             ['4.1.05', '0.00', '2.00'],
         ])
         assert.equal(descuento.saldo, 50)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
 
         // a los 3 meses vencen los 10 que le quedan al lote corto; el largo sigue entero
         await ejecutarCron('lealtad:vencer', new Date(`${sumarMeses(hoy, 3)}T18:00:00Z`))
@@ -147,7 +153,68 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
         )
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 40)
         assert.equal(await saldoCuenta(e.B, '2.1.10'), '-4.00')
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('cron de vencimiento con un mes cerrado: esa empresa queda fallida en la corrida y las demás siguen', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        await programaConReglas(e.B, e.ctx, { diferimiento: true, vencimiento_meses: 1 })
+        await programaConReglas(e.C, e.ctx, { diferimiento: true, vencimiento_meses: 1 })
+        const enB = await servicioEn(e.B)
+        const enC = await servicioEn(e.C)
+        for (const [empresa, s] of [
+            [e.B, enB],
+            [e.C, enC],
+        ] as const) {
+            await new AjustarPuntos().execute(
+                { empresa_id: empresa, cliente_id: s.clienteId, puntos: 10, motivo: 'bienvenida' },
+                e.ctx,
+            )
+        }
+        // la corrida cae dos meses después; ese mes ya está cerrado en B
+        const corrida = sumarMeses(hoyGuatemala(), 2)
+        const [anio, mes] = corrida.split('-').map(Number) as [number, number]
+        await new CerrarPeriodo().execute(
+            {
+                empresa_id: e.B,
+                anio,
+                mes,
+                ahora: new Date(`${sumarMeses(corrida, 1).slice(0, 8)}05T18:00:00Z`),
+            },
+            e.ctx,
+        )
+        const salida = await ejecutarCron('lealtad:vencer', new Date(`${corrida}T18:00:00Z`))
+        assert.isFalse(salida.omitido)
+        const resultado = salida.resultado as unknown as {
+            empresas: Array<{ empresa_id: number; vencidos: number }>
+            fallidas: Array<{ empresa_id: number; error: string }>
+        }
+        const fallida = resultado.fallidas.find((f) => f.empresa_id === e.B)
+        assert.isDefined(fallida)
+        assert.match(fallida!.error, /cerrado/)
+        assert.deepInclude(resultado.empresas, { empresa_id: e.C, vencidos: 1, avisados: 0 })
+        // B conserva su lote (se reintenta al reabrir o en el mes siguiente); C venció el suyo
+        const movB = await movimientosDe(e.B, enB.clienteId)
+        const movC = await movimientosDe(e.C, enC.clienteId)
+        assert.deepEqual(
+            movB.map((m) => m.tipo),
+            ['ajuste'],
+        )
+        assert.deepEqual(
+            movC.map((m) => m.tipo),
+            ['ajuste', 'vencimiento'],
+        )
+        const corridas = await db
+            .from('audit.acciones')
+            .where('accion', 'lealtad.vencer')
+            .whereNull('entidad_tipo')
+            .whereRaw(`entrada->'resultado'->'fallidas' @> ?::jsonb`, [JSON.stringify([{ empresa_id: e.B }])])
+        assert.isAtLeast(corridas.length, 1)
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('ajuste: motivo obligatorio, nunca deja saldo negativo, programa activo y cliente de la empresa', async ({
@@ -190,7 +257,8 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
         const [movimiento] = await movimientosDe(e.B, s.clienteId)
         assert.equal(movimiento!.valor, '0.00')
         assert.isNull(movimiento!.asiento_id)
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('lealtad.movimientos y lealtad.consumos son de solo inserción', async ({ assert }) => {
@@ -215,6 +283,7 @@ test.group('Lealtad · vencimiento y ajustes', (group) => {
                 .table('lealtad.consumos')
                 .insert({ movimiento_id: salida.movimiento.id, lote_id: ajuste.movimiento.id, puntos: 1 }),
         )
-        await afirmarLibroLealtad(assert, [e.B, e.C])
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

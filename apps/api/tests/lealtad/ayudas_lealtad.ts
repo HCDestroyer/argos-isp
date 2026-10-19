@@ -7,7 +7,6 @@ import CrearPrograma, { type EntradaCrearPrograma } from '#lealtad/actions/crear
 import ActivarPrograma from '#lealtad/actions/activar_programa'
 import CrearRegla, { type EntradaRegla } from '#lealtad/actions/crear_regla'
 import { reporteLealtad } from '#lealtad/reporte'
-import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
  * Ayudas de las pruebas de lealtad. Cada prueba arma su empresa (NIT nuevo, `prepararEmpresas`
@@ -124,48 +123,16 @@ export async function asientosLealtad(empresaId: number): Promise<number> {
 }
 
 /**
- * Cierre de cada prueba: los invariantes del auditor (`verificarLibro`) más el de lealtad (§6):
- * saldo de `2.1.10` = Σ valor vivo de los lotes, por empresa.
- *
- * El auditor todavía no conoce el origen `lealtad` (invariante 9, `origen_de_asiento_desconocido`,
- * pendiente de su fase): se aparta **solo** esa violación y solo si todas sus filas son de origen
- * `lealtad` (y se comprueba aparte que no hay otro origen desconocido). Cualquier otra violación
- * hace fallar la prueba. Cuando el auditor agregue `lealtad` a su lista, el filtro queda sin efecto.
+ * Invariante propio de lealtad (§6), además de `afirmarLibro` del auditor: por empresa, saldo de
+ * `2.1.10` = Σ valor vivo de los lotes (`cuadra` del reporte) y saldo de puntos = puntos vivos.
  */
-export async function afirmarLibroLealtad(
+export async function afirmarPasivoLealtad(
     assert: {
         deepEqual: (a: unknown, b: unknown, m?: string) => void
         isTrue: (v: unknown, m?: string) => void
     },
     empresas: number[],
 ) {
-    const violaciones = await verificarLibro(empresas)
-    const resto = violaciones.filter(
-        (v) =>
-            !(
-                v.invariante.startsWith('9.origen_de_asiento_desconocido') &&
-                Array.isArray(v.detalle) &&
-                (v.detalle as Array<{ origen_tipo: string }>).every((f) => f.origen_tipo === 'lealtad')
-            ),
-    )
-    assert.deepEqual(resto, [], `Invariantes contables rotos:\n${JSON.stringify(resto, null, 2)}`)
-    const otros = await db
-        .from('ledger.asientos')
-        .whereIn('empresa_id', empresas)
-        .whereNotIn('origen_tipo', [
-            'factura',
-            'mora',
-            'pago',
-            'nota_credito',
-            'egreso',
-            'cierre_caja',
-            'ajuste',
-            'reclasificacion',
-            'lealtad',
-        ])
-        .count('* as n')
-        .firstOrFail()
-    assert.deepEqual(Number(otros.n), 0, 'asientos con un origen desconocido')
     const reporte = await reporteLealtad(empresas, null, null)
     for (const fila of reporte.empresas) {
         assert.isTrue(

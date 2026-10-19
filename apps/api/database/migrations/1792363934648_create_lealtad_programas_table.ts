@@ -137,6 +137,10 @@ export default class extends BaseSchema {
                 usados integer;
                 usado_valor numeric;
             BEGIN
+                -- bloquea el lote: dos salidas concurrentes del mismo lote se ordenan (hallazgo H15). Es un
+                -- advisory lock por lote y no SELECT ... FOR UPDATE porque argosisp_app no tiene UPDATE sobre
+                -- lealtad.movimientos (REVOKE) y FOR UPDATE lo exige; el efecto es el mismo.
+                PERFORM pg_advisory_xact_lock(5105, (NEW.lote_id % 2147483647)::int);
                 SELECT * INTO lote FROM lealtad.movimientos WHERE id = NEW.lote_id;
                 SELECT * INTO salida FROM lealtad.movimientos WHERE id = NEW.movimiento_id;
                 IF lote.puntos <= 0 THEN
