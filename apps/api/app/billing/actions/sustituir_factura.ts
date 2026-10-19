@@ -183,11 +183,12 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
             .count('* as n')
             .first()) as { n: string }
         const clave = `${raiz}#s${Number(previas.n) + 1}`
-        const lineas = (await t.trx
+        const originales = (await t.trx
             .from('billing.facturas_lineas')
             .where('factura_id', f.id)
             .orderBy('id')
             .select(
+                'id',
                 'concepto',
                 'tipo',
                 t.trx.raw('cantidad::text as cantidad'),
@@ -195,7 +196,16 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
                 'gravable',
                 'iva',
                 'total',
-            )) as LineaCalculada[]
+                'linea_id',
+                'cuenta_codigo',
+                'servicio_adicional_id',
+                t.trx.raw(`to_char(adicional_periodo, 'YYYY-MM-DD') as adicional_periodo`),
+            )) as Array<LineaCalculada & { id: number; linea_id: number | null }>
+        // los descuentos siguen ligados a su línea en la factura nueva (por posición)
+        const posicion = new Map(originales.map((l, i) => [Number(l.id), i]))
+        const lineas: LineaCalculada[] = originales.map(({ id: _id, linea_id: lineaId, ...l }) =>
+            lineaId === null ? l : { ...l, linea_indice: posicion.get(Number(lineaId)) },
+        )
         const snapshot = {
             ...(f.reglas_snapshot ?? {}),
             sustituye_a: f.id,

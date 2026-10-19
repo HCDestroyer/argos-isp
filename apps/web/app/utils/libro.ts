@@ -27,6 +27,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     diferido: { etiqueta: 'Diferido', icono: 'i-lucide-calendar-range' },
     alta_activo: { etiqueta: 'Alta de activo', icono: 'i-lucide-package-plus' },
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
+    bonificacion: { etiqueta: 'Bonificación', icono: 'i-lucide-badge-percent' },
 }
 
 interface OrigenVisual {

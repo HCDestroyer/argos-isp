@@ -368,6 +368,16 @@ con un token inventado o revocado responde 401 `nodo_portal_invalido`. `GET /ver
 
 Tabla `core.nodos_portal` (solo el sha256 del token; `nombre` único). Pruebas: `tests/portal/nodo_portal.spec.ts`.
 
+### Adicionales y tipo de plan en la cuenta (contrato `contratos/adicionales.md`)
+
+`GET /portal/cuenta` trae en cada servicio `plan_tipo` (`residencial`, `empresarial`, `dedicado`) y
+`adicionales[]` (schema `PortalAdicional`: `id`, `nombre`, `identificador`, `modalidad` y `precio`
+solo con `cobrado`, y `bloqueado`: suspendido el servicio, A1 los bloquea y el portal dice «Bloqueado
+por suspensión»). Solo los activos (bloqueados incluidos) de los servicios del cliente de la sesión; lectura propia de
+`core.servicios_adicionales` (`cuenta.ts`, sin tocar `app/core`) que **nunca selecciona la
+credencial** ni el motivo interno de la cortesía. Por la IP no sale nada de esto (el identificador
+puede ser un correo). Pruebas: `tests/portal/adicionales.spec.ts`.
+
 ## Eventos
 
 No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos

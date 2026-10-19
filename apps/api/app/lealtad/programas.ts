@@ -28,6 +28,10 @@ export interface ProgramaVista {
     minimo_canje: number
     terminos: string
     terminos_hash: string
+    /** el cliente ve sus puntos en el portal */
+    visible_portal: boolean
+    /** el cliente canjea desde el portal (solo con `visible_portal`) */
+    canje_portal: boolean
     vigente_desde: string
     vigente_hasta: string | null
     version: number
@@ -47,6 +51,8 @@ export const CAMPOS_PROGRAMA = [
     'minimo_canje',
     'terminos',
     'terminos_hash',
+    'visible_portal',
+    'canje_portal',
     'vigente_desde',
     'vigente_hasta',
 ] as const
@@ -82,6 +88,8 @@ function columnas(cliente: QueryClientContract) {
         'p.minimo_canje',
         'p.terminos',
         'p.terminos_hash',
+        'p.visible_portal',
+        'p.canje_portal',
         cliente.raw(`to_char(p.vigente_desde, 'YYYY-MM-DD') as vigente_desde`),
         cliente.raw(`to_char(p.vigente_hasta, 'YYYY-MM-DD') as vigente_hasta`),
         'p.version',
