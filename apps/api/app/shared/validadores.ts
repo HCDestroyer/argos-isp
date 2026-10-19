@@ -1,4 +1,6 @@
 import vine from '@vinejs/vine'
+// corrección de `.meta()` de VineJS 4.4.0 (ver el módulo)
+import '#shared/vine_meta'
 
 /**
  * Piezas de validación comunes (VineJS). Cada una declara su `meta` para que el OpenAPI
