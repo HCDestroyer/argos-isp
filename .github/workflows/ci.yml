@@ -154,7 +154,7 @@ jobs:
           docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
           COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal \
             docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
-          docker compose -f infra/produccion/docker-compose.nodo-portal.yml --env-file infra/produccion/.env.nodo-portal.example config --quiet
+          docker compose -f infra/produccion/docker-compose.nodo-portal.yml --env-file infra/produccion/nodo-portal.env.example config --quiet
 
       - name: radiusd -XC
         run: infra/ci/freeradius-check.sh

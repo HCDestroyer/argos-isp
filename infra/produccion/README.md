@@ -5,7 +5,7 @@ ArgosIsp como producto instalable (PLAN, "Distribución e instalación"): imáge
 | Archivo | Qué es |
 | --- | --- |
 | `docker-compose.produccion.yml` | Compose de producción: solo imágenes publicadas (`${ARGOSISP_REGISTRO}/argosisp-*:${ARGOSISP_VERSION}`), nada publicado salvo el proxy (80/443) y FreeRADIUS (1812/1813 UDP) |
-| `.env.example` | Referencia de las variables del `.env` de producción (el real lo genera `instalar.sh`) |
+| `.env.example` | Referencia de las variables del `.env` de producción (el real lo genera `instalar.sh`); `nodo-portal.env.example`, la del `.env` de un nodo portal |
 | `docker-compose.nodo-portal.yml` | Compose de un nodo portal remoto: solo `portal` y `proxy` (`instalar.sh --rol portal`) |
 | `config/` | Init de Postgres sin base de pruebas, Caddyfile de producción (API, panel, portal por HTTPS y `/corte` por HTTP), `Caddyfile.nodo-portal` y `clients.conf` de FreeRADIUS sin el cliente del laboratorio |
 | `instalar.sh` | Instalador para Ubuntu/Debian |
