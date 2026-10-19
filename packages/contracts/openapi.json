@@ -35397,6 +35397,105 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/bonificaciones": {
+      "get": {
+        "operationId": "portalBonificaciones",
+        "summary": "Periodos bonificados del cliente de la sesión (mes gratis, canje, cargo sin costo)",
+        "description": "Decisión del PM: un periodo en cero no es una factura de Q0 sino una bonificación (A3). Sin montos, documento ni motivo interno: el portal la muestra como «Mes bonificado». Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de bonificaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalBonificacion"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/codigo": {
       "post": {
         "operationId": "portalSolicitarCodigo",
@@ -61691,6 +61790,57 @@
           }
         }
       },
+      "PortalBonificacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa",
+          "servicio_id",
+          "periodo",
+          "concepto",
+          "origen",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa que bonificó el periodo"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día del periodo bonificado"
+          },
+          "concepto": {
+            "type": "string",
+            "description": "Qué se bonificó, sin el motivo interno"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "mes_gratis",
+              "descuento_100",
+              "cargo_sin_costo",
+              "canje"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PortalComprobante": {
         "type": "object",
         "required": [
@@ -62064,7 +62214,8 @@
           "empresa",
           "saldo",
           "saldo_a_favor",
-          "facturas_pendientes"
+          "facturas_pendientes",
+          "bonificaciones"
         ],
         "properties": {
           "empresa": {
@@ -62084,6 +62235,13 @@
               "$ref": "#/components/schemas/PortalFacturaPendiente"
             },
             "description": "Emitidas, parciales y vencidas de esta empresa, la más antigua primero"
+          },
+          "bonificaciones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortalBonificacion"
+            },
+            "description": "Periodos bonificados recientes (este mes y los dos anteriores), el más reciente primero"
           }
         }
       },
