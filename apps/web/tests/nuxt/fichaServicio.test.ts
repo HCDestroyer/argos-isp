@@ -1,7 +1,8 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import ServicioCredenciales from '~/components/ServicioCredenciales.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('ficha de servicio · composables', () => {
     beforeEach(() => {
@@ -114,7 +115,7 @@ describe('ficha de servicio · composables', () => {
         expect(antes.ok && antes.data.data).toHaveLength(0)
 
         await wrapper.findAll('button').find(b => b.text().includes('Mostrar'))?.trigger('click')
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Ocultar'))
+        await esperar(() => expect(wrapper.text()).toContain('Ocultar'))
         expect(wrapper.text()).not.toContain('••••')
     })
 

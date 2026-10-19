@@ -1,5 +1,5 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
@@ -7,6 +7,7 @@ import PlanFormulario from '~/components/PlanFormulario.vue'
 import RouterVelocidad from '~/components/RouterVelocidad.vue'
 import type { VelocidadPlan } from '~~/fixtures/planes/velocidad'
 import { formatoKbps, garantizadoKbps, rateLimitServicio, vistaPreviaVelocidad } from '~~/fixtures/planes/velocidad'
+import { esperar } from '../ayudas/esperar'
 
 function plan(extra: Partial<VelocidadPlan> = {}): VelocidadPlan {
     return { bajada_kbps: 20000, subida_kbps: 5000, bajada_limitada_kbps: 2048, subida_limitada_kbps: 1024, ...VELOCIDAD_POR_DEFECTO, ...extra }
@@ -90,7 +91,7 @@ describe('semana 2 · formularios de velocidad', () => {
         const primero = planes.ok ? planes.data.data[0] : undefined
         expect(primero).toBeDefined()
         const wrapper = await mountSuspended(PlanFormulario, { props: { plan: primero, open: true } })
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="rate-limit-activo"]')?.textContent?.trim()).toBe('5M/10M 0/0 0/0 0/0 8 5M/10M'), { timeout: 3000 })
+        await esperar(() => expect(document.body.querySelector('[data-prueba="rate-limit-activo"]')?.textContent?.trim()).toBe('5M/10M 0/0 0/0 0/0 8 5M/10M'), { timeout: 3000 })
         expect(document.body.querySelector('[data-prueba="rate-limit-limitado"]')?.textContent?.trim()).toBe('512k/1M 0/0 0/0 0/0 8 512k/1M')
         expect(document.body.querySelector('[data-prueba="vista-padre"]')?.textContent).toContain('max-limit 100M/200M')
         wrapper.unmount()
@@ -104,14 +105,14 @@ describe('semana 2 · formularios de velocidad', () => {
             return
         }
         const invalido = await mountSuspended(PlanFormulario, { props: { plan: { ...primero, reuso: 4, garantizado_pct: 50 }, open: true } })
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="vista-rate-limit-errores"]')?.textContent).toContain('no puede pasar de 25 %'), { timeout: 3000 })
+        await esperar(() => expect(document.body.querySelector('[data-prueba="vista-rate-limit-errores"]')?.textContent).toContain('no puede pasar de 25 %'), { timeout: 3000 })
         expect(document.body.querySelector('[data-prueba="rate-limit-activo"]')).toBeNull()
         invalido.unmount()
         document.body.innerHTML = ''
 
         simularFalla('POST /api/v1/planes/vista-previa', 501)
         const caida = await mountSuspended(PlanFormulario, { props: { plan: primero, open: true } })
-        await vi.waitFor(() => expect(document.body.textContent).toContain('Reintentar'), { timeout: 3000 })
+        await esperar(() => expect(document.body.textContent).toContain('Reintentar'), { timeout: 3000 })
         expect(document.body.querySelector('[data-prueba="rate-limit-activo"]')).toBeNull()
         caida.unmount()
     })
@@ -136,14 +137,14 @@ describe('semana 2 · formularios de velocidad', () => {
             return
         }
         const admin = await mountSuspended(RouterVelocidad, { props: { router, open: true } })
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="control-actual"]')?.textContent).toContain('Colas simples'))
+        await esperar(() => expect(document.body.querySelector('[data-prueba="control-actual"]')?.textContent).toContain('Colas simples'))
         expect(document.body.querySelector('[data-prueba="abrir-cambio-control"]')).not.toBeNull()
         admin.unmount()
         document.body.innerHTML = ''
 
         useUsuarioActual().value = { ...meCajero, permisos: [...meCajero.permisos, 'routers.ver', 'routers.editar'] }
         const tecnico = await mountSuspended(RouterVelocidad, { props: { router, open: true } })
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="control-actual"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="control-actual"]')).not.toBeNull())
         expect(document.body.querySelector('[data-prueba="abrir-cambio-control"]')).toBeNull()
         expect(document.body.textContent).toContain('Solo un administrador cambia el modo de colas.')
         tecnico.unmount()

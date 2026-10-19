@@ -1,6 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import { aplicarBloqueoPorEstado } from '../adicionales/rutas'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, problema, registrarAccion, usuariosPorToken } from '../comun'
 import { evaluarPromesa } from './simulador'
@@ -33,6 +34,9 @@ function activarPorPromesa(servicioId: number): void {
         promesa_activa: true,
         version: servicio.version + 1,
         updated_at: ahora(),
+    }
+    if (reactivar) {
+        aplicarBloqueoPorEstado(servicio.id, servicio.estado, 'activo', 'promesa de pago')
     }
 }
 

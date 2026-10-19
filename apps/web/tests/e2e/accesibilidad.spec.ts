@@ -42,6 +42,9 @@ const PANTALLAS = [
     ['lealtad', '/lealtad'],
     ['puntos del cliente', '/clientes/2?tab=puntos'],
     ['reporte de lealtad', '/reportes/lealtad'],
+    // Anuncios del portal.
+    ['anuncios', '/anuncios'],
+    ['ficha de anuncio', '/anuncios/1'],
     // Servicios adicionales y tipo de plan.
     ['adicionales', '/adicionales'],
     ['motivos de cortesía', '/adicionales/motivos'],

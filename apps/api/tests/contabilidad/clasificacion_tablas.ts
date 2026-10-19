@@ -91,6 +91,9 @@ export const INMUTABLES: Record<string, string> = {
     'lealtad.sorteos_requisitos': 'marca del checklist legal; vale la última por clave (lealtad §8)',
     'lealtad.sorteos_archivos':
         'evidencias, imágenes de premios, acta y constancias con su SHA-256; el archivo vive en disco (lealtad §15.4)',
+    // servicios adicionales (`contratos/adicionales.md`, A1)
+    'core.servicios_adicionales_bloqueos':
+        'historial de bloqueos de adicionales por la suspensión del servicio',
 }
 
 /** Solo cambian una vez: al cerrarse. Un trigger rechaza UPDATE/DELETE de la fila ya cerrada. */

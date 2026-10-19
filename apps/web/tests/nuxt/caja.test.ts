@@ -1,12 +1,13 @@
 import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import { bd } from '~~/fixtures/bd'
 import { esperadoDelTurno } from '~~/fixtures/cajas/rutas'
 import PaginaCaja from '~/pages/caja/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('tarea 12 · caja', () => {
     beforeEach(() => {
@@ -79,7 +80,7 @@ describe('tarea 12 · caja', () => {
         const oficial = turno ? esperadoDelTurno(turno) : new Decimal(0)
 
         const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="turno-esperado"]').text()).toContain(formatearQuetzales(oficial))
         expect(vista.get('[data-prueba="turno-egresos"]').text()).toContain('− Q 120.00')
         vista.unmount()
@@ -92,8 +93,8 @@ describe('tarea 12 · caja', () => {
     it('sin egresos.ver (cajero) no hay esperado provisional y lo dice', async () => {
         useUsuarioActual().value = meCajero
         const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(true))
-        await vi.waitFor(() => expect(vista.find('[data-prueba="sin-esperado"]').text()).toContain('egresos.ver'))
+        await esperar(() => expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="sin-esperado"]').text()).toContain('egresos.ver'))
         expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(false)
         expect(vista.text()).toContain('Efectivo cobrado')
         vista.unmount()
@@ -113,7 +114,7 @@ describe('tarea 12 · caja', () => {
     it('con GET /cajas en 501 la página muestra el error y ningún monto', async () => {
         simularFalla('GET /api/v1/cajas', 501)
         const vista = await mountSuspended(PaginaCaja)
-        await vi.waitFor(() => expect(vista.text()).toContain('No implementado'))
+        await esperar(() => expect(vista.text()).toContain('No implementado'))
         expect(vista.text()).toContain('Reintentar')
         expect(vista.text()).not.toContain('Q ')
         expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(false)

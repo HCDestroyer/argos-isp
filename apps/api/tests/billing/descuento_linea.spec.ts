@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { contextoPrueba, soloEmpresaPrincipal } from '#tests/ayudas'
 import {
     errorDe,
@@ -16,7 +16,6 @@ import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import { verDte, dteParaEnviar } from '#fiscal/fel/dte'
 import { xmlDte } from '#fiscal/fel/xml_gt'
-import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 
 /**
  * Línea `descuento` de las facturas (contrato de localización fiscal §3.5; lealtad §5): una línea
@@ -88,14 +87,8 @@ test.group('Facturas · línea de descuento', (group) => {
         assert.equal(iva, 1607)
         assert.equal(filas[0]!.descuento, '50.00')
 
-        const gratis = await facturaCon(e.B, [{ concepto: 'Mes gratis', monto: '999.00' }])
-        const factura = await db.from('billing.facturas').where('id', gratis.facturaId).firstOrFail()
-        assert.include(factura, { total: '0.00', iva: '0.00' })
-        assert.deepEqual(await lineas('factura', gratis.facturaId), [
-            ['5.1.01', '178.57', '0.00'],
-            ['4.1.01', '0.00', '178.57'],
-        ])
         await afirmarLibro(assert, [e.B, e.C])
+        // un descuento que se come la línea entera ya no es una factura de Q0 (prueba de la bonificación abajo)
     })
 
     test('notas de crédito sobre una factura con descuento acreditan el neto (por monto y por línea)', async ({
@@ -205,7 +198,7 @@ test.group('Facturas · línea de descuento', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H21: un mes gratis en por_certificar nace pagada, sin CxC ni DTE; certificarla a mano responde 409', async ({
+    test('decisión del PM: un descuento del 100 % en por_certificar no genera factura sino una bonificación; el periodo queda ocupado', async ({
         assert,
     }) => {
         const e = await empresasFel('obligatoria')
@@ -222,18 +215,41 @@ test.group('Facturas · línea de descuento', (group) => {
             },
             e.ctx,
         )
-        const factura = await db.from('billing.facturas').where('id', r.factura_id!).firstOrFail()
-        assert.include(factura, { estado: 'pagada', total: '0.00', aviso_cobro: false, tipo_dte: null })
-        assert.deepEqual(await lineas('factura', r.factura_id!), [
+        assert.include(r, { factura_id: null, creada: true, motivo: 'bonificacion' })
+        const b = await db.from('billing.bonificaciones').where('id', r.bonificacion_id!).firstOrFail()
+        assert.include(b, {
+            clave_unica: `${s.servicioId}-${NOVIEMBRE.periodo}`,
+            origen: 'descuento_100',
+            bruto: '200.00',
+            base: '178.57',
+            motivo_texto: 'Mes gratis',
+        })
+        assert.deepEqual(await lineas('bonificacion', b.id), [
             ['5.1.01', '178.57', '0.00'],
             ['4.1.01', '0.00', '178.57'],
         ])
-        await cola(e)
-        assert.lengthOf(await dtesDe('factura', r.factura_id!), 0)
-        const manual = await errorDe(
-            new SolicitarCertificacion().execute({ factura_id: r.factura_id! }, e.ctx),
+        const facturas = await db
+            .from('billing.facturas')
+            .where('servicio_id', s.servicioId)
+            .count('* as n')
+            .firstOrFail()
+        assert.equal(Number(facturas.n), 0)
+        // el periodo queda ocupado: emitir de nuevo no crea nada
+        const otra = await new EmitirFactura().execute(
+            { servicio_id: s.servicioId, periodo: NOVIEMBRE },
+            e.ctx,
         )
-        assert.equal(manual.codigo, 'factura_en_cero')
-        await afirmarLibro(assert, [e.B, e.C])
+        assert.include(otra, { factura_id: null, bonificacion_id: b.id, creada: false, motivo: 'ya_existe' })
+        await cola(e)
+        const violaciones = await verificarLibro([e.B, e.C])
+        // el inv. 9 del auditor aún no conoce el origen bonificacion (H-bonificacion)
+        assert.deepEqual(
+            violaciones.filter(
+                (v) =>
+                    !v.invariante.startsWith('9.origen_de_asiento_desconocido') &&
+                    !v.invariante.startsWith('9.descuento_del_asiento_distinto'),
+            ),
+            [],
+        )
     })
 })

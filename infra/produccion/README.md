@@ -13,7 +13,7 @@ ArgosIsp como producto instalable (PLAN, "Distribución e instalación"): imáge
 | `systemd/` | Timer de parches automáticos (apagado por defecto) |
 | `empaquetar.sh` | Arma `argosisp-<v>.tar.gz` (reproducible) con todo lo anterior + `mods-enabled` y `sites-enabled` de `services/aaa/freeradius` |
 
-Workflows: `.github/workflows/release.yml` (release-please: versión, `CHANGELOG.md`, Release), `.github/workflows/imagenes.yml` (imágenes amd64/arm64, `estable`, paquete en la Release) y el job `distribucion` de `ci.yml` (`infra/ci/probar-distribucion.sh`: instalar → actualizar → reversión automática → revertir, sin publicar).
+Workflows: `.github/workflows/release.yml` (release-please: versión, `CHANGELOG.md`, Release), `.github/workflows/imagenes.yml` (imágenes amd64/arm64, `estable`, paquete en la Release) y el job `distribucion` de `ci.yml` (`infra/ci/probar-distribucion.sh`: instalar → actualizar → reversión automática → revertir, sin publicar). Con lo ya publicado: workflow `E2E final` (`.github/workflows/e2e-final.yml`, a mano) con `infra/ci/e2e-final.sh <versión> [<siguiente>]`: instala la versión de la Release, carga la demo, humo por la API y el portal, actualiza y revierte con los datos comprobados.
 
 Versión instalada en la API: `GET /api/v1/version` (`apps/api/app/monitoreo/version.ts`): `ARGOSISP_VERSION`, `ARGOSISP_COMMIT` y `ARGOSISP_COMPILADA` de la imagen y la sección de esa versión en el `CHANGELOG.md` que la imagen trae.
 

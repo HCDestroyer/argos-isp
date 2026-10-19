@@ -18,6 +18,7 @@ import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
 import { ESTADOS_CANJE } from '#lealtad/canjes'
 import { ORIGENES_MOVIMIENTO, TIPOS_MOVIMIENTO } from '#lealtad/puntos'
 import { ESTADOS_SORTEO } from '#lealtad/sorteos'
+import { TIPOS_PLAN } from '#network/tipos_plan'
 
 /**
  * Schemas del portal del cliente (A5). Desde la IP solo se muestra información mínima:
@@ -185,12 +186,43 @@ export const PortalVinculoTelegram = definirEsquema(
     }),
 )
 
+/**
+ * Servicio adicional activo de un servicio (contrato `adicionales.md`), como lo ve el cliente:
+ * nombre, identificador (usuario o correo de la cuenta) y modalidad. Nunca la credencial: ni
+ * siquiera si tiene una.
+ */
+export const PortalAdicional = definirEsquema(
+    'PortalAdicional',
+    objeto({
+        id,
+        nombre: texto,
+        identificador: { ...nulable(texto), description: 'Usuario de IPTV, correo de la cuenta…' },
+        modalidad: {
+            ...enumerado(['incluido', 'cortesia', 'cobrado']),
+            description: '`incluido` en el plan, de `cortesia` (sin cobro) o `cobrado` aparte (`precio`)',
+        },
+        precio: { ...nulable(Dinero), description: 'Precio mensual; solo con `cobrado`' },
+        bloqueado: {
+            ...booleano,
+            description: 'Bloqueado por la suspensión del servicio; vuelve solo al reactivarse',
+        },
+    }),
+)
+
 export const PortalServicio = definirEsquema(
     'PortalServicio',
     objeto({
         id,
         estado: EstadoServicio,
         plan: nulable(texto),
+        plan_tipo: {
+            ...nulable(enumerado([...TIPOS_PLAN])),
+            description: 'Tipo del plan: residencial, empresarial o dedicado (null sin plan)',
+        },
+        adicionales: {
+            ...lista(PortalAdicional),
+            description: 'Servicios adicionales activos (streaming, IPTV…), sin la credencial',
+        },
         direccion: nulable(texto),
         promesa_activa: booleano,
         monto_adeudado: Dinero,
