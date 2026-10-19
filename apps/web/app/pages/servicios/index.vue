@@ -36,6 +36,9 @@ const clienteId = ref(idQuery(route.query.cliente))
 const zonaId = ref(textoQuery(route.query.zona) || TODOS)
 const conDeuda = ref(['1', 'true'].includes(textoQuery(route.query.deuda)))
 const tipo = ref<TipoConexion | typeof TODOS>(esTipoConexion(route.query.tipo) ? route.query.tipo : TODOS)
+/** Tipo de plan (`?tipo=` de la API); en la URL del panel es `tipo_plan` porque `tipo` ya es la conexión. */
+const tipoPlan = ref<TipoPlan | typeof TODOS>(esTipoPlan(route.query.tipo_plan) ? route.query.tipo_plan : TODOS)
+const itemsTipoPlan: SelectItem[] = [{ label: 'Todos los tipos de plan', value: TODOS }, ...ITEMS_TIPO_PLAN]
 
 const itemsTipo = [
     { label: 'Todos los tipos', value: TODOS },
@@ -95,6 +98,9 @@ function filtros(): FiltrosServicios {
     if (tipo.value !== TODOS) {
         resultado.tipo_conexion = tipo.value
     }
+    if (tipoPlan.value !== TODOS) {
+        resultado.tipo = tipoPlan.value
+    }
     // `false` en la API es "sin deuda"; apagado no se manda.
     if (conDeuda.value) {
         resultado.con_deuda_vencida = true
@@ -125,6 +131,7 @@ const hayFiltros = computed(() => busqueda.value.trim() !== ''
     || clienteId.value !== 0
     || zonaId.value !== TODOS
     || tipo.value !== TODOS
+    || tipoPlan.value !== TODOS
     || conDeuda.value)
 
 /** Accesos rápidos: "Todos", "Cortados" (suspendido), "Limitados" y "Con deuda" vencida. */
@@ -175,6 +182,9 @@ async function aplicarFiltros() {
     if (tipo.value !== TODOS) {
         query.tipo = tipo.value
     }
+    if (tipoPlan.value !== TODOS) {
+        query.tipo_plan = tipoPlan.value
+    }
     if (conDeuda.value) {
         query.deuda = '1'
     }
@@ -191,6 +201,7 @@ function limpiarFiltros() {
     clienteElegido.value = null
     zonaId.value = TODOS
     tipo.value = TODOS
+    tipoPlan.value = TODOS
     conDeuda.value = false
 }
 
@@ -199,7 +210,7 @@ watch(busqueda, () => {
     clearTimeout(temporizador)
     temporizador = setTimeout(aplicarFiltros, 300)
 })
-watch([estado, routerId, planId, clienteId, zonaId, tipo, conDeuda], aplicarFiltros)
+watch([estado, routerId, planId, clienteId, zonaId, tipo, tipoPlan, conDeuda], aplicarFiltros)
 onBeforeUnmount(() => clearTimeout(temporizador))
 
 onMounted(async () => {
@@ -338,6 +349,14 @@ onMounted(async () => {
                     class="w-full sm:w-48"
                     data-prueba="filtro-tipo"
                 />
+                <USelect
+                    v-model="tipoPlan"
+                    :items="itemsTipoPlan"
+                    icon="i-lucide-tag"
+                    aria-label="Filtrar por tipo de plan"
+                    class="w-full sm:w-48"
+                    data-prueba="filtro-tipo-plan"
+                />
                 <USwitch
                     v-model="conDeuda"
                     label="Con deuda vencida"
@@ -402,6 +421,11 @@ onMounted(async () => {
                                 <template v-if="!esPppoe(row.original)"> · {{ TIPOS_CONEXION[tipoConexionDe(row.original)].corta }}</template>
                                 <template v-if="row.original.costo_override"> · {{ formatearQuetzales(row.original.costo_override) }} precio especial</template>
                             </span>
+                            <TipoPlanBadge
+                                :tipo="row.original.plan_tipo"
+                                size="sm"
+                                class="mt-1 self-start"
+                            />
                             <span class="truncate text-xs text-muted sm:hidden">{{ nombreCliente(row.original) }}</span>
                             <span
                                 v-if="row.original.ipv4"

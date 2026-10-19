@@ -7,9 +7,13 @@ import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
+import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
+import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
 import type { ImagenAnuncioFixture } from './anuncios/datos'
 import { anuncios, imagenesAnuncios, metricasAnuncios } from './anuncios/datos'
+import type { PlanAdicionalFixture } from './adicionales/datos'
+import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -118,12 +122,36 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /* Fase 4 · cobros y bancos (A3, §10.3 y §10.9). */
+    proveedoresCobro: Schema<'ProveedorCobro'>[]
+    liquidaciones: Schema<'LiquidacionCobro'>[]
+    /** Contracargos ya descontados en una liquidación (id de pago). */
+    contracargosLiquidados: number[]
+    depositos: Schema<'Deposito'>[]
+    traslados: Schema<'Traslado'>[]
+    /** Movimientos del libro en cuentas bancarias que se pueden conciliar. */
+    movimientosBanco: MovimientoBancoFixture[]
+    extractos: Schema<'Extracto'>[]
+    lineasExtracto: LineaGuardada[]
+    conciliaciones: Schema<'Conciliacion'>[]
+    reglasConciliacion: Schema<'ReglaConciliacion'>[]
+    provisiones: Schema<'ProvisionCartera'>[]
+    castigos: Schema<'CastigoCartera'>[]
+    /** Pago y factura con la diferencia ya cerrada (`billing.diferencias_cobro`). */
+    diferenciasCerradas: { pago_id: number, factura_id: number }[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
     programasLealtad: Schema<'ProgramaLealtad'>[]
     /* Anuncios del portal (A5, `contratos/anuncios.md`). */
     anuncios: Schema<'Anuncio'>[]
     imagenesAnuncios: Record<number, ImagenAnuncioFixture>
     metricasAnuncios: Record<number, Schema<'MetricasAnuncio'>>
+    /* Servicios adicionales (A1, `contratos/adicionales.md`). */
+    adicionales: Schema<'Adicional'>[]
+    motivosCortesia: Schema<'MotivoCortesia'>[]
+    adicionalesServicio: Schema<'AdicionalServicio'>[]
+    /** Credencial en claro por asignación (la API la guarda cifrada y nunca la lista). */
+    credencialesAdicionales: Record<number, string>
+    planesAdicionales: PlanAdicionalFixture[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
     movimientosPuntos: Schema<'MovimientoPuntos'>[]
     lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
@@ -182,6 +210,19 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        proveedoresCobro,
+        liquidaciones,
+        contracargosLiquidados: [],
+        depositos,
+        traslados,
+        movimientosBanco,
+        extractos,
+        lineasExtracto,
+        conciliaciones,
+        reglasConciliacion,
+        provisiones,
+        castigos: [],
+        diferenciasCerradas: [],
         fiscal: fiscalInicial(),
         fel: felInicial(),
         horus: horusInicial(),
@@ -189,6 +230,11 @@ function inicial(): BaseFixtures {
         anuncios,
         imagenesAnuncios,
         metricasAnuncios,
+        adicionales,
+        motivosCortesia,
+        adicionalesServicio,
+        credencialesAdicionales,
+        planesAdicionales,
         reglasLealtad,
         movimientosPuntos,
         lotesPuntos,
@@ -197,6 +243,10 @@ function inicial(): BaseFixtures {
     })
     sembrarNotasCredito(datos)
     sembrarFel(datos)
+    // Fase 4: pagos con proveedor de cobro (anticipos), sus asientos y las cuentas nuevas.
+    datos.pagos.push(...structuredClone(pagosProveedor))
+    datos.asientos.push(...asientosFase4())
+    datos.cuentas.push(...structuredClone(cuentasFase4))
     return datos
 }
 

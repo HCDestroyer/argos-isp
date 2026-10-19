@@ -32,6 +32,9 @@ await setup({
     server: false,
     build: true,
     env: CON_URL_PUBLICA,
+    // `setup()` registra su propio `beforeAll` con este límite (120 s por defecto), que pisa el
+    // `hookTimeout` de vitest.servidor.config.ts: con la máquina cargada la compilación pasó de 120 s.
+    setupTimeout: 240_000,
 })
 
 afterAll(() => api.cerrar())
@@ -198,6 +201,81 @@ describe('seguridad (semana 3, tarea 3)', () => {
         const propio = await pedir('/api/v1/portal/salir', { metodo: 'POST', host: HOST, headers: { 'origin': URL_PUBLICA, 'sec-fetch-site': 'same-origin' } })
         expect(propio.status).toBe(200)
         expect(api.rutas).toEqual(['/api/v1/portal/salir'])
+    })
+})
+
+describe('nodo portal remoto (contrato nodo-portal.md)', () => {
+    const HOST = 'portal.argosisp.example'
+    const TOKEN = `argn_${'x'.repeat(43)}`
+    const FALSAS = {
+        'x-argos-nodo-token': 'argn_robado',
+        'x-argos-cliente-ip': '198.51.100.66',
+        'x-argos-cliente-proto': 'https',
+    }
+
+    it('sin token: lo que el navegador mande como cabeceras del nodo nunca llega a la API', async () => {
+        await servidorCon({ NUXT_API_BASE_INTERNAL: api.url, NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA, NUXT_PORTAL_HOSTS: '' })
+        api.cabeceras.length = 0
+        const respuesta = await pedir('/api/v1/portal/quien-soy', { host: HOST, headers: FALSAS })
+        expect(respuesta.status).toBe(200)
+        const recibidas = api.cabeceras.at(-1)!
+        expect(recibidas['x-argos-nodo-token']).toBeUndefined()
+        expect(recibidas['x-argos-cliente-ip']).toBeUndefined()
+        expect(recibidas['x-argos-cliente-proto']).toBeUndefined()
+        // como siempre: la IP del socket al final de X-Forwarded-For
+        expect(recibidas['x-forwarded-for']).toMatch(/(127\.0\.0\.1|::1)$/)
+    })
+
+    it('con token: token del nodo e IP del cliente resuelta por el proxy local; sin X-Forwarded-For', async () => {
+        await servidorCon({
+            NUXT_API_BASE_INTERNAL: api.url,
+            NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA,
+            NUXT_PORTAL_HOSTS: '',
+            NUXT_NODO_PORTAL_TOKEN: TOKEN,
+            NUXT_PORTAL_PROXIES_CONFIABLES: '127.0.0.1/32, ::1',
+        })
+        api.cabeceras.length = 0
+        const respuesta = await pedir('/api/v1/portal/quien-soy', {
+            host: HOST,
+            headers: { ...FALSAS, 'x-forwarded-for': '203.0.113.7, 198.51.100.9', 'x-forwarded-proto': 'https' },
+        })
+        expect(respuesta.status).toBe(200)
+        const recibidas = api.cabeceras.at(-1)!
+        expect(recibidas['x-argos-nodo-token']).toBe(TOKEN)
+        // el proxy local (127.0.0.1) puso la última IP de la cadena: esa es la del cliente
+        expect(recibidas['x-argos-cliente-ip']).toBe('198.51.100.9')
+        expect(recibidas['x-argos-cliente-proto']).toBe('https')
+        expect(recibidas['x-forwarded-for']).toBeUndefined()
+        expect(recibidas['x-canal']).toBe('portal')
+    })
+
+    it('con token y sin proxy local de confianza: la IP del socket, no la cadena del navegador', async () => {
+        await servidorCon({
+            NUXT_API_BASE_INTERNAL: api.url,
+            NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA,
+            NUXT_PORTAL_HOSTS: '',
+            NUXT_NODO_PORTAL_TOKEN: TOKEN,
+            NUXT_PORTAL_PROXIES_CONFIABLES: '',
+        })
+        api.cabeceras.length = 0
+        await pedir('/api/v1/portal/quien-soy', { host: HOST, headers: { 'x-forwarded-for': '198.51.100.66', 'x-forwarded-proto': 'https' } })
+        const recibidas = api.cabeceras.at(-1)!
+        expect(recibidas['x-argos-cliente-ip']).toMatch(/^(127\.0\.0\.1|::1)$/)
+        expect(recibidas['x-argos-cliente-proto']).toBe('http')
+    })
+
+    it('con token, una API por http:// a otro servidor no recibe nada: 502', async () => {
+        await servidorCon({
+            NUXT_API_BASE_INTERNAL: 'http://192.0.2.80:3333',
+            NUXT_PORTAL_URL_PUBLICA: URL_PUBLICA,
+            NUXT_PORTAL_HOSTS: '',
+            NUXT_NODO_PORTAL_TOKEN: TOKEN,
+        })
+        const respuesta = await pedir('/api/v1/portal/quien-soy', { host: HOST })
+        expect(respuesta.status).toBe(502)
+        expect(respuesta.headers['content-type']).toContain('application/problem+json')
+        expect(respuesta.cuerpo).not.toContain('192.0.2.80')
+        expect(respuesta.cuerpo).not.toContain(TOKEN)
     })
 })
 

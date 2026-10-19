@@ -31,6 +31,13 @@ const PANTALLAS = [
     ['balance por empresa', '/libro?tab=balance'],
     ['estado de resultados', '/libro?tab=resultados'],
     ['bitácora con empresas', '/bitacora'],
+    // Fase 4 (cobros y bancos).
+    ['cobros por liquidar', '/cobros/por-liquidar'],
+    ['fondos en tránsito', '/bancos/transito'],
+    ['extracto y conciliación', '/bancos/extractos/1'],
+    ['reporte de conciliación', '/bancos/conciliacion'],
+    ['cartera', '/cartera'],
+    ['pago con proveedor de cobro', '/pagos/7003'],
     // Lealtad, fase 1.
     ['lealtad', '/lealtad'],
     ['puntos del cliente', '/clientes/2?tab=puntos'],
@@ -38,6 +45,10 @@ const PANTALLAS = [
     // Anuncios del portal.
     ['anuncios', '/anuncios'],
     ['ficha de anuncio', '/anuncios/1'],
+    // Servicios adicionales y tipo de plan.
+    ['adicionales', '/adicionales'],
+    ['motivos de cortesía', '/adicionales/motivos'],
+    ['ficha de plan', '/planes/3'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']

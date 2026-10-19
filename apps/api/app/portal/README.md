@@ -351,6 +351,23 @@ Tablas `core.anuncios` y `core.anuncios_eventos`. Lecturas en `anuncios.ts`, ima
 `anuncios_imagenes.ts`. Pruebas: `tests/portal/anuncios.spec.ts`. No emite eventos: nadie consume
 un cambio de anuncio y el portal lo lee en la siguiente consulta.
 
+### Nodo portal remoto (contrato `contratos/nodo-portal.md`)
+
+El portal puede correr en otro servidor sin base de datos. Llama a `/api/v1/portal/**` con
+`X-Argos-Nodo-Token: argn_…` y la IP del cliente en `X-Argos-Cliente-Ip` (opcional:
+`X-Argos-Cliente-Proto`). Solo con un token válido la API cree esa IP (`nodo_portal.ts`, que llaman
+`ipOrigenDelCliente` en todas las rutas `/portal/*` y `opcionesCookie`). Sin token se ignora siempre;
+con un token inventado o revocado responde 401 `nodo_portal_invalido`. `GET /version` acepta el token
+(`nodoPortal: true`, `sesion_o_nodo_middleware.ts`).
+
+| Endpoint | Acción | Permiso |
+| --- | --- | --- |
+| `POST /api/v1/nodos-portal`, `POST /api/v1/internal/nodos-portal` | `actions/crear_nodo_portal.ts` (`nodos_portal.crear`) | `nodos_portal.administrar` / token interno |
+| `GET /api/v1/nodos-portal`, `GET /api/v1/internal/nodos-portal` | `nodos_portal.ts` | ídem |
+| `POST /api/v1/nodos-portal/:id/revocar`, `POST /api/v1/internal/nodos-portal/:nombre/revocar` | `actions/revocar_nodo_portal.ts` (`nodos_portal.revocar`) | ídem |
+
+Tabla `core.nodos_portal` (solo el sha256 del token; `nombre` único). Pruebas: `tests/portal/nodo_portal.spec.ts`.
+
 ## Eventos
 
 No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos

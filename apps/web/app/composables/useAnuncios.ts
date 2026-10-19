@@ -4,7 +4,7 @@ export type Anuncio = Schema<'Anuncio'>
 export type MetricasAnuncio = Schema<'MetricasAnuncio'>
 export type FiltrosAnuncios = Omit<NonNullable<paths['/api/v1/anuncios']['get']['parameters']['query']>, 'cursor'>
 export type DatosAnuncio = paths['/api/v1/anuncios']['post']['requestBody']['content']['application/json']
-type CambiosAnuncioTipados = paths['/api/v1/anuncios/{id}']['put']['requestBody']['content']['application/json']
+export type CambiosAnuncio = paths['/api/v1/anuncios/{id}']['put']['requestBody']['content']['application/json']
 
 /**
  * Anuncios del portal (A5, `contratos/anuncios.md` §2): promociones de la empresa activa en el
@@ -32,24 +32,11 @@ export function useAnuncios() {
     }
 
     /**
-     * `PUT /anuncios/:id` con `version`: solo los campos enviados. `inicio` y `fin` en `null` los
-     * borran (la API los acepta; el OpenAPI aún los tipa sin `null`), así que el JSON se arma con
-     * los cambios tal cual. Archivado: 422 `anuncio_archivado`.
+     * `PUT /anuncios/:id` con `version`: solo los campos enviados; `inicio` y `fin` en `null` los
+     * borran. Archivado: 422 `anuncio_archivado`.
      */
-    function editar(id: number, cambios: CambiosAnuncioConNulos): Promise<Resultado<Anuncio>> {
-        const { inicio, fin, ...resto } = cambios
-        const tipados: CambiosAnuncioTipados = { ...resto }
-        if (typeof inicio === 'string') {
-            tipados.inicio = inicio
-        }
-        if (typeof fin === 'string') {
-            tipados.fin = fin
-        }
-        return resolver(api.PUT('/api/v1/anuncios/{id}', {
-            params: { path: { id } },
-            body: tipados,
-            bodySerializer: () => JSON.stringify(cambios),
-        }))
+    function editar(id: number, cambios: CambiosAnuncio): Promise<Resultado<Anuncio>> {
+        return resolver(api.PUT('/api/v1/anuncios/{id}', { params: { path: { id } }, body: cambios }))
     }
 
     /**

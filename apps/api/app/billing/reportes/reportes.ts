@@ -494,7 +494,7 @@ export async function cierresCaja(
             'uc.nombre as cerrado_por',
             't.fondo_inicial',
             db.raw(
-                `(select coalesce(sum(p.monto), 0) from billing.pagos p where p.turno_id = t.id and p.estado <> 'anulado')::text as cobrado`,
+                `(select coalesce(sum(p.monto - p.retenido), 0) from billing.pagos p where p.turno_id = t.id and p.estado <> 'anulado')::text as cobrado`,
             ),
             db.raw(
                 `(select coalesce(sum(e.monto), 0) from ledger.egresos e where e.turno_id = t.id

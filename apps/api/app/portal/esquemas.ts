@@ -698,3 +698,58 @@ export const MetricasAnuncio = definirEsquema(
         por_dia: lista(objeto({ dia: fecha, vistas: entero, clics: entero })),
     }),
 )
+
+/** Nodo portal remoto (`contratos/nodo-portal.md`). Nunca expone el token ni su hash. */
+export const NodoPortal = definirEsquema(
+    'NodoPortal',
+    objeto({
+        id,
+        nombre: { ...texto, description: 'Identificador del nodo (`^[a-z0-9][a-z0-9-]{0,62}$`)' },
+        ultimo_uso: {
+            ...nulable(instante),
+            description: 'Última petición del nodo (se actualiza cada minuto)',
+        },
+        ultima_ip: { ...nulable(texto), description: 'IP desde la que llamó el nodo la última vez' },
+        revocado_en: nulable(instante),
+        creado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+export const NodoPortalCreado = definirEsquema(
+    'NodoPortalCreado',
+    objeto({
+        token: {
+            type: 'string',
+            pattern: '^argn_[A-Za-z0-9]{43}$',
+            description:
+                'Se muestra una sola vez; va en NODO_PORTAL_TOKEN del nodo (cabecera X-Argos-Nodo-Token)',
+        },
+        datos: NodoPortal,
+    }),
+)
+
+/** Vistas del CLI (`argosisp nodo-portal`, `/internal/nodos-portal`; contrato `nodo-portal.md` §4). */
+export const NodoPortalInterno = definirEsquema(
+    'NodoPortalInterno',
+    objeto({
+        nombre: texto,
+        creado_en: instante,
+        ultimo_uso_en: nulable(instante),
+        revocado_en: nulable(instante),
+    }),
+)
+
+export const NodoPortalInternoCreado = definirEsquema(
+    'NodoPortalInternoCreado',
+    objeto({
+        nombre: texto,
+        token: { type: 'string', pattern: '^argn_[A-Za-z0-9]{43}$', description: 'Se muestra una sola vez' },
+        creado_en: instante,
+    }),
+)
+
+export const NodoPortalInternoRevocado = definirEsquema(
+    'NodoPortalInternoRevocado',
+    objeto({ nombre: texto, revocado_en: instante }),
+)

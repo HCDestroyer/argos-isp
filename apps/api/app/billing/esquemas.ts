@@ -418,8 +418,29 @@ export const Pago = definirEsquema(
             cliente_id: id,
             cliente_nombre: { ...texto, description: 'Nombre del pagador' },
             metodo: enumerado([...METODOS_PAGO]),
-            monto: Dinero,
+            monto: {
+                ...Dinero,
+                description:
+                    'Lo que el pago aplica a la deuda (efectivo o depósito + constancias de retención)',
+            },
             comision: Dinero,
+            retenido: {
+                ...Dinero,
+                description:
+                    'Parte del monto cubierta con constancias de retención del cliente (fase 5): a caja o banco entró monto − comision − retenido',
+            },
+            constancias: {
+                ...lista(
+                    objeto({
+                        impuesto: enumerado(['iva', 'isr']),
+                        impuesto_codigo: texto,
+                        numero: texto,
+                        fecha,
+                        monto: Dinero,
+                    }),
+                ),
+                description: 'Constancias de retención recibidas con el pago (1.1.05 IVA, 1.1.06 ISR)',
+            },
             referencia: nulable(texto),
             caja_id: nulable(id),
             pasarela: nulable(texto),
@@ -471,6 +492,8 @@ export const Pago = definirEsquema(
             ...auditable,
         },
         [
+            'retenido',
+            'constancias',
             'proveedor_cobro_id',
             'proveedor_cobro_nombre',
             'liquidacion_id',

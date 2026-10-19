@@ -20,6 +20,8 @@ import { TIPOS_EXCEPCION } from '#core/esquemas'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
+import { MODALIDADES_ADICIONAL } from '#shared/eventos'
+import { TIPOS_PLAN } from '#network/tipos_plan'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -362,6 +364,10 @@ export const listarServiciosValidator = vine.compile(
             .boolean()
             .optional()
             .meta({ description: 'true: el servicio tiene alguna factura vencida; false: ninguna' }),
+        tipo: vine
+            .enum(TIPOS_PLAN)
+            .optional()
+            .meta({ description: 'Tipo del plan del servicio: residencial, empresarial o dedicado' }),
     }),
 )
 
@@ -784,5 +790,157 @@ export const revocarVinculacionesValidator = vine.compile(
     vine.object({
         usuario_id: idEntidad().optional().meta({ description: 'Solo las de este usuario; sin él, todas' }),
         conector: vine.enum(CONECTORES_SSO).optional(),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Servicios adicionales (`contratos/adicionales.md`)
+|--------------------------------------------------------------------------
+*/
+
+const codigoCatalogo = () =>
+    vine
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[A-Z0-9][A-Z0-9_-]{0,39}$/)
+        .meta({
+            description:
+                'Código único en la empresa: letras, dígitos, guion y guion bajo (se guarda en mayúsculas)',
+        })
+
+const empresaDelCatalogo = () =>
+    idEntidad().optional().meta({ description: 'Empresa (NIT) del catálogo; por defecto, la empresa activa' })
+
+export const listarAdicionalesValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        q: vine.string().trim().maxLength(100).optional().meta({ description: 'Busca en nombre y código' }),
+        activo: vine.boolean().optional(),
+        empresas: empresasConsulta(),
+    }),
+)
+
+export const crearAdicionalValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaDelCatalogo(),
+        codigo: codigoCatalogo(),
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+        descripcion: vine.string().trim().maxLength(500).nullable().optional(),
+        precio_sugerido: dinero()
+            .nullable()
+            .optional()
+            .meta({ description: 'Precio sugerido para asignarlo `cobrado` (solo una sugerencia)' }),
+    }),
+)
+
+export const editarAdicionalValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        codigo: codigoCatalogo().optional(),
+        nombre: vine.string().trim().minLength(2).maxLength(100).optional(),
+        descripcion: vine.string().trim().maxLength(500).nullable().optional(),
+        precio_sugerido: dinero().nullable().optional(),
+    }),
+)
+
+/** `POST /adicionales/:id/desactivar`, `POST /adicionales/motivos/:id/desactivar` */
+export const desactivarVersionadoValidator = vine.compile(vine.object({ version: versionEsperada() }))
+
+export const listarMotivosCortesiaValidator = vine.compile(
+    vine.object({ activo: vine.boolean().optional(), empresas: empresasConsulta() }),
+)
+
+export const crearMotivoCortesiaValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaDelCatalogo(),
+        codigo: codigoCatalogo(),
+        nombre: vine.string().trim().minLength(2).maxLength(100),
+    }),
+)
+
+export const listarAdicionalesServicioValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        estado: vine
+            .enum(['activo', 'baja'] as const)
+            .optional()
+            .meta({ description: 'Solo los activos o solo las bajas; sin él, todos' }),
+    }),
+)
+
+const identificadorAdicional = () =>
+    vine
+        .string()
+        .trim()
+        .minLength(1)
+        .maxLength(200)
+        .nullable()
+        .optional()
+        .meta({ description: 'Usuario de IPTV, correo de la cuenta de streaming…' })
+
+const credencialAdicional = () =>
+    vine
+        .string()
+        .minLength(1)
+        .maxLength(500)
+        .nullable()
+        .optional()
+        .meta({ description: 'Se guarda cifrada; nunca vuelve en las respuestas (ver `/credencial`)' })
+
+export const agregarAdicionalServicioValidator = vine.compile(
+    vine.object({
+        adicional_id: idEntidad().meta({ description: 'Adicional activo de la empresa del servicio' }),
+        modalidad: vine.enum(MODALIDADES_ADICIONAL).meta({
+            description: 'cortesia exige además el permiso servicios.adicional_cortesia y motivo_id',
+        }),
+        identificador: identificadorAdicional(),
+        credencial: credencialAdicional(),
+        precio: dinero()
+            .nullable()
+            .optional()
+            .meta({ description: 'Obligatorio y > 0 con cobrado; solo con cobrado' }),
+        motivo_id: idEntidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Motivo de cortesía (GET /adicionales/motivos); obligatorio con cortesia' }),
+        motivo_detalle: vine.string().trim().maxLength(500).nullable().optional(),
+    }),
+)
+
+export const editarAdicionalServicioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        modalidad: vine.enum(MODALIDADES_ADICIONAL).optional(),
+        identificador: identificadorAdicional(),
+        credencial: credencialAdicional(),
+        precio: dinero().nullable().optional(),
+        motivo_id: idEntidad().nullable().optional(),
+        motivo_detalle: vine.string().trim().maxLength(500).nullable().optional(),
+    }),
+)
+
+export const quitarAdicionalServicioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        motivo: vine.string().trim().minLength(3).maxLength(500).nullable().optional(),
+    }),
+)
+
+export const definirAdicionalesPlanValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1).meta({
+            description: 'version leída del plan (la lista es parte del plan); si cambió responde 409',
+        }),
+        adicionales: vine
+            .array(
+                vine.object({
+                    adicional_id: idEntidad(),
+                    cantidad: vine.number().withoutDecimals().range([1, 50]),
+                }),
+            )
+            .maxLength(100)
+            .meta({ description: 'Lista completa (reemplaza la anterior); [] la vacía' }),
     }),
 )

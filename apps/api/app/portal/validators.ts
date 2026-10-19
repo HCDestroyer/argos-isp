@@ -194,12 +194,14 @@ const AUDIENCIAS_ANUNCIO = ['todos', 'suspendidos', 'con_puntos', 'al_dia'] as c
 const LUGARES_ANUNCIO = ['portal_inicio', 'pagina_corte'] as const
 const ESTADOS_ANUNCIO = ['borrador', 'publicado', 'archivado'] as const
 
+// `type` con `null`: el `type` del `.meta()` reemplaza el que deduce el generador del OpenAPI y
+// sin él `inicio: null` / `fin: null` (que borran la vigencia) quedarían fuera de los tipos.
 const instanteOpcional = () =>
     vine
         .date({ formats: ['iso8601'] })
         .nullable()
         .optional()
-        .meta({ type: 'string', format: 'date-time' })
+        .meta({ type: ['string', 'null'], format: 'date-time' })
 
 const camposAnuncio = {
     texto: vine.string().trim().maxLength(500).optional().meta({
@@ -266,5 +268,18 @@ export const eventoAnuncioValidator = vine.compile(
         tipo: vine.enum(['vista', 'clic'] as const),
         visitante: vine.string().trim().uuid(),
         lugar: vine.enum(LUGARES_ANUNCIO),
+    }),
+)
+
+/** `POST /nodos-portal` (contrato `nodo-portal.md`). */
+export const crearNodoPortalValidator = vine.compile(
+    vine.object({
+        // Identificador del nodo (`^[a-z0-9][a-z0-9-]{0,62}$`, p. ej. `xela-1`), único. Sin `.meta()`:
+        // en VineJS 4.4 `meta()` sobre un campo obligatorio lo deja aceptar `null` (y el bodyparser
+        // convierte "" en null), así que la descripción va en el schema `NodoPortal`.
+        nombre: vine
+            .string()
+            .trim()
+            .regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
     }),
 )

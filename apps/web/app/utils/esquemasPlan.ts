@@ -29,6 +29,8 @@ function opcional(min: number, max: number, mensaje: string) {
  */
 export const esquemaPlan = z.object({
     nombre: z.string().trim().min(2, 'Al menos 2 caracteres').max(100, 'Máximo 100 caracteres'),
+    /** Tipo de plan (A1): solo cambia advertencias y reportes, nunca la velocidad. */
+    tipo: z.enum(['residencial', 'empresarial', 'dedicado']),
     precio: z.string()
         .trim()
         .regex(MONTO, 'Escribe un monto con hasta 2 decimales, sin comas (ej. 175.00)'),
@@ -84,6 +86,7 @@ export function velocidadDeFormulario(datos: Pick<EntradaPlan, CamposVelocidad>)
 export function entradaPlanVacia(): EntradaPlan {
     return {
         nombre: '',
+        tipo: 'residencial',
         precio: '',
         bajada_kbps: 20_000,
         subida_kbps: 10_000,
@@ -127,6 +130,7 @@ export function cuerpoVistaPrevia(datos: EntradaPlan, activos: number | null): D
 export function entradaDesdePlan(plan: Plan): EntradaPlan {
     return {
         nombre: plan.nombre,
+        tipo: plan.tipo ?? 'residencial',
         precio: plan.precio,
         bajada_kbps: plan.bajada_kbps,
         subida_kbps: plan.subida_kbps,
@@ -153,6 +157,7 @@ export function cuerpoPlan(datos: SalidaPlan): DatosPlan {
     const velocidad = velocidadDeFormulario(datos)
     return {
         nombre: datos.nombre,
+        tipo: datos.tipo,
         precio: new Decimal(datos.precio).toFixed(2),
         bajada_kbps: datos.bajada_kbps,
         subida_kbps: datos.subida_kbps,

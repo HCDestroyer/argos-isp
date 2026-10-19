@@ -8,6 +8,7 @@ import { programaConReglas } from '#tests/lealtad/ayudas_lealtad'
 import AjustarPuntos from '#lealtad/actions/ajustar_puntos'
 import { audienciaAplica, urlBotonValida } from '#portal/anuncios'
 import { prepararImagenAnuncio } from '#portal/anuncios_imagenes'
+import { construirOpenApi } from '#shared/openapi/documento'
 
 /**
  * Anuncios del portal (contrato `anuncios.md`) contra Postgres real: CRUD del panel con versión,
@@ -288,6 +289,85 @@ test.group('Anuncios: panel', (group) => {
             422,
         )
         assert.equal(r.body().type, 'urn:argosisp:problema:anuncio_vencido')
+    })
+
+    test('editar con inicio y fin en null borra la vigencia (y el OpenAPI lo declara)', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const a = await anuncio(client, token, {
+            inicio: '2030-01-01T00:00:00Z',
+            fin: '2030-02-01T00:00:00Z',
+        })
+        assert.isNotNull(a.inicio)
+        assert.isNotNull(a.fin)
+
+        const soloFin = await estado(
+            client.put(`/api/v1/anuncios/${a.id}`).bearerToken(token).json({ version: a.version, fin: null }),
+            200,
+        )
+        assert.isNotNull(soloFin.body().inicio)
+        assert.isNull(soloFin.body().fin)
+
+        const editado = await estado(
+            client
+                .put(`/api/v1/anuncios/${a.id}`)
+                .bearerToken(token)
+                .json({ version: soloFin.body().version, inicio: null }),
+            200,
+        )
+        assert.isNull(editado.body().inicio)
+        assert.isNull(editado.body().fin)
+        assert.equal(editado.body().version, a.version + 2)
+
+        const fila = await db.from('core.anuncios').where('id', a.id).select('inicio', 'fin').firstOrFail()
+        assert.isNull(fila.inicio)
+        assert.isNull(fila.fin)
+        const cambios = await db
+            .from('audit.cambios')
+            .where('entidad_tipo', 'anuncio')
+            .where('entidad_id', a.id)
+            .whereIn('campo', ['inicio', 'fin'])
+            .whereRaw(`despues = 'null'::jsonb`)
+            .whereRaw(`antes <> 'null'::jsonb`)
+            .orderBy('id')
+            .select('campo')
+        assert.deepEqual(
+            cambios.map((c) => c.campo),
+            ['fin', 'inicio'],
+        )
+
+        // sin vigencia, publicar ya no choca con `anuncio_vencido`: se ve desde ya
+        const publicado = await estado(
+            client
+                .post(`/api/v1/anuncios/${a.id}/publicar`)
+                .bearerToken(token)
+                .json({ version: editado.body().version }),
+            200,
+        )
+        assert.isTrue(publicado.body().vigente)
+        // archivado: las pruebas del portal cuentan los anuncios vigentes de la empresa
+        await estado(
+            client
+                .post(`/api/v1/anuncios/${a.id}/archivar`)
+                .bearerToken(token)
+                .json({ version: publicado.body().version }),
+            200,
+        )
+
+        // el panel manda `null` con los tipos generados: el OpenAPI lo admite en PUT y POST
+        const doc = JSON.parse(await construirOpenApi())
+        for (const [ruta, metodo] of [
+            ['/api/v1/anuncios/{id}', 'put'],
+            ['/api/v1/anuncios', 'post'],
+        ] as const) {
+            const props = doc.paths[ruta][metodo].requestBody.content['application/json'].schema.properties
+            for (const campo of ['inicio', 'fin']) {
+                assert.deepEqual(props[campo].type, ['string', 'null'], `${metodo} ${ruta} ${campo}`)
+                assert.equal(props[campo].format, 'date-time')
+            }
+        }
     })
 
     test('imagen: sube PNG con alt, rechaza sin alt o con otro tipo, y la sirve con ETag', async ({

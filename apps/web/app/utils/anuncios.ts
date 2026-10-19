@@ -11,12 +11,6 @@ export type EstadoAnuncio = AnuncioApi['estado']
 export type AudienciaAnuncio = AnuncioApi['audiencia']
 export type LugarAnuncio = AnuncioApi['lugares'][number]
 
-/**
- * Cambios de `PUT /anuncios/:id` como los acepta la API: `inicio` y `fin` también admiten `null`
- * para borrarlos (el validador los declara `nullable`; el OpenAPI aún no lo dice, pedido a A5).
- */
-export type CambiosAnuncioConNulos = Omit<CambiosAnuncioApi, 'inicio' | 'fin'> & { inicio?: string | null, fin?: string | null }
-
 /** Estados (`contratos/anuncios.md` §1): cambian solo por acción (publicar, archivar). */
 export const ESTADOS_ANUNCIO: Record<EstadoAnuncio, { etiqueta: string, color: NonNullable<BadgeProps['color']>, icono: string }> = {
     borrador: { etiqueta: 'Borrador', color: 'neutral', icono: 'i-lucide-file-pen' },
@@ -149,8 +143,8 @@ export function cuerpoAnuncio(datos: SalidaAnuncio): DatosAnuncioApi {
 }
 
 /** Cambios de `PUT /anuncios/:id`: solo lo que cambió, con `null` para borrar lo opcional. */
-export function cambiosAnuncio(antes: AnuncioApi, datos: SalidaAnuncio): CambiosAnuncioConNulos {
-    const cambios: CambiosAnuncioConNulos = { version: antes.version }
+export function cambiosAnuncio(antes: AnuncioApi, datos: SalidaAnuncio): CambiosAnuncioApi {
+    const cambios: CambiosAnuncioApi = { version: antes.version }
     if (datos.titulo !== antes.titulo) {
         cambios.titulo = datos.titulo
     }
