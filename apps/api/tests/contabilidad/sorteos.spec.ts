@@ -47,6 +47,7 @@ function bases(): EntradaSorteo['bases'] {
         no_reclamados: 'Pasan al suplente en orden',
         publicacion_resultados: 'Portal del ISP el mismo día',
         resolucion_gobernacion: 'GD-2026-077',
+        fuente_valor_publico: 'Números del primer premio de la Lotería Santa Lucía del día del sorteo',
     }
 }
 
@@ -100,7 +101,10 @@ async function ejecutado(e: EmpresasGt, valorPublico = '90210') {
             e.ctx,
         )
     }
-    return new EjecutarSorteo().execute({ id: creado.id, valor_publico: valorPublico }, e.ctx)
+    return new EjecutarSorteo().execute(
+        { id: creado.id, valor_publico: valorPublico, valor_publico_evidencia: 'acta del notario' },
+        e.ctx,
+    )
 }
 
 function datosDeEntrega(e: EmpresasGt, sorteo: Ejecutado, premioPosicion: number) {
@@ -339,7 +343,10 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
 
         // otra vez por la acción: 422 estado_sorteo
         const otraVez = await errorDe(
-            new EjecutarSorteo().execute({ id: sorteo.id, valor_publico: '1' }, e.ctx),
+            new EjecutarSorteo().execute(
+                { id: sorteo.id, valor_publico: '1', valor_publico_evidencia: 'acta del notario' },
+                e.ctx,
+            ),
         )
         assert.equal(otraVez.codigo, 'estado_sorteo')
         // ni devolviendo el estado a mano: el trigger rechaza otro resultado y el índice otros ganadores
@@ -353,7 +360,11 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
             for (const valor of ['1', '90210']) {
                 const sp = await trx.transaction()
                 const fallo = await errorDe(
-                    new EjecutarSorteo().execute({ id: sorteo.id, valor_publico: valor }, e.ctx, { trx: sp }),
+                    new EjecutarSorteo().execute(
+                        { id: sorteo.id, valor_publico: valor, valor_publico_evidencia: 'acta del notario' },
+                        e.ctx,
+                        { trx: sp },
+                    ),
                 ).catch((error: Error) => ({ codigo: error.message }))
                 await sp.rollback()
                 assert.exists(fallo.codigo, `re-ejecutar con ${valor} falla`)
