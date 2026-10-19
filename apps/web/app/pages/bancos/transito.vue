@@ -30,6 +30,14 @@ const itemsEstado: SelectItem[] = [
 
 const filtroEstado = () => (estado.value === TODOS ? undefined : estado.value)
 const depositos = usePaginacionCursor(cursor => useFondosEnTransito().depositos(filtroEstado(), cursor))
+/** `GET /bancos/depositos` pide `cajas.ver` (A3, fase 4 final), además del `bancos.ver` de la página. */
+const leeDepositos = computed(() => puede('cajas.ver'))
+
+function recargarDepositos() {
+    if (leeDepositos.value) {
+        void depositos.recargar()
+    }
+}
 const traslados = usePaginacionCursor(cursor => useFondosEnTransito().traslados(filtroEstado(), cursor))
 
 const columnasDepositos: TableColumn<Deposito>[] = [
@@ -59,7 +67,7 @@ async function cargarResumen() {
 
 function recargarTodo() {
     void cargarResumen()
-    void depositos.recargar()
+    recargarDepositos()
     void traslados.recargar()
 }
 
@@ -74,7 +82,7 @@ function alTrasladar(traslado: Traslado) {
 }
 
 watch(estado, () => {
-    void depositos.recargar()
+    recargarDepositos()
     void traslados.recargar()
 })
 
@@ -179,8 +187,17 @@ onMounted(recargarTodo)
                 <h3 class="text-sm font-semibold text-highlighted">
                     Depósitos de caja
                 </h3>
+                <UAlert
+                    v-if="!leeDepositos"
+                    color="neutral"
+                    variant="subtle"
+                    icon="i-lucide-lock"
+                    title="Sin acceso a los depósitos de caja"
+                    description="Para verlos tu usuario necesita el permiso cajas.ver."
+                    data-prueba="depositos-sin-permiso"
+                />
                 <ProblemaAlerta
-                    v-if="depositos.problema.value"
+                    v-else-if="depositos.problema.value"
                     :problema="depositos.problema.value"
                     :reintentar="depositos.recargar"
                     :reintentando="depositos.cargando.value"

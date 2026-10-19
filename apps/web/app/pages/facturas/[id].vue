@@ -81,6 +81,22 @@ function alEmitirNota(nota: NotaCreditoEmitida) {
 
 const puedeAnular = computed(() => puede('facturas.anular') && factura.value !== null && factura.value.estado !== 'anulada')
 
+const tipoVisual = computed(() => tipoFacturaVisual(factura.value?.tipo))
+
+/** Aviso de lo que no es una factura normal: cargo interno (H18) o acreditada por notas (H16). */
+const avisoNoFiscal = computed<string | null>(() => {
+    if (!factura.value) {
+        return null
+    }
+    if (factura.value.tipo === 'cargo') {
+        return TIPOS_FACTURA.cargo.descripcion
+    }
+    if (factura.value.estado === 'acreditada') {
+        return 'Cubierta entera por notas de crédito internas, sin ningún cobro: no es una venta y no se certifica en FEL.'
+    }
+    return null
+})
+
 const pendiente = computed(() => (factura.value && factura.value.estado !== 'anulada' ? saldoFactura(factura.value) : null))
 
 const columnasLineas: TableColumn<FacturaLinea>[] = [
@@ -239,11 +255,12 @@ onMounted(cargar)
                         </h2>
                         <EstadoFacturaBadge :estado="factura.estado" />
                         <UBadge
-                            v-if="factura.tipo === 'mora'"
-                            label="Recargo por mora"
-                            icon="i-lucide-calendar-x"
-                            color="warning"
+                            v-if="tipoVisual"
+                            :label="tipoVisual.etiqueta"
+                            :icon="tipoVisual.icono"
+                            :color="tipoVisual.color"
                             variant="outline"
+                            :data-tipo="factura.tipo"
                         />
                     </div>
                     <p class="text-sm text-muted">
@@ -264,7 +281,7 @@ onMounted(cargar)
                             </ULink>
                         </template>
                         <template v-if="factura.factura_origen_id">
-                            · mora de la
+                            · {{ relacionOrigen(factura.tipo) }}
                             <ULink
                                 :to="`/facturas/${factura.factura_origen_id}`"
                                 class="text-default hover:text-primary"
@@ -303,6 +320,16 @@ onMounted(cargar)
                     />
                 </div>
             </div>
+
+            <UAlert
+                v-if="avisoNoFiscal"
+                :title="factura.tipo === 'cargo' ? 'Cargo interno no fiscal' : 'Factura acreditada'"
+                :description="avisoNoFiscal"
+                icon="i-lucide-info"
+                color="neutral"
+                variant="subtle"
+                data-prueba="factura-no-fiscal"
+            />
 
             <div class="grid gap-4 lg:grid-cols-2">
                 <UPageCard
@@ -367,7 +394,7 @@ onMounted(cargar)
                         />
                         <DatoFicha
                             etiqueta="FEL"
-                            :valor="factura.fel_estado ?? 'Sin certificar'"
+                            :valor="felDeFactura(factura)"
                         />
                         <DatoFicha
                             v-if="factura.fel_uuid"

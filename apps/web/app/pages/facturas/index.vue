@@ -236,13 +236,14 @@ onMounted(async () => {
                             </span>
                             <span class="truncate text-xs text-muted sm:hidden">{{ nombres.nombre(row.original.cliente_id) }}</span>
                             <UBadge
-                                v-if="row.original.tipo === 'mora'"
-                                label="Recargo por mora"
-                                icon="i-lucide-calendar-x"
-                                color="warning"
+                                v-if="tipoFacturaVisual(row.original.tipo)"
+                                :label="tipoFacturaVisual(row.original.tipo)?.etiqueta"
+                                :icon="tipoFacturaVisual(row.original.tipo)?.icono"
+                                :color="tipoFacturaVisual(row.original.tipo)?.color"
                                 variant="outline"
                                 size="sm"
                                 class="mt-1 self-start"
+                                :data-tipo="row.original.tipo"
                             />
                         </div>
                     </template>

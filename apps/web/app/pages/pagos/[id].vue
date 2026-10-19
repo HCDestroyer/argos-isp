@@ -26,10 +26,19 @@ const anularAbierto = ref(false)
 
 /*
  * Fase 4: proveedor de cobro (pasarela, agente o débito con fecha de corte) y su liquidación. El
- * nombre del proveedor sale de `GET /cobros/proveedores` (`bancos.ver`); sin ese permiso, su id.
+ * nombre viene en el pago; la cuenta puente sale de `GET /cobros/proveedores` (`bancos.ver`).
  */
 const proveedores = shallowRef<ProveedorCobro[]>([])
 const proveedor = computed(() => (pago.value?.proveedor_cobro_id ? proveedores.value.find(p => p.id === pago.value?.proveedor_cobro_id) ?? null : null))
+/** `Pago.proveedor_cobro_nombre` (lo ve cualquiera con `pagos.ver`); la cuenta puente, con `bancos.ver`. */
+const nombreProveedor = computed(() => {
+    const actual = pago.value
+    if (!actual?.proveedor_cobro_id) {
+        return ''
+    }
+    const nombre = actual.proveedor_cobro_nombre ?? proveedor.value?.nombre ?? `Proveedor #${actual.proveedor_cobro_id}`
+    return proveedor.value ? `${nombre} · ${proveedor.value.cuenta_codigo}` : nombre
+})
 
 /*
  * Cerrar diferencia (`pagos.cerrar_diferencia`): el saldo pequeño que el pago dejó en sus facturas.
@@ -353,7 +362,7 @@ onMounted(cargar)
                             :to="enlace('/configuracion/proveedores-cobro')"
                             class="hover:text-primary"
                         >
-                            {{ proveedor ? `${proveedor.nombre} · ${proveedor.cuenta_codigo}` : `Proveedor #${pago.proveedor_cobro_id}` }}
+                            {{ nombreProveedor }}
                         </ULink>
                     </DatoFicha>
                     <DatoFicha

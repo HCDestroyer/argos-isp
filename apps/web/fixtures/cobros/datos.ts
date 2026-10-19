@@ -133,6 +133,7 @@ function pagoProveedor(semilla: SemillaPago): Pago {
         cuenta_bancaria_id: null,
         cuenta_bancaria_nombre: null,
         proveedor_cobro_id: semilla.proveedor,
+        proveedor_cobro_nombre: semilla.proveedor === 2 ? 'Agentes BAM' : 'Pasarela en línea',
         liquidacion_id: semilla.liquidacion ?? null,
         historico: false,
         origen: null,

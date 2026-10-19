@@ -74,6 +74,25 @@ function detalle(factura: Factura): FacturaDetalle {
     const servicio = bd.servicios.find(s => s.id === factura.servicio_id)
     const plan = bd.planes.find(p => p.id === servicio?.plan_id)
     const mora = factura.tipo === 'mora'
+    // H18: el cargo interno lleva una línea `otro` sin IVA, como `crearCargoDiferencia` (A3).
+    if (factura.tipo === 'cargo') {
+        return {
+            ...factura,
+            acreditado: factura.acreditado ?? '0.00',
+            notas_credito: notasDeFactura(factura.id),
+            lineas: [{
+                id: factura.id * 10 + 1,
+                concepto: `Diferencia de cobro devuelta: pago anulado (factura ${factura.factura_origen_id ?? ''})`,
+                tipo: 'otro',
+                cantidad: '1.000',
+                precio_unitario: factura.total,
+                gravable: false,
+                iva: '0.00',
+                total: factura.total,
+            }],
+            reglas_snapshot: { mora_tipo: 'ninguna' },
+        }
+    }
     return {
         ...factura,
         acreditado: factura.acreditado ?? '0.00',
@@ -442,6 +461,8 @@ export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
     const cobroId = siguienteId(bd.cobros)
     const pagos: Pago[] = []
     for (const parte of partes) {
+        // Fase 4: agente o débito de un proveedor activo desde su fecha de corte va al puente 1.1.10.NN.
+        const proveedorCobro = bd.proveedoresCobro.find(p => p.empresa_id === parte.empresaId && p.metodo === metodo && p.metodo !== 'pasarela' && p.activo && p.desde <= momento.slice(0, 10))
         const pago: Pago = {
             id: siguienteId(bd.pagos),
             empresa_id: parte.empresaId,
@@ -464,8 +485,8 @@ export function procesarPago(solicitud: SolicitudFixture): RespuestaFixture {
             banco_origen_nombre: banco?.nombre ?? null,
             cuenta_bancaria_id: cuenta?.id ?? null,
             cuenta_bancaria_nombre: cuenta ? nombreCuentaDestino(cuenta) : null,
-            // Fase 4: agente o débito de un proveedor activo desde su fecha de corte va al puente 1.1.10.NN.
-            proveedor_cobro_id: bd.proveedoresCobro.find(p => p.empresa_id === parte.empresaId && p.metodo === metodo && p.metodo !== 'pasarela' && p.activo && p.desde <= momento.slice(0, 10))?.id ?? null,
+            proveedor_cobro_id: proveedorCobro?.id ?? null,
+            proveedor_cobro_nombre: proveedorCobro?.nombre ?? null,
             liquidacion_id: null,
             version: 1,
             created_at: momento,

@@ -12,7 +12,7 @@ import type { LineaGuardada, MovimientoBancoFixture } from '../cobros/datos'
 import { huellaDe } from '../cobros/datos'
 import { conflicto, cuentasBancoFixture, hoy, invalido, regla422, resolverCuenta, siguienteMovimientoBanco } from '../cobros/rutas'
 import { esperadoDelTurno } from '../cajas/rutas'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, problema, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
 
 type Errores = NonNullable<Problem['errors']>
 type Conciliacion = Schema<'Conciliacion'>
@@ -155,6 +155,40 @@ function porEstado<T extends { estado: string, id: number }>(filas: T[], solicit
     }
     const lista = filas.filter(f => !estado || f.estado === estado).sort((a, b) => b.id - a.id)
     return { status: 200, cuerpo: paginar(lista, solicitud) }
+}
+
+/**
+ * Como la API (A3, fase 4 final): con `bancos.ver`, todos los de la empresa; con solo `cajas.ver`
+ * (el cajero), `caja_id` o `turno_id` es obligatorio (422) y la caja debe estar en su alcance (403).
+ */
+function listarDepositos(solicitud: SolicitudFixture): RespuestaFixture {
+    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+    let cajaId = numeroQuery(solicitud, 'caja_id')
+    const turnoId = numeroQuery(solicitud, 'turno_id')
+    if (turnoId !== undefined) {
+        const turno = bd.turnos.find(t => t.id === turnoId)
+        if (!turno) {
+            return noEncontrado(`el turno ${turnoId}`)
+        }
+        if (cajaId !== undefined && cajaId !== turno.caja_id) {
+            return invalido([{ field: 'turno_id', message: `El turno ${turnoId} no es de la caja ${cajaId}`, rule: 'turno_de_la_caja' }])
+        }
+        cajaId = turno.caja_id
+    }
+    if (cajaId !== undefined) {
+        const caja = bd.cajas.find(c => c.id === cajaId)
+        if (!caja) {
+            return noEncontrado(`la caja ${cajaId}`)
+        }
+        if (!usuario?.alcance_global && !(usuario?.empresas ?? []).some(e => e.id === caja.empresa_id)) {
+            return problema(403, 'Sin permiso', `La caja ${cajaId} no está en tu alcance.`)
+        }
+    }
+    else if (!usuario?.permisos.includes('bancos.ver')) {
+        return invalido([{ field: 'caja_id', message: 'Sin bancos.ver indica la caja (caja_id) o el turno (turno_id)', rule: 'required' }])
+    }
+    const filas = deLaEmpresa(bd.depositos, solicitud).filter(d => cajaId === undefined || d.caja_id === cajaId)
+    return porEstado(filas, solicitud)
 }
 
 function fondosEnTransito(solicitud: SolicitudFixture): Schema<'ResumenFondosEnTransito'>[] {
@@ -598,7 +632,7 @@ function reatribuir(solicitud: SolicitudFixture): RespuestaFixture {
 export const rutasConciliacion: RutasFixture = {
     'POST /api/v1/bancos/llegadas/reatribuir': conPermiso('bancos.reatribuir_llegada', conIdempotencia(reatribuir)),
     'POST /api/v1/cajas/:id/depositar': conPermiso('cajas.depositar', conIdempotencia(depositar)),
-    'GET /api/v1/bancos/depositos': conPermiso('bancos.ver', solicitud => porEstado(deLaEmpresa(bd.depositos, solicitud), solicitud)),
+    'GET /api/v1/bancos/depositos': conPermiso('cajas.ver', listarDepositos),
     'GET /api/v1/bancos/traslados': conPermiso('bancos.ver', solicitud => porEstado(deLaEmpresa(bd.traslados, solicitud), solicitud)),
     'GET /api/v1/bancos/fondos-en-transito': conPermiso('bancos.ver', solicitud => ({ status: 200, cuerpo: fondosEnTransito(solicitud) })),
     'POST /api/v1/bancos/trasladar': conPermiso('bancos.trasladar', conIdempotencia(trasladar)),

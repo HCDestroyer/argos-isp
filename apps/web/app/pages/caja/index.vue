@@ -58,14 +58,13 @@ const egresosTurno = computed(() => (turnoAbierto.value ? egresosEnEfectivo(egre
 const totalEgresos = computed(() => egresosTurno.value.reduce((suma, e) => suma.plus(e.monto), new Decimal(0)))
 
 /*
- * Depósitos al banco del turno (`GET /bancos/depositos`, `bancos.ver`; fase 4): bajan el esperado
- * como un egreso. Sin ese permiso el panel no puede leerlos y no calcula un esperado que saldría
- * de más (el cajero deposita, pero el esperado lo calcula la API al cerrar).
+ * Depósitos al banco del turno (`GET /bancos/depositos?turno_id=`; fase 4): bajan el esperado
+ * como un egreso. El cajero los lee de su caja con `cajas.ver`; con `bancos.ver`, cualquier caja.
  */
 const depositos = shallowRef<Deposito[]>([])
 const cargandoDepositos = ref(false)
 const problemaDepositos = ref<Problem | null>(null)
-const leeDepositos = computed(() => puede('bancos.ver'))
+const leeDepositos = computed(() => puede('cajas.ver') || puede('bancos.ver'))
 const depositosTurno = computed(() => (turnoAbierto.value ? depositosDelTurno(depositos.value, turnoAbierto.value.id) : []))
 const totalDepositos = computed(() => depositosTurno.value.reduce((suma, d) => suma.plus(d.monto), new Decimal(0)))
 const depositoAbierto = ref(false)
@@ -106,7 +105,7 @@ const sinEsperado = computed<string | null>(() => {
         return 'El esperado lo calcula la API al cerrar: resta los egresos en efectivo del turno, que tu usuario no puede ver (falta egresos.ver).'
     }
     if (!leeDepositos.value) {
-        return 'El esperado lo calcula la API al cerrar: resta los depósitos al banco del turno, que tu usuario no puede ver (falta bancos.ver).'
+        return 'El esperado lo calcula la API al cerrar: resta los depósitos al banco del turno, que tu usuario no puede ver (falta cajas.ver).'
     }
     if (problemaCobros.value || problemaEgresos.value || problemaDepositos.value) {
         return 'No se pudieron leer los cobros, los egresos o los depósitos del turno: la API calcula el esperado y la diferencia al cerrar.'
@@ -170,9 +169,10 @@ async function cargarEgresos(turno: TurnoCaja) {
     problemaEgresos.value = fallo
 }
 
-/** Depósitos de la empresa (hasta 5 páginas de 200), filtrados por el turno (`turno_id`). */
+/** Depósitos del turno abierto (`turno_id`, hasta 5 páginas de 200). */
 async function cargarDepositos() {
-    if (!leeDepositos.value) {
+    const turno = turnoAbierto.value
+    if (!leeDepositos.value || !turno) {
         return
     }
     cargandoDepositos.value = true
@@ -180,7 +180,7 @@ async function cargarDepositos() {
     let cursor: string | undefined
     let fallo: Problem | null = null
     for (let pagina = 0; pagina < 5; pagina++) {
-        const resultado = await useFondosEnTransito().depositos(undefined, cursor, 200)
+        const resultado = await useFondosEnTransito().depositos(undefined, cursor, 200, { turno_id: turno.id })
         if (!resultado.ok) {
             fallo = resultado.problema
             break

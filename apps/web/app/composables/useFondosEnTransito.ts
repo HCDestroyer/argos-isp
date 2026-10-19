@@ -5,6 +5,7 @@ export type Traslado = Schema<'Traslado'>
 export type ResumenFondosEnTransito = Schema<'ResumenFondosEnTransito'>
 export type DatosTraslado = paths['/api/v1/bancos/trasladar']['post']['requestBody']['content']['application/json']
 export type EstadoTransito = Deposito['estado']
+export type FiltrosDepositos = Pick<NonNullable<paths['/api/v1/bancos/depositos']['get']['parameters']['query']>, 'caja_id' | 'turno_id'>
 export type DatosReatribucion = paths['/api/v1/bancos/llegadas/reatribuir']['post']['requestBody']['content']['application/json']
 
 /**
@@ -20,8 +21,13 @@ export function useFondosEnTransito() {
         return resolver(api.GET('/api/v1/bancos/fondos-en-transito'))
     }
 
-    function depositos(estado?: EstadoTransito, cursor?: string, limit = 25): Promise<Resultado<Pagina<Deposito>>> {
-        const query: { limit: number, estado?: EstadoTransito, cursor?: string } = { limit }
+    /**
+     * `GET /bancos/depositos`: con `bancos.ver`, los de las empresas; con solo `cajas.ver` (el
+     * cajero) hay que filtrar por `caja_id` o `turno_id` de su caja (422 sin filtro, 403 con una
+     * caja ajena).
+     */
+    function depositos(estado?: EstadoTransito, cursor?: string, limit = 25, filtros: FiltrosDepositos = {}): Promise<Resultado<Pagina<Deposito>>> {
+        const query: FiltrosDepositos & { limit: number, estado?: EstadoTransito, cursor?: string } = { ...filtros, limit }
         if (estado) {
             query.estado = estado
         }
