@@ -17,6 +17,11 @@ import { plantillaPorDefecto } from '#core/plantilla_por_defecto'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 import { resolverEmpresaServicio } from '#core/empresas'
+import { reconciliarIncluidos } from '#core/adicionales'
+import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
+
+/** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
+export type ServicioConAdvertencias = ServicioVista & { warnings: Advertencia[] }
 
 export interface EntradaCrearServicio {
     cliente_id: number
@@ -76,12 +81,13 @@ export async function exigirUserPppLibre(t: Transaccion, userPpp: string) {
  *   `dhcp_fija` exige `mac` (`validarTipoConexion`).
  *
  * Asigna IPv4 y reserva prefijos IPv6 según el modo; guarda las excepciones a la plantilla
- * (validadas por A3); emite `servicio.creado` y `asignacion.cambiada`.
+ * (validadas por A3); emite `servicio.creado` y `asignacion.cambiada`. Asigna los adicionales que
+ * trae el plan para la empresa del servicio (`modalidad: incluido`, `servicio.adicional_agregado`).
  */
-export default class CrearServicio extends DomainAction<EntradaCrearServicio, ServicioVista> {
+export default class CrearServicio extends DomainAction<EntradaCrearServicio, ServicioConAdvertencias> {
     readonly nombre = 'servicios.crear'
 
-    protected async handle(input: EntradaCrearServicio, t: Transaccion): Promise<ServicioVista> {
+    protected async handle(input: EntradaCrearServicio, t: Transaccion): Promise<ServicioConAdvertencias> {
         const cliente = (await t.trx
             .from('core.clientes')
             .where('id', input.cliente_id)
@@ -214,7 +220,13 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
             inicio: new Date().toISOString(),
             fin: null,
         })
+        await reconciliarIncluidos(
+            t,
+            { id, empresa_id: empresaId, cliente_id: input.cliente_id },
+            input.plan_id,
+            'cambio_plan',
+        )
         refrescarAaaAlConfirmar(t, { servicioId: id })
-        return servicio
+        return { ...servicio, warnings: await advertenciasServicio(t.trx, id) }
     }
 }

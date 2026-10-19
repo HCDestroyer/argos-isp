@@ -15,7 +15,8 @@ export class ConsumidorAaaCache implements ConsumidorEventos {
 
     acepta(evento: string): boolean {
         return (
-            evento.startsWith('servicio.') ||
+            // los adicionales (streaming, IPTV) no cambian nada de RADIUS
+            (evento.startsWith('servicio.') && !evento.startsWith('servicio.adicional_')) ||
             evento === 'asignacion.cambiada' ||
             evento === 'plan.velocidad_cambiada'
         )

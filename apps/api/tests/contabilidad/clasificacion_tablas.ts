@@ -100,6 +100,13 @@ export const MUTABLES: Record<string, string> = {
     'lealtad.reglas':
         'reglas para ganar con version y audit.cambios; se desactivan, no se borran (lealtad §3)',
     'lealtad.referidos': 'estado del referido por acción, con version y audit.cambios (lealtad §3)',
+    // servicios adicionales (`contratos/adicionales.md`, A1): no son dinero ni libro; la factura de
+    // los `cobrado` la hace A3 en billing
+    'core.adicionales': 'catálogo por empresa con version y audit.cambios; se desactiva, no se borra',
+    'core.motivos_cortesia': 'catálogo de motivos con version y audit.cambios; se desactiva, no se borra',
+    'core.servicios_adicionales':
+        'asignación a un servicio con version y audit.cambios; la baja es estado + baja_en, nunca DELETE',
+    'network.planes_adicionales': 'configuración del plan (lista reemplazable) con el diff en audit.cambios',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */
