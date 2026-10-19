@@ -35,6 +35,9 @@ const PANTALLAS = [
     ['lealtad', '/lealtad'],
     ['puntos del cliente', '/clientes/2?tab=puntos'],
     ['reporte de lealtad', '/reportes/lealtad'],
+    // Anuncios del portal.
+    ['anuncios', '/anuncios'],
+    ['ficha de anuncio', '/anuncios/1'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']

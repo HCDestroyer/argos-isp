@@ -129,6 +129,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
     'ClientePuntos.vue': { permisos: ['lealtad.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ProgramaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
+    // Anuncios del portal (A5, `contratos/anuncios.md`).
+    'AnuncioFormulario.vue': { permisos: ['anuncios.administrar'], desde: ['pages/anuncios/index.vue', 'pages/anuncios/[id].vue'] },
+    'AnuncioImagenModal.vue': { permisos: ['anuncios.administrar'], desde: ['pages/anuncios/[id].vue'] },
+    'AnuncioMetricas.vue': { permisos: ['anuncios.ver'], desde: ['pages/anuncios/[id].vue'] },
     'PuntosAjusteModal.vue': { permisos: ['lealtad.ajustar'], desde: ['components/ClientePuntos.vue'] },
     'ReglaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
     'CajaCierreModal.vue': { permisos: ['cajas.cerrar'], desde: ['pages/caja/index.vue'] },

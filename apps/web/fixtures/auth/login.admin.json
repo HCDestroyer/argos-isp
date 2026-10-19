@@ -126,7 +126,9 @@
       "vinculaciones.revocar",
       "lealtad.ver",
       "lealtad.configurar",
-      "lealtad.ajustar"
+      "lealtad.ajustar",
+      "anuncios.ver",
+      "anuncios.administrar"
     ],
     "alcance_global": true,
     "empresas": [
