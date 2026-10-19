@@ -232,7 +232,11 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('tipo_dte'),
         c('anulada_en'),
         c('motivo_anulacion'),
-        cliente.raw(`starts_with(${alias}.clave_unica, 'cargo-') as cargo_unico`),
+        // cargo único manual: `cargo-<uuid>` de tipo servicio (el cargo interno H18 de main usa
+        // `cargo-diferencia-<id>` con tipo `cargo` y no lo es)
+        cliente.raw(
+            `(${alias}.tipo = 'servicio' AND starts_with(${alias}.clave_unica, 'cargo-')) as cargo_unico`,
+        ),
         c('motivo_sin_costo_id'),
         cliente.raw(
             `(select ms.nombre from billing.motivos_sin_costo ms where ms.id = ${alias}.motivo_sin_costo_id) as motivo_sin_costo_nombre`,
