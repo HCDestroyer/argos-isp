@@ -96,16 +96,27 @@ export const EstadoFactura = definirEsquema(
 
 export const FacturaLinea = definirEsquema(
     'FacturaLinea',
-    objeto({
-        id,
-        concepto: texto,
-        tipo: enumerado(['servicio', 'producto', 'mora', 'otro']),
-        cantidad: { type: 'string', description: 'Decimal con hasta 3 decimales' },
-        precio_unitario: Dinero,
-        gravable: booleano,
-        iva: Dinero,
-        total: Dinero,
-    }),
+    objeto(
+        {
+            id,
+            concepto: texto,
+            tipo: enumerado(['servicio', 'producto', 'mora', 'otro', 'descuento']),
+            cantidad: { type: 'string', description: 'Decimal con hasta 3 decimales' },
+            precio_unitario: Dinero,
+            gravable: booleano,
+            iva: {
+                ...Dinero,
+                description: 'En una línea descuento, negativo: el IVA de la factura es el del neto',
+            },
+            total: { ...Dinero, description: 'En una línea descuento, negativo' },
+            linea_id: {
+                ...nulable(id),
+                description: 'Solo en tipo descuento: la línea que descuenta (de la misma factura)',
+            },
+            descuento: { ...Dinero, description: 'Suma de los descuentos de esta línea (0.00 si no tiene)' },
+        },
+        ['linea_id', 'descuento'],
+    ),
 )
 
 export const Factura = definirEsquema(

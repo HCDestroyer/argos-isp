@@ -350,6 +350,10 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 'l.gravable',
                 'l.total',
                 'l.iva',
+                'l.descuento',
+                t.trx.raw(
+                    '(select coalesce(sum(d.iva), 0) from billing.facturas_lineas d where d.linea_id = l.id)::text as iva_descuento',
+                ),
                 t.trx.raw(
                     '(select coalesce(sum(nl.monto), 0) from billing.notas_credito_lineas nl where nl.linea_id = l.id and not exists (select 1 from billing.notas_credito_anulaciones x where x.nota_id = nl.nota_id))::text as acreditado',
                 ),
@@ -362,6 +366,8 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             gravable: boolean
             total: string
             iva: string
+            descuento: string
+            iva_descuento: string
             acreditado: string
             iva_acreditado: string
         }>
@@ -374,6 +380,14 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         const cuentaIva = certificada || !factura.aviso_cobro ? CUENTAS.IVA_DEBITO : IVA_POR_CERTIFICAR
         pedidas.forEach((p, i) => {
             const linea = porId.get(Number(p.linea_id))
+            if (linea?.tipo === 'descuento') {
+                errores.push({
+                    field: `lineas.${i}.linea_id`,
+                    message: 'Una línea de descuento no se acredita: acredita la línea que descuenta',
+                    rule: 'linea',
+                })
+                return
+            }
             if (!linea) {
                 errores.push({
                     field: `lineas.${i}.linea_id`,
@@ -383,7 +397,8 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 return
             }
             const monto = dec(p.monto)
-            const restante = dec(linea.total).minus(linea.acreditado)
+            // la línea vale su neto: total menos sus descuentos (y su IVA, el del neto)
+            const restante = dec(linea.total).minus(linea.descuento).minus(linea.acreditado)
             if (monto.gt(restante)) {
                 errores.push({
                     field: `lineas.${i}.monto`,
@@ -392,7 +407,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                 })
                 return
             }
-            const ivaRestante = dec(linea.iva).minus(linea.iva_acreditado)
+            const ivaRestante = dec(linea.iva).plus(linea.iva_descuento).minus(linea.iva_acreditado)
             const iva = !linea.gravable
                 ? CERO
                 : monto.equals(restante)
@@ -457,6 +472,22 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             debe: string
         }>
         const yaDebitado = new Map(previas.map((p) => [Number(p.cuenta_id), dec(p.debe)]))
+        // descuentos de la factura (5.1.01 al debe): lo acreditable del servicio es el neto
+        const descuentos = (await t.trx
+            .from('ledger.asientos as a')
+            .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
+            .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+            .where('a.origen_tipo', factura.tipo === 'mora' ? 'mora' : 'factura')
+            .where('a.origen_id', factura.id)
+            .whereNull('a.reversa_de')
+            .whereNotExists((q) => q.from('ledger.asientos as r').whereRaw('r.reversa_de = a.id'))
+            .where('c.codigo', CUENTAS.DESCUENTOS)
+            .select(t.trx.raw('coalesce(sum(m.debe), 0)::text as debe'))
+            .first()) as { debe: string }
+        const servicio = lineas.find((l) => l.cuenta_codigo === CUENTAS.INGRESOS_INTERNET)
+        if (servicio && dec(descuentos.debe).gt(0)) {
+            servicio.haber = aTexto(dec(servicio.haber).minus(descuentos.debe))
+        }
         if (certificada) {
             // aviso certificado: su IVA ya se reclasificó a 2.1.02; lo que las notas internas
             // debitaron de 2.1.11 antes de certificar también cuenta como IVA ya acreditado

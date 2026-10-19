@@ -115,7 +115,7 @@ Caja | Banco | 2.1.03 Proveedores haber  total − retenciones
 ### 3.5 Facturación (`billing`, A3)
 
 - `billing.facturas.estado` agrega `por_certificar`. `establecimiento_id` (FK) y `tipo_dte` (texto, del catálogo). Las columnas `fel_*` quedan de solo lectura y se migran a `fiscal.dte` (§12).
-- `billing.facturas_lineas.tipo` agrega `descuento` (línea negativa ligada a otra línea por `linea_id`; la usa lealtad, inv. F.1). `descuento numeric(14,2)` en la línea descontada.
+- `billing.facturas_lineas.tipo` agrega `descuento` (línea negativa ligada a otra línea por `linea_id`; la usa lealtad, inv. F.1). `descuento numeric(14,2)` en la línea descontada. Implementado (A3, rama `a3/descuento-linea`): `facturas.emitir` acepta `descuentos[]` sobre la línea del plan (nunca la dejan bajo cero); el IVA de cada descuento es el IVA del neto de su línea menos el que ya tenía (la factura queda con el IVA del neto, redondeado una vez); el asiento lleva los ingresos por el bruto, `5.1.01 Descuentos` al debe por el subtotal del descuento y el IVA del neto; una factura que queda en cero nace `pagada`. En FEL el descuento es el `Descuento` del ítem que descuenta (no un ítem propio). Las notas de crédito acreditan el neto (por monto: el ingreso del servicio menos `5.1.01`; por línea: la línea menos sus descuentos; una línea `descuento` no se acredita). La sustitución copia los descuentos ligados a su línea.
 - `billing.pagos`: `retenciones[]` vía `ledger.constancias_retencion` (`direccion = recibida`). El asiento del pago agrega `1.1.05 IVA retenido por clientes` o `1.1.06 ISR retenido por clientes` en el debe por el monto de la constancia, y CxC en el haber por el total.
 
 ### 3.6 FEL (`fiscal`, A3)
