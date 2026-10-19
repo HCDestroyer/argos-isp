@@ -47,6 +47,8 @@ ENTORNO=(
     PORTAL_DOMINIO=$DOMINIO
     PORTAL_TLS=internal
     PORTAL_HSTS_MAX_AGE=300
+    # Almacenamiento vacío + CA interna: sin limpieza, que puede borrar el certificado a medio guardar
+    PORTAL_PROXY_LIMPIEZA_ALMACEN=off
 )
 CADDY="${CADDY:-$(command -v caddy || true)}"
 if [[ -n "$CADDY" ]]; then

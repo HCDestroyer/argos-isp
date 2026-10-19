@@ -25,6 +25,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     baja_activo: { etiqueta: 'Baja de activo', icono: 'i-lucide-package-x' },
     diferido: { etiqueta: 'Diferido', icono: 'i-lucide-calendar-range' },
     alta_activo: { etiqueta: 'Alta de activo', icono: 'i-lucide-package-plus' },
+    lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
 }
 
 export const TIPOS_CUENTA: Record<Schema<'Cuenta'>['tipo'], string> = {
@@ -72,6 +73,16 @@ export function rutaOrigen(asiento: Pick<AsientoLibro, 'origen_tipo' | 'origen_i
     }
     if (asiento.origen_tipo === 'nota_credito') {
         return `/notas-credito/${asiento.origen_id}`
+    }
+    // Fase 4 (bancos): la liquidación tiene ficha; depósitos y traslados se ven en fondos en tránsito.
+    if (asiento.origen_tipo === 'liquidacion_cobro') {
+        return `/cobros/liquidaciones/${asiento.origen_id}`
+    }
+    if (asiento.origen_tipo === 'deposito' || asiento.origen_tipo === 'traslado') {
+        return '/bancos/transito'
+    }
+    if (asiento.origen_tipo === 'provision' || asiento.origen_tipo === 'castigo') {
+        return '/cartera'
     }
     return null
 }

@@ -131,6 +131,9 @@ export interface CatalogoEventos {
      * recalcula el estado deseado del servicio y limpia lo del tipo anterior.
      * `empresa` (multiempresa): el servicio pasó a otra empresa (`servicios.cambiar_empresa`);
      * `empresa_anterior_id` solo viene en ese caso. No cambia nada en la red.
+     * `motivo: 'plan_temporal'` (lealtad, aditivo): inicio, fin o cancelación de un plan temporal
+     * (`core.servicios_planes_temporales`, `plan_temporal_id`); llega con `campos: ['plan']` y se
+     * aplica como cualquier cambio de plan (CoA de velocidad, sin cortar la sesión).
      */
     'servicio.config_cambiada': {
         servicio_id: number
@@ -139,6 +142,8 @@ export interface CatalogoEventos {
             'plan' | 'ips' | 'prefijo_v6' | 'router' | 'tipo_conexion' | 'mac' | 'amarre_ip_mac' | 'empresa'
         >
         empresa_anterior_id?: number
+        motivo?: 'plan_temporal'
+        plan_temporal_id?: number
     }
     /**
      * Cambió algo que altera las colas de un plan (semana 2, `contratos/velocidad.md`): velocidades,
@@ -429,6 +434,58 @@ export interface CatalogoEventos {
         motivo: string
         valor_libros: Dinero
     }
+    // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
+    /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
+    'lealtad.programa_cambiado': {
+        programa_id: number
+        empresa_id: number
+        /** columnas del programa, o `reglas` si cambió una regla */
+        campos: string[]
+    }
+    /** acumulación (o ajuste positivo): un lote nuevo */
+    'lealtad.puntos_acumulados': {
+        movimiento_id: number
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number | null
+        /** null en un ajuste manual */
+        regla_id: number | null
+        puntos: number
+        /** null = el programa no vence puntos */
+        vence_en: string | null
+    }
+    /** reverso de lo otorgado (pago o factura anulada…) o ajuste negativo; `puntos` es positivo */
+    'lealtad.puntos_revertidos': {
+        movimiento_id: number
+        empresa_id: number
+        cliente_id: number
+        puntos: number
+        origen_tipo: string
+        origen_id: number | null
+    }
+    /** una vez por lote, `aviso_vencimiento_dias` antes de `vence_en` (A6 avisa al cliente) */
+    'lealtad.puntos_por_vencer': {
+        empresa_id: number
+        cliente_id: number
+        puntos: number
+        vence_en: string
+        /** aditivo: el lote (`lealtad.movimientos.id`) */
+        lote_id: number
+    }
+    'lealtad.puntos_vencidos': {
+        movimiento_id: number
+        empresa_id: number
+        cliente_id: number
+        puntos: number
+    }
+    'lealtad.referido_calificado': {
+        /** `lealtad.referidos.id` */
+        referido_id: number
+        empresa_id: number
+        referidor_id: number
+        /** el cliente referido */
+        cliente_id: number
+    }
     // integraciones · Horus Flow (A6, `contratos/horus.md`). Horus no decide cortes: ningún
     // consumidor cambia el estado de un servicio por estos eventos (ADR-0030).
     /** Cambió la configuración del conector Horus: los procesos la releen (regla 5). Nunca valores. */
@@ -544,6 +601,12 @@ export const EVENTOS = [
     'compra.registrada',
     'compra.anulada',
     'activo.dado_de_baja',
+    'lealtad.programa_cambiado',
+    'lealtad.puntos_acumulados',
+    'lealtad.puntos_revertidos',
+    'lealtad.puntos_por_vencer',
+    'lealtad.puntos_vencidos',
+    'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',

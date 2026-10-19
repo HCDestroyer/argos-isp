@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { configPara, disponibilidad, type ConfigCanales } from '#notify/configuracion'
+import { ambito, configPara, disponibilidad, type ConfigCanales } from '#notify/configuracion'
 import { crearEnvio, type EnvioCreado } from '#notify/envios'
 import { PLANTILLAS_ALERTA } from '#notify/plantillas_base'
 import { variablesEmpresa, type Variables } from '#notify/variables'
@@ -105,6 +105,12 @@ export interface DatosIncidente {
     ventanaMin?: number
     /** el incidente nace cerrado (hechos puntuales, p. ej. un cierre de caja) */
     puntual?: boolean
+    /**
+     * Con `puntual`: un hecho que se avisa una sola vez por `clave` aunque llegue en otro evento
+     * (p. ej. la misma cadena rota informada dos veces). Si ya hubo un incidente con esa clave,
+     * solo suma el evento y devuelve `nuevo: false`.
+     */
+    unico?: boolean
 }
 
 /** Abre el incidente de `clave` o, si ya hay uno abierto, suma el evento. */
@@ -114,6 +120,26 @@ export async function abrirIncidente(
 ): Promise<{ incidente: Incidente; nuevo: boolean }> {
     await bloquearClave(trx, datos.clave)
     const ahora = datos.ahora.toJSDate()
+    if (datos.puntual && datos.unico) {
+        const previo = (await trx
+            .from('notify.incidentes')
+            .where('clave', datos.clave)
+            .orderBy('id', 'desc')
+            .select('id')
+            .first()) as { id: number } | null
+        if (previo) {
+            const [actualizado] = (await trx
+                .from('notify.incidentes')
+                .where('id', previo.id)
+                .update({
+                    eventos: trx.knexRawQuery('eventos + 1'),
+                    ultimo_en: ahora,
+                    updated_at: trx.knexRawQuery('now()'),
+                })
+                .returning(COLUMNAS)) as Incidente[]
+            return { incidente: actualizado!, nuevo: false }
+        }
+    }
     if (!datos.puntual) {
         const abierto = await incidenteAbierto(trx, datos.clave, datos)
         if (abierto) {
@@ -172,6 +198,24 @@ export async function incidentesAbiertos(trx: TransactionClientContract, tipo: s
         .select(COLUMNAS)) as Incidente[]
 }
 
+/** Canales de una alerta: `telegram` (chat del equipo) y `correo` (contabilidad). */
+export type CanalAlerta = 'telegram' | 'correo'
+
+export interface DatosAlerta {
+    incidente: Incidente
+    fase: FaseAlerta
+    evento: string
+    alerta: Variables
+    requestId: string
+    /**
+     * Empresa del incidente (alertas de Horus sobre un servicio, avisos fiscales): usa su
+     * configuración de canales y su chat del equipo (o la global si hereda). Sin ella, la global.
+     */
+    empresaId?: number | null
+    /** Por defecto solo `telegram` (alertas al equipo); los fiscales agregan `correo` (contabilidad). */
+    canales?: CanalAlerta[]
+}
+
 /**
  * Registra el envío de la alerta al chat del equipo. Plantilla: la de `notify.plantillas`
  * (`evento`, canal telegram); si no existe, el texto de `PLANTILLAS_ALERTA`; si existe pero está
@@ -180,59 +224,72 @@ export async function incidentesAbiertos(trx: TransactionClientContract, tipo: s
  */
 export async function crearAlerta(
     trx: TransactionClientContract,
-    datos: {
-        incidente: Incidente
-        fase: FaseAlerta
-        evento: string
-        alerta: Variables
-        requestId: string
-        /**
-         * Empresa del incidente (alertas de Horus sobre un servicio): usa su configuración y su
-         * chat del equipo (o la global si hereda). Sin ella, la global.
-         */
-        empresaId?: number | null
-    },
+    datos: Omit<DatosAlerta, 'canales'>,
 ): Promise<EnvioCreado | null> {
-    const enBase = (await trx
-        .from('notify.plantillas')
-        .where('evento', datos.evento)
-        .where('canal', 'telegram')
-        .select('asunto', 'cuerpo', 'activa')
-        .first()) as { asunto: string | null; cuerpo: string; activa: boolean } | null
-    if (enBase && !enBase.activa) return null
-    const plantilla = enBase ?? PLANTILLAS_ALERTA.find((p) => p.evento === datos.evento)
-    if (!plantilla) throw new Error(`Alerta sin plantilla: ${datos.evento}`)
+    const [envio] = await crearAlertas(trx, { ...datos, canales: ['telegram'] })
+    return envio ?? null
+}
 
-    // Las alertas al equipo usan la configuración global (o la de la empresa del incidente) y su
-    // interruptor de alertas.
+/**
+ * Alerta por uno o varios canales con la configuración de canales de `empresaId` (la de la
+ * empresa si tiene la suya con `hereda = false`; si no, la global): Telegram al chat del equipo de
+ * esa configuración y correo a su `correo.contabilidad`. Un envío por canal con el mismo origen
+ * `alerta:<incidente>:<fase>` (único por canal). Por canal: plantilla desactivada → sin envío;
+ * canal apagado → `omitido`; sin destino o sin canal configurado → `fallido` con el motivo.
+ * `notify.envios.empresa_id` guarda la empresa: el envío sale con su configuración y su marca.
+ */
+export async function crearAlertas(
+    trx: TransactionClientContract,
+    datos: DatosAlerta,
+): Promise<EnvioCreado[]> {
     const empresaId = datos.empresaId ?? null
+    const canales = datos.canales ?? ['telegram']
+    // Las alertas al equipo usan el interruptor de alertas de la configuración que aplica.
     const config = await configPara(empresaId)
-    const chat = chatDelEquipo(config)
-    const uso = disponibilidad(config, 'telegram', 'alertas')
-    const omitido = uso.apagado ? uso.motivo : null
-    const error = omitido
-        ? undefined
-        : !chat
-          ? 'Chat del equipo de Telegram no configurado'
-          : (uso.motivo ?? undefined)
-
-    return crearEnvio(trx, {
-        origen: `alerta:${datos.incidente.id}:${datos.fase}`,
+    const variables: Variables = {
         evento: datos.evento,
-        clienteId: null,
-        canal: 'telegram',
-        destino: chat ?? '-',
-        variables: {
-            evento: datos.evento,
-            empresa: await variablesEmpresa(trx, empresaId ?? undefined),
-            alerta: datos.alerta,
-        },
-        plantilla,
-        requestId: datos.requestId,
-        error,
-        omitido,
-        empresaId,
-    })
+        empresa: await variablesEmpresa(trx, empresaId ?? undefined),
+        alerta: datos.alerta,
+    }
+    const envios: EnvioCreado[] = []
+    for (const canal of canales) {
+        const enBase = (await trx
+            .from('notify.plantillas')
+            .where('evento', datos.evento)
+            .where('canal', canal)
+            .select('asunto', 'cuerpo', 'activa')
+            .first()) as { asunto: string | null; cuerpo: string; activa: boolean } | null
+        if (enBase && !enBase.activa) continue
+        const plantilla =
+            enBase ?? PLANTILLAS_ALERTA.find((p) => p.evento === datos.evento && p.canal === canal)
+        if (!plantilla) throw new Error(`Alerta sin plantilla: ${datos.evento} (${canal})`)
+
+        const destino = canal === 'telegram' ? chatDelEquipo(config) : config.correo.contabilidad
+        const uso = disponibilidad(config, canal, 'alertas')
+        const omitido = uso.apagado ? uso.motivo : null
+        const sinDestino =
+            canal === 'telegram'
+                ? 'Chat del equipo de Telegram no configurado'
+                : `Correo de contabilidad no configurado en ${ambito(config)}`
+        const error = omitido ? undefined : !destino ? sinDestino : (uso.motivo ?? undefined)
+
+        envios.push(
+            await crearEnvio(trx, {
+                origen: `alerta:${datos.incidente.id}:${datos.fase}`,
+                evento: datos.evento,
+                clienteId: null,
+                canal,
+                destino: destino ?? '-',
+                variables,
+                plantilla,
+                requestId: datos.requestId,
+                error,
+                omitido,
+                empresaId,
+            }),
+        )
+    }
+    return envios
 }
 
 /** Instante en Guatemala para mostrar: `16/10/2026 08:05`. */

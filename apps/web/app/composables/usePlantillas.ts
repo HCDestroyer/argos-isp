@@ -10,5 +10,16 @@ export function usePlantillas() {
         return resolver(api.GET('/api/v1/plantillas-facturacion'))
     }
 
-    return { listar }
+    /**
+     * `PUT /plantillas-facturacion/:id` (`plantillas.editar`) solo con el momento de certificar
+     * (`certificar_al`) y la `version` leída; 409 si otra persona la cambió.
+     */
+    function cambiarCertificarAl(plantilla: Pick<PlantillaFacturacion, 'id' | 'version'>, certificarAl: PlantillaFacturacion['certificar_al']): Promise<Resultado<PlantillaFacturacion>> {
+        return resolver(api.PUT('/api/v1/plantillas-facturacion/{id}', {
+            params: { path: { id: plantilla.id } },
+            body: { version: plantilla.version, certificar_al: certificarAl },
+        }))
+    }
+
+    return { listar, cambiarCertificarAl }
 }

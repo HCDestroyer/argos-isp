@@ -20,6 +20,7 @@ describe('filtros de clientes · URL y parámetros de la API', () => {
             planId: null,
             conDeuda: true,
             conPromesa: false,
+            nitInvalido: false,
         })
         expect(leerFiltrosClientes({ estado: 'cortado' }).estado).toBeNull()
     })
@@ -33,9 +34,10 @@ describe('filtros de clientes · URL y parámetros de la API', () => {
             planId: 4,
             conDeuda: true,
             conPromesa: true,
+            nitInvalido: true,
         }
         const query = queryFiltrosClientes(filtros)
-        expect(query).toEqual({ q: 'ana', zona: '2', estado: 'limitado', router: '1', plan: '4', deuda: '1', promesa: '1' })
+        expect(query).toEqual({ q: 'ana', zona: '2', estado: 'limitado', router: '1', plan: '4', deuda: '1', promesa: '1', nit_invalido: '1' })
         expect(leerFiltrosClientes(query)).toEqual({ ...filtros, q: 'ana' })
         expect(queryFiltrosClientes({ ...FILTROS_CLIENTES_VACIOS })).toEqual({})
     })

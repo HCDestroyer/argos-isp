@@ -31,6 +31,17 @@ const PANTALLAS = [
     ['balance por empresa', '/libro?tab=balance'],
     ['estado de resultados', '/libro?tab=resultados'],
     ['bitácora con empresas', '/bitacora'],
+    // Fase 4 (cobros y bancos).
+    ['cobros por liquidar', '/cobros/por-liquidar'],
+    ['fondos en tránsito', '/bancos/transito'],
+    ['extracto y conciliación', '/bancos/extractos/1'],
+    ['reporte de conciliación', '/bancos/conciliacion'],
+    ['cartera', '/cartera'],
+    ['pago con proveedor de cobro', '/pagos/7003'],
+    // Lealtad, fase 1.
+    ['lealtad', '/lealtad'],
+    ['puntos del cliente', '/clientes/2?tab=puntos'],
+    ['reporte de lealtad', '/reportes/lealtad'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
@@ -67,7 +78,7 @@ for (const tema of ['light', 'dark'] as const) {
         })
 
         test('pantallas principales sin violaciones de axe', async ({ page }) => {
-            test.setTimeout(180_000)
+            test.setTimeout(240_000)
             await entrar(page, 'admin@argos.test')
             for (const [nombre, ruta] of PANTALLAS) {
                 // Un paso por pantalla y esperas acotadas: si una no llega a estar lista, falla

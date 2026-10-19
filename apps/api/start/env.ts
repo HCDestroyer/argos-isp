@@ -105,6 +105,8 @@ export default await Env.create(new URL('../', import.meta.url), {
     /** URL pública de la API (sin `/api/v1`): arma `{{empresa.logo_url}}` en los avisos. */
     NOTIFY_API_URL: Env.schema.string.optional(),
     TELEGRAM_CHAT_EQUIPO: Env.schema.string.optional(),
+    /** Avisos fiscales a contabilidad (valor inicial; después se edita en el panel). */
+    NOTIFY_CORREO_CONTABILIDAD: Env.schema.string.optional(),
     NOTIFY_CRON_TOLERANCIA_MIN: Env.schema.number.optional(),
     /**
      * Conector Horus (A6): se configura desde el panel. Solo este flag de laboratorio es de

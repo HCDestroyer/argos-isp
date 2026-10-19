@@ -16,7 +16,11 @@ import { Problema } from '#shared/errores'
 export const CONECTORES_SSO = ['horus'] as const
 export type ConectorSso = (typeof CONECTORES_SSO)[number]
 
-export const TIPOS_DESTINO_SSO = ['cliente', 'servicio', 'router'] as const
+/**
+ * Destinos que Argos abre (contrato §1.5, 1.7.0): `cliente` y `servicio` con el id de Argos. Los
+ * tipos `router` y `hallazgo` llevan ids de Horus y solo existen con Horus como destino.
+ */
+export const TIPOS_DESTINO_SSO = ['cliente', 'servicio'] as const
 export type TipoDestinoSso = (typeof TIPOS_DESTINO_SSO)[number]
 
 export const VIGENCIA_TICKET_S = 60
@@ -36,7 +40,6 @@ export function rutaDestino(tipo: TipoDestinoSso, idExterno: string): string {
     const rutas: Record<TipoDestinoSso, string> = {
         cliente: '/clientes/',
         servicio: '/servicios/',
-        router: '/routers/',
     }
     return `${rutas[tipo]}${encodeURIComponent(idExterno)}`
 }

@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresasDeLista, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
 import { asientoReverso, bancosLibro } from './datos'
 
 type Cuenta = Schema<'Cuenta'>
@@ -37,7 +37,30 @@ export function vistaAsiento(asiento: Schema<'Asiento'>): Schema<'Asiento'> {
     else if (asiento.origen_tipo === 'ajuste' && asiento.origen_id !== null) {
         bloqueo = `El asiento ${asiento.id} es del saldo inicial ${asiento.origen_id}: no se revierte directo; anula el saldo inicial`
     }
-    return { ...asiento, revertido_por: revertidoPor, revertible: bloqueo === null, motivo_no_revertible: bloqueo }
+    const diario = diarioDe(asiento)
+    const numero = bd.asientos
+        .filter(a => (a.empresa_id ?? 1) === (asiento.empresa_id ?? 1) && a.fecha.slice(0, 4) === asiento.fecha.slice(0, 4) && diarioDe(a) === diario && a.id <= asiento.id)
+        .length
+    return { ...asiento, revertido_por: revertidoPor, revertible: bloqueo === null, motivo_no_revertible: bloqueo, diario, numero, partida: null }
+}
+
+/** Diario del asiento como lo deriva A3 de `origen_tipo` (§10.7): VEN, COB, COM, CAJ-n, VAR. */
+function diarioDe(asiento: Schema<'Asiento'>): string {
+    switch (asiento.origen_tipo) {
+        case 'factura':
+        case 'mora':
+        case 'nota_credito':
+        case 'reclasificacion':
+            return 'VEN'
+        case 'pago':
+            return 'COB'
+        case 'egreso':
+            return 'COM'
+        case 'cierre_caja':
+            return 'CAJ-1'
+        default:
+            return 'VAR'
+    }
 }
 
 /** Saldo según la naturaleza de la cuenta, como `saldoSegunNaturaleza` de la API. */
@@ -50,7 +73,51 @@ function fechaValida(valor: string | null): boolean {
     return valor === null || valor === '' || FECHA.test(valor)
 }
 
+const DIARIOS_BASE: { codigo: string, nombre: string, tipo: Schema<'Diario'>['tipo'] }[] = [
+    { codigo: 'CIE', nombre: 'Cierre', tipo: 'cierre' },
+    { codigo: 'COB', nombre: 'Cobros', tipo: 'cobros' },
+    { codigo: 'COM', nombre: 'Compras y egresos', tipo: 'compras' },
+    { codigo: 'IMP', nombre: 'Impuestos', tipo: 'impuestos' },
+    { codigo: 'VAR', nombre: 'Varios', tipo: 'varios' },
+    { codigo: 'VEN', nombre: 'Ventas', tipo: 'ventas' },
+]
+
+/**
+ * Diarios de una empresa como los crea el paquete (A3, §10.7; forma capturada de
+ * `GET /libro/diarios`): los base, uno `CAJ-n` por caja y uno `BAN-n` por cuenta bancaria, con la
+ * numeración por año contada de sus asientos.
+ */
+function diariosDe(empresaId: number): Schema<'Diario'>[] {
+    const creado = '2026-09-01T15:00:00.000Z'
+    const filas: Omit<Schema<'Diario'>, 'id' | 'secuencias'>[] = [
+        ...DIARIOS_BASE.map(d => ({ ...d, cuenta_por_defecto: null, cuenta_por_defecto_codigo: null, caja_id: null, cuenta_bancaria_id: null })),
+        ...bd.cajas.filter(c => (c.empresa_id ?? 1) === empresaId).map(c => ({ codigo: `CAJ-${c.id}`, nombre: c.nombre, tipo: 'caja' as const, cuenta_por_defecto: c.cuenta_id, cuenta_por_defecto_codigo: bd.cuentas.find(x => x.id === c.cuenta_id)?.codigo ?? null, caja_id: c.id, cuenta_bancaria_id: null })),
+        ...bd.cuentasBancarias.filter(c => (c.empresa_id ?? 1) === empresaId).map(c => ({ codigo: `BAN-${c.id}`, nombre: `${c.banco_nombre} · ${c.alias}`, tipo: 'banco' as const, cuenta_por_defecto: c.cuenta_id, cuenta_por_defecto_codigo: c.cuenta_codigo, caja_id: null, cuenta_bancaria_id: c.id })),
+    ].map(d => ({ ...d, empresa_id: empresaId, activo: true, version: 1, created_at: creado, updated_at: creado }))
+    return filas.map((fila, indice) => {
+        const anios = new Map<number, number>()
+        for (const asiento of bd.asientos) {
+            if ((asiento.empresa_id ?? 1) === empresaId && diarioDe(asiento) === fila.codigo) {
+                const anio = Number(asiento.fecha.slice(0, 4))
+                anios.set(anio, (anios.get(anio) ?? 0) + 1)
+            }
+        }
+        return { ...fila, id: empresaId * 100 + indice + 1, secuencias: [...anios.entries()].map(([anio, ultimo]) => ({ anio, ultimo })) }
+    })
+}
+
 export const rutasLibro: RutasFixture = {
+    'GET /api/v1/libro/diarios': conPermiso('libro.ver', (solicitud) => {
+        const empresas = empresasDeLista(solicitud) ?? bd.empresas.map(e => e.id)
+        return { status: 200, cuerpo: empresas.flatMap(diariosDe) }
+    }),
+
+    'GET /api/v1/libro/diarios/:id': conPermiso('libro.ver', (solicitud) => {
+        const id = idDe(solicitud) ?? 0
+        const diario = diariosDe(Math.floor(id / 100)).find(d => d.id === id)
+        return diario ? { status: 200, cuerpo: diario } : noEncontrado('el diario')
+    }),
+
     /** Como `GET /libro/bancos` (A3, `egresos.ver`). */
     'GET /api/v1/libro/bancos': conPermiso('egresos.ver', () => ({ status: 200, cuerpo: bancosLibro })),
 

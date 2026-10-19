@@ -73,7 +73,7 @@ onMounted(() => {
 watch(empresaId, cargar)
 
 async function guardar() {
-    if (!form.value || !config.value) {
+    if (!form.value || !config.value || errorListaCorreos(form.value.correo.contabilidad)) {
         return
     }
     guardando.value = true
@@ -301,6 +301,21 @@ const itemsTls = Object.entries(TLS_CORREO).map(([value, label]) => ({ label, va
                             />
                         </UFormField>
                         <UFormField
+                            name="correo.contabilidad"
+                            label="Correo de contabilidad"
+                            description="Avisos fiscales: integridad del libro, DTE rechazado, contingencia FEL y notas anuladas. Varios, separados por coma."
+                            :error="errorListaCorreos(form.correo.contabilidad)"
+                            class="sm:col-span-6"
+                        >
+                            <UInput
+                                v-model="form.correo.contabilidad"
+                                :disabled="bloqueado"
+                                placeholder="contabilidad@dominio.gt, contador@despacho.gt"
+                                class="w-full"
+                                data-prueba="correo-contabilidad"
+                            />
+                        </UFormField>
+                        <UFormField
                             name="correo.nombre_visible"
                             label="Nombre visible"
                             description="Lleva el nombre comercial de la empresa"
@@ -468,7 +483,7 @@ const itemsTls = Object.entries(TLS_CORREO).map(([value, label]) => ({ label, va
                     </div>
                     <div class="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                         <USwitch
-                            v-for="(aviso, clave) in AVISOS"
+                            v-for="{ clave, aviso } in avisosDe(form.avisos)"
                             :key="clave"
                             v-model="form.avisos[clave]"
                             :disabled="bloqueado"

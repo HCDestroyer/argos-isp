@@ -12,7 +12,12 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * invalidar la caché de parámetros fiscales, `ConsumidorFiscal`; `pago.registrado` → pedir la
  * certificación de los avisos de cobro cubiertos, `ConsumidorFel`); `--sin-eventos` lo apaga.
  *
- * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas`, `conciliar`, `sellar`, `integridad`, `depreciar` o `diferir`) y termina:
+ * También consume el grupo `lealtad` (`ConsumidorLealtad`: pagos, facturas, notas de crédito y
+ * servicios retirados → `lealtad.evaluar_evento`) y agenda los crons `lealtad:antiguedad` y
+ * `lealtad:vencer`.
+ *
+ * `--una-vez <cron>` ejecuta un solo cron (`generar`, `vencer`, `corte`, `promesas`, `conciliar`, `sellar`,
+ * `integridad`, `depreciar`, `diferir`, `lealtad:antiguedad` o `lealtad:vencer`) y termina:
  * útil en el laboratorio y en scripts.
  */
 export default class BillingWorker extends BaseCommand {
@@ -27,7 +32,7 @@ export default class BillingWorker extends BaseCommand {
 
     @flags.string({
         description:
-            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad, depreciar, diferir) y termina',
+            'Ejecuta un solo cron (generar, vencer, corte, promesas, conciliar, sellar, integridad, depreciar, diferir, lealtad:antiguedad, lealtad:vencer) y termina',
     })
     declare unaVez?: string
 
@@ -49,7 +54,7 @@ export default class BillingWorker extends BaseCommand {
         const worker = crearWorkerBilling()
         this.logger.info(`billing:worker escuchando la cola ${NOMBRE_COLA_BILLING}`)
 
-        let ejecutor: { detener(): Promise<void> } | null = null
+        const ejecutores: Array<{ detener(): Promise<void> }> = []
         if (!this.sinEventos) {
             const { EjecutorGrupo } = await import('#shared/eventos_bus')
             const { ConsumidorBilling } = await import('#billing/consumidor')
@@ -67,12 +72,19 @@ export default class BillingWorker extends BaseCommand {
                 ],
             })
             grupo.iniciar()
-            ejecutor = grupo
+            ejecutores.push(grupo)
             this.logger.info(`billing:worker consumiendo el grupo billing de ${grupo.stream}`)
+
+            // programa de lealtad: grupo propio (un fallo de lealtad no reintenta los consumidores de billing)
+            const { ConsumidorLealtad } = await import('#lealtad/consumidor')
+            const lealtad = new EjecutorGrupo({ grupo: 'lealtad', consumidores: [new ConsumidorLealtad()] })
+            lealtad.iniciar()
+            ejecutores.push(lealtad)
+            this.logger.info(`billing:worker consumiendo el grupo lealtad de ${lealtad.stream}`)
         }
 
         const terminar = async () => {
-            await ejecutor?.detener()
+            for (const ejecutor of ejecutores) await ejecutor.detener()
             await worker.close()
             await cola.close()
             await this.terminate()

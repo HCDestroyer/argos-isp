@@ -10,7 +10,8 @@
 // Crea 4 zonas, 2 routers con redes IPv4 e IPv6, 3 planes implementados en ambos routers,
 // 2 plantillas, 8 clientes (NIT con dígito verificador o CF) y 7 servicios, uno retirado; una
 // cuenta bancaria propia (Banrural · Monetaria) y un pago por transferencia que deja al día a un
-// cliente con servicio activo (facturado hasta hoy).
+// cliente con servicio activo (facturado hasta hoy). DEMO_FEL=falso (y DEMO_FEL_MODO) configura la
+// FEL con el certificador falso de pruebas; sin ella no se toca la FEL.
 const B = (process.env.API_URL ?? 'http://localhost:3333') + '/api/v1'
 let token
 async function api(m, p, body) {
@@ -38,6 +39,21 @@ token = (
         password: process.env.DEMO_PASSWORD ?? 'admin12345',
     })
 ).token
+// FEL (fase 3): sin DEMO_FEL la empresa queda como esté (sin configuración = FEL desactivada) y
+// nada se certifica. Con DEMO_FEL=falso se configura el certificador falso en ambiente de pruebas
+// (nunca INFILE ni producción) con el modo DEMO_FEL_MODO (opcional por defecto; obligatoria u
+// opcional): los avisos pagados se certifican en memoria cuando corre `fiscal:worker`.
+if (process.env.DEMO_FEL) {
+    if (process.env.DEMO_FEL !== 'falso') throw new Error('DEMO_FEL solo admite "falso" (certificador de pruebas)')
+    const modo = process.env.DEMO_FEL_MODO ?? 'opcional'
+    if (!['opcional', 'obligatoria'].includes(modo)) throw new Error('DEMO_FEL_MODO: opcional u obligatoria')
+    const fel = await api('GET', '/fel/configuracion')
+    await api('PUT', '/fel/configuracion', { proveedor: 'falso', ambiente: 'pruebas', modo, version: fel.version })
+    await api('PUT', '/fel/credenciales/pruebas', {
+        proveedor: 'falso',
+        credenciales: { usuario: 'demo', llave: 'demo-no-secreta' },
+    })
+}
 const zonas = {}
 for (const n of ['Centro', 'Zona 10', 'Mixco', 'Villa Nueva'])
     zonas[n] = (await api('POST', '/zonas', { nombre: n })).id

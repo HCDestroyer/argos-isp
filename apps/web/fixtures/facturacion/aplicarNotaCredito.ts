@@ -50,6 +50,7 @@ export function aplicarNotaCredito(
         created_by: usuario?.id ?? null,
         created_by_nombre: usuario?.nombre ?? null,
         created_at: momento,
+        anulada_en: null,
     }
     tablas.notasCredito.push(nota)
     tablas.asientos.push({

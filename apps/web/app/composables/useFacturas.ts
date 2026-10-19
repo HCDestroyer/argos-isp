@@ -5,6 +5,8 @@ export type FacturaDetalle = Schema<'FacturaDetalle'>
 export type FacturaLinea = Schema<'FacturaLinea'>
 export type NotaCreditoEmitida = Schema<'NotaCreditoEmitida'>
 export type DatosNotaCredito = paths['/api/v1/facturas/{id}/notas-credito']['post']['requestBody']['content']['application/json']
+export type SustitucionFactura = Schema<'SustitucionFactura'>
+export type DatosSustituir = paths['/api/v1/facturas/{id}/sustituir']['post']['requestBody']['content']['application/json']
 export type FiltrosFacturas = Omit<NonNullable<paths['/api/v1/facturas']['get']['parameters']['query']>, 'cursor'>
 
 export const LIMITE_FACTURAS = 25
@@ -25,7 +27,12 @@ export function useFacturas() {
         return resolver(api.GET('/api/v1/facturas/{id}', { params: { path: { id } } }))
     }
 
-    /** `POST /facturas/:id/anular` con motivo (`facturas.anular`): la API revierte su asiento. */
+    /**
+     * `POST /facturas/:id/anular` con motivo (`facturas.anular`): la API revierte su asiento. Con
+     * DTE certificado exige además `fel.anular` y responde con `fel_estado = anulacion_pendiente`
+     * (se anula cuando el certificador confirma); 422 `anulacion_fuera_de_plazo`, 409
+     * `anulacion_en_proceso`, `factura_con_ndeb`.
+     */
     function anular(id: number, motivo: string, claveIdempotencia: string): Promise<Resultado<Factura>> {
         return resolver(api.POST('/api/v1/facturas/{id}/anular', {
             params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
@@ -45,5 +52,17 @@ export function useFacturas() {
         }))
     }
 
-    return { listar, ver, anular, notaCredito }
+    /**
+     * `POST /facturas/:id/sustituir` (`facturas.sustituir`): anula la original (sin DTE certificado)
+     * o la acredita con una NCRE por todo su saldo, y emite una nueva del mismo periodo con el
+     * receptor corregido. 409 `sustitucion_no_permitida`, `factura_anulada`; 422 `nota_fuera_de_plazo`.
+     */
+    function sustituir(id: number, datos: DatosSustituir, claveIdempotencia: string): Promise<Resultado<SustitucionFactura>> {
+        return resolver(api.POST('/api/v1/facturas/{id}/sustituir', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { listar, ver, anular, notaCredito, sustituir }
 }

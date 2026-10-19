@@ -66,8 +66,19 @@ function copiarAFiscal() {
 }
 
 function consumidorFinal() {
-    estado.nit_cui = 'CF'
+    estado.tipo_documento_fiscal = 'cf'
+    estado.nit_cui = ''
 }
+
+const itemsDocumento: SelectItem[] = Object.entries(TIPOS_DOCUMENTO_FISCAL).map(([value, label]) => ({ label, value }))
+const PLACEHOLDER_DOCUMENTO: Record<TipoDocumentoFiscal, string> = { nit: '1234567-9', cui: '2984 56132 0101', pasaporte: 'A1234567', cf: 'Sin número' }
+
+/** Al escribir un número con «Consumidor final» elegido, el tipo se deduce como lo hace la API. */
+watch(() => estado.nit_cui, (valor) => {
+    if (estado.tipo_documento_fiscal === 'cf' && valor.trim() && limpiarDocumento(valor) !== 'CF') {
+        estado.tipo_documento_fiscal = deducirTipoDocumento(valor) ?? (/^\d/.test(valor.trim()) ? 'nit' : 'pasaporte')
+    }
+})
 
 async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
     enviando.value = true
@@ -268,16 +279,37 @@ onMounted(async () => {
             description="Para el aviso de cobro y, desde la semana 5, la factura FEL."
             variant="subtle"
         >
+            <UAlert
+                v-if="cliente?.nit_cui_invalido"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-badge-alert"
+                title="NIT o CUI por corregir"
+                description="El número no pasó la validación al activar la localización fiscal (se conservó tal cual). Corrígelo o márcalo como consumidor final: la factura FEL lo exige válido."
+                class="mb-4"
+                data-prueba="nit-invalido"
+            />
             <div class="grid gap-4 sm:grid-cols-2">
                 <UFormField
+                    name="tipo_documento_fiscal"
+                    label="Documento"
+                >
+                    <USelect
+                        v-model="estado.tipo_documento_fiscal"
+                        :items="itemsDocumento"
+                        class="w-full"
+                    />
+                </UFormField>
+                <UFormField
                     name="nit_cui"
-                    label="NIT o CUI"
-                    description="NIT con dígito verificador, CUI de 13 dígitos o CF."
+                    label="Número"
+                    :description="estado.tipo_documento_fiscal === 'nit' ? 'Con dígito verificador (módulo 11).' : estado.tipo_documento_fiscal === 'cui' ? '13 dígitos del DPI.' : estado.tipo_documento_fiscal === 'pasaporte' ? '3 a 20 letras o dígitos.' : 'Consumidor final no lleva número.'"
                 >
                     <UFieldGroup class="w-full">
                         <UInput
                             v-model="estado.nit_cui"
-                            placeholder="1234567-8"
+                            :placeholder="PLACEHOLDER_DOCUMENTO[estado.tipo_documento_fiscal]"
+                            :disabled="estado.tipo_documento_fiscal === 'cf'"
                             class="w-full font-mono"
                         />
                         <UButton
@@ -288,6 +320,18 @@ onMounted(async () => {
                             @click="consumidorFinal"
                         />
                     </UFieldGroup>
+                </UFormField>
+
+                <UFormField
+                    name="pais_fiscal"
+                    label="País"
+                    description="NIT y CUI son de Guatemala; un extranjero usa pasaporte."
+                >
+                    <UInput
+                        v-model="estado.pais_fiscal"
+                        maxlength="2"
+                        class="w-full font-mono uppercase"
+                    />
                 </UFormField>
 
                 <UFormField
@@ -308,6 +352,25 @@ onMounted(async () => {
                     <UInput
                         v-model="estado.direccion_fiscal"
                         class="w-full"
+                    />
+                </UFormField>
+
+                <UFormField
+                    name="agente_retencion_iva"
+                    description="Retiene IVA al pagar sus facturas."
+                >
+                    <USwitch
+                        v-model="estado.agente_retencion_iva"
+                        label="Agente de retención de IVA"
+                    />
+                </UFormField>
+                <UFormField
+                    name="sector_publico"
+                    description="Reglas propias de retención."
+                >
+                    <USwitch
+                        v-model="estado.sector_publico"
+                        label="Sector público"
                     />
                 </UFormField>
 

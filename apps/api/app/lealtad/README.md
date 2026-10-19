@@ -1,0 +1,47 @@
+# lealtad · programa de lealtad (A3)
+
+Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6, §6.1, §9, §11, §13–§15 y §15.1).
+
+## Qué hace
+
+- **Programa por empresa** (`lealtad.programas`, uno activo por empresa). Por defecto los puntos son un
+  indicador (`diferimiento = false`, sin asientos); con `diferimiento = true` son un pasivo NIIF 15
+  (`2.1.10`) valorado a `valor_punto × canje_esperado_pct`. Vencimiento por empresa (12 meses por
+  defecto, `null` = no vencen).
+- **Reglas para ganar** (`lealtad.reglas`): `pago_a_tiempo` (con racha), `antiguedad`, `referido` y
+  `pago_adelantado`, cada una con su esquema de `condiciones` (`validators.ts`) y topes por cliente.
+- **Auxiliar de puntos por lotes** (`lealtad.movimientos`, solo inserción): cada acumulación es un lote
+  con `vence_en` y `valor`; las salidas consumen lotes en `lealtad.consumos`, el que vence antes
+  primero. Saldo = suma de movimientos (no hay columna). `puntos.ts` concentra la escritura.
+- **Asientos del pasivo** por `RegistrarAsiento` (origen `lealtad`): acumulación `4.1.05 / 2.1.10`,
+  vencimiento `2.1.10 / 4.1.06`, reverso y ajuste negativo `2.1.10 / 4.1.05`. Invariante: saldo de
+  `2.1.10` = Σ valor vivo de los lotes (`GET /reportes/lealtad`, `cuadra`).
+- **Referidos** (`lealtad.referidos`): se registran con `servicio.creado` del cliente que llegó con el
+  código de otro (A1: `core.codigos_referido`, `referidoDeCliente` de `#core/referidos`) y califican
+  con las facturas pagadas mínimas.
+
+## Acciones
+
+`lealtad.crear_programa`, `lealtad.editar_programa`, `lealtad.activar_programa`,
+`lealtad.desactivar_programa`, `lealtad.crear_regla`, `lealtad.editar_regla`, `lealtad.ajustar`,
+`lealtad.rechazar_referido`, `lealtad.evaluar_evento` (consumidor), `lealtad.otorgar_antiguedad` y
+`lealtad.vencer` (crons).
+
+## Eventos
+
+- Emite: `lealtad.programa_cambiado`, `lealtad.puntos_acumulados`, `lealtad.puntos_revertidos`,
+  `lealtad.puntos_por_vencer`, `lealtad.puntos_vencidos`, `lealtad.referido_calificado`.
+- Consume (grupo `lealtad` en `node ace billing:worker`, `consumidor.ts`): `pago.registrado`,
+  `pago.anulado`, `factura.emitida`, `factura.anulada`, `nota_credito.emitida`,
+  `nota_credito.anulada`, `servicio.creado`, `servicio.estado_cambiado`. Idempotente por
+  `clave_unica`: un evento repetido no da puntos dos veces.
+
+## Crons
+
+`lealtad:antiguedad` (03:05) y `lealtad:vencer` (03:20, Guatemala) en la cola de `billing:worker`, con
+lock y "todo lo pendiente hasta hoy" por lotes de 500. `node ace billing:worker --una-vez lealtad:vencer`.
+
+## Pruebas
+
+`tests/lealtad/*.spec.ts`; cada una termina en `afirmarLibroLealtad` (invariantes del auditor y
+`2.1.10` = lotes vivos).

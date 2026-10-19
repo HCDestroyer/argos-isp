@@ -27,6 +27,15 @@ const reportes = CLAVES_REPORTE.map(clave => ({ clave, ...REPORTES[clave] }))
                     variant="subtle"
                     :data-prueba="`reporte-${reporte.clave}`"
                 />
+                <!-- Lealtad (A3): su propio formato, con el pasivo de los puntos contra el libro. -->
+                <UPageCard
+                    title="Lealtad"
+                    description="Puntos emitidos, canjeados y vencidos, y el pasivo de los puntos contra 2.1.10."
+                    icon="i-lucide-gem"
+                    to="/reportes/lealtad"
+                    variant="subtle"
+                    data-prueba="reporte-lealtad"
+                />
             </UPageGrid>
         </div>
     </PanelPagina>

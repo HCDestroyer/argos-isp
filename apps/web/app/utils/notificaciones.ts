@@ -25,6 +25,8 @@ export interface FormularioNotificaciones {
         usuario: string
         remitente: string
         nombre_visible: string
+        /** Correos de contabilidad para los avisos fiscales, separados por coma (A6). */
+        contabilidad: string
     }
     telegram: {
         clientes_activo: boolean
@@ -40,6 +42,17 @@ export interface FormularioNotificaciones {
     }
 }
 
+/** Espejo de `LISTA_CORREOS` del validador de A6: direcciones separadas por coma (o vacío). */
+export const LISTA_CORREOS = /^\s*(?:[^\s@,]+@[^\s@,]+\.[^\s@,]+\s*(?:,\s*|$))*$/
+
+/** Error del campo «correo de contabilidad», o `undefined` si es válido. */
+export function errorListaCorreos(valor: string): string | undefined {
+    if (valor.length > 1000) {
+        return 'Máximo 1000 caracteres'
+    }
+    return LISTA_CORREOS.test(valor) ? undefined : 'Escribe correos válidos separados por coma'
+}
+
 export const TLS_CORREO: Record<Configuracion['correo']['tls'], string> = {
     auto: 'Automático (STARTTLS si el servidor lo ofrece)',
     starttls: 'STARTTLS obligatorio',
@@ -47,8 +60,14 @@ export const TLS_CORREO: Record<Configuracion['correo']['tls'], string> = {
     ninguno: 'Sin cifrar',
 }
 
-/** Tipos de aviso, con el nombre que ve el operador. */
-export const AVISOS: Record<keyof Configuracion['avisos'], { etiqueta: string, descripcion: string }> = {
+type TextoAviso = { etiqueta: string, descripcion: string }
+
+/**
+ * Textos de todos los tipos de aviso que el panel conoce, incluidos los que la API todavía no
+ * publica en `avisos` (p. ej. `lealtad`, que A6 agrega en `a6/lealtad-1`): un tipo sin texto rompe el
+ * typecheck de `AVISOS`; uno con texto que la API no manda no se muestra (`avisosDe`).
+ */
+const TEXTOS_AVISO = {
     factura: { etiqueta: 'Factura emitida', descripcion: 'Aviso de cobro nuevo' },
     vencimiento: { etiqueta: 'Factura vencida', descripcion: 'Al vencer sin pago' },
     recordatorio: { etiqueta: 'Recordatorio', descripcion: 'Antes del vencimiento' },
@@ -56,6 +75,17 @@ export const AVISOS: Record<keyof Configuracion['avisos'], { etiqueta: string, d
     pago: { etiqueta: 'Pago registrado', descripcion: 'Recibo del pago' },
     promesa: { etiqueta: 'Promesa de pago', descripcion: 'Creada, cumplida o incumplida' },
     comprobante: { etiqueta: 'Comprobante', descripcion: 'Aprobado o rechazado' },
+    lealtad: { etiqueta: 'Puntos de lealtad', descripcion: 'Puntos ganados, por vencer y referido calificado' },
+} satisfies Record<string, TextoAviso>
+
+/** Tipos de aviso, con el nombre que ve el operador. */
+export const AVISOS: Record<keyof Configuracion['avisos'], TextoAviso> = TEXTOS_AVISO
+
+/** Los avisos que trae la configuración leída, con su texto (sin interruptores de tipos que la API no tiene). */
+export function avisosDe(avisos: Record<string, boolean>): { clave: keyof Configuracion['avisos'], aviso: TextoAviso }[] {
+    return (Object.keys(AVISOS) as (keyof Configuracion['avisos'])[])
+        .filter(clave => Object.hasOwn(avisos, clave))
+        .map(clave => ({ clave, aviso: AVISOS[clave] }))
 }
 
 const conservar = (): Secreto => ({ accion: 'conservar', valor: '' })
@@ -72,6 +102,7 @@ export function formularioNotificaciones(config: Configuracion): FormularioNotif
             usuario: config.correo.usuario ?? '',
             remitente: config.correo.remitente ?? '',
             nombre_visible: config.correo.nombre_visible ?? '',
+            contabilidad: config.correo.contabilidad ?? '',
         },
         telegram: {
             clientes_activo: config.telegram.clientes_activo,
@@ -109,6 +140,7 @@ export function cuerpoNotificaciones(form: FormularioNotificaciones, version: nu
         usuario: textoONull(form.correo.usuario),
         remitente: textoONull(form.correo.remitente),
         nombre_visible: textoONull(form.correo.nombre_visible),
+        contabilidad: textoONull(form.correo.contabilidad),
     }
     const password = secreto(form.secretos.password)
     if (password) {

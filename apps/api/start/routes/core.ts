@@ -40,6 +40,9 @@ import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
 import CambiarEmpresaServicio from '#core/actions/cambiar_empresa_servicio'
 import { configuracionEfectivaPublica } from '#core/actions/obtener_configuracion_efectiva'
 import SuspenderServicio from '#core/actions/suspender_servicio'
+import ProgramarPlanTemporal from '#core/actions/programar_plan_temporal'
+import CancelarPlanTemporal from '#core/actions/cancelar_plan_temporal'
+import { listarPlanesTemporales } from '#core/planes_temporales'
 import ReactivarServicio from '#core/actions/reactivar_servicio'
 import LimitarServicio from '#core/actions/limitar_servicio'
 import QuitarLimiteServicio from '#core/actions/quitar_limite_servicio'
@@ -105,6 +108,7 @@ import {
     CredencialesPpp,
     EmpresaGrupo,
     PaisLocalizacion,
+    PlanTemporal,
     Me,
     Permiso,
     ResolucionIp,
@@ -894,6 +898,73 @@ const servicios: Ruta[] = [
             return new CambiarEmpresaServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
         },
     }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/planes-temporales',
+        operacion: 'serviciosPlanesTemporales',
+        resumen: 'Planes temporales del servicio (mejoras de plan de lealtad o manuales)',
+        descripcion:
+            'Del más reciente al más viejo. El vigente (programado o activo) viene también en `plan_temporal`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        query: v.listarPaginadoValidator,
+        respuesta: { status: 200, descripcion: 'Página de planes temporales', esquema: pagina(PlanTemporal) },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return listarPlanesTemporales(id, query)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/planes-temporales',
+        operacion: 'serviciosProgramarPlanTemporal',
+        resumen: 'Programar un plan temporal (mejora de plan con fecha de fin)',
+        descripcion:
+            'Con `inicio` ya llegado (o sin él) se inicia en la misma petición: `plan_id` del servicio pasa al ' +
+            'temporal y se emite `servicio.config_cambiada` (`motivo: plan_temporal`); al `fin` el cron lo ' +
+            'devuelve a su plan base. 409 `plan_temporal_existente` si ya hay uno programado o activo; 422 ' +
+            '`plan_temporal_incompatible` si cambia IPv4/IPv6 o el tamaño del prefijo delegado, ' +
+            '`plan_temporal_igual`, `plan_no_disponible`, `plan_inactivo` o `servicio_retirado`.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.programar_plan_temporal',
+        cuerpo: v.programarPlanTemporalValidator,
+        idempotente: true,
+        respuesta: {
+            status: 201,
+            descripcion: 'Plan temporal programado (o ya activo)',
+            esquema: PlanTemporal,
+        },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new ProgramarPlanTemporal().execute(
+                { ...cuerpo, servicio_id: id, origen: 'manual' },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/planes-temporales/:planTemporalId/cancelar',
+        operacion: 'serviciosCancelarPlanTemporal',
+        resumen: 'Cancelar un plan temporal (si está activo, el servicio vuelve a su plan base)',
+        descripcion: '409 `plan_temporal_cerrado` si ya terminó o se canceló; 409 si `version` cambió.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.cancelar_plan_temporal',
+        cuerpo: v.cancelarPlanTemporalValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Plan temporal cancelado', esquema: PlanTemporal },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new CancelarPlanTemporal().execute(
+                { ...cuerpo, id: Number(params.planTemporalId), servicio_id: id },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
     accionServicio(
         'desconectar',
         'serviciosDesconectar',
@@ -1214,7 +1285,9 @@ integraciones.push(
         etiqueta: 'integraciones',
         permiso: 'sso.emitir',
         descripcion:
-            'Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial). Devuelve ' +
+            'Solo con el token `atk_` de la integración Horus (403 con cualquier otra credencial; si el ' +
+            'conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `horus_apagado` mientras ' +
+            'el conector esté apagado). Destino `cliente` o `servicio` con el id de Argos. Devuelve ' +
             'la URL del panel con el ticket en el fragmento (60 s, un solo uso). No da privilegios: el canje ' +
             'abre la sesión del usuario local vinculado, o pide su login.',
         cuerpo: v.emitirTicketSsoValidator,

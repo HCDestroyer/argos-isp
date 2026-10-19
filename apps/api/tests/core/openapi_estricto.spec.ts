@@ -39,7 +39,13 @@ const OPCIONALES_PENDIENTES: Record<string, string[]> = {
         'pais_fiscal',
         'agente_retencion_iva',
         'sector_publico',
+        // lealtad (2026-10-18)
+        'referido_por_id',
+        'referido_empresa_id',
+        'codigos_referido',
     ],
+    // lealtad (2026-10-18): plan temporal vigente
+    Servicio: ['plan_temporal'],
 }
 
 test.group('OpenAPI estricto · núcleo', () => {

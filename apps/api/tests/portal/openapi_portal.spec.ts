@@ -20,6 +20,10 @@ const SOLO_SESION = [
     'portalVincularTelegram',
     'portalDesvincularTelegram',
     'portalFacturaPdf',
+    'portalFacturaXml',
+    'portalNotasCredito',
+    'portalNotaCreditoXml',
+    'portalNotaCreditoPdf',
     'portalComprobantes',
 ]
 

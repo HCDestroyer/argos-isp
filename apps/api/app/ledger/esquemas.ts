@@ -128,6 +128,7 @@ export const Asiento = definirEsquema(
                 'baja_activo',
                 'diferido',
                 'alta_activo',
+                'lealtad',
             ]),
             origen_id: nulable(id),
             reversa_de: {

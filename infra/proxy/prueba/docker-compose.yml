@@ -31,10 +31,15 @@ services:
     profiles: !reset []
     restart: 'no'
     ports: !reset []
+    environment:
+      # Almacenamiento vacío en cada corrida: sin la limpieza, que corre a la vez que la emisión con
+      # la CA interna y puede borrar el certificado de api.localhost a medio guardar (Caddyfile)
+      PROXY_LIMPIEZA_ALMACEN: 'off'
     healthcheck:
       interval: 2s
       retries: 15
-    depends_on: !reset
+    # !override (no !reset, que vacía la lista e ignora lo de abajo): el proxy espera a la api de eco
+    depends_on: !override
       api:
         condition: service_healthy
       web:

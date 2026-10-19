@@ -234,6 +234,21 @@ export const Cliente = definirEsquema(
                 ...nulable(texto),
                 description: 'Nombre del responsable de pago (solo lectura)',
             },
+            referido_por_id: {
+                ...nulable(id),
+                description:
+                    'Cliente que lo refirió (programa de lealtad): el dueño del `codigo_referido` del alta',
+            },
+            referido_empresa_id: {
+                ...nulable(id),
+                description: 'Empresa (NIT) en la que cuenta el referido: la del código usado',
+            },
+            codigos_referido: {
+                ...lista(objeto({ empresa_id: id, codigo: { ...texto, pattern: '^[2-9A-HJKMNP-Z]{8}$' } })),
+                description:
+                    'Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos ' +
+                    'con el primer servicio en cada empresa)',
+            },
             ...auditable,
         },
         // Opcionales en el esquema hasta que los fixtures del panel los tengan; la API siempre los envía
@@ -245,6 +260,9 @@ export const Cliente = definirEsquema(
             'pais_fiscal',
             'agente_retencion_iva',
             'sector_publico',
+            'referido_por_id',
+            'referido_empresa_id',
+            'codigos_referido',
         ],
     ),
 )
@@ -302,43 +320,96 @@ export const ExcepcionesServicio = definirEsquema('ExcepcionesServicio', {
 
 export const Servicio = definirEsquema(
     'Servicio',
+    objeto(
+        {
+            id,
+            cliente_id: id,
+            empresa_id: { ...id, description: 'Empresa (NIT) que factura el servicio' },
+            router_id: id,
+            plan_id: id,
+            plantilla_facturacion_id: nulable(id),
+            estado: EstadoServicio,
+            promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
+            suspension_manual: {
+                type: 'boolean',
+                description: 'Suspendido a mano por un operador: el corte y los pagos no lo reactivan',
+            },
+            suspension_manual_motivo: nulable(texto),
+            tipo_conexion: {
+                ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
+                description: 'pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS',
+            },
+            user_ppp: { ...nulable(texto), description: 'null fuera de pppoe' },
+            amarre_ip_mac: { ...booleano, description: 'ARP estático IP-MAC en el router (solo sin PPPoE)' },
+            mac: nulable(texto),
+            direccion: nulable(texto),
+            coordenadas: nulable(texto),
+            fecha_instalacion: nulable(fecha),
+            costo_override: nulable(Dinero),
+            excluir_firewall: booleano,
+            ipv4: nulable(texto),
+            prefijo_enlace_v6: nulable(texto),
+            prefijo_delegado_v6: nulable(texto),
+            ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
+            ipv6_duid: nulable(texto),
+            // nombres de solo lectura (la API siempre los envía; obligatorios desde la semana 3)
+            cliente_nombre: texto,
+            plan_nombre: texto,
+            router_nombre: texto,
+            zona_nombre: nulable(texto),
+            excepciones: ExcepcionesServicio,
+            plan_temporal: {
+                ...nulable(
+                    objeto({
+                        id,
+                        plan_id: { ...id, description: 'Plan temporal' },
+                        plan_original_id: { ...id, description: 'Plan base al que vuelve al terminar' },
+                        inicio: instante,
+                        fin: instante,
+                        estado: enumerado(['programado', 'activo']),
+                        origen: enumerado(['lealtad', 'manual']),
+                        origen_id: nulable(id),
+                        version: { type: 'integer', minimum: 1 },
+                    }),
+                ),
+                description:
+                    'Plan temporal programado o activo (lealtad), o null. Activo: `plan_id` del servicio ya es ' +
+                    'el temporal (RADIUS, RouterOS y facturación lo usan) y vuelve a `plan_original_id` al terminar',
+            },
+            ...auditable,
+        },
+        // opcional en el esquema hasta que los fixtures del panel lo tengan; la API siempre lo envía
+        ['plan_temporal'],
+    ),
+)
+
+/** Fila de `core.servicios_planes_temporales` (`contratos/lealtad.md` §3). */
+export const PlanTemporal = definirEsquema(
+    'PlanTemporal',
     objeto({
         id,
-        cliente_id: id,
-        empresa_id: { ...id, description: 'Empresa (NIT) que factura el servicio' },
-        router_id: id,
-        plan_id: id,
-        plantilla_facturacion_id: nulable(id),
-        estado: EstadoServicio,
-        promesa_activa: { type: 'boolean', description: 'Bandera: hay una promesa de pago activa' },
-        suspension_manual: {
-            type: 'boolean',
-            description: 'Suspendido a mano por un operador: el corte y los pagos no lo reactivan',
-        },
-        suspension_manual_motivo: nulable(texto),
-        tipo_conexion: {
-            ...enumerado(['pppoe', 'ip_estatica', 'dhcp_fija']),
-            description: 'pppoe (RADIUS) o sin PPPoE (ip_estatica, dhcp_fija) por API REST de RouterOS',
-        },
-        user_ppp: { ...nulable(texto), description: 'null fuera de pppoe' },
-        amarre_ip_mac: { ...booleano, description: 'ARP estático IP-MAC en el router (solo sin PPPoE)' },
-        mac: nulable(texto),
-        direccion: nulable(texto),
-        coordenadas: nulable(texto),
-        fecha_instalacion: nulable(fecha),
-        costo_override: nulable(Dinero),
-        excluir_firewall: booleano,
-        ipv4: nulable(texto),
-        prefijo_enlace_v6: nulable(texto),
-        prefijo_delegado_v6: nulable(texto),
-        ipv6_modo: enumerado(['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno']),
-        ipv6_duid: nulable(texto),
-        // nombres de solo lectura (la API siempre los envía; obligatorios desde la semana 3)
-        cliente_nombre: texto,
+        empresa_id: id,
+        servicio_id: id,
+        plan_id: { ...id, description: 'Plan temporal (la mejora)' },
         plan_nombre: texto,
-        router_nombre: texto,
-        zona_nombre: nulable(texto),
-        excepciones: ExcepcionesServicio,
+        plan_original_id: {
+            ...id,
+            description:
+                'Plan base: el del servicio al programar, actualizado al iniciar; vuelve a él al terminar',
+        },
+        plan_original_nombre: texto,
+        inicio: instante,
+        fin: instante,
+        origen: enumerado(['lealtad', 'manual']),
+        origen_id: {
+            ...nulable(id),
+            description: 'Canje de lealtad que lo programó (con `origen: lealtad`)',
+        },
+        estado: enumerado(['programado', 'activo', 'terminado', 'cancelado']),
+        motivo: nulable(texto),
+        iniciado_en: nulable(instante),
+        terminado_en: nulable(instante),
+        creado_por: nulable(id),
         ...auditable,
     }),
 )
