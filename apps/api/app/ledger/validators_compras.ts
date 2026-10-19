@@ -113,6 +113,10 @@ const lineaCompra = vine.object({
     }),
     // total de la línea con el IVA incluido
     total: dinero(),
+    cantidad: vine.number().withoutDecimals().range([1, 100000]).nullable().optional().meta({
+        description:
+            'Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad',
+    }),
     iva: dinero().nullable().optional().meta({
         description: 'IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)',
     }),

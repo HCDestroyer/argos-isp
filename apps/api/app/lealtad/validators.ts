@@ -552,6 +552,10 @@ export const entregarPremioValidator = vine.compile(
         compra_linea_id: idEntidad().nullable().optional().meta({
             description: 'Con contrapartida compra: línea (bien) de una compra registrada de la empresa',
         }),
+        unidades: vine.number().withoutDecimals().min(1).nullable().optional().meta({
+            description:
+                'Con contrapartida compra: unidades de la línea que se entregan (1 por defecto); sin pasar de su cantidad',
+        }),
         nota: vine.string().trim().maxLength(2000).nullable().optional(),
     }),
 )

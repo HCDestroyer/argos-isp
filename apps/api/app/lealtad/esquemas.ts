@@ -458,6 +458,12 @@ const GanadorSorteo = objeto(
         reclamar_antes: nulable(instante),
         no_reclamado_en: nulable(instante),
         constancia_archivo_id: nulable(id),
+        compra_unidades: { ...nulable(entero), description: 'Unidades de esa línea que consumió la entrega' },
+        compra_base: {
+            ...nulable(Dinero),
+            description:
+                'Parte de la base de la línea que le tocó (base / cantidad por unidad; la última lleva el resto)',
+        },
         version: entero,
     },
     [
@@ -469,6 +475,8 @@ const GanadorSorteo = objeto(
         'reclamar_antes',
         'no_reclamado_en',
         'constancia_archivo_id',
+        'compra_unidades',
+        'compra_base',
     ],
 )
 
