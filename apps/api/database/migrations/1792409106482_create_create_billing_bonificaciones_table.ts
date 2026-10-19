@@ -21,13 +21,20 @@ import { BaseSchema } from '@adonisjs/lucid/schema'
 export default class extends BaseSchema {
     async up() {
         this.schema.raw(`
-            ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
-            ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo IN (
-                'factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
-                'compra', 'pago_proveedor', 'retencion', 'liquidacion_impuesto', 'pago_impuesto', 'cierre_anual',
-                'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco', 'provision', 'castigo',
-                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad', 'alta_activo',
-                'sorteo', 'bonificacion'));
+            -- agrega \`bonificacion\` y conserva los demás orígenes que ya admite la base
+            DO $$
+            DECLARE
+                valores text[];
+            BEGIN
+                SELECT array_agg(DISTINCT m[1]) INTO valores
+                  FROM pg_constraint c, regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m
+                 WHERE c.conname = 'asientos_origen_tipo_check' AND c.conrelid = 'ledger.asientos'::regclass;
+                IF NOT 'bonificacion' = ANY (valores) THEN
+                    valores := valores || 'bonificacion'::text;
+                END IF;
+                ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
+                EXECUTE format('ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo = ANY (%L::text[]))', valores);
+            END $$;
 
             CREATE OR REPLACE FUNCTION billing.sembrar_catalogos_cargo(empresa bigint) RETURNS void LANGUAGE plpgsql AS $$
             BEGIN
@@ -163,12 +170,18 @@ export default class extends BaseSchema {
             DROP FUNCTION IF EXISTS billing.factura_sin_bonificacion();
             DROP TABLE IF EXISTS billing.bonificaciones;
             DROP FUNCTION IF EXISTS billing.validar_bonificacion();
-            ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
-            ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo IN (
-                'factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
-                'compra', 'pago_proveedor', 'retencion', 'liquidacion_impuesto', 'pago_impuesto', 'cierre_anual',
-                'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco', 'provision', 'castigo',
-                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad', 'alta_activo')) NOT VALID;
+            -- quita \`bonificacion\` y conserva los demás orígenes que ya admite la base
+            DO $$
+            DECLARE
+                valores text[];
+            BEGIN
+                SELECT array_agg(DISTINCT m[1]) INTO valores
+                  FROM pg_constraint c, regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m
+                 WHERE c.conname = 'asientos_origen_tipo_check' AND c.conrelid = 'ledger.asientos'::regclass;
+                valores := array_remove(valores, 'bonificacion');
+                ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
+                EXECUTE format('ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo = ANY (%L::text[])) NOT VALID', valores);
+            END $$;
         `)
     }
 }
