@@ -9,6 +9,8 @@ export const planes: Schema<'Plan'>[] = [
     {
         id: 1,
         nombre: 'Hogar 10 Mbps',
+        // Tipo de plan (A1): la API siempre lo manda (por defecto residencial).
+        tipo: 'residencial',
         precio: '150.00',
         bajada_kbps: 10_000,
         subida_kbps: 5_000,
@@ -25,6 +27,8 @@ export const planes: Schema<'Plan'>[] = [
     {
         id: 2,
         nombre: 'Hogar 20 Mbps',
+        // Tipo de plan (A1): la API siempre lo manda (por defecto residencial).
+        tipo: 'residencial',
         precio: '200.00',
         bajada_kbps: 20_000,
         subida_kbps: 10_000,
@@ -41,6 +45,8 @@ export const planes: Schema<'Plan'>[] = [
     {
         id: 3,
         nombre: 'Pyme 50 Mbps',
+        // Tipo de plan (A1): la API siempre lo manda (por defecto residencial).
+        tipo: 'empresarial',
         precio: '450.00',
         bajada_kbps: 50_000,
         subida_kbps: 25_000,
@@ -57,6 +63,8 @@ export const planes: Schema<'Plan'>[] = [
     {
         id: 4,
         nombre: 'Fibra Mixco 100 Mbps',
+        // Tipo de plan (A1): la API siempre lo manda (por defecto residencial).
+        tipo: 'residencial',
         precio: '349.99',
         bajada_kbps: 100_000,
         subida_kbps: 50_000,

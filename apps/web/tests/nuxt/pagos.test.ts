@@ -55,8 +55,9 @@ describe('tarea 11 · pagos', () => {
         const otraVez = await usePagos().anular(pago, 'Otra vez', nuevaClaveIdempotencia())
         expect(!otraVez.ok && otraVez.problema.type).toBe('urn:argosisp:problema:pago_anulado')
 
+        // Fuera del pago 7004 de los fixtures de la fase 4 (pasarela liquidada y anulada: contracargo).
         const anulados = await usePagos().listar({ estado: 'anulado' })
-        expect(anulados.ok && anulados.data.data.map(p => p.id)).toEqual([pago])
+        expect(anulados.ok && anulados.data.data.map(p => p.id).filter(id => id !== 7004)).toEqual([pago])
     })
 
     it('anular exige pagos.anular: el cajero no puede', async () => {

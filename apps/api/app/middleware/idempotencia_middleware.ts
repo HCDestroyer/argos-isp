@@ -5,7 +5,7 @@ import type { NextFn } from '@adonisjs/core/types/http'
 import db from '@adonisjs/lucid/services/db'
 import { Conflicto, Problema } from '#shared/errores'
 import { COOKIE_PORTAL } from '#shared/rutas'
-import { ipOrigenDeLaPeticion } from '#portal/ip_origen'
+import { ipOrigenDelCliente } from '#portal/ip_origen'
 
 interface RespuestaGuardada {
     status: number
@@ -53,7 +53,7 @@ export default class IdempotenciaMiddleware {
         }
 
         const actorId = 'auth' in ctx ? (ctx.auth.user?.id ?? null) : null
-        const alcance = actorId === null ? alcanceAnonimo(ctx) : null
+        const alcance = actorId === null ? await alcanceAnonimo(ctx) : null
         const metodo = ctx.request.method()
         const ruta = ctx.request.url(true)
         const huella = createHash('sha256')
@@ -133,13 +133,16 @@ const hash = (texto: string) => createHash('sha256').update(texto).digest('hex')
 
 /**
  * Alcance de una petición sin usuario: `sesion:<hash>` de la cookie del portal (`argos_portal`) o
- * `ip:<hash>` de la IP de origen (`ipOrigenDeLaPeticion`, que respeta
- * `PORTAL_PROXIES_CONFIABLES`). Solo hashes: ni el token ni la IP quedan en la tabla.
+ * `ip:<hash>` de la IP del cliente (`ipOrigenDelCliente` de A5: valida el token del nodo portal si
+ * la petición trae uno y entonces cuenta la IP que manda el nodo, no la del nodo; sin token respeta
+ * `PORTAL_PROXIES_CONFIABLES`). Este middleware corre antes que el handler, así que es aquí donde
+ * se valida el token (401 `nodo_portal_invalido` si no sirve). Solo hashes: ni el token ni la IP
+ * quedan en la tabla.
  */
-export function alcanceAnonimo(ctx: HttpContext): string {
+export async function alcanceAnonimo(ctx: HttpContext): Promise<string> {
     const sesion = ctx.request.plainCookie(COOKIE_PORTAL, { encoded: false })
     if (typeof sesion === 'string' && sesion !== '') return `sesion:${hash(sesion)}`
-    const ip = ipOrigenDeLaPeticion(ctx) ?? ctx.request.ip()
+    const ip = (await ipOrigenDelCliente(ctx)) ?? ctx.request.ip()
     return `ip:${hash(ip)}`
 }
 

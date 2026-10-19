@@ -103,6 +103,11 @@ export interface DefinicionRuta<
     idempotente?: boolean
     /** la edición exige `version` y puede responder 409 */
     versionada?: boolean
+    /**
+     * Con `seguridad: 'sesion'` y `permiso: null`: también responde a un nodo portal remoto con su
+     * `X-Argos-Nodo-Token` válido, sin sesión (contrato `nodo-portal.md`; hoy solo `GET /version`).
+     */
+    nodoPortal?: boolean
     /** tiene límite de peticiones y puede responder 429 con `Retry-After` */
     limitada?: boolean
     /**

@@ -26,6 +26,7 @@ async function idCuenta(t: Transaccion, codigo: string): Promise<number> {
     return Number(fila.id)
 }
 import type { ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
+import { diferimientoDeFactura } from '#ledger/diferidos'
 
 /**
  * `facturas.nota_credito` (`POST /facturas/:id/notas-credito { monto, motivo }`): nota de crédito
@@ -100,6 +101,16 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             .select('cliente_id')
             .first()
         if (!previa) throw new NoEncontrado(`La factura ${input.factura_id} no existe`)
+        // fase 5 (§10.10): el ingreso de una factura diferida está en 2.1.12; anularla o acreditarla
+        // dejaría el diferimiento sin ingreso que devolver (confirmar con contador cómo revertirlo)
+        const diferida = await diferimientoDeFactura(t.trx, input.factura_id)
+        if (diferida) {
+            throw new Conflicto(
+                `La factura ${input.factura_id} tiene su ingreso diferido (diferimiento ${diferida.id})`,
+                'factura_diferida',
+                'Factura diferida',
+            )
+        }
         await bloquearCliente(t.trx, previa.cliente_id)
 
         const factura = (await t.trx

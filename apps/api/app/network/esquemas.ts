@@ -14,6 +14,7 @@ import {
     texto,
     type EsquemaJson,
 } from '#shared/openapi/esquemas'
+import { TIPOS_PLAN } from '#network/tipos_plan'
 
 /**
  * Schemas de respuesta del módulo network. Credenciales (api_password, radius_secret) nunca salen;
@@ -116,24 +117,46 @@ const velocidadPlan = {
     prioridad: { type: 'integer', minimum: 1, maximum: 8, description: '1 (alta) a 8 (baja)' },
 } satisfies Record<string, EsquemaJson>
 
+/** Advertencia que no bloquea (tipo de plan); `codigo` estable para el frontend. */
+export const Advertencia = definirEsquema(
+    'Advertencia',
+    objeto({
+        codigo: enumerado(['plan_dedicado_asimetrico', 'plan_dedicado_compartido', 'servicio_cliente_cf']),
+        mensaje: texto,
+    }),
+)
+
 export const Plan = definirEsquema(
     'Plan',
-    objeto({
-        id,
-        nombre: texto,
-        precio: Dinero,
-        bajada_kbps: entero,
-        subida_kbps: entero,
-        bajada_limitada_kbps: entero,
-        subida_limitada_kbps: entero,
-        reuso: entero,
-        ...velocidadPlan,
-        dual_stack: enumerado(['ambos', 'v4', 'v6']),
-        tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
-        global: booleano,
-        activo: booleano,
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            nombre: texto,
+            precio: Dinero,
+            bajada_kbps: entero,
+            subida_kbps: entero,
+            bajada_limitada_kbps: entero,
+            subida_limitada_kbps: entero,
+            reuso: entero,
+            ...velocidadPlan,
+            dual_stack: enumerado(['ambos', 'v4', 'v6']),
+            tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+            tipo: {
+                ...enumerado(TIPOS_PLAN),
+                description: 'residencial (por defecto), empresarial o dedicado',
+            },
+            global: booleano,
+            activo: booleano,
+            ...auditable,
+            warnings: {
+                ...lista(Advertencia),
+                description: 'Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)',
+            },
+        },
+        // `tipo`: opcional hasta que los fixtures del panel lo tengan (la API siempre lo envía);
+        // `warnings`: solo en las respuestas de crear y editar
+        ['tipo', 'warnings'],
+    ),
 )
 
 export const PlanRouter = definirEsquema(
@@ -164,39 +187,47 @@ export const PlanRouter = definirEsquema(
 /** Plan con su configuración efectiva en un router (plantilla + `planes_routers`). */
 export const PlanEfectivo = definirEsquema(
     'PlanEfectivo',
-    objeto({
-        id,
-        nombre: texto,
-        precio: Dinero,
-        bajada_kbps: entero,
-        subida_kbps: entero,
-        bajada_limitada_kbps: entero,
-        subida_limitada_kbps: entero,
-        reuso: { ...entero, description: 'Reuso efectivo en el router' },
-        ...velocidadPlan,
-        dual_stack: enumerado(['ambos', 'v4', 'v6']),
-        tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
-        global: booleano,
-        activo: booleano,
-        ...auditable,
-        router_id: id,
-        implementacion: nulable(PlanRouter),
-        rate_limit: {
-            type: 'string',
-            description:
-                'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            precio: Dinero,
+            bajada_kbps: entero,
+            subida_kbps: entero,
+            bajada_limitada_kbps: entero,
+            subida_limitada_kbps: entero,
+            reuso: { ...entero, description: 'Reuso efectivo en el router' },
+            ...velocidadPlan,
+            dual_stack: enumerado(['ambos', 'v4', 'v6']),
+            tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+            global: booleano,
+            activo: booleano,
+            ...auditable,
+            router_id: id,
+            implementacion: nulable(PlanRouter),
+            rate_limit: {
+                type: 'string',
+                description:
+                    'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
+            },
+            rate_limit_limitado: {
+                type: 'string',
+                description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+            },
+            profile_ppp: nulable(texto),
+            pool_ipv4: nulable(texto),
+            pool_ipv6_enlace: nulable(texto),
+            pool_ipv6_delegacion: nulable(texto),
+            local_address: nulable(texto),
+            no_crear_reglas: booleano,
+            tipo: {
+                ...enumerado(TIPOS_PLAN),
+                description: 'Tipo del plan (residencial, empresarial, dedicado)',
+            },
         },
-        rate_limit_limitado: {
-            type: 'string',
-            description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
-        },
-        profile_ppp: nulable(texto),
-        pool_ipv4: nulable(texto),
-        pool_ipv6_enlace: nulable(texto),
-        pool_ipv6_delegacion: nulable(texto),
-        local_address: nulable(texto),
-        no_crear_reglas: booleano,
-    }),
+        // `tipo`: opcional hasta que los fixtures del panel lo tengan (la API siempre lo envía)
+        ['tipo'],
+    ),
 )
 
 export const Sesion = definirEsquema(

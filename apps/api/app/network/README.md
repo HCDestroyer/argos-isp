@@ -46,6 +46,19 @@ Lecturas en `consultas/routers.ts` y `consultas/planes.ts`.
 
 Eventos: salvo los de velocidad (sección "Velocidad"), los cambios de asignación de un servicio salen de las acciones de `core` (`servicio.config_cambiada`, `asignacion.cambiada`). `EditarPlan` e `ImplementarPlan` reescriben `aaa:user:*` de los servicios afectados. No consume eventos.
 
+### Tipo de plan (`tipos_plan.ts`, decisión del PM 19 oct)
+
+- `network.planes.tipo` ∈ `residencial` (por defecto; los planes que ya existían quedaron así), `empresarial`, `dedicado`. Se crea y edita con el plan (`version`, diff en `audit.cambios`). No cambia la velocidad: no emite `plan.velocidad_cambiada` ni otro evento.
+- Visible en `Plan.tipo`, `PlanEfectivo.tipo` y, de solo lectura, en `Servicio.plan_tipo`. Filtro `?tipo=` en `GET /planes` y `GET /servicios` (tipo del plan del servicio).
+- **Reglas, solo advertencias** (`warnings[]` = `{ codigo, mensaje }` en las respuestas de crear y editar; nunca 422):
+  - `plan_dedicado_asimetrico`: plan `dedicado` con `bajada_kbps` ≠ `subida_kbps`.
+  - `plan_dedicado_compartido`: plan `dedicado` con `reuso` (compartición 1:N) ≠ 1.
+  - `servicio_cliente_cf`: servicio (`POST /servicios`, `PUT /servicios/:id`) de un plan `empresarial` o `dedicado` cuyo cliente factura como CF (`tipo_documento_fiscal = 'cf'`).
+
+### Adicionales incluidos en el plan
+
+`GET/PUT /planes/:id/adicionales` (`DefinirAdicionalesPlan`, permiso `planes.editar`): lista de adicionales con su cantidad; el PUT reemplaza la lista y sube la `version` del plan. Reglas en `.claude/integration/contratos/adicionales.md` y `app/core/README.md`.
+
 ## Velocidad (`velocidad.ts`, semana 2)
 
 Contrato: `.claude/integration/contratos/velocidad.md`. Única fuente del rate-limit para PPPoE y WISP.

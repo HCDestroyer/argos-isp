@@ -134,6 +134,13 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     castigo: 'VAR',
     // B: diferencia de cobro como gasto (5.3.05 / CxC)
     diferencia_cobro: 'VAR',
+    // fase 5 (§3.4, §10.10): compras y sus pagos al diario de compras (o al de su caja o banco)
+    compra: 'COM',
+    pago_proveedor: 'COM',
+    depreciacion: 'VAR',
+    baja_activo: 'VAR',
+    diferido: 'VAR',
+    alta_activo: 'VAR',
 }
 
 export interface DiarioAsiento {

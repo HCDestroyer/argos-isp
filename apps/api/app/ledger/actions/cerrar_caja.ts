@@ -7,13 +7,16 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { verTurno, type TurnoVista } from '#ledger/cajas'
 import { egresosDelTurno } from '#ledger/egresos'
 import { depositosDelTurno } from '#ledger/transitos'
+import { pagosProveedoresDelTurno } from '#ledger/pagos_proveedores'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 
 /**
  * `cajas.cerrar` (`POST /cajas/:id/cerrar`): cierra el turno abierto de la caja.
  *
- * - `esperado = fondo_inicial + Σ pagos vigentes (no anulados) del turno − Σ egresos en efectivo
- *   vigentes del turno − Σ depósitos al banco del turno` (`cajas.depositar`, fase 4);
+ * - `esperado = fondo_inicial + Σ efectivo de los pagos vigentes (no anulados) del turno − Σ egresos
+ *   en efectivo vigentes del turno − Σ depósitos al banco del turno` (`cajas.depositar`, fase 4);
+ *   el efectivo de un pago es `monto − retenido` (constancias de retención, fase 5) y también se
+ *   restan los pagos a proveedores en efectivo del turno (`compras.pagar`, fase 5);
  *   `diferencia = contado − esperado`.
  * - Diferencia ≠ 0 exige `motivo` (422) y deja asiento `cierre_caja` (origen = turno):
  *   faltante `Faltantes de caja / Caja`; sobrante `Caja / Sobrantes de caja`.
@@ -76,11 +79,16 @@ export default class CerrarCaja extends DomainAction<EntradaCerrarCaja, TurnoVis
             .from('billing.pagos')
             .where('turno_id', turno.id)
             .whereNot('estado', 'anulado')
-            .select(t.trx.raw('coalesce(sum(monto), 0)::text as total'))
+            .select(t.trx.raw('coalesce(sum(monto - retenido), 0)::text as total'))
             .first()) as { total: string }
         const pagado = await egresosDelTurno(t.trx, turno.id)
         const depositado = await depositosDelTurno(t.trx, turno.id)
-        const esperado = dec(turno.fondo_inicial).plus(cobrado.total).minus(pagado).minus(depositado)
+        const aProveedores = await pagosProveedoresDelTurno(t.trx, turno.id)
+        const esperado = dec(turno.fondo_inicial)
+            .plus(cobrado.total)
+            .minus(pagado)
+            .minus(depositado)
+            .minus(aProveedores)
         const diferencia = contado.minus(esperado)
         const motivo = input.motivo?.trim() || null
         if (!diferencia.isZero() && !motivo) {

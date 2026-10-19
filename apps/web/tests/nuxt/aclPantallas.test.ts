@@ -119,7 +119,11 @@ function rutasDePaginas(): Map<string, string> {
  * Componentes que llaman acciones pero no deciden si se muestran: los abre otra pantalla, que
  * debe comprobar el permiso antes. Para cada uno, el permiso y quién lo abre.
  */
-const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = {
+/**
+ * `exentos`: quien abre el componente sin una de sus acciones, con el motivo en un comentario (la
+ * ficha del plan solo edita: siempre le pasa el plan, así que nunca crea).
+ */
+const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exentos?: Record<string, string[]> }> = {
     'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
     'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },
     'DteFicha.vue': { permisos: ['fel.ver'], desde: ['components/DteDocumento.vue', 'pages/dte/[id].vue'] },
@@ -127,6 +131,17 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'FelCredencialesModal.vue': { permisos: ['fel.configurar'], desde: ['pages/configuracion/fel.vue'] },
     'SustituirFacturaModal.vue': { permisos: ['facturas.sustituir'], desde: ['pages/facturas/[id].vue'] },
     'CajaAperturaModal.vue': { permisos: ['cajas.abrir'], desde: ['pages/caja/index.vue'] },
+    'CajaDepositoModal.vue': { permisos: ['cajas.depositar'], desde: ['pages/caja/index.vue'] },
+    'CarteraCastigoModal.vue': { permisos: ['cartera.castigar', 'facturas.ver'], desde: ['pages/cartera/index.vue'] },
+    'CarteraProvisionModal.vue': { permisos: ['cartera.provisionar'], desde: ['pages/cartera/index.vue'] },
+    'ConciliarLineaSlideover.vue': { permisos: ['bancos.conciliar', 'bancos.ver'], desde: ['pages/bancos/extractos/[id].vue'] },
+    'ExtractoImportarModal.vue': { permisos: ['bancos.importar_extracto'], desde: ['pages/bancos/extractos/index.vue'] },
+    'LlegadaReatribuirModal.vue': { permisos: ['bancos.reatribuir_llegada', 'bancos.ver'], desde: ['pages/bancos/extractos/[id].vue'] },
+    'LineaRegistrarModal.vue': { permisos: ['bancos.conciliar'], desde: ['pages/bancos/extractos/[id].vue'] },
+    'LiquidacionRegistrarModal.vue': { permisos: ['cobros.liquidar'], desde: ['pages/cobros/por-liquidar.vue'] },
+    'ProveedorCobroModal.vue': { permisos: ['cobros.configurar'], desde: ['pages/configuracion/proveedores-cobro.vue'] },
+    'ReglaConciliacionModal.vue': { permisos: ['bancos.conciliar'], desde: ['pages/bancos/reglas.vue'] },
+    'TrasladoModal.vue': { permisos: ['bancos.trasladar'], desde: ['pages/bancos/transito.vue'] },
     'ClientePuntos.vue': { permisos: ['lealtad.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ProgramaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
     'PuntosAjusteModal.vue': { permisos: ['lealtad.ajustar'], desde: ['components/ClientePuntos.vue'] },
@@ -146,7 +161,17 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[] }> = 
     'LibroIntegridad.vue': { permisos: ['libro.ver'], desde: ['pages/libro/index.vue'] },
     'LineaTiempoBitacora.vue': { permisos: ['bitacora.ver'], desde: ['pages/clientes/[id]/index.vue', 'pages/servicios/[id].vue'] },
     'NotaCreditoModal.vue': { permisos: ['facturas.nota_credito'], desde: ['pages/facturas/[id].vue'] },
-    'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue'] },
+    // La ficha del plan solo edita; el alta ("Nuevo plan", `planes.crear`) está en la lista.
+    'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue', 'pages/planes/[id].vue'], exentos: { 'pages/planes/[id].vue': ['planes.crear'] } },
+    // Servicios adicionales (A1, `contratos/adicionales.md`).
+    'AdicionalCredencialModal.vue': { permisos: ['servicios.ver_credencial_adicional'], desde: ['components/ServicioAdicionales.vue'] },
+    'AdicionalModal.vue': { permisos: ['adicionales.crear', 'adicionales.editar'], desde: ['pages/adicionales/index.vue'] },
+    'AdicionalQuitarModal.vue': { permisos: ['servicios.quitar_adicional'], desde: ['components/ServicioAdicionales.vue'] },
+    'AdicionalServicioModal.vue': { permisos: ['servicios.agregar_adicional', 'servicios.editar_adicional', 'adicionales.ver'], desde: ['components/ServicioAdicionales.vue'] },
+    'MotivoCortesiaModal.vue': { permisos: ['adicionales.crear_motivo'], desde: ['pages/adicionales/motivos.vue'] },
+    'PlanIncluidos.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
+    'PlanAdicionalesModal.vue': { permisos: ['planes.editar', 'adicionales.ver'], desde: ['components/PlanIncluidos.vue'] },
+    'ServicioAdicionales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'PromesaAprobarModal.vue': { permisos: ['promesas.aprobar'], desde: ['pages/promesas/index.vue'] },
     'ReciboCobro.vue': { permisos: ['pagos.ver'], desde: ['pages/cobro/index.vue'] },
     'PromesaCrearModal.vue': { permisos: ['promesas.crear'], desde: ['pages/servicios/[id].vue'] },
@@ -199,14 +224,14 @@ describe('semana 3 · ACL por pantalla (revisión estática)', () => {
 
     it('los componentes de acción solo se abren desde pantallas que comprueban su permiso', () => {
         const huecos: string[] = []
-        for (const [componente, { permisos, desde }] of Object.entries(ABIERTOS_DESDE)) {
+        for (const [componente, { permisos, desde, exentos }] of Object.entries(ABIERTOS_DESDE)) {
             const nombre = componente.replace(/\.vue$/, '')
             const usuarios = ARCHIVOS.filter(archivo => leer(archivo).includes(`<${nombre}`)).map(archivo => relativo(archivo).replace(/^app\//, ''))
             for (const archivo of usuarios) {
                 const texto = leer(join(WEB, 'app', archivo))
                 const pagina = permisoDePagina(texto)
                 for (const permiso of permisos) {
-                    if (permiso !== pagina && !comprobados(texto).has(permiso)) {
+                    if (permiso !== pagina && !comprobados(texto).has(permiso) && !exentos?.[archivo]?.includes(permiso)) {
                         huecos.push(`${archivo} abre ${componente} sin comprobar ${permiso}`)
                     }
                 }
