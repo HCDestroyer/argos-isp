@@ -50,5 +50,37 @@ for (const tema of ['light', 'dark'] as const) {
             await page.getByTestId('promociones-portal_inicio').waitFor({ timeout: 30_000 })
             await capturar(page, 'cuenta-inicio-promos', info.project.name, nombreTema)
         })
+
+        test('puntos', async ({ page }, info) => {
+            mkdirSync(DESTINO!, { recursive: true })
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await page.addInitScript((t) => {
+                try {
+                    localStorage.setItem('nuxt-color-mode', t)
+                }
+                catch {
+                    // sin almacenamiento: el tema sale de prefers-color-scheme
+                }
+            }, tema)
+            const nombreTema = tema === 'light' ? 'claro' : 'oscuro'
+            // `?puntos=canje` se recuerda en la pestaña: programa visible y canje activo
+            await page.goto('/entrar?puntos=canje')
+            await expect(async () => {
+                await page.getByLabel('NIT, CUI o usuario de conexión').fill('12345679')
+                await page.getByRole('button', { name: 'Enviarme un código' }).click()
+                await expect(page.getByTestId('destino-codigo')).toBeVisible({ timeout: 3_000 })
+            }).toPass({ timeout: 60_000 })
+            await page.locator('input').first().click()
+            await page.keyboard.type('123456')
+            await page.getByTestId('resumen-puntos').waitFor({ timeout: 30_000 })
+            await capturar(page, 'puntos-inicio', info.project.name, nombreTema)
+            await page.getByTestId('nav-puntos').filter({ visible: true }).first().click()
+            await page.getByTestId('premios').waitFor({ timeout: 30_000 })
+            await capturar(page, 'puntos-seccion', info.project.name, nombreTema)
+            await page.getByTestId('premio-501').getByTestId('canjear').click()
+            await page.getByTestId('confirmar-canje').waitFor()
+            await page.waitForTimeout(400)
+            await page.screenshot({ path: join(DESTINO!, `puntos-confirmar-${nombreTema}-${info.project.name}.png`) })
+        })
     })
 }

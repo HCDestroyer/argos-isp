@@ -368,6 +368,22 @@ con un token inventado o revocado responde 401 `nodo_portal_invalido`. `GET /ver
 
 Tabla `core.nodos_portal` (solo el sha256 del token; `nombre` único). Pruebas: `tests/portal/nodo_portal.spec.ts`.
 
+### Puntos de lealtad (contrato `contratos/lealtad.md` §12)
+
+Solo con la sesión y solo de las empresas cuyo programa activo tiene `visible_portal` (el panel lo
+enciende; sin ninguna, listas vacías y el portal no muestra la sección). Lecturas en `puntos.ts`
+sobre `lealtad.*` de A3, sin motivos internos ni valores contables:
+
+- `GET /portal/puntos`: por empresa, saldo, lo que vence dentro del aviso (por fecha), los últimos
+  20 movimientos y los términos (`PortalPuntosEmpresa`).
+- `GET /portal/premios`: activos con `en_portal`, con `faltan`, `canjeable` y
+  `motivo_no_canjeable` para pintar la tarjeta (`PortalPremio`).
+- `GET /portal/canjes` y `POST /portal/canjes` (`Idempotency-Key`): el canje lo hace
+  `lealtad.canjear` (A3) con actor `cliente` y canal `portal`, que exige además `canje_portal`. Un
+  premio sin `en_portal` o de un programa no visible responde 404 antes de llamar la acción.
+
+Pruebas: `tests/portal/puntos.spec.ts`.
+
 ## Eventos
 
 No emite ni consume eventos propios. Las acciones de A3 que llama emiten los suyos

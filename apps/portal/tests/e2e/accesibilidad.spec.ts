@@ -93,6 +93,22 @@ for (const tema of ['light', 'dark'] as const) {
             await revisar(page, 'cuenta con promociones')
         })
 
+        test('puntos: saldo, premios, historial y confirmación sin violaciones de axe', async ({ page }) => {
+            // `?puntos=canje` en fixtures: programa visible con canje (se recuerda en la pestaña)
+            await page.goto('/corte?puntos=canje')
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+            await entrar(page, null)
+            await page.getByTestId('resumen-puntos').waitFor()
+            await revisar(page, 'cuenta con puntos: inicio')
+            await seccion(page, 'Puntos', 'premios')
+            await revisar(page, 'cuenta: puntos')
+            const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+            expect(ancho).toBeLessThanOrEqual(0)
+            await page.getByTestId('premio-501').getByTestId('canjear').click()
+            await page.getByTestId('confirmar-canje').waitFor()
+            await revisar(page, 'puntos: confirmar canje')
+        })
+
         for (const cuenta of [null, 'dos_empresas'] as const) {
             const nombre = cuenta ? 'dos empresas' : 'una empresa'
             test(`/cuenta con ${nombre} sin violaciones de axe`, async ({ page }) => {

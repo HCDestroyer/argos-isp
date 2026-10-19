@@ -33174,6 +33174,209 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/canjes": {
+      "get": {
+        "operationId": "portalCanjes",
+        "summary": "Canjes del cliente de la sesión y su estado",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de canjes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalCanje"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalCanjear",
+        "summary": "El cliente canjea sus puntos por un premio",
+        "description": "Llama `lealtad.canjear` (A3) con actor `cliente` y canal `portal`. 404 si el premio no está en el portal (inactivo, sin `en_portal` o de un programa no visible). Errores de la acción: 403 `canje_portal_inactivo`, 422 `saldo_insuficiente`, `servicio_no_valido`, `premio_inactivo`, `recompensa_no_disponible`, `parametro_sin_confirmar`; 409 `sin_existencias`, `canje_pendiente`. Un descuento queda `reservado` para la próxima factura del servicio. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "premio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "premio_id",
+                  "servicio_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Canje hecho",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalCanje"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/codigo": {
       "post": {
         "operationId": "portalSolicitarCodigo",
@@ -34604,6 +34807,65 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/premios": {
+      "get": {
+        "operationId": "portalPremios",
+        "summary": "Premios canjeables desde el portal, con lo que le falta al cliente para cada uno",
+        "description": "Activos y con `en_portal`, del más barato al más caro. Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Premios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalPremio"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/promesas": {
       "get": {
         "operationId": "portalPromesas",
@@ -34835,6 +35097,65 @@
           },
           "422": {
             "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/puntos": {
+      "get": {
+        "operationId": "portalPuntos",
+        "summary": "Puntos del cliente por empresa: saldo, lo que vence pronto, movimientos y términos",
+        "description": "Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Puntos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalPuntosEmpresa"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -58415,6 +58736,83 @@
           }
         }
       },
+      "PortalCanje": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "servicio_id",
+          "premio_nombre",
+          "tipo",
+          "puntos",
+          "estado",
+          "descuento",
+          "aplicado_en",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "premio_nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "descuento_factura",
+              "mes_gratis",
+              "mejora_plan",
+              "bien",
+              "boletos"
+            ]
+          },
+          "puntos": {
+            "type": "integer"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "reservado",
+              "aplicado",
+              "revertido",
+              "rechazado"
+            ],
+            "description": "`reservado`: para la próxima factura; `aplicado`; `revertido`; `rechazado`"
+          },
+          "descuento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Q descontados; null mientras está reservado"
+          },
+          "aplicado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PortalComprobante": {
         "type": "object",
         "required": [
@@ -59418,6 +59816,118 @@
           }
         }
       },
+      "PortalPremio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "tipo",
+          "nombre",
+          "costo_puntos",
+          "descuento_tipo",
+          "descuento_valor",
+          "tope",
+          "dias",
+          "plan_destino",
+          "agotado",
+          "canjeable",
+          "motivo_no_canjeable",
+          "faltan"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "descuento_factura",
+              "mes_gratis",
+              "mejora_plan",
+              "bien",
+              "boletos"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "costo_puntos": {
+            "type": "integer"
+          },
+          "descuento_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "monto",
+              "porcentaje"
+            ]
+          },
+          "descuento_valor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dias": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Días de la mejora de plan"
+          },
+          "plan_destino": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del plan de la mejora"
+          },
+          "agotado": {
+            "type": "boolean"
+          },
+          "canjeable": {
+            "type": "boolean",
+            "description": "Para la tarjeta; la acción `lealtad.canjear` decide"
+          },
+          "motivo_no_canjeable": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "canje_desactivado",
+              "puntos_insuficientes",
+              "agotado",
+              "no_disponible_en_portal"
+            ]
+          },
+          "faltan": {
+            "type": "integer",
+            "description": "Puntos que faltan (el mayor entre costo y mínimo, menos el saldo)"
+          }
+        }
+      },
       "PortalPromesa": {
         "type": "object",
         "required": [
@@ -59520,6 +60030,164 @@
               }
             ],
             "description": "Estado del servicio tras la promesa (solo si quedó aprobada)"
+          }
+        }
+      },
+      "PortalPuntosEmpresa": {
+        "type": "object",
+        "required": [
+          "empresa",
+          "programa",
+          "saldo",
+          "por_vencer",
+          "proximo_vencimiento",
+          "vencen_pronto",
+          "movimientos"
+        ],
+        "properties": {
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa del programa (los puntos son por NIT)"
+          },
+          "programa": {
+            "type": "object",
+            "required": [
+              "nombre",
+              "terminos",
+              "minimo_canje",
+              "vencimiento_meses",
+              "aviso_vencimiento_dias",
+              "canje_portal"
+            ],
+            "properties": {
+              "nombre": {
+                "type": "string"
+              },
+              "terminos": {
+                "type": "string",
+                "description": "Términos publicados del programa (texto plano)"
+              },
+              "minimo_canje": {
+                "type": "integer",
+                "description": "Saldo mínimo para canjear"
+              },
+              "vencimiento_meses": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "null = los puntos no vencen"
+              },
+              "aviso_vencimiento_dias": {
+                "type": "integer"
+              },
+              "canje_portal": {
+                "type": "boolean",
+                "description": "El cliente puede canjear desde el portal"
+              }
+            }
+          },
+          "saldo": {
+            "type": "integer",
+            "description": "Puede ser negativo tras un reverso; entonces no canjea"
+          },
+          "por_vencer": {
+            "type": "integer",
+            "description": "Puntos que vencen dentro del aviso del programa"
+          },
+          "proximo_vencimiento": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "vencen_pronto": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "puntos",
+                "vence_en"
+              ],
+              "properties": {
+                "puntos": {
+                  "type": "integer"
+                },
+                "vence_en": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "tipo",
+                "origen_tipo",
+                "puntos",
+                "servicio_id",
+                "vence_en",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "acumulacion",
+                    "canje",
+                    "vencimiento",
+                    "reverso",
+                    "ajuste"
+                  ]
+                },
+                "origen_tipo": {
+                  "type": "string",
+                  "enum": [
+                    "factura",
+                    "pago",
+                    "servicio",
+                    "referido",
+                    "canje",
+                    "sorteo",
+                    "ajuste",
+                    "nota_credito",
+                    "lote"
+                  ]
+                },
+                "puntos": {
+                  "type": "integer",
+                  "description": "Con signo: positivo gana, negativo sale"
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "vence_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "description": "Los últimos 20, del más reciente; sin motivos internos ni valores contables"
           }
         }
       },

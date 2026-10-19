@@ -26,6 +26,7 @@ import { EMPRESA_FIXTURE, EMPRESA_SUR_FIXTURE, MARCA_SUR_FIXTURE } from './empre
 import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
 import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
 import { ANUNCIOS_FIXTURE } from './anuncios'
+import { CANJES_FIXTURE, PREMIOS_FIXTURE, PUNTOS_FIXTURE } from './puntos'
 import {
     condicionesConPagoPrevioFixture,
     condicionesConPromesaFixture,
@@ -350,6 +351,77 @@ function anunciosDeLaUrl(): Schema<'PortalAnuncio'>[] {
     return Number.isInteger(cuantos) && cuantos > 0 ? ANUNCIOS_FIXTURE.slice(0, cuantos) : []
 }
 
+/**
+ * Puntos de lealtad: `fijarPuntosFixture` en pruebas o `?puntos=visible|canje` en la URL (desarrollo;
+ * se recuerda en la pestaña). Por defecto el programa no está visible en el portal (así viene de
+ * fábrica): ni la sección ni la pestaña aparecen. `visible`: se ven los puntos pero el canje está
+ * apagado (403 `canje_portal_inactivo`); `canje`: también se canjea. Cada canje descuenta el saldo.
+ */
+type EscenarioPuntos = 'oculto' | 'visible' | 'canje'
+const CLAVE_PUNTOS = 'argos:fixture:puntos'
+const puntos: {
+    escenario: EscenarioPuntos | null
+    saldo: number
+    canjes: Schema<'PortalCanje'>[]
+    movimientos: Schema<'PortalPuntosEmpresa'>['movimientos']
+} = { escenario: null, saldo: PUNTOS_FIXTURE.saldo, canjes: [], movimientos: [] }
+
+export function fijarPuntosFixture(escenario: EscenarioPuntos | null, saldo = PUNTOS_FIXTURE.saldo): void {
+    puntos.escenario = escenario
+    puntos.saldo = saldo
+    puntos.canjes = []
+    puntos.movimientos = []
+}
+
+function escenarioPuntos(): EscenarioPuntos {
+    if (puntos.escenario) {
+        return puntos.escenario
+    }
+    if (typeof window === 'undefined') {
+        return 'oculto'
+    }
+    let pedido = new URL(window.location.href).searchParams.get('puntos')
+    try {
+        if (pedido) {
+            sessionStorage.setItem(CLAVE_PUNTOS, pedido)
+        }
+        else {
+            pedido = sessionStorage.getItem(CLAVE_PUNTOS)
+        }
+    }
+    catch {
+        // Sin almacenamiento: solo cuenta la URL.
+    }
+    return pedido === 'visible' || pedido === 'canje' ? pedido : 'oculto'
+}
+
+// Se lee al cargar: `/entrar?puntos=canje` debe recordarse aunque la primera consulta de puntos
+// llegue después de entrar con el código (ya sin la query).
+escenarioPuntos()
+
+function puntosActuales(): Schema<'PortalPuntosEmpresa'> {
+    return {
+        ...PUNTOS_FIXTURE,
+        saldo: puntos.saldo,
+        programa: { ...PUNTOS_FIXTURE.programa, canje_portal: escenarioPuntos() === 'canje' },
+        movimientos: [...puntos.movimientos, ...PUNTOS_FIXTURE.movimientos].slice(0, 20),
+    }
+}
+
+/** Lo mismo que calcula la API (`app/portal/puntos.ts`): cuánto falta y por qué no se canjea. */
+function premiosActuales(): Schema<'PortalPremio'>[] {
+    const canje = escenarioPuntos() === 'canje'
+    return PREMIOS_FIXTURE.map((p) => {
+        const faltan = Math.max(0, Math.max(p.costo_puntos, PUNTOS_FIXTURE.programa.minimo_canje) - puntos.saldo)
+        const motivo = !canje
+            ? 'canje_desactivado'
+            : p.motivo_no_canjeable === 'no_disponible_en_portal'
+                ? 'no_disponible_en_portal'
+                : p.agotado ? 'agotado' : faltan > 0 ? 'puntos_insuficientes' : null
+        return { ...p, faltan, canjeable: motivo === null, motivo_no_canjeable: motivo }
+    })
+}
+
 const rutasBase: RutasFixture = {
     'GET /api/v1/portal/anuncios': () => ({
         status: 200,
@@ -359,6 +431,60 @@ const rutasBase: RutasFixture = {
         const evento = cuerpo as { tipo: string, visitante: string, lugar: string }
         anuncios.eventos.push({ id: Number(params.id), ...evento })
         return { status: 204 }
+    },
+    'GET /api/v1/portal/puntos': conSesion(() => ({
+        status: 200,
+        cuerpo: { data: escenarioPuntos() === 'oculto' ? [] : [puntosActuales()] },
+    })),
+    'GET /api/v1/portal/premios': conSesion(() => ({
+        status: 200,
+        cuerpo: { data: escenarioPuntos() === 'oculto' ? [] : premiosActuales() },
+    })),
+    'GET /api/v1/portal/canjes': conSesion(() => pagina([...puntos.canjes, ...CANJES_FIXTURE])),
+    'POST /api/v1/portal/canjes': ({ cuerpo }) => {
+        if (!sesion.abierta) {
+            return SIN_SESION()
+        }
+        const pedido = cuerpo as { premio_id: number, servicio_id: number }
+        const premio = escenarioPuntos() === 'oculto' ? undefined : premiosActuales().find(p => p.id === pedido.premio_id)
+        if (!premio) {
+            return problema(404, 'no_encontrado', 'No encontrado', 'Ese premio no está disponible en el portal')
+        }
+        if (premio.motivo_no_canjeable === 'canje_desactivado') {
+            return problema(403, 'canje_portal_inactivo', 'Canje no disponible', 'El canje de puntos desde el portal no está activo.')
+        }
+        if (premio.motivo_no_canjeable === 'puntos_insuficientes') {
+            return problema(422, 'saldo_insuficiente', 'Saldo insuficiente', `Te faltan ${premio.faltan} puntos para este premio.`)
+        }
+        if (premio.motivo_no_canjeable) {
+            return problema(422, 'recompensa_no_disponible', 'Premio no disponible', 'Este premio se canjea en nuestras oficinas.')
+        }
+        puntos.saldo -= premio.costo_puntos
+        const ahora = new Date().toISOString()
+        const reservado = premio.tipo === 'descuento_factura' || premio.tipo === 'mes_gratis'
+        const canje: Schema<'PortalCanje'> = {
+            id: 900 + puntos.canjes.length,
+            empresa_id: premio.empresa_id,
+            servicio_id: pedido.servicio_id,
+            premio_nombre: premio.nombre,
+            tipo: premio.tipo,
+            puntos: premio.costo_puntos,
+            estado: reservado ? 'reservado' : 'aplicado',
+            descuento: null,
+            aplicado_en: reservado ? null : ahora,
+            created_at: ahora,
+        }
+        puntos.canjes.unshift(canje)
+        puntos.movimientos.unshift({
+            id: 9900 + puntos.movimientos.length,
+            tipo: 'canje',
+            origen_tipo: 'canje',
+            puntos: -premio.costo_puntos,
+            servicio_id: pedido.servicio_id,
+            vence_en: null,
+            created_at: ahora,
+        })
+        return { status: 201, cuerpo: canje }
     },
     'GET /api/v1/portal/quien-soy': () => {
         consultasEstado = 0
