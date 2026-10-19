@@ -174,6 +174,15 @@ export default class AnularPago extends DomainAction<EntradaAnularPago, Resultad
                     .from('fiscal.dte as e')
                     .whereRaw("e.documento_tipo = 'nota_credito' AND e.documento_id = d.nota_credito_id"),
             )
+            // con el documento ya en la SAT (o en camino) la nota quedó en su neto: no se toca
+            .whereNotExists((q) =>
+                q
+                    .from('fiscal.dte as e')
+                    .join('billing.notas_credito as n', 'n.id', 'd.nota_credito_id')
+                    .whereRaw(
+                        "e.documento_tipo IN ('factura', 'nota_debito') AND e.documento_id = n.factura_id AND e.estado IN ('pendiente', 'error_temporal', 'contingencia', 'certificado', 'anulacion_pendiente')",
+                    ),
+            )
             .orderBy('d.id')
             .select('d.nota_credito_id')) as Array<{ nota_credito_id: number }>
         for (const d of diferencias) {

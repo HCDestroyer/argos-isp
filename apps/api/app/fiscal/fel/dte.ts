@@ -562,6 +562,8 @@ export async function netoParaDte(
                 .where('d.documento_tipo', 'nota_credito')
                 .whereRaw('d.documento_id = n.id'),
         )
+        // H13: la nota interna anulada con su pago ya no acredita nada
+        .whereNotExists((q) => q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'))
         .select(
             cliente.raw('coalesce(sum(n.monto), 0)::text as monto'),
             cliente.raw('coalesce(sum(n.iva), 0)::text as iva'),
@@ -595,6 +597,8 @@ async function lineasNetas(cliente: QueryClientContract, facturaId: number): Pro
                 .where('d.documento_tipo', 'nota_credito')
                 .whereRaw('d.documento_id = n.id'),
         )
+        // H13: la nota interna anulada con su pago ya no acredita nada
+        .whereNotExists((q) => q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'))
         .orderBy('n.id')
         .select('n.id', 'n.monto', 'n.iva')) as Array<{ id: number; monto: string; iva: string }>
     if (notas.length === 0) return lineas

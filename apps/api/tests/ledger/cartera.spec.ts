@@ -3,6 +3,8 @@ import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal } from '#tests/ayudas'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
+import AnularFactura from '#billing/actions/anular_factura'
+import RegistrarPagoHistorico from '#billing/actions/registrar_pago_historico'
 import CerrarDiferenciaPago from '#billing/actions/cerrar_diferencia_pago'
 import ProvisionarCartera from '#ledger/actions/provisionar_cartera'
 import CastigarCartera from '#ledger/actions/castigar_cartera'
@@ -279,6 +281,30 @@ test.group('Fase 4 · diferencias de cobro y cartera', (group) => {
             new AnularPago().execute({ pago_id: Number(pagoPrevio.pago_id), motivo: 'error' }, e.ctx),
         )
         assert.equal(castigada.codigo, 'factura_castigada')
+        // ni se anula ni se sustituye: el castigo cerró su saldo en el libro
+        const anular = await errorDe(
+            new AnularFactura().execute({ factura_id: factura!.id, motivo: 'error' }, e.ctx),
+        )
+        assert.equal(anular.codigo, 'factura_castigada')
+        // un pago histórico que sobra también es recuperación antes que anticipo
+        const hist = await new RegistrarPagoHistorico().execute(
+            {
+                historico: true,
+                origen: 'prueba',
+                id_externo: 'hist-castigada-1',
+                cliente_id: s.clienteId,
+                metodo: 'deposito',
+                monto: '5.00',
+                fecha: '2026-10-01',
+                empresa_id: e.B,
+            },
+            e.ctx,
+        )
+        assert.deepEqual(await lineas('pago', hist.id), [
+            [CUENTAS.SALDOS_APERTURA, '5.00', '0.00'],
+            [CUENTAS_GT.RECUPERACION_INCOBRABLES, '0.00', '5.00'],
+        ])
+        await new AnularPago().execute({ pago_id: hist.id, motivo: 'duplicado' }, e.ctx)
         // anular una recuperación la revierte con su espejo
         await new AnularPago().execute({ pago_id: p2.id, motivo: 'cheque rechazado' }, e.ctx)
         assert.equal(await saldoCuenta(e.B, CUENTAS_GT.RECUPERACION_INCOBRABLES), '-100.00')

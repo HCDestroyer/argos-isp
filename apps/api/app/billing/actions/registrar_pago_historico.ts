@@ -11,6 +11,8 @@ import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_a
 import { aplicarAFacturas, bloquearClientes, duenosDeFacturas, facturasPendientes } from '#billing/cobros'
 import { claveImportacion, exigirPeriodoAbierto, textoClave } from '#billing/importacion'
 import { verPago, type PagoVista } from '#billing/pagos'
+import { porRecuperar } from '#ledger/cartera'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
  * `pagos.registrar_historico` = `registrarPagoHistorico` (importador de A6, sin endpoint): un
@@ -173,10 +175,25 @@ export default class RegistrarPagoHistorico extends DomainAction<
         for (const [clienteId, aplicado] of [...porCliente].sort(([x], [y]) => x - y)) {
             movimientos.push({ cuenta: CUENTAS.CXC_CLIENTES, haber: aTexto(aplicado), cliente_id: clienteId })
         }
-        if (restante.gt(0)) {
+        // decisión (g) del líder, igual que registrarPago: con castigos por recuperar, lo que sobra es
+        // recuperación (4.2.03) antes que anticipo
+        let sobrante = restante
+        if (sobrante.gt(0)) {
+            const falta = await porRecuperar(t.trx, empresaId, input.cliente_id)
+            const recuperado = falta.gt(0) ? (falta.lt(sobrante) ? falta : sobrante) : CERO
+            if (recuperado.gt(0)) {
+                movimientos.push({
+                    cuenta: CUENTAS_GT.RECUPERACION_INCOBRABLES,
+                    haber: aTexto(recuperado),
+                    cliente_id: input.cliente_id,
+                })
+                sobrante = sobrante.minus(recuperado)
+            }
+        }
+        if (sobrante.gt(0)) {
             movimientos.push({
                 cuenta: CUENTAS.ANTICIPOS_CLIENTES,
-                haber: aTexto(restante),
+                haber: aTexto(sobrante),
                 cliente_id: input.cliente_id,
             })
         }
