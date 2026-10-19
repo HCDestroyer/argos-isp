@@ -52,11 +52,14 @@ function pendiente(datos: Partial<Schema<'PortalFacturaPendiente'>> & { id: numb
     }
 }
 
-/** Adicionales activos del servicio 41: incluido con su usuario, de cortesía y cobrado aparte. */
+/**
+ * Adicionales activos del servicio 41: incluido con su usuario, de cortesía y cobrado aparte. El
+ * servicio está suspendido, así que vienen bloqueados (contrato `adicionales.md`).
+ */
 export const ADICIONALES_FIXTURE: Schema<'PortalAdicional'>[] = [
-    { id: 301, nombre: 'Streaming Plus', identificador: 'maria@example.com', modalidad: 'incluido', precio: null },
-    { id: 302, nombre: 'IPTV básico', identificador: null, modalidad: 'cortesia', precio: null },
-    { id: 303, nombre: 'IPTV deportes', identificador: 'mgarcia-tv', modalidad: 'cobrado', precio: '35.00' },
+    { id: 301, nombre: 'Streaming Plus', identificador: 'maria@example.com', modalidad: 'incluido', precio: null, bloqueado: true },
+    { id: 302, nombre: 'IPTV básico', identificador: null, modalidad: 'cortesia', precio: null, bloqueado: true },
+    { id: 303, nombre: 'IPTV deportes', identificador: 'mgarcia-tv', modalidad: 'cobrado', precio: '35.00', bloqueado: true },
 ]
 
 export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
@@ -100,7 +103,13 @@ export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
 export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
     cliente: CONTACTO_FIXTURE,
     servicios: [
-        { ...CUENTA_FIXTURE.servicios[0]!, estado: 'activo', monto_adeudado: '175.00' },
+        {
+            ...CUENTA_FIXTURE.servicios[0]!,
+            estado: 'activo',
+            monto_adeudado: '175.00',
+            // activo: sus adicionales ya no están bloqueados
+            adicionales: ADICIONALES_FIXTURE.map(a => ({ ...a, bloqueado: false })),
+        },
         {
             id: 57,
             estado: 'suspendido',

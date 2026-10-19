@@ -56,6 +56,12 @@ describe('/cuenta: adicionales y tipo de plan', () => {
         expect(filas[0]!.find('[data-testid="adicional-identificador"]').text()).toBe('maria@example.com')
         // Sin identificador no se pinta una línea vacía
         expect(filas[1]!.find('[data-testid="adicional-identificador"]').exists()).toBe(false)
+        // El servicio está suspendido: cada adicional dice que está bloqueado
+        expect(filas.map(f => f.find('[data-testid="adicional-bloqueado"]').text())).toEqual([
+            'Bloqueado por suspensión',
+            'Bloqueado por suspensión',
+            'Bloqueado por suspensión',
+        ])
         // Nada que sugiera la credencial
         expect(servicio.text()).not.toMatch(/contraseña|credencial/i)
     })
@@ -68,6 +74,10 @@ describe('/cuenta: adicionales y tipo de plan', () => {
         const fibra = servicios.find(s => s.text().includes('Fibra 50 Mbps'))!
         expect(fibra.find('[data-testid="plan-tipo"]').text()).toBe('Empresarial')
         expect(fibra.find('[data-testid="adicionales"]').exists()).toBe(false)
+        // el servicio activo muestra sus adicionales sin el aviso de bloqueo
+        const hogar = servicios.find(s => s.text().includes('Hogar 20 Mbps'))!
+        expect(hogar.findAll('[data-testid="adicional"]')).toHaveLength(3)
+        expect(hogar.find('[data-testid="adicional-bloqueado"]').exists()).toBe(false)
     })
 
     it('el componente no usa controles crudos y sin lista no pinta nada', async () => {

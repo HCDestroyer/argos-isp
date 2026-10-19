@@ -198,6 +198,10 @@ export const PortalAdicional = definirEsquema(
             description: '`incluido` en el plan, de `cortesia` (sin cobro) o `cobrado` aparte (`precio`)',
         },
         precio: { ...nulable(Dinero), description: 'Precio mensual; solo con `cobrado`' },
+        bloqueado: {
+            ...booleano,
+            description: 'Bloqueado por la suspensión del servicio; vuelve solo al reactivarse',
+        },
     }),
 )
 

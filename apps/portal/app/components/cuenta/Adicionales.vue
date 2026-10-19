@@ -2,6 +2,8 @@
 /**
  * Servicios adicionales activos de un servicio (streaming, IPTV…): nombre, identificador y
  * modalidad. La API nunca manda la credencial; aquí tampoco se ofrece verla (se pide a soporte).
+ * Con el servicio suspendido, cada adicional dice «Bloqueado por suspensión» (vuelve solo al
+ * reactivarse el servicio).
  */
 const props = defineProps<{
     adicionales: AdicionalPortal[]
@@ -26,7 +28,7 @@ const props = defineProps<{
             >
                 <div class="flex min-w-0 items-center gap-2">
                     <UIcon
-                        name="i-lucide-tv"
+                        :name="adicional.bloqueado ? 'i-lucide-lock' : 'i-lucide-tv'"
                         class="size-4 shrink-0 text-muted"
                     />
                     <div class="min-w-0">
@@ -42,14 +44,25 @@ const props = defineProps<{
                         </p>
                     </div>
                 </div>
-                <UBadge
-                    :label="textoModalidad(adicional)"
-                    :color="colorModalidad(adicional.modalidad)"
-                    variant="subtle"
-                    size="sm"
-                    class="tabular-nums"
-                    data-testid="adicional-modalidad"
-                />
+                <div class="flex flex-wrap items-center justify-end gap-1.5">
+                    <UBadge
+                        v-if="adicional.bloqueado"
+                        label="Bloqueado por suspensión"
+                        icon="i-lucide-lock"
+                        color="warning"
+                        variant="subtle"
+                        size="sm"
+                        data-testid="adicional-bloqueado"
+                    />
+                    <UBadge
+                        :label="textoModalidad(adicional)"
+                        :color="colorModalidad(adicional.modalidad)"
+                        variant="subtle"
+                        size="sm"
+                        class="tabular-nums"
+                        data-testid="adicional-modalidad"
+                    />
+                </div>
             </li>
         </ul>
     </div>

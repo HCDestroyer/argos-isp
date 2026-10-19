@@ -5,6 +5,7 @@ import { crearServicio, sesionDirecta } from '#tests/portal/ayudas_portal'
 import CrearAdicional from '#core/actions/crear_adicional'
 import AgregarAdicionalServicio from '#core/actions/agregar_adicional_servicio'
 import QuitarAdicionalServicio from '#core/actions/quitar_adicional_servicio'
+import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 
 /**
  * Adicionales y tipo de plan en `GET /portal/cuenta` (contrato `adicionales.md`, «Para otros
@@ -104,14 +105,30 @@ test.group('Portal: adicionales y tipo de plan en la cuenta', (group) => {
                 identificador: 'maria@example.com',
                 modalidad: 'incluido',
                 precio: null,
+                bloqueado: false,
             },
-            { id: cortesia.id, nombre: 'IPTV', identificador: null, modalidad: 'cortesia', precio: null },
+            {
+                id: cortesia.id,
+                nombre: 'IPTV',
+                identificador: null,
+                modalidad: 'cortesia',
+                precio: null,
+                bloqueado: false,
+            },
         ])
         const sb = porId.get(b.servicioId) as Record<string, any>
         assert.equal(sb.plan_tipo, 'empresarial')
-        // la baja no sale; el cobrado lleva su precio con dos decimales
+        // la baja no sale; el cobrado lleva su precio con dos decimales y, agregado a un servicio
+        // suspendido, nace bloqueado (contrato `adicionales.md`)
         assert.deepEqual(sb.adicionales, [
-            { id: cobrado.id, nombre: 'IPTV', identificador: null, modalidad: 'cobrado', precio: '25.50' },
+            {
+                id: cobrado.id,
+                nombre: 'IPTV',
+                identificador: null,
+                modalidad: 'cobrado',
+                precio: '25.50',
+                bloqueado: true,
+            },
         ])
         assert.isFalse(porId.has(ajeno.servicioId))
 
@@ -135,5 +152,37 @@ test.group('Portal: adicionales y tipo de plan en la cuenta', (group) => {
         const cuenta = respuesta.body()
         assert.deepEqual(cuenta.servicios[0].adicionales, [])
         assert.equal(cuenta.servicios[0].plan_tipo, 'residencial')
+    })
+
+    test('al suspender el servicio sus adicionales salen bloqueados; al reactivarlo, ya no', async ({
+        client,
+        assert,
+    }) => {
+        const s = await crearServicio({ estado: 'activo', sinFacturas: true })
+        const streaming = await adicional('Streaming Plus')
+        const asignado = await new AgregarAdicionalServicio().execute(
+            { servicio_id: s.servicioId, adicional_id: streaming.id, modalidad: 'incluido' },
+            ctx(),
+        )
+        const { cookie } = await sesionDirecta(s.clienteId)
+        const leer = async () => {
+            const respuesta = await estado(client.get('/api/v1/portal/cuenta').header('Cookie', cookie), 200)
+            const cuenta = respuesta.body()
+            const lista = cuenta.servicios[0].adicionales as Array<{ id: number; bloqueado: boolean }>
+            return lista.map((a) => [a.id, a.bloqueado])
+        }
+
+        assert.deepEqual(await leer(), [[asignado.id, false]])
+        await new CambiarEstadoServicio().execute(
+            { servicioId: s.servicioId, nuevo: 'suspendido', motivo: 'mora' },
+            ctx(),
+        )
+        // sigue saliendo (está activo), marcado como bloqueado
+        assert.deepEqual(await leer(), [[asignado.id, true]])
+        await new CambiarEstadoServicio().execute(
+            { servicioId: s.servicioId, nuevo: 'activo', motivo: 'pago' },
+            ctx(),
+        )
+        assert.deepEqual(await leer(), [[asignado.id, false]])
     })
 })

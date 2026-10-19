@@ -57,6 +57,8 @@ export interface AdicionalPortal {
     identificador: string | null
     modalidad: 'incluido' | 'cortesia' | 'cobrado'
     precio: string | null
+    /** Bloqueado por la suspensión del servicio (`bloqueo = 'bloqueado'`); vuelve al reactivarse */
+    bloqueado: boolean
 }
 
 export interface ServicioPortal {
@@ -233,8 +235,8 @@ export async function cuentaPortal(clienteId: number): Promise<CuentaPortal> {
 }
 
 /**
- * Adicionales activos de los servicios (de `core.servicios_adicionales`, contrato
- * `adicionales.md`; solo lectura), por servicio y en el orden en que se dieron de alta. Nunca lee la
+ * Adicionales activos de los servicios, también los bloqueados por la suspensión (de
+ * `core.servicios_adicionales`, contrato `adicionales.md`; solo lectura), por servicio y en el orden en que se dieron de alta. Nunca lee la
  * columna `credencial`. Los servicios ya son los del cliente de la sesión.
  */
 async function adicionalesDeServicios(servicioIds: number[]): Promise<Map<number, AdicionalPortal[]>> {
@@ -257,6 +259,7 @@ async function adicionalesDeServicios(servicioIds: number[]): Promise<Map<number
             'sa.identificador',
             'sa.modalidad',
             'sa.precio',
+            db.raw(`(sa.bloqueo = 'bloqueado') AS bloqueado`),
         )) as Array<AdicionalPortal & { servicio_id: number }>
     for (const { servicio_id: servicioId, ...fila } of filas) {
         const lista = porServicio.get(Number(servicioId)) ?? []
@@ -264,6 +267,7 @@ async function adicionalesDeServicios(servicioIds: number[]): Promise<Map<number
             ...fila,
             id: Number(fila.id),
             precio: fila.modalidad === 'cobrado' && fila.precio !== null ? aTexto(dec(fila.precio)) : null,
+            bloqueado: Boolean(fila.bloqueado),
         })
         porServicio.set(Number(servicioId), lista)
     }

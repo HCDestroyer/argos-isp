@@ -57294,7 +57294,8 @@
           "nombre",
           "identificador",
           "modalidad",
-          "precio"
+          "precio",
+          "bloqueado"
         ],
         "properties": {
           "id": {
@@ -57330,6 +57331,10 @@
               }
             ],
             "description": "Precio mensual; solo con `cobrado`"
+          },
+          "bloqueado": {
+            "type": "boolean",
+            "description": "Bloqueado por la suspensión del servicio; vuelve solo al reactivarse"
           }
         }
       },

@@ -9230,6 +9230,8 @@ export interface components {
             modalidad: "incluido" | "cortesia" | "cobrado";
             /** @description Precio mensual; solo con `cobrado` */
             precio: components["schemas"]["Dinero"] | null;
+            /** @description Bloqueado por la suspensión del servicio; vuelve solo al reactivarse */
+            bloqueado: boolean;
         };
         PortalAnuncio: {
             id: number;
