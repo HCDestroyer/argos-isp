@@ -280,6 +280,10 @@ onMounted(cargar)
                         {{ etiquetaServicio(servicio) }}
                     </h2>
                     <EstadoServicioBadge :estado="servicio.estado" />
+                    <TipoPlanBadge
+                        :tipo="servicio.plan_tipo"
+                        data-prueba="tipo-plan-servicio"
+                    />
                     <UBadge
                         :label="TIPOS_CONEXION[tipoConexionDe(servicio)].etiqueta"
                         :icon="TIPOS_CONEXION[tipoConexionDe(servicio)].icono"
@@ -583,6 +587,11 @@ onMounted(cargar)
             <ServicioHorus
                 v-if="puede('horus.ver')"
                 :servicio-id="servicio.id"
+            />
+
+            <ServicioAdicionales
+                :servicio="servicio"
+                @cambiado="lineaTiempo?.recargar()"
             />
 
             <section

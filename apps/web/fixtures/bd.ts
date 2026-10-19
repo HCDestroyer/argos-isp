@@ -8,6 +8,8 @@ import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
+import type { PlanAdicionalFixture } from './adicionales/datos'
+import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -118,6 +120,13 @@ interface BaseFixtures {
     notasCredito: Schema<'NotaCredito'>[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
     programasLealtad: Schema<'ProgramaLealtad'>[]
+    /* Servicios adicionales (A1, `contratos/adicionales.md`). */
+    adicionales: Schema<'Adicional'>[]
+    motivosCortesia: Schema<'MotivoCortesia'>[]
+    adicionalesServicio: Schema<'AdicionalServicio'>[]
+    /** Credencial en claro por asignación (la API la guarda cifrada y nunca la lista). */
+    credencialesAdicionales: Record<number, string>
+    planesAdicionales: PlanAdicionalFixture[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
     movimientosPuntos: Schema<'MovimientoPuntos'>[]
     lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
@@ -180,6 +189,11 @@ function inicial(): BaseFixtures {
         fel: felInicial(),
         horus: horusInicial(),
         programasLealtad,
+        adicionales,
+        motivosCortesia,
+        adicionalesServicio,
+        credencialesAdicionales,
+        planesAdicionales,
         reglasLealtad,
         movimientosPuntos,
         lotesPuntos,

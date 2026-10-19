@@ -20,6 +20,7 @@ const emit = defineEmits<{
     guardado: [plan: Plan]
 }>()
 
+const toast = useToast()
 const formulario = useTemplateRef('formulario')
 const estado = reactive<EntradaPlan>(entradaPlanVacia())
 const enviando = ref(false)
@@ -115,6 +116,8 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
     if (resultado.ok) {
         abierto.value = false
         emit('guardado', resultado.data)
+        // Tipo de plan (A1): `dedicado` asimétrico o compartido se guarda igual, con aviso.
+        avisarAdvertencias(toast, resultado.data.warnings, 'Plan guardado con advertencias')
         return
     }
     // 409 `plan_duplicado` (A1): es del nombre, se muestra junto al campo.
@@ -177,6 +180,19 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                                 <span class="text-sm text-muted">Q</span>
                             </template>
                         </UInput>
+                    </UFormField>
+                    <UFormField
+                        label="Tipo de plan"
+                        name="tipo"
+                        help="Solo cambia avisos y reportes: un dedicado suele ser 1:1 y simétrico."
+                        class="sm:col-span-2"
+                    >
+                        <USelect
+                            v-model="estado.tipo"
+                            :items="ITEMS_TIPO_PLAN"
+                            class="w-full"
+                            data-prueba="plan-tipo"
+                        />
                     </UFormField>
                 </section>
 

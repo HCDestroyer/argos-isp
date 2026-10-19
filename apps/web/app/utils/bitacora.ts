@@ -30,6 +30,16 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'servicios.iniciar_plan_temporal': 'Plan temporal iniciado',
     'servicios.terminar_plan_temporal': 'Plan temporal terminado',
     'servicios.cancelar_plan_temporal': 'Plan temporal cancelado',
+    // Servicios adicionales (A1, `contratos/adicionales.md`).
+    'servicios.agregar_adicional': 'Adicional agregado al servicio',
+    'servicios.editar_adicional': 'Adicional del servicio editado',
+    'servicios.quitar_adicional': 'Adicional del servicio dado de baja',
+    'servicios.ver_credencial_adicional': 'Credencial de un adicional consultada',
+    'adicionales.crear': 'Adicional creado en el catálogo',
+    'adicionales.editar': 'Adicional del catálogo editado',
+    'adicionales.desactivar': 'Adicional del catálogo desactivado',
+    'adicionales.crear_motivo': 'Motivo de cortesía creado',
+    'adicionales.desactivar_motivo': 'Motivo de cortesía desactivado',
     'sesiones.iniciar': 'Sesión PPPoE iniciada',
     'sesiones.actualizar': 'Sesión PPPoE actualizada',
     'sesiones.terminar': 'Sesión PPPoE terminada',
@@ -279,7 +289,7 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     caja: { etiqueta: 'Caja', ruta: id => `/caja?caja=${id}` },
     asiento: { etiqueta: 'Asiento' },
     sesion: { etiqueta: 'Sesión PPPoE' },
-    plan: { etiqueta: 'Plan' },
+    plan: { etiqueta: 'Plan', ruta: id => `/planes/${id}` },
     plan_router: { etiqueta: 'Plan en router' },
     plantilla_facturacion: { etiqueta: 'Plantilla de facturación' },
     plantilla_notificacion: { etiqueta: 'Plantilla de notificación' },
@@ -295,6 +305,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     referido_lealtad: { etiqueta: 'Referido' },
     // Mejora de plan temporal (A1, `core.servicios_planes_temporales`): se ve en la ficha del servicio.
     plan_temporal: { etiqueta: 'Plan temporal' },
+    adicional: { etiqueta: 'Adicional', ruta: () => '/adicionales' },
+    motivo_cortesia: { etiqueta: 'Motivo de cortesía', ruta: () => '/adicionales/motivos' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */
