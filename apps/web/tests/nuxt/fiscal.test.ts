@@ -1,10 +1,11 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { UApp } from '#components'
 import PaginaFiscal from '~/pages/configuracion/fiscal.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Configuración → Fiscal (localización GT, fase 2 de A3): composables contra los fixtures (que
@@ -230,13 +231,13 @@ describe('configuración fiscal · pantalla', () => {
     it('con «Todas las empresas» pide elegir una y no muestra datos', async () => {
         useEmpresaActiva().elegir('todas')
         const vista = await montar()
-        await vi.waitFor(() => expect(vista.find('[data-prueba="elegir-empresa"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="elegir-empresa"]').exists()).toBe(true))
         expect(vista.text()).not.toContain('Sobre utilidades')
     })
 
     it('general: régimen con su aviso e historial, banderas y paquete instalado', async () => {
         const vista = await montar()
-        await vi.waitFor(() => expect(vista.find('[data-prueba="regimen-actual"]').text()).toContain('Sobre utilidades'))
+        await esperar(() => expect(vista.find('[data-prueba="regimen-actual"]').text()).toContain('Sobre utilidades'))
         expect(vista.text()).toContain('LAT, art. 51')
         expect(vista.text()).toContain('gt-2026.1')
         expect(vista.text()).toContain('Guatemala')
@@ -247,7 +248,7 @@ describe('configuración fiscal · pantalla', () => {
 
     it('parámetros: marca «confirmar con contador», fuente y filtro', async () => {
         const vista = await montar('parametros')
-        await vi.waitFor(() => expect(vista.findAll('[data-parametro]').length).toBeGreaterThan(20))
+        await esperar(() => expect(vista.findAll('[data-parametro]').length).toBeGreaterThan(20))
         const sinValor = vista.find('[data-parametro="interes_resarcitorio"]')
         expect(sinValor.text()).toContain('Confirmar con contador')
         expect(vista.text()).toContain('Sin valor')
@@ -257,7 +258,7 @@ describe('configuración fiscal · pantalla', () => {
 
     it('impuestos: retenciones con signo menos y cuadrícula de la base nula', async () => {
         const vista = await montar('impuestos')
-        await vi.waitFor(() => expect(vista.findAll('[data-impuesto]')).toHaveLength(19))
+        await esperar(() => expect(vista.findAll('[data-impuesto]')).toHaveLength(19))
         expect(vista.text()).toContain('−15.00 %')
         expect(vista.text()).toContain('IVA12_C')
     })
@@ -265,7 +266,7 @@ describe('configuración fiscal · pantalla', () => {
     it('si la API falla muestra el error con «Reintentar» y ningún valor', async () => {
         simularFalla('GET /api/v1/fiscal/impuestos', 500)
         const vista = await montar('impuestos')
-        await vi.waitFor(() => expect(vista.text()).toContain('Reintentar'))
+        await esperar(() => expect(vista.text()).toContain('Reintentar'))
         expect(vista.findAll('[data-impuesto]')).toHaveLength(0)
         expect(vista.text()).not.toContain('%')
     })

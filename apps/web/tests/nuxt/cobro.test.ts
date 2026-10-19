@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import ReciboPago from '~/components/ReciboPago.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('cobro rápido · composables y reglas', () => {
     beforeEach(() => {
@@ -167,7 +168,7 @@ describe('cobro rápido · composables y reglas', () => {
         expect(seguimiento.siguiendo.value).toBe(true)
         expect(seguimiento.pendientes.value).toHaveLength(1)
 
-        await vi.waitFor(() => expect(seguimiento.reactivados.value.map(s => s.id)).toEqual([2]), { timeout: 2000 })
+        await esperar(() => expect(seguimiento.reactivados.value.map(s => s.id)).toEqual([2]), { timeout: 2000 })
         expect(seguimiento.siguiendo.value).toBe(false)
         expect(seguimiento.agotado.value).toBe(false)
     })
@@ -182,7 +183,7 @@ describe('cobro rápido · composables y reglas', () => {
         for (let segundo = 3; segundo <= 30; segundo += 3) {
             await vi.advanceTimersByTimeAsync(3000)
         }
-        await vi.waitFor(() => expect(seguimiento.siguiendo.value).toBe(false))
+        await esperar(() => expect(seguimiento.siguiendo.value).toBe(false))
         expect(seguimiento.agotado.value).toBe(true)
         expect(seguimiento.reactivados.value).toHaveLength(0)
     })
