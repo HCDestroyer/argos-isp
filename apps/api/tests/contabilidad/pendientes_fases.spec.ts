@@ -17,19 +17,7 @@ interface Pendiente {
 const PENDIENTES: Pendiente[] = [
     // Localización fiscal · fase 2: activados en `fase2.spec.ts` (instalación, vigencia y cadena de hash)
     // Fase 3 (FEL): activados en `fase3.spec.ts`
-    // Fase 4 (compras y retenciones)
-    {
-        titulo: 'libro de compras = cuenta 1.1.04 IVA crédito fiscal',
-        fase: 'localización fiscal, fase 4 (compras)',
-        criterio:
-            'PLAN fase 4: por empresa y mes, Σ iva de ledger.compras con credito_fiscal = movimiento del mes de 1.1.04; FPEQ y FCAP no suman; compra desde egreso = reclasificación IVA crédito / gasto sin tocar el asiento original.',
-    },
-    {
-        titulo: 'retención recibida: CxC baja por el total y 1.1.05 por la constancia',
-        fase: 'localización fiscal, fase 4 (retenciones)',
-        criterio:
-            'Contrato §3.5 y §12: asiento del pago = Caja/Banco (neto) + 1.1.05 o 1.1.06 (constancia) / CxC (total); Σ constancias recibidas = saldo de 1.1.05 + 1.1.06 antes de liquidar.',
-    },
+    // Compras y retenciones (localización fiscal, fase 5 de A3): activados en `fase5.spec.ts`
     // Fase 5 (libros, bloqueos, cierre anual)
     {
         titulo: 'el cierre anual deja los resultados en cero',

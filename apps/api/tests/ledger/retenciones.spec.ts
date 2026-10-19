@@ -20,7 +20,7 @@ import {
 import { generar } from '#tests/billing/ayudas_billing'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { hacerAgenteRetencion, haceMeses, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
-import { afirmarLibroFase5 } from '#tests/ledger/verificar_compras'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
  * Fase 5 (§3.4, §3.5): constancias de retención recibidas de clientes (en el pago) y emitidas a
@@ -105,7 +105,7 @@ test.group('Fase 5 · retenciones y constancias', (group) => {
         const turno = await new CerrarCaja().execute({ caja_id: cajaId, contado: '239.50' }, e.ctx)
         assert.equal(turno.esperado, '239.50')
         assert.equal(turno.diferencia, '0.00')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('constancias recibidas: solo retenciones de venta, una empresa por pago, combustibles con tarjeta', async ({
@@ -160,7 +160,7 @@ test.group('Fase 5 · retenciones y constancias', (group) => {
             ),
         )
         assert.equal(repartido.codigo, 'retencion_en_cobro_repartido')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('constancia emitida al proveedor: una por retención, número único, bloquea anular la compra', async ({
@@ -246,6 +246,6 @@ test.group('Fase 5 · retenciones y constancias', (group) => {
         assert.equal(ruta.body().compra_id, otra.id)
         const filas = await db.from('ledger.constancias_retencion').where('compra_id', otra.id)
         assert.lengthOf(filas, 1)
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

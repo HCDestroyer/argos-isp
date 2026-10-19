@@ -12,7 +12,7 @@ import { ejecutarCron } from '#billing/jobs'
 import { errorDe, saldoCuenta } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { haceMeses, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
-import { afirmarLibroFase5 } from '#tests/ledger/verificar_compras'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import type { ContextoAccion } from '#shared/contexto'
 
 /**
@@ -137,7 +137,7 @@ test.group('Fase 5 · activos fijos', (group) => {
         assert.equal(dosVeces.codigo, 'activo_dado_de_baja')
         assert.equal(await saldoCuenta(e.B, EQUIPO_RED), '0.00')
         assert.equal(await saldoCuenta(e.B, DEP_EQUIPO_RED), '0.00')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('alta a mano con depreciación inicial; retiro con ganancia o pérdida; anular una compra sin cuotas cierra su activo', async ({
@@ -194,7 +194,7 @@ test.group('Fase 5 · activos fijos', (group) => {
         assert.isNull(anulado.baja!.asiento_id)
         const sinCuotas = await new DepreciarActivos().execute({ empresa_id: e.B }, e.ctx)
         assert.equal(sinCuotas.cuotas, 0)
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('rutas: activos y depreciación bajo pedido', async ({ client, assert }) => {
@@ -233,6 +233,6 @@ test.group('Fase 5 · activos fijos', (group) => {
                 .json({ tipo: 'retiro', motivo: 'siniestro' }),
             200,
         )
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

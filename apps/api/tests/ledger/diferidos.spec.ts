@@ -13,7 +13,7 @@ import { ejecutarCron } from '#billing/jobs'
 import { errorDe, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { haceMeses, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
-import { afirmarLibroFase5 } from '#tests/ledger/verificar_compras'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
  * Fase 5 (§10.10): gastos pagados por anticipado (1.1.13) e ingresos cobrados por anticipado
@@ -90,7 +90,7 @@ test.group('Fase 5 · diferidos', (group) => {
             ),
         )
         assert.include(activo.reglas, 'no_aplica')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('factura de varios meses: la base pasa a 2.1.12 y vuelve al ingreso; la factura diferida no se anula', async ({
@@ -128,7 +128,7 @@ test.group('Fase 5 · diferidos', (group) => {
             new AnularFactura().execute({ factura_id: factura!.id, motivo: 'no corresponde' }, e.ctx),
         )
         assert.equal(anular.codigo, 'factura_diferida')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('diferir una línea de compra ya registrada; anular la compra sin cuotas cancela el diferimiento con su reverso', async ({
@@ -176,6 +176,6 @@ test.group('Fase 5 · diferidos', (group) => {
             200,
         )
         assert.isTrue(lista.body().data.some((d: { id: number }) => d.id === diferido.id))
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

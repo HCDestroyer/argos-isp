@@ -12,7 +12,7 @@ import CerrarCaja from '#ledger/actions/cerrar_caja'
 import { codigoCaja, errorDe, saldoCuenta } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { haceMeses, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
-import { afirmarLibroFase5 } from '#tests/ledger/verificar_compras'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import type { ContextoAccion } from '#shared/contexto'
 
 /**
@@ -150,7 +150,7 @@ test.group('Fase 5 · pagos a proveedores', (group) => {
             ),
         )
         assert.include(ajena.reglas, 'cuenta_de_otra_empresa')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('pago en efectivo baja el esperado del turno; estado de cuenta y antigüedad cuadran con 2.1.03', async ({
@@ -199,7 +199,7 @@ test.group('Fase 5 · pagos a proveedores', (group) => {
         assert.equal(fila.total, '480.00')
         assert.equal(fila.por_vencer, '224.00')
         assert.equal(fila.vencido, '256.00')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('rutas: pagar, anular, estado de cuenta y antigüedad de proveedores (json y xlsx)', async ({
@@ -263,6 +263,6 @@ test.group('Fase 5 · pagos a proveedores', (group) => {
                 .json({ motivo: 'transferencia devuelta' }),
             200,
         )
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

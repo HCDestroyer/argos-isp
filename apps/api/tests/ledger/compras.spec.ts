@@ -22,7 +22,7 @@ import {
     partidas,
     proveedorEn,
 } from '#tests/ledger/ayudas_compras'
-import { afirmarLibroFase5 } from '#tests/ledger/verificar_compras'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 
 /**
  * Fase 5 (§3.4, §6.2, §7): proveedores, compras al contado y al crédito, desde un egreso, NCRE,
@@ -105,7 +105,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             cambios.map((c) => c.campo),
             ['nombre', 'regimen_isr'],
         )
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('compra al crédito: Gasto + 1.1.04 / 2.1.03 con auxiliar; NCRE la corrige; libro = 1.1.04', async ({
@@ -223,7 +223,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         )
         assert.equal(conNota.codigo, 'compra_con_notas')
         await assert.rejects(() => db.from('ledger.compras').where('id', compra.id).update({ total: '1.00' }))
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('compra al contado por caja: crea su egreso sin otro asiento; anular la compra anula el egreso; el libro resta la anulación', async ({
@@ -303,7 +303,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         )
         assert.equal(libro.totales.iva_credito, '0.00')
         assert.equal(await saldoCuenta(e.B, IVA_CREDITO), '0.00')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('documentos sin crédito: FPEQ de un pequeño contribuyente; crédito fuera de la ventana 422 o al costo', async ({
@@ -392,7 +392,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             ),
         )
         assert.include(futuro.reglas, 'futuro')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('desde un egreso: reclasificación sin tocar su asiento; una sola vez; el egreso no se anula con compra vigente', async ({
@@ -509,7 +509,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             e.ctx,
         )
         assert.isFalse(tardia.credito_fiscal)
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('retenciones emitidas: agente de retención (15 % del IVA) y régimen opcional (7 % sin IVA)', async ({
@@ -598,7 +598,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
             ),
         )
         assert.include(deVenta.reglas, 'retencion')
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('multiempresa: el pago al contado no cruza NIT; la lista y el libro son de la empresa', async ({
@@ -640,7 +640,7 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         assert.include(cuentaC.reglas, 'cuenta_compra')
         const libroC = await libroCompras(e.C, {})
         assert.lengthOf(libroC.filas, 0)
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('rutas: proveedores, compras, anulación y libro con su cuadre; cajero sin permiso', async ({
@@ -727,6 +727,6 @@ test.group('Fase 5 · proveedores y compras', (group) => {
         const { token } = await usuarioConRoles(['cajero'])
         await estado(client.post('/api/v1/compras').bearerToken(token).json(cuerpo), 403)
         await estado(client.get('/api/v1/libros/compras').bearerToken(token), 403)
-        await afirmarLibroFase5(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })
