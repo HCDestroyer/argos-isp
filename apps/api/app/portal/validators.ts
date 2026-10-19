@@ -182,3 +182,16 @@ export const vincularTelegramValidator = vine.compile(
             }),
     }),
 )
+
+/** `POST /nodos-portal` (contrato `nodo-portal.md`). */
+export const crearNodoPortalValidator = vine.compile(
+    vine.object({
+        // Identificador del nodo (`^[a-z0-9][a-z0-9-]{0,62}$`, p. ej. `xela-1`), único. Sin `.meta()`:
+        // en VineJS 4.4 `meta()` sobre un campo obligatorio lo deja aceptar `null` (y el bodyparser
+        // convierte "" en null), así que la descripción va en el schema `NodoPortal`.
+        nombre: vine
+            .string()
+            .trim()
+            .regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
+    }),
+)

@@ -3,6 +3,7 @@ import { Conflicto, ValidacionFallida } from '#shared/errores'
 import { verPlan, type PlanVista } from '#network/consultas/planes'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { validarVelocidad, VELOCIDAD_POR_DEFECTO, type VelocidadPlan } from '#network/velocidad'
+import { advertenciasPlan, type Advertencia, type TipoPlan } from '#network/tipos_plan'
 
 export interface DatosPlan {
     nombre?: string
@@ -20,6 +21,7 @@ export interface DatosPlan {
     prioridad?: number
     dual_stack?: 'ambos' | 'v4' | 'v6'
     tamano_prefijo_delegado?: 64 | 56 | 48
+    tipo?: TipoPlan
     global?: boolean
     activo?: boolean
 }
@@ -55,11 +57,16 @@ export function exigirVelocidadValida(velocidad: VelocidadPlan, detalle?: string
  * `global`: disponible en todos los routers; si no, solo donde tenga implementación.
  * Velocidad (`contratos/velocidad.md`): reuso, garantizado, ráfaga y prioridad con los valores por
  * defecto del contrato; 422 por campo si no son coherentes.
+ * `tipo` (`residencial` por defecto, `empresarial`, `dedicado`): la respuesta trae `warnings[]` si un
+ * dedicado es asimétrico o compartido (`advertenciasPlan`); nunca es un 422.
  */
-export default class CrearPlan extends DomainAction<EntradaCrearPlan, PlanVista> {
+/** Plan con las advertencias de su tipo (`app/network/tipos_plan.ts`); nunca bloquean. */
+export type PlanConAdvertencias = PlanVista & { warnings: Advertencia[] }
+
+export default class CrearPlan extends DomainAction<EntradaCrearPlan, PlanConAdvertencias> {
     readonly nombre = 'planes.crear'
 
-    protected async handle(entrada: EntradaCrearPlan, t: Transaccion): Promise<PlanVista> {
+    protected async handle(entrada: EntradaCrearPlan, t: Transaccion): Promise<PlanConAdvertencias> {
         const { externo, ...input } = entrada
         const repetido = await t.trx.from('network.planes').where('nombre', input.nombre).first()
         if (repetido) throw new Conflicto(`Ya existe el plan ${input.nombre}`, 'plan_duplicado')
@@ -76,6 +83,6 @@ export default class CrearPlan extends DomainAction<EntradaCrearPlan, PlanVista>
         await vincularExterno(t.trx, 'plan', fila!.id, externo)
         const plan = await verPlan(fila!.id, t.trx)
         await t.registrarCambios({ tipo: 'plan', id: plan.id }, null, plan)
-        return plan
+        return { ...plan, warnings: advertenciasPlan(plan) }
     }
 }
