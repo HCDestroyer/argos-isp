@@ -621,15 +621,8 @@ test.group('Lealtad · canjes', (group) => {
                 .update({ monto: '1.00' }),
         )
         await afirmarPasivoLealtad(assert, [e.B, e.C])
-        // el inv. 5.factura_anulada_con_saldo_vivo del auditor aún no descuenta la fila de reverso
-        // (H-anular-saldo-a-favor, prueba .fails abajo); ningún otro invariante se rompe
-        const violaciones = await verificarLibro([e.B, e.C])
-        assert.deepEqual(
-            violaciones
-                .map((v) => v.invariante)
-                .filter((v) => !v.startsWith('5.factura_anulada_con_saldo_vivo')),
-            [],
-        )
+        // auditor: 5.factura_anulada_con_saldo_vivo cuenta Σ monto (la fila de reverso lo deja en 0)
+        assert.deepEqual(await verificarLibro([e.B, e.C]), [])
     })
 
     test('H-anular-saldo-a-favor: anular la factura que recibió saldo a favor de una nota deja el libro limpio', async ({
@@ -639,9 +632,7 @@ test.group('Lealtad · canjes', (group) => {
         const { diciembre } = await canjeSobrePagada(e)
         await new AnularFactura().execute({ factura_id: diciembre.id, motivo: 'error de emisión' }, e.ctx)
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'H-anular-saldo-a-favor: 5.factura_anulada_con_saldo_vivo cuenta la aplicación revertida (falta descontar su fila de reverso, Σ monto = 0)',
-    )
+    })
 
     test('anular una factura con saldo a favor de nota y además un pago en efectivo: 409 factura_con_pagos sin tocar nada', async ({
         assert,
