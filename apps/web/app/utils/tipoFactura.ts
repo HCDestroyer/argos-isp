@@ -12,9 +12,9 @@ interface TipoVisual {
 }
 
 /**
- * Tipos de factura (`Factura.tipo`): la del periodo no lleva insignia. `mora` es el recargo por
- * vencimiento de otra factura; `cargo` (H18) es un cargo interno no fiscal sin IVA, ligado por
- * `factura_origen_id` a la factura de la diferencia de cobro: nunca se certifica.
+ * Tipos de factura (`Factura.tipo`): la del periodo no lleva insignia y `mora` es el recargo por
+ * vencimiento de otra factura. (El `cargo` interno de H18 desapareció con la decisión B: la diferencia
+ * de cobro se cierra como gasto y no vuelve a deberse en una factura.)
  */
 export const TIPOS_FACTURA: Record<TipoFactura, TipoVisual> = {
     servicio: { etiqueta: 'Factura del periodo', icono: 'i-lucide-file-text', color: 'neutral', descripcion: null },
@@ -23,12 +23,6 @@ export const TIPOS_FACTURA: Record<TipoFactura, TipoVisual> = {
         icono: 'i-lucide-calendar-x',
         color: 'warning',
         descripcion: 'Recargo por el vencimiento de otra factura.',
-    },
-    cargo: {
-        etiqueta: 'Cargo interno',
-        icono: 'i-lucide-receipt',
-        color: 'neutral',
-        descripcion: 'Cargo interno no fiscal y sin IVA: la diferencia de cobro que volvió a deberse al anular el pago que la cerró. No va a FEL ni cuenta para limitar o cortar el servicio.',
     },
 }
 
@@ -44,10 +38,7 @@ export function tipoFacturaVisual(tipo: string | null | undefined): TipoVisual |
     return { etiqueta: texto.charAt(0).toUpperCase() + texto.slice(1), icono: 'i-lucide-file-question', color: 'neutral', descripcion: null }
 }
 
-/** Texto de la relación con `factura_origen_id`: "mora de la", "cargo de la"… */
+/** Texto de la relación con `factura_origen_id`: "mora de la"… */
 export function relacionOrigen(tipo: string | null | undefined): string {
-    if (tipo === 'cargo') {
-        return 'diferencia de cobro de la'
-    }
     return tipo === 'mora' ? 'mora de la' : 'originada por la'
 }

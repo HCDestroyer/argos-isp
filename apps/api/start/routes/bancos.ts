@@ -8,9 +8,7 @@
 */
 import db from '@adonisjs/lucid/services/db'
 import { definirRuta, type Ruta } from '#shared/rutas'
-import { NoEncontrado, ValidacionFallida } from '#shared/errores'
-import { alcanceDePermiso } from '#core/acl'
-import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { NoEncontrado } from '#shared/errores'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import { EmpresaRequerida, empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
@@ -34,6 +32,7 @@ import {
     Traslado,
 } from '#ledger/esquemas_bancos'
 import { existeCaja } from '#ledger/cajas'
+import { autorizarLecturaDeCaja } from '#ledger/lectura_caja'
 import { listarDepositos, listarTraslados, resumenFondosEnTransito } from '#ledger/transitos'
 import {
     empresaDe,
@@ -210,47 +209,15 @@ const transitos: Ruta[] = [
         operacion: 'bancosDepositos',
         resumen: 'Depósitos de caja (en tránsito o acreditados)',
         descripcion:
-            'Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.',
+            'Permiso bancos.ver o cajas.ver. Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.',
         etiqueta: 'bancos',
-        permiso: 'cajas.ver',
+        permiso: null,
         query: v.listarDepositosValidator,
         respuesta: { status: 200, descripcion: 'Página de depósitos', esquema: pagina(Deposito) },
         handler: async (ctx, { query }) => {
-            const usuario = ctx.auth.user
-            const conBancos = usuario
-                ? await alcanceDePermiso(usuario.id, 'bancos.ver', alcancesDelToken(ctx))
-                : null
-            let cajaId = query.caja_id
-            if (query.turno_id !== undefined) {
-                const turno = await db
-                    .from('ledger.cajas_turnos')
-                    .where('id', query.turno_id)
-                    .select('caja_id')
-                    .first()
-                if (!turno) throw new NoEncontrado(`El turno ${query.turno_id} no existe`)
-                if (cajaId !== undefined && cajaId !== Number(turno.caja_id)) {
-                    throw new ValidacionFallida([
-                        {
-                            field: 'turno_id',
-                            message: `El turno ${query.turno_id} no es de la caja ${cajaId}`,
-                            rule: 'turno_de_la_caja',
-                        },
-                    ])
-                }
-                cajaId = Number(turno.caja_id)
-            }
-            if (cajaId !== undefined) exigirAcceso(ctx, await existeCaja(cajaId))
-            else if (!conBancos) {
-                throw new ValidacionFallida([
-                    {
-                        field: 'caja_id',
-                        message: 'Sin bancos.ver indica la caja (caja_id) o el turno (turno_id)',
-                        rule: 'required',
-                    },
-                ])
-            }
+            const lectura = await autorizarLecturaDeCaja(ctx, 'bancos.ver', query)
             return listarDepositos(
-                { ...query, caja_id: cajaId },
+                { ...query, caja_id: lectura.caja_id },
                 empresasDeLaLista(ctx.empresa, query.empresas),
             )
         },
@@ -520,7 +487,7 @@ const cartera: Ruta[] = [
         cuerpo: v.cerrarDiferenciaValidator,
         idempotente: true,
         descripcion:
-            'Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.',
+            'El saldo de cada factura del pago se cierra como gasto: asiento diferencia_cobro 5.3.05 Diferencias de cobro / CxC, sin tocar IVA ni DTE (el DTE va por el total). pagado no cambia (solo dinero cobrado); la factura queda pagada porque pagado + diferencias vigentes = total. Emite pago.diferencia_cerrada y re-evalúa los servicios. Anular el pago revierte la diferencia. 422 diferencia_sobre_tope; 409 sin_diferencia, pago_anulado o anulacion_en_proceso.',
         respuesta: { status: 201, descripcion: 'Diferencia cerrada', esquema: DiferenciaCerrada },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)

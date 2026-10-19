@@ -1,8 +1,11 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, cajeroDe, nuevaCaja } from '#tests/ledger/ayudas_libro'
 import { escenario, generar, lineasAsiento } from '#tests/billing/ayudas_billing'
+import AbrirCaja from '#ledger/actions/abrir_caja'
+import RegistrarEgreso from '#ledger/actions/registrar_egreso'
+import Usuario from '#core/models/usuario'
 
 /**
  * Tarea 9: cajas y turnos. Cada prueba crea su propia caja (con su cuenta hija de 1.1.01) y un
@@ -261,4 +264,82 @@ test.group('ledger · cajas y turnos', () => {
         const { token: contador } = await usuarioConRoles(['contabilidad'])
         await estado(client.get('/api/v1/bancos/depositos').bearerToken(contador), 200)
     })
+
+    test('lecturas del cajero (pedidos de A4): egresos de su caja o turno con cajas.ver; depósitos con bancos.ver o cajas.ver', async ({
+        client,
+        assert,
+    }) => {
+        const cajaId = await nuevaCaja()
+        const otraCaja = await nuevaCaja()
+        const turno = await new AbrirCaja().execute(
+            { caja_id: cajaId, fondo_inicial: '300.00' },
+            contextoPrueba(),
+        )
+        await new AbrirCaja().execute({ caja_id: otraCaja, fondo_inicial: '300.00' }, contextoPrueba())
+        const propio = await new RegistrarEgreso().execute(
+            { categoria: 'otros', monto: '25.00', metodo: 'caja', caja_id: cajaId, descripcion: 'Agua' },
+            contextoPrueba(),
+        )
+        const ajeno = await new RegistrarEgreso().execute(
+            { categoria: 'otros', monto: '30.00', metodo: 'caja', caja_id: otraCaja },
+            contextoPrueba(),
+        )
+        const { token } = await cajeroDe(cajaId)
+        // egresos: sin caja ni turno 422; otra caja 403; su caja o su turno, solo lo suyo
+        await estado(client.get('/api/v1/egresos').bearerToken(token), 422)
+        await estado(client.get(`/api/v1/egresos?caja_id=${otraCaja}`).bearerToken(token), 403)
+        const deLaCaja = await estado(client.get(`/api/v1/egresos?caja_id=${cajaId}`).bearerToken(token), 200)
+        assert.deepEqual(
+            deLaCaja.body().data.map((e: { id: number }) => e.id),
+            [propio.id],
+        )
+        const delTurno = await estado(
+            client.get(`/api/v1/egresos?turno_id=${turno.id}`).bearerToken(token),
+            200,
+        )
+        assert.deepEqual(
+            delTurno.body().data.map((e: { id: number }) => e.id),
+            [propio.id],
+        )
+        // con egresos.ver, todos (caja opcional)
+        const { token: contador } = await usuarioConRoles(['contabilidad'])
+        const todos = await estado(client.get('/api/v1/egresos?limit=100').bearerToken(contador), 200)
+        const ids = todos.body().data.map((e: { id: number }) => e.id)
+        assert.includeMembers(ids, [propio.id, ajeno.id])
+
+        // depósitos: un rol a la medida con solo bancos.ver ve todos; sin ninguno de los dos, 403
+        const soloBancos = await rolConPermisos(['bancos.ver'])
+        await estado(client.get('/api/v1/bancos/depositos').bearerToken(soloBancos), 200)
+        await estado(client.get(`/api/v1/bancos/depositos?caja_id=${otraCaja}`).bearerToken(soloBancos), 200)
+        const ninguno = await rolConPermisos(['clientes.ver'])
+        const sinPermiso = await estado(client.get('/api/v1/bancos/depositos').bearerToken(ninguno), 403)
+        assert.include(sinPermiso.body().detail, 'bancos.ver o cajas.ver')
+        await estado(client.get(`/api/v1/egresos?caja_id=${cajaId}`).bearerToken(ninguno), 403)
+        // solo bancos.ver no da egresos
+        await estado(client.get(`/api/v1/egresos?caja_id=${cajaId}`).bearerToken(soloBancos), 403)
+        await afirmarLibroCuadrado(assert)
+    })
 })
+
+/** Usuario con un rol a la medida que solo tiene estos permisos. */
+async function rolConPermisos(permisos: string[]): Promise<string> {
+    const [rol] = (await db
+        .table('core.roles')
+        .insert({ nombre: unico('rol'), descripcion: 'a la medida' })
+        .returning('id')) as Array<{ id: number }>
+    const filas = (await db.from('core.permisos').whereIn('nombre', permisos).select('id')) as Array<{
+        id: number
+    }>
+    await db
+        .table('core.roles_permisos')
+        .multiInsert(filas.map((p) => ({ role_id: rol!.id, permiso_id: p.id })))
+    const usuario = await Usuario.create({
+        nombre: unico('Usuario'),
+        email: `${unico('u')}@prueba.local`,
+        password: 'clave-de-prueba',
+        activo: true,
+    })
+    await db.table('core.usuarios_roles').insert({ usuario_id: usuario.id, role_id: rol!.id })
+    const token = await Usuario.accessTokens.create(usuario)
+    return token.value!.release()
+}

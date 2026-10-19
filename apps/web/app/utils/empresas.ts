@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js'
+import { saldoFactura } from './cobro'
 
 /** Filas de una misma empresa (multiempresa: el cliente se ve agrupado por la empresa de cada servicio). */
 export interface GrupoEmpresa<T> {
@@ -26,9 +27,9 @@ export function empresaDeFactura(factura: { servicio_id: number | null }, servic
     return servicios.find(s => s.id === factura.servicio_id)?.empresa_id ?? null
 }
 
-/** Lo que falta pagar de unas facturas (total − pagado), con `decimal.js`. */
-export function pendienteDeFacturas(facturas: readonly { total: string, pagado: string }[]): Decimal {
-    return facturas.reduce((suma, f) => suma.plus(f.total).minus(f.pagado), new Decimal(0))
+/** Lo que falta pagar de unas facturas (`saldoFactura`: el estado manda), con `decimal.js`. */
+export function pendienteDeFacturas(facturas: readonly Parameters<typeof saldoFactura>[0][]): Decimal {
+    return facturas.reduce((suma, f) => suma.plus(saldoFactura(f)), new Decimal(0))
 }
 
 /**

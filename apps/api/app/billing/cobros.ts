@@ -5,6 +5,7 @@ import { aTexto, dec, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { estadoSegunPago, pendienteDe, type EstadoFactura } from '#billing/facturas'
+import { diferenciasVigentes } from '#billing/diferencias'
 
 /**
  * Piezas compartidas por las acciones que mueven el saldo de un cliente (emitir facturas,
@@ -163,14 +164,23 @@ async function acreditadaSinCobro(trx: TransactionClientContract, facturaId: num
     return Boolean(f?.aviso_sin_dte) && dec(f!.cobrado).isZero()
 }
 
-/** Suma `monto` a lo pagado de la factura y recalcula su estado (H16: `acreditada` sin cobro). */
+/**
+ * Suma `monto` a lo pagado de la factura y recalcula su estado (H16: `acreditada` sin cobro). Con
+ * `monto` 0 solo recalcula el estado (p. ej. al cerrar o revertir una diferencia de cobro).
+ */
 export async function sumarAPagado(
     trx: TransactionClientContract,
     factura: FacturaPendiente,
     monto: Dec,
 ): Promise<EstadoFactura> {
     const pagado = dec(factura.pagado).plus(monto)
-    let estado = estadoSegunPago({ total: factura.total, pagado, vencida_en: factura.vencida_en })
+    // B: lo cerrado como diferencia de cobro (gasto) cubre sin ser cobro: `pagado` no lo incluye
+    const diferencias = await diferenciasVigentes(trx, factura.id)
+    let estado = estadoSegunPago({
+        total: dec(factura.total).minus(diferencias),
+        pagado,
+        vencida_en: factura.vencida_en,
+    })
     if (estado === 'pagada' && (await acreditadaSinCobro(trx, factura.id))) estado = 'acreditada'
     await trx
         .from('billing.facturas')

@@ -26,8 +26,7 @@ export type EstadoFactura =
     | 'castigada'
     /** H16: aviso de cobro cubierto entero por notas internas, sin cobro: no es venta, no se certifica */
     | 'acreditada'
-/** `cargo`: cargo interno no fiscal sin IVA (H18: diferencia de cobro que vuelve al anular su pago) */
-export type TipoFactura = 'servicio' | 'mora' | 'cargo'
+export type TipoFactura = 'servicio' | 'mora'
 
 export interface LineaCalculada {
     concepto: string
