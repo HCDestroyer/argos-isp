@@ -5,7 +5,8 @@ import { aTexto, dec } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
-import { cuentasDeClase, inicioDepreciacion, tasaDeClase } from '#ledger/activos'
+import { LOCK_ACTIVO, cuentasDeClase, inicioDepreciacion, tasaDeClase } from '#ledger/activos'
+import { LOCK_DIFERIDO } from '#ledger/diferidos'
 import type { LineaCompraCalculada, LineaCompraEntrada } from '#ledger/compras'
 import type { CompraPreparada } from '#ledger/preparar_compra'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
@@ -157,6 +158,24 @@ export async function altasDeLaCompra(
  * de la compra ya cancela su costo; un diferimiento con asiento inicial lo revierte aquí).
  */
 export async function anularAltasDeLaCompra(t: Transaccion, compraId: number, motivo: string): Promise<void> {
+    // mismo lock por activo y por diferimiento que la depreciación y la amortización (observación del
+    // auditor): una cuota no se registra mientras se anula la compra, ni después sobre su baja
+    const ids = (await t.trx
+        .from('ledger.activos')
+        .where('compra_id', compraId)
+        .orderBy('id')
+        .select('id')) as Array<{
+        id: number
+    }>
+    for (const { id } of ids) await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ACTIVO, id])
+    const idsDiferidos = (await t.trx
+        .from('ledger.diferimientos')
+        .where('compra_id', compraId)
+        .orderBy('id')
+        .select('id')) as Array<{ id: number }>
+    for (const { id } of idsDiferidos) {
+        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_DIFERIDO, id])
+    }
     const activos = (await t.trx
         .from('ledger.activos as ac')
         .where('ac.compra_id', compraId)

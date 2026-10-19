@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { LOCK_COMPRA } from '#ledger/actions/registrar_pago_proveedor'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -54,7 +55,7 @@ export default class AnularCompra extends DomainAction<EntradaAnularCompra, Comp
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
         // una compra se anula una vez; un pago a proveedor simultáneo espera (mismo lock)
-        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3012, compra.id])
+        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_COMPRA, compra.id])
         const previa = await t.trx.from('ledger.compras_anulaciones').where('compra_id', compra.id).first()
         if (previa) {
             throw new Conflicto(`La compra ${compra.id} ya está anulada`, 'compra_anulada', 'Compra anulada')

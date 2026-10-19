@@ -29,6 +29,7 @@ import { proveedorParaPago } from '#ledger/cobros_liquidar'
 import { guardarRecuperacion, movimientosRecuperacion, repartirRecuperacion } from '#ledger/cartera'
 import { hoyGuatemala } from '#ledger/fechas'
 import {
+    exigirDocumentoDeRetencionIva,
     insertarConstanciasRecibidas,
     leerRetencionesRecibidas,
     validarRetencionesRecibidas,
@@ -73,7 +74,9 @@ export { DATOS_POR_METODO } from '#billing/datos_bancarios'
  *   su etiqueta (`+RET_IVA_REC`, `+RET_ISR_REC`). Un pago con constancias es de una sola empresa
  *   (422 `retencion_en_cobro_repartido`) y no va a un proveedor de cobro (422
  *   `retencion_con_proveedor_cobro`); número de constancia repetido entre pagos vigentes: 409
- *   `constancia_duplicada`.
+ *   `constancia_duplicada`. Una constancia de IVA en un pago que recupera (total o parcialmente)
+ *   un aviso castigado sin DTE: 422 `retencion_sin_documento_fiscal` (H19; no hay DTE que la
+ *   respalde).
  * - Evento `pago.registrado` por pago (con `empresa_id` y `cobro_id`) y, **en la misma
  *   transacción**, `evaluarEstadoServicio` de cada servicio cuyas facturas tocó: la reactivación
  *   sale con el pago (evento `servicio.estado_cambiado`), sin esperar al cron.
@@ -622,6 +625,11 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         // anticipo eterno ni una aplicación a la factura castigada
         // H17: la recuperación se parte en base (4.2.03) e IVA (2.1.11) en la proporción de cada castigo
         const recuperacion = await repartirRecuperacion(t.trx, parte.empresaId, input.cliente_id, restante)
+        // H19: una constancia de IVA no respalda lo recuperado de un aviso castigado sin DTE
+        exigirDocumentoDeRetencionIva(
+            constancias,
+            recuperacion.reduce((a, r) => a.plus(r.iva), CERO),
+        )
         movimientos.push(...movimientosRecuperacion(recuperacion, input.cliente_id))
         const sobrante = recuperacion.reduce((a, r) => a.minus(r.monto), restante)
         if (sobrante.gt(0)) {

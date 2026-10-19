@@ -60,8 +60,6 @@ export interface OpcionesVerificacion {
  * `verificarLibro`.
  */
 export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    // fase 5 × fase 4: constancia de IVA recibida sobre IVA recuperado de un aviso castigado sin DTE
-    '15.retencion_iva_sin_dte': 'H19',
     // fase 5: baja de un activo con fecha anterior a cuotas ya registradas
     '15.cuota_posterior_a_la_baja': 'H20',
 }

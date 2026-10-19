@@ -1,7 +1,7 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { Conflicto, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { impuesto as impuestoVigente, type ImpuestoVigente } from '#fiscal/impuestos'
@@ -319,6 +319,33 @@ export async function validarRetencionesRecibidas(
         }
     }
     return salida
+}
+
+/**
+ * H19 (decisión del líder): una constancia de retención de **IVA** recibida no respalda la parte
+ * del pago que recupera un aviso castigado sin DTE (`ivaRecuperado` > 0: su IVA vuelve a `2.1.11`
+ * y nunca se certifica), porque no hay documento fiscal al que referir: 422
+ * `retencion_sin_documento_fiscal`. Con DTE (castigo sin IVA) y las de ISR no cambia nada.
+ * La llama `pagos.registrar` con lo recuperado de cada parte, antes del asiento.
+ */
+export function exigirDocumentoDeRetencionIva(constancias: ConstanciaRecibida[], ivaRecuperado: Dec): void {
+    if (ivaRecuperado.lte(0)) return
+    const errores: ErrorCampo[] = constancias
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => c.impuesto === 'iva')
+        .map(({ c, i }) => ({
+            field: `retenciones.${i}.codigo`,
+            message: `La constancia de IVA ${c.numero} no tiene DTE que la respalde: el pago recupera un aviso castigado sin documento fiscal`,
+            rule: 'documento_fiscal',
+        }))
+    if (errores.length === 0) return
+    throw new Problema(
+        422,
+        'retencion_sin_documento_fiscal',
+        'Retención sin documento fiscal',
+        `El pago recupera ${aTexto(ivaRecuperado)} de IVA de un aviso castigado sin DTE: una constancia de retención de IVA no se puede aplicar a esa recuperación`,
+        errores,
+    )
 }
 
 /** Filas de `ledger.constancias_retencion` (recibidas) del pago. */

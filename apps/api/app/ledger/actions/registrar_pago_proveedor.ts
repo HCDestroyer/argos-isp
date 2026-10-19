@@ -37,7 +37,11 @@ export interface EntradaPagoProveedor {
 }
 
 /** Advisory lock de una compra: sus pagos y su anulación no corren a la vez. */
-export const LOCK_COMPRA = 3012
+/**
+ * Lock por compra: lo toman el pago, su anulación, la anulación de la compra y su constancia emitida.
+ * Espacio propio (3012 lo usa `cartera.provisionar` por empresa: compartirlo serializaba de más).
+ */
+export const LOCK_COMPRA = 3020
 
 export default class RegistrarPagoProveedor extends DomainAction<EntradaPagoProveedor, PagoProveedorVista> {
     readonly nombre = 'compras.pagar'
@@ -121,6 +125,23 @@ export default class RegistrarPagoProveedor extends DomainAction<EntradaPagoProv
             const usar = saldo.lt(restante) ? saldo : restante
             aplicaciones.push({ compra_id: compra.id, monto: usar })
             restante = restante.minus(usar)
+        }
+        // observación del auditor: no se paga una compra antes de su fecha contable (2.1.03 negativo)
+        const anteriores = aplicaciones
+            .map((a) => vigentes.find((c) => c.id === a.compra_id)!)
+            .filter((c) => fecha < c.fecha)
+        if (anteriores.length > 0) {
+            throw new Problema(
+                422,
+                'pago_anterior_a_compra',
+                'Pago anterior a la compra',
+                `El pago del ${fecha} aplicaría a ${anteriores.length === 1 ? 'una compra posterior' : 'compras posteriores'}: ${anteriores.map((c) => `${c.id} (${c.fecha})`).join(', ')}`,
+                anteriores.map((c) => ({
+                    field: 'fecha',
+                    message: `La compra ${c.id} es del ${c.fecha}`,
+                    rule: 'pago_anterior_a_compra',
+                })),
+            )
         }
 
         const [fila] = (await t.trx

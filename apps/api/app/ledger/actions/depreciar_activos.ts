@@ -3,7 +3,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { ValidacionFallida } from '#shared/errores'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { fechaValida, inicioDeMes } from '#ledger/fechas'
-import { cuotaMensual, fechaDeCuota, mesCerradoAnterior, sumarMeses } from '#ledger/activos'
+import { LOCK_ACTIVO, cuotaMensual, fechaDeCuota, mesCerradoAnterior, sumarMeses } from '#ledger/activos'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 
 /**
@@ -87,7 +87,12 @@ export default class DepreciarActivos extends DomainAction<EntradaDepreciar, Res
         for (const activo of activos) {
             const empresaId = Number(activo.empresa_id)
             exigirAccesoEmpresa(t.ctx, empresaId)
-            await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3015, activo.id])
+            await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ACTIVO, activo.id])
+            // con el lock: una baja o la anulación de su compra que terminó mientras esperaba
+            if (!input.incluir_baja) {
+                const baja = await t.trx.from('ledger.activos_bajas').where('activo_id', activo.id).first()
+                if (baja) continue
+            }
             const hechas = (await t.trx
                 .from('ledger.activos_cuotas')
                 .where('activo_id', activo.id)

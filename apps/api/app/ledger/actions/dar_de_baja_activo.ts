@@ -1,12 +1,21 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, NoEncontrado, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { Conflicto, NoEncontrado, Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { CERO, aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { resolverCuentaBanco, type PedidoCuentaBanco } from '#ledger/cuentas_banco'
-import { acumuladaDe, sumarMeses, verActivo, type ActivoVista } from '#ledger/activos'
+import {
+    CUOTA_VIGENTE,
+    LOCK_ACTIVO,
+    acumuladaDe,
+    sumarMeses,
+    verActivo,
+    type ActivoVista,
+} from '#ledger/activos'
+import { periodoCerrado } from '#ledger/cierres'
+import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import DepreciarActivos from '#ledger/actions/depreciar_activos'
 
@@ -16,6 +25,10 @@ import DepreciarActivos from '#ledger/actions/depreciar_activos'
  *
  * - Antes deprecia lo pendiente hasta el mes anterior al de la baja (el mes de la baja ya no se
  *   deprecia; confirmar con contador).
+ * - **Baja retroactiva** (H20, decisión del líder): las cuotas ya registradas del mes de la baja en
+ *   adelante se revierten, cada una con un asiento de reverso en su propio mes (la fecha de su
+ *   asiento); si alguno de esos meses está cerrado, 422 `periodo_cerrado` con cada mes en
+ *   `errors[]`. La depreciación acumulada de la baja es la inicial más las cuotas vigentes.
  * - Asiento `baja_activo` (origen = el activo): `1.2.02.NN (acumulada) + Banco (precio de venta) +
  *   5.3.06 Pérdida (si el valor en libros pasa del precio) / 1.2.01.NN (costo) + 4.2.02 Ganancia
  *   (si el precio pasa del valor en libros)`. La venta se cobra en una cuenta bancaria de la empresa;
@@ -52,7 +65,7 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
         const empresaId = Number(activo.empresa_id)
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
-        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3016, activo.id])
+        await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_ACTIVO, activo.id])
         const previa = await t.trx.from('ledger.activos_bajas').where('activo_id', activo.id).first()
         if (previa) {
             throw new Conflicto(
@@ -95,6 +108,7 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
         // lo pendiente hasta el mes anterior al de la baja
         const hasta = sumarMeses(inicioDeMes(fecha), -1)
         await new DepreciarActivos().execute({ activo_id: activo.id, hasta }, t.ctx, { trx: t.trx })
+        await this.revertirCuotasPosteriores(t, activo.id, empresaId, inicioDeMes(fecha), motivo)
         const costo = dec(activo.costo)
         const acumulada = await acumuladaDe(t.trx, activo.id)
         const libros = costo.minus(acumulada)
@@ -147,5 +161,62 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
             valor_libros: aTexto(libros),
         })
         return verActivo(activo.id, t.trx)
+    }
+
+    /**
+     * H20: revierte las cuotas vigentes del mes `desde` en adelante, cada una en la fecha de su
+     * asiento (su propio mes). Todas o ninguna: un mes cerrado → 422 `periodo_cerrado`.
+     */
+    private async revertirCuotasPosteriores(
+        t: Transaccion,
+        activoId: number,
+        empresaId: number,
+        desde: string,
+        motivo: string,
+    ): Promise<void> {
+        const cuotas = (await t.trx
+            .from('ledger.activos_cuotas as q')
+            .join('ledger.asientos as a', 'a.id', 'q.asiento_id')
+            .where('q.activo_id', activoId)
+            .where('q.mes', '>=', desde)
+            .whereRaw(CUOTA_VIGENTE)
+            .orderBy('q.mes')
+            .select(
+                'q.asiento_id',
+                t.trx.raw(`to_char(q.mes, 'YYYY-MM') as mes`),
+                t.trx.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`),
+            )) as Array<{ asiento_id: number; mes: string; fecha: string }>
+        if (cuotas.length === 0) return
+        const cerrados: ErrorCampo[] = []
+        for (const cuota of cuotas) {
+            if (await periodoCerrado(t.trx, cuota.fecha, empresaId)) {
+                cerrados.push({
+                    field: 'fecha',
+                    message: `La cuota de ${cuota.mes} está en el periodo ${cuota.fecha.slice(0, 7)}, cerrado: no se puede revertir`,
+                    rule: 'periodo_cerrado',
+                })
+            }
+        }
+        if (cerrados.length > 0) {
+            throw new Problema(
+                422,
+                'periodo_cerrado',
+                'Periodo cerrado',
+                `La baja con fecha anterior a cuotas ya registradas revierte esas cuotas, y ${cerrados.length === 1 ? 'una está' : `${cerrados.length} están`} en un periodo cerrado`,
+                cerrados,
+            )
+        }
+        for (const cuota of cuotas) {
+            await new RevertirAsiento().execute(
+                {
+                    asiento_id: Number(cuota.asiento_id),
+                    fecha: cuota.fecha,
+                    motivo: `baja del activo ${activoId} con fecha anterior a la cuota de ${cuota.mes}: ${motivo}`,
+                    por_anulacion: true,
+                },
+                t.ctx,
+                { trx: t.trx },
+            )
+        }
     }
 }

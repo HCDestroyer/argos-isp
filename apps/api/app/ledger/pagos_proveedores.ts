@@ -182,9 +182,10 @@ export async function comprasPendientes(cliente: QueryClientContract, proveedorI
         .select(
             'c.id',
             cliente.raw(`to_char(c.vence_en, 'YYYY-MM-DD') as vence_en`),
+            cliente.raw(`to_char(c.fecha, 'YYYY-MM-DD') as fecha`),
             cliente.raw(`(${sqlSaldoCompra('c')})::numeric(14,2)::text as saldo`),
-        )) as Array<{ id: number; vence_en: string; saldo: string }>
-    return filas.map((f) => ({ id: Number(f.id), vence_en: f.vence_en, saldo: dec(f.saldo) }))
+        )) as Array<{ id: number; vence_en: string; fecha: string; saldo: string }>
+    return filas.map((f) => ({ id: Number(f.id), vence_en: f.vence_en, fecha: f.fecha, saldo: dec(f.saldo) }))
 }
 
 /** Efectivo pagado a proveedores en un turno de caja (pagos vigentes); baja el esperado del cierre. */

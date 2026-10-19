@@ -26,6 +26,20 @@ import type { ClaseActivo } from '#ledger/compras'
  *   Depreciaciones` (gasto).
  */
 
+/**
+ * Lock por activo (`pg_advisory_xact_lock(LOCK_ACTIVO, activo_id)`): lo toman la depreciación, la
+ * baja y la anulación de la compra que lo dio de alta (observación del auditor, fase 5), así una
+ * cuota nunca se registra sobre un activo que otra transacción está dando de baja o anulando.
+ */
+export const LOCK_ACTIVO = 3015
+
+/**
+ * La cuota `q` está vigente: su asiento no fue revertido (H20: una baja retroactiva revierte las
+ * cuotas del mes de la baja en adelante; la fila de la cuota queda, insert-only, con su reverso).
+ */
+export const CUOTA_VIGENTE =
+    'NOT EXISTS (SELECT 1 FROM ledger.asientos qr WHERE qr.reversa_de = q.asiento_id)'
+
 export function sumarMeses(periodo: string, meses: number): string {
     return DateTime.fromISO(periodo, { zone: 'utc' }).plus({ months: meses }).toISODate()!
 }
@@ -154,7 +168,7 @@ export interface ActivoVista {
     cuota_mensual: string
     cuenta_activo_codigo: string
     cuenta_depreciacion_codigo: string
-    /** depreciación inicial + Σ cuotas */
+    /** depreciación inicial + Σ cuotas vigentes (sin las revertidas por una baja retroactiva) */
     depreciacion_acumulada: string
     valor_libros: string
     cuotas: number
@@ -196,13 +210,13 @@ function consultaActivos(cliente: QueryClientContract) {
             'ca.codigo as cuenta_activo_codigo',
             'cd.codigo as cuenta_depreciacion_codigo',
             cliente.raw(
-                `(ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id), 0))::text as depreciacion_acumulada`,
+                `(ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id AND ${CUOTA_VIGENTE}), 0))::text as depreciacion_acumulada`,
             ),
             cliente.raw(
-                `(SELECT count(*)::int FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id) as cuotas`,
+                `(SELECT count(*)::int FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id AND ${CUOTA_VIGENTE}) as cuotas`,
             ),
             cliente.raw(
-                `(SELECT to_char(max(q.mes), 'YYYY-MM-DD') FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id) as ultima_cuota`,
+                `(SELECT to_char(max(q.mes), 'YYYY-MM-DD') FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id AND ${CUOTA_VIGENTE}) as ultima_cuota`,
             ),
             cliente.raw(`to_char(b.fecha, 'YYYY-MM-DD') as baja_fecha`),
             'b.tipo as baja_tipo',
@@ -298,7 +312,7 @@ export async function acumuladaDe(cliente: QueryClientContract, activoId: number
         .where('ac.id', activoId)
         .select(
             cliente.raw(
-                `(ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id), 0))::text as total`,
+                `(ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id AND ${CUOTA_VIGENTE}), 0))::text as total`,
             ),
         )
         .first()) as { total: string } | null

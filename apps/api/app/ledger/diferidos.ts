@@ -5,6 +5,9 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 
+/** Lock por diferimiento: lo toman la amortización y la anulación de la compra que lo creó. */
+export const LOCK_DIFERIDO = 3017
+
 /**
  * Diferidos (contrato de localización fiscal §10.10, fase 5): gastos pagados por anticipado
  * (`1.1.13`, desde una compra: seguros, licencias anuales) e ingresos cobrados por anticipado

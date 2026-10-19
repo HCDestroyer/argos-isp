@@ -1011,6 +1011,7 @@ Reparto de §10 por fase (la tabla de fases está en `PLAN.md`):
 | 52  | Activos del inventario inicial                   | Contrapartida (saldos de apertura, capital o utilidades) y depreciación acumulada al darlos de alta | 2.9.01 por defecto | inv. B.1; A3 (fase 5) |
 | 53  | Factura con ingreso diferido                     | Cómo se anula o se acredita una factura cuyo ingreso está en 2.1.12 (hoy 409 `factura_diferida`) | Impedido | odoo §9; A3 (fase 5) |
 | 54  | Equipo de red en comodato (CPE)                  | Si el CPE en casa del cliente se activa y deprecia como equipo de red (10 %) | Como activo de la clase `equipo_red` | inv. A.2; A3 (fase 5) |
+| 55  | Retención de IVA sobre lo recuperado de un castigo | Una constancia de IVA del cliente en el pago que recupera un aviso castigado sin DTE se rechaza (422 `retencion_sin_documento_fiscal`, H19): no hay DTE que la respalde. Emitir un DTE por lo recuperado (y reclasificar su IVA de `2.1.11` a `2.1.02`) haría válida la retención | Rechazada (abierto) | §19 (H19) |
 
 ## 16. Desvíos aprobados en la implementación (A3, fase 2)
 
@@ -1081,7 +1082,7 @@ Rama `a3/fase4-bancos`. Lo que sigue cumple §10.3 y §10.9; cada punto marcado 
 
 ## 19. Implementación de la fase 5 (compras, proveedores, activos y diferidos, A3): aprobada por el líder
 
-Rama `a3/fase5-compras` (sobre `a3/fase4-bancos`). Cumple §3.3, §3.4, §3.5, §6, §10.8 (auxiliar y antigüedad de proveedores) y §10.10 (activos y diferidos). Los **desvíos** (a) a (g) quedaron aprobados por el líder; lo que el informe no verifica va en las filas 45 a 54 de §15.
+Rama `a3/fase5-compras` (sobre `a3/fase4-bancos`). Cumple §3.3, §3.4, §3.5, §6, §10.8 (auxiliar y antigüedad de proveedores) y §10.10 (activos y diferidos). Los **desvíos** (a) a (g) quedaron aprobados por el líder; lo que el informe no verifica va en las filas 45 a 55 de §15.
 
 **Compras.**
 
@@ -1109,13 +1110,12 @@ Rama `a3/fase5-compras` (sobre `a3/fase4-bancos`). Cumple §3.3, §3.4, §3.5, �
 
 **Permisos** (A1): `activos.ver`, `activos.registrar`, `activos.dar_de_baja` agregados en `permisos.ts` (entran a `contabilidad` con los fiscales; `lectura` recibe `activos.ver`).
 
-**Invariantes del auditor que la fase 5 deja atrás** (no se relajó ninguno; mis pruebas corren el auditor completo (`verificarLibro`, que ya incluye la fase 4) y, solo para estos, la versión de `tests/ledger/verificar_compras.ts`):
+**Hallazgos del auditor (decisiones del líder).**
 
-| Invariante | Por qué ya no aplica tal cual | Versión de la fase 5 (A3) |
-| --- | --- | --- |
-| `9.origen_de_asiento_desconocido` | Orígenes `compra`, `pago_proveedor`, `depreciacion`, `baja_activo`, `diferido`, `alta_activo` | `F5.origen_de_asiento_desconocido` |
-| `4.saldo_de_caja_o_banco_distinto_de_sus_documentos` | Pagos a proveedores, ventas de activos y pagos con constancias (entra `monto − comision − retenido`) | `F5.saldo_de_caja_o_banco…` |
-| `4.caja_cerrada_no_cuadra` | El egreso de una compra al contado tiene el asiento de la compra; pagos a proveedores en efectivo | `F5.caja_cerrada_no_cuadra` |
-| `5.pago_vigente_mal_contabilizado` | Pago con constancias: dinero = monto − comisión − retenido; `1.1.05` + `1.1.06` = retenido | `F5.pago_vigente_mal_contabilizado` |
+- **H19 · retención de IVA sin documento fiscal.** Una constancia de IVA recibida en un pago que recupera (total o parcialmente) un aviso castigado sin DTE responde 422 `retencion_sin_documento_fiscal` (`exigirDocumentoDeRetencionIva` de `#ledger/retenciones`, con lo recuperado de cada parte del pago; todo el pago se rechaza). Con DTE (el castigo no tocó el IVA) y las de ISR, sin cambio. Queda abierto para el contador (fila 55 de §15).
+- **H20 · baja retroactiva.** `activos.dar_de_baja` con fecha anterior a cuotas ya registradas revierte las cuotas vigentes del mes de la baja en adelante, cada una con su reverso (`RevertirAsiento`, origen `depreciacion`) en la fecha de su asiento; si alguna cae en un periodo cerrado, 422 `periodo_cerrado` con un `errors[]` por mes y nada cambia. La fila de la cuota queda (insert-only) y deja de ser vigente cuando su asiento tiene reverso; la acumulada de la baja = inicial + cuotas vigentes.
+- **Un lock por activo** (`LOCK_ACTIVO`): depreciación, baja y anulación de la compra; y uno por diferimiento (`LOCK_DIFERIDO`): amortización y anulación de la compra. Con el lock, la depreciación y la amortización vuelven a mirar si el activo ya tiene baja o el diferimiento ya se canceló. El lock de compras pasa a su propio espacio (`LOCK_COMPRA = 3020`; 3012 lo usaba también `cartera.provisionar`).
+- **Pago a proveedor anterior a la compra**: 422 `pago_anterior_a_compra` (un `errors[]` por compra) si la fecha del pago es anterior a la fecha contable de una compra a la que aplicaría.
+- **Pendiente del auditor (H20)**: `15.cuota_posterior_a_la_baja` y `15.baja_de_activo_mal_contabilizada` cuentan también las cuotas revertidas; con `AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = q.asiento_id)` en las cuotas que suman, el escenario de H20 queda limpio (`tests/ledger/hallazgos_fase5.spec.ts` lo comprueba invariante por invariante).
 
-Nuevos de la fase 5: `F5.auxiliar_sin_proveedor`, `F5.cxp_distinta_de_compras_pendientes`, `F5.compra_con_saldo_fuera_de_rango`, `F5.compra_mal_contabilizada`, `F5.compra_anulada_mal`, `F5.egreso_de_compra_con_asiento_propio`, `F5.retenciones_por_pagar_distintas`, `F5.pago_proveedor_mal_contabilizado`, `F5.retenciones_recibidas_distintas`, `F5.libro_compras_distinto_de_1.1.04`, `F5.activo_depreciado_de_mas`, `F5.depreciacion_acumulada_distinta`, `F5.costo_de_activos_distinto`, `F5.cuota_de_depreciacion_mal_contabilizada`, `F5.diferido_amortizado_de_mas`, `F5.saldo_diferido_distinto`.
+**Invariantes**: el auditor integró los cuatro reemplazos y los 16 nuevos de la fase 5 como `15.*` en `tests/contabilidad/verificar_libro.ts`; las pruebas de la fase 5 terminan en `afirmarLibro`.

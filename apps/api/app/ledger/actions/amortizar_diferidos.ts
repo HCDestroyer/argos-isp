@@ -4,7 +4,7 @@ import { ValidacionFallida } from '#shared/errores'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { fechaValida, inicioDeMes } from '#ledger/fechas'
 import { fechaDeCuota, mesCerradoAnterior, sumarMeses } from '#ledger/activos'
-import { cuotaDiferida } from '#ledger/diferidos'
+import { LOCK_DIFERIDO, cuotaDiferida } from '#ledger/diferidos'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 
 /**
@@ -84,7 +84,13 @@ export default class AmortizarDiferidos extends DomainAction<EntradaAmortizar, R
         for (const d of diferimientos) {
             const empresaId = Number(d.empresa_id)
             exigirAccesoEmpresa(t.ctx, empresaId)
-            await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [3017, d.id])
+            await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_DIFERIDO, d.id])
+            // con el lock: la anulación de su compra que terminó mientras esperaba lo canceló
+            const cancelado = await t.trx
+                .from('ledger.diferimientos_cancelaciones')
+                .where('diferimiento_id', d.id)
+                .first()
+            if (cancelado) continue
             const hechas = (await t.trx
                 .from('ledger.diferimientos_cuotas')
                 .where('diferimiento_id', d.id)
