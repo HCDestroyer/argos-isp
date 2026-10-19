@@ -760,7 +760,7 @@ export const emitirTicketSsoValidator = vine.compile(
                 .string()
                 .trim()
                 .regex(/^[1-9]\d{0,17}$/)
-                .meta({ description: 'Id del recurso en ArgosIsp (cliente, servicio o router)' }),
+                .meta({ description: 'Id del cliente o del servicio en ArgosIsp' }),
         }),
     }),
 )

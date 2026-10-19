@@ -2,7 +2,8 @@
 
 Argos lee de Horus consumo, salud y seguridad de sus servicios, le avisa por webhooks firmados
 los cambios de identidad (IPs, sesiones, estado) y recibe sus hallazgos y alertas. Contrato
-compartido: `.claude/integration/contratos/horus.md` (1.2.0-propuesta, ADR-0030). Runbook:
+compartido: `.claude/integration/contratos/horus.md` (1.7.0-propuesta, ADR-0030). Prueba de extremo a
+extremo con los dos sistemas corriendo: `tests/e2e-argos` del repositorio de Horus (`make e2e-argos`). Runbook:
 `docs/runbooks/conectar-horus.md`.
 
 ## Reglas
@@ -31,8 +32,8 @@ compartido: `.claude/integration/contratos/horus.md` (1.2.0-propuesta, ADR-0030)
 | `consultas.ts` | Consulta 360 (§3.1, por `external_service_id` y si no por la IP actual), consumo (§3.2), seguridad por lotes (§3.5 o alternativa) |
 | `envios.ts`, `consumidor.ts` | Webhooks Argos → Horus: grupo `horus`, tabla `horus_envios`, reintentos 1 min, 5 min, 30 min, 2 h, 12 h |
 | `receptor.ts`, `actions/recibir_webhook_horus.ts` | Webhooks Horus → Argos: firma, desfase ±5 min, dedupe por `id`, eventos `horus.*` |
-| `actions/generar_enlace_horus.ts`, `actions/canjear_enlace_horus.ts`, `actions/conectar_con_enlace_horus.ts` | Enlace de conexión (§1.4) en los dos sentidos |
-| `actions/abrir_en_horus.ts` | "Ver en Horus" (§1.5, lado emisor): ticket pedido por el servidor |
+| `actions/generar_enlace_horus.ts`, `actions/canjear_enlace_horus.ts`, `actions/conectar_con_enlace_horus.ts` | Enlace de conexión (§1.4) en los dos sentidos: un enlace nuevo anula los anteriores sin usar; la misma petición de canje repetida antes de vencer recibe la misma respuesta (guardada cifrada); `base_url` se guarda como origen (sin `/api/v1`); el enlace de Horus puede traer su API en `?api=` |
+| `actions/abrir_en_horus.ts` | "Ver en Horus" (§1.5, lado emisor): ticket pedido por el servidor; la URL solo se abre si es `https://<panel de Horus>/sso/entrar#<ticket>` (el panel puede estar en otro origen que la API) |
 | `token_argos.ts` | Token `atk_` del canje: `GenerarTokenHorus` y `RevocarTokenHorus` de A1, anidadas (cada canje revoca el anterior) |
 | `firma.ts` | HMAC-SHA256 `v1=` de `timestamp + "." + cuerpo` |
 
@@ -88,7 +89,9 @@ nada; `block`: `consumption`, `health` o `security`), como fija el contrato.
   `horus.hallazgo_resuelto`, `horus.estado_seguridad_cambiado`, `horus.router_estado_cambiado`,
   `horus.servicio_infra_cambiado` (payloads en `app/shared/eventos.ts` y `contratos/eventos.md`).
 - **Consume (grupo `horus`):** `asignacion.cambiada`, `sesion.iniciada`, `sesion.terminada`,
-  `cliente.actualizado` (A1), `servicio.estado_cambiado` → webhooks a Horus; `horus.config_cambiada`.
+  `cliente.actualizado` (A1), `servicio.estado_cambiado` y, desde el contrato 1.7.0,
+  `servicio.config_cambiada` (solo si cambian `plan` o `empresa`) → webhooks a Horus;
+  `horus.config_cambiada`.
 - **notify** (grupo `notify`, `ConsumidorAlertas`): alerta al chat del equipo por hallazgos `high`
   o `critical` (con la configuración de la empresa del servicio), routers y servicios de
   infraestructura caídos, y su recuperación.
