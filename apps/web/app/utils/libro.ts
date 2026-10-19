@@ -19,6 +19,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     banco: { etiqueta: 'Partida del extracto', icono: 'i-lucide-file-spreadsheet' },
     provision: { etiqueta: 'Estimación de incobrables', icono: 'i-lucide-shield-alert' },
     castigo: { etiqueta: 'Castigo de cartera', icono: 'i-lucide-file-x' },
+    diferencia_cobro: { etiqueta: 'Diferencia de cobro', icono: 'i-lucide-coins' },
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
 }
 
