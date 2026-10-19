@@ -40,6 +40,7 @@ import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
 import CrearCaja from '#ledger/actions/crear_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
+import { autorizarLecturaDeCaja } from '#ledger/lectura_caja'
 import bancos from '#start/routes/bancos'
 import compras from '#start/routes/compras'
 import activos from '#start/routes/activos'
@@ -308,11 +309,19 @@ const egresos: Ruta[] = [
         operacion: 'egresosListar',
         resumen: 'Listar egresos',
         etiqueta: 'egresos',
-        permiso: 'egresos.ver',
+        permiso: null,
         query: v.listarEgresosValidator,
+        descripcion:
+            'Permiso egresos.ver o cajas.ver. Con egresos.ver, los de sus empresas y su alcance (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero, para el esperado provisional de /caja), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.',
         respuesta: { status: 200, descripcion: 'Página de egresos', esquema: pagina(Egreso) },
-        handler: (ctx, { query }) =>
-            listarEgresos(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: async (ctx, { query }) => {
+            const lectura = await autorizarLecturaDeCaja(ctx, 'egresos.ver', query)
+            return listarEgresos(
+                { ...query, caja_id: lectura.caja_id },
+                ctx.alcance,
+                empresasDeLaLista(ctx.empresa, query.empresas),
+            )
+        },
     }),
     definirRuta({
         metodo: 'get',

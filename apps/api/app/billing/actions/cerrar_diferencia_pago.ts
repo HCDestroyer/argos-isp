@@ -4,22 +4,30 @@ import { Conflicto, NoEncontrado, Problema } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { CERO, aTexto, dec } from '#ledger/dinero'
 import { hoyGuatemala } from '#ledger/fechas'
+import { CUENTAS } from '#ledger/plan_cuentas'
+import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { valorParametro } from '#fiscal/parametros'
-import { bloquearCliente } from '#billing/cobros'
-import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import { bloquearCliente, serviciosDe, sumarAPagado, type FacturaPendiente } from '#billing/cobros'
+import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
 /**
  * `pagos.cerrar_diferencia` (`POST /pagos/:id/cerrar-diferencia`): cierra el saldo pequeño que dejó
  * un pago en las facturas a las que se aplicó, hasta `diferencia_cobro_tope` (parámetro de la
  * empresa, Q1.00 por defecto; contrato de localización fiscal §10.9, el _Post Difference In_ de Odoo).
  *
- * - Por cada factura del pago que quedó con saldo: una nota de crédito por ese saldo
- *   (`facturas.nota_credito` anidada, con su auditoría, evento y reevaluación del servicio). Si la
- *   factura tiene DTE certificado es una **NCRE** (reduce la venta); si es un aviso sin DTE, una nota
- *   interna proporcional cuya base va a `5.3.05 Diferencias de cobro` y su IVA sale de 2.1.11.
+ * Decisión del líder (B): la diferencia es un **gasto por centavos no cobrados**, nunca una nota de
+ * crédito. Por cada factura del pago que quedó con saldo:
+ *
+ * - Asiento `diferencia_cobro` (origen = la fila de `billing.diferencias_cobro`): `5.3.05 Diferencias
+ *   de cobro / CxC` del dueño de la factura. No toca IVA ni DTE: el DTE va siempre por el total (un
+ *   aviso con `certificar_al = pagar` queda cubierto y se certifica por el total).
+ * - `pagado` no cambia (es solo dinero cobrado, decisión g): la factura queda `pagada` porque
+ *   `pagado + Σ diferencias vigentes = total` (`sumarAPagado`).
+ * - Evento `pago.diferencia_cerrada` y reevaluación de cada servicio (puede reactivar).
  * - Σ saldos > tope → 422 `diferencia_sobre_tope`; sin saldo que cerrar → 409 `sin_diferencia`;
- *   pago anulado → 409 `pago_anulado`. Una vez por pago y factura (`billing.diferencias_cobro`).
+ *   pago anulado → 409 `pago_anulado`; DTE de una factura en anulación → 409 `anulacion_en_proceso`.
+ *   Una vez por pago y factura. Anular el pago revierte el asiento en espejo (`pagos.anular`).
  */
 
 export interface EntradaCerrarDiferencia {
@@ -27,13 +35,22 @@ export interface EntradaCerrarDiferencia {
     motivo?: string | null
 }
 
+export interface DiferenciaCerrada {
+    factura_id: number
+    diferencia_id: number
+    monto: string
+    asiento_id: number
+}
+
 export interface ResultadoCerrarDiferencia {
     pago_id: number
     empresa_id: number
     monto: string
     tope: string
-    notas: Array<{ factura_id: number; nota_credito_id: number; monto: string; ncre: boolean }>
+    diferencias: DiferenciaCerrada[]
 }
+
+type FacturaConSaldo = FacturaPendiente & { pendiente: string }
 
 export default class CerrarDiferenciaPago extends DomainAction<
     EntradaCerrarDiferencia,
@@ -58,24 +75,48 @@ export default class CerrarDiferenciaPago extends DomainAction<
         if (pago.estado !== 'registrado') {
             throw new Conflicto(`El pago ${pago.id} está ${pago.estado}`, 'pago_anulado', 'Pago no vigente')
         }
-        const facturas = (await t.trx
-            .from('billing.pagos_aplicaciones as a')
-            .join('billing.facturas as f', 'f.id', 'a.factura_id')
-            .where('a.pago_id', pago.id)
-            .whereIn('f.estado', ['emitida', 'parcial', 'vencida'])
-            .whereRaw('f.total > f.pagado')
-            .whereNotExists((q) =>
-                q
-                    .from('billing.diferencias_cobro as d')
-                    .whereRaw('d.pago_id = a.pago_id AND d.factura_id = f.id'),
+        const consulta = () =>
+            t.trx
+                .from('billing.facturas as f')
+                .whereIn('f.id', (q) =>
+                    q
+                        .from('billing.pagos_aplicaciones as a')
+                        .where('a.pago_id', pago.id)
+                        .select('a.factura_id'),
+                )
+                .whereIn('f.estado', ['emitida', 'parcial', 'vencida'])
+                .whereRaw('f.total > f.pagado')
+                .whereNotExists((q) =>
+                    q
+                        .from('billing.diferencias_cobro as d')
+                        .where('d.pago_id', pago.id)
+                        .whereRaw('d.factura_id = f.id'),
+                )
+        const clientes = (await consulta().distinct('f.cliente_id')) as Array<{ cliente_id: number }>
+        if (clientes.length === 0) {
+            throw new Conflicto(
+                `El pago ${pago.id} no dejó saldo pendiente en sus facturas`,
+                'sin_diferencia',
+                'Sin diferencia',
             )
-            .groupBy('f.id', 'f.cliente_id', 'f.total', 'f.pagado')
+        }
+        for (const id of clientes.map((c) => Number(c.cliente_id)).sort((a, b) => a - b)) {
+            await bloquearCliente(t.trx, id)
+        }
+        // releída con los clientes bloqueados
+        const facturas = (await consulta()
             .orderBy('f.id')
-            .select('f.id', 'f.cliente_id', t.trx.raw('(f.total - f.pagado)::text as pendiente'))) as Array<{
-            id: number
-            cliente_id: number
-            pendiente: string
-        }>
+            .forUpdate()
+            .select(
+                'f.id',
+                'f.empresa_id',
+                'f.cliente_id',
+                'f.servicio_id',
+                'f.total',
+                'f.pagado',
+                'f.vencida_en',
+                t.trx.raw('(f.total - f.pagado)::text as pendiente'),
+            )) as FacturaConSaldo[]
         if (facturas.length === 0) {
             throw new Conflicto(
                 `El pago ${pago.id} no dejó saldo pendiente en sus facturas`,
@@ -83,8 +124,21 @@ export default class CerrarDiferenciaPago extends DomainAction<
                 'Sin diferencia',
             )
         }
-        for (const id of [...new Set(facturas.map((f) => Number(f.cliente_id)))].sort((a, b) => a - b)) {
-            await bloquearCliente(t.trx, id)
+        const enAnulacion = (await t.trx
+            .from('fiscal.dte')
+            .whereIn('documento_tipo', ['factura', 'nota_debito'])
+            .whereIn(
+                'documento_id',
+                facturas.map((f) => f.id),
+            )
+            .where('estado', 'anulacion_pendiente')
+            .select('documento_id')) as Array<{ documento_id: number }>
+        if (enAnulacion.length > 0) {
+            throw new Conflicto(
+                `La anulación del DTE de las facturas ${enAnulacion.map((d) => d.documento_id).join(', ')} está pendiente con el certificador`,
+                'anulacion_en_proceso',
+                'Anulación en proceso',
+            )
         }
         const total = facturas.reduce((s, f) => s.plus(f.pendiente), CERO)
         const tope = dec(
@@ -106,41 +160,75 @@ export default class CerrarDiferenciaPago extends DomainAction<
             )
         }
         const motivo = input.motivo?.trim() || `Diferencia de cobro del pago ${pago.id}`
-        const notas: ResultadoCerrarDiferencia['notas'] = []
+        const diferencias: DiferenciaCerrada[] = []
         for (const f of facturas) {
-            const nota = await new EmitirNotaCredito().execute(
+            // el asiento lleva como origen la fila de la diferencia: se reserva su id antes
+            const { rows } = (await t.trx.rawQuery(
+                `SELECT nextval(pg_get_serial_sequence('billing.diferencias_cobro', 'id'))::bigint AS id`,
+            )) as { rows: Array<{ id: string }> }
+            const diferenciaId = Number(rows[0]!.id)
+            const monto = aTexto(f.pendiente)
+            const asiento = await new RegistrarAsiento().execute(
                 {
-                    factura_id: Number(f.id),
-                    monto: f.pendiente,
-                    motivo,
-                    cuenta_base: CUENTAS_GT.DIFERENCIAS_COBRO,
+                    empresa_id: empresaId,
+                    descripcion: `Diferencia de cobro del pago ${pago.id} en la factura ${f.id} · ${motivo}`,
+                    origen_tipo: 'diferencia_cobro',
+                    origen_id: diferenciaId,
+                    movimientos: [
+                        { cuenta: CUENTAS_GT.DIFERENCIAS_COBRO, debe: monto },
+                        { cuenta: CUENTAS.CXC_CLIENTES, haber: monto, cliente_id: Number(f.cliente_id) },
+                    ],
                 },
                 t.ctx,
                 { trx: t.trx },
             )
-            await t.trx
-                .insertQuery()
-                .table('billing.diferencias_cobro')
-                .insert({
-                    empresa_id: empresaId,
-                    pago_id: pago.id,
-                    factura_id: Number(f.id),
-                    nota_credito_id: nota.id,
-                    monto: f.pendiente,
-                    registrado_por: usuarioDelActor(t.ctx.actor),
-                })
-            const ncre = await t.trx
-                .from('fiscal.dte')
-                .where({ documento_tipo: 'nota_credito', documento_id: nota.id })
-                .select('id')
-                .first()
-            notas.push({
-                factura_id: Number(f.id),
-                nota_credito_id: nota.id,
-                monto: aTexto(f.pendiente),
-                ncre: Boolean(ncre),
-            })
+            await t.trx.rawQuery(
+                `INSERT INTO billing.diferencias_cobro
+                        (id, empresa_id, pago_id, factura_id, monto, asiento_id, registrado_por)
+                 OVERRIDING SYSTEM VALUE VALUES (?, ?, ?, ?, ?, ?, NULLIF(?, 0))`,
+                [
+                    diferenciaId,
+                    empresaId,
+                    pago.id,
+                    f.id,
+                    monto,
+                    asiento.id,
+                    usuarioDelActor(t.ctx.actor) ?? 0,
+                ],
+            )
+            const antes = { estado: await estadoDe(t, f.id) }
+            const estado = await sumarAPagado(t.trx, f, CERO)
+            await t.registrarCambios({ tipo: 'factura', id: f.id }, antes, { estado })
+            diferencias.push({ factura_id: f.id, diferencia_id: diferenciaId, monto, asiento_id: asiento.id })
         }
-        return { pago_id: pago.id, empresa_id: empresaId, monto: aTexto(total), tope: aTexto(tope), notas }
+        t.fijarEntidad('pago', pago.id)
+        await t.emit('pago.diferencia_cerrada', {
+            pago_id: pago.id,
+            empresa_id: empresaId,
+            cliente_id: pago.cliente_id,
+            facturas: diferencias.map((d) => d.factura_id),
+            monto: aTexto(total),
+        })
+        for (const servicioId of serviciosDe(facturas)) {
+            await new EvaluarEstadoServicio().execute({ servicio_id: servicioId }, t.ctx, { trx: t.trx })
+        }
+        return {
+            pago_id: pago.id,
+            empresa_id: empresaId,
+            monto: aTexto(total),
+            tope: aTexto(tope),
+            diferencias,
+        }
     }
+}
+
+async function estadoDe(t: Transaccion, facturaId: number): Promise<string> {
+    const fila = (await t.trx
+        .from('billing.facturas')
+        .where('id', facturaId)
+        .select('estado')
+        .firstOrFail()) as {
+        estado: string
+    }
+    return fila.estado
 }

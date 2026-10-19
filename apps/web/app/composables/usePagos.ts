@@ -67,9 +67,10 @@ export function usePagos() {
     }
 
     /**
-     * `POST /pagos/:id/cerrar-diferencia` (`pagos.cerrar_diferencia`): cierra con una nota de
-     * crédito por factura el saldo pequeño que dejó el pago, hasta `diferencia_cobro_tope`. 422
-     * `diferencia_sobre_tope`, 409 `sin_diferencia` y `pago_anulado`.
+     * `POST /pagos/:id/cerrar-diferencia` (`pagos.cerrar_diferencia`): cierra como gasto (decisión B,
+     * asiento `diferencia_cobro`) el saldo pequeño que dejó el pago en cada factura, hasta
+     * `diferencia_cobro_tope`; responde `diferencias[]`. 422 `diferencia_sobre_tope`, 409
+     * `sin_diferencia`, `pago_anulado` y `anulacion_en_proceso`.
      */
     function cerrarDiferencia(id: number, motivo: string | null, claveIdempotencia: string): Promise<Resultado<DiferenciaCerrada>> {
         return resolver(api.POST('/api/v1/pagos/{id}/cerrar-diferencia', {

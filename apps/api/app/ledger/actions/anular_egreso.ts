@@ -1,7 +1,7 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, NoEncontrado } from '#shared/errores'
+import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { verEgreso, type EgresoVista } from '#ledger/egresos'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 
@@ -10,12 +10,15 @@ import RevertirAsiento from '#ledger/actions/revertir_asiento'
  * `RevertirAsiento` (fecha de hoy: si el egreso es de un mes cerrado, el reverso cae en el periodo
  * abierto) y deja la anulación en `ledger.egresos_anulaciones`. El egreso nunca se edita ni se
  * borra. Un egreso en efectivo anulado deja de restar en el esperado de su turno si sigue abierto.
- * 409 `egreso_anulado` si ya estaba anulado.
+ * 409 `egreso_anulado` si ya estaba anulado. 422 `egreso_de_premio_sorteo` si es el egreso de un premio
+ * de sorteo entregado (H22: se anula con `sorteos.anular_entrega`).
  */
 
 export interface EntradaAnularEgreso {
     egreso_id: number
     motivo: string
+    /** interno: solo desde `sorteos.anular_entrega` (el egreso de un premio en efectivo) */
+    por_entrega_anulada?: boolean
 }
 
 export default class AnularEgreso extends DomainAction<EntradaAnularEgreso, EgresoVista> {
@@ -36,6 +39,20 @@ export default class AnularEgreso extends DomainAction<EntradaAnularEgreso, Egre
         const previa = await t.trx.from('ledger.egresos_anulaciones').where('egreso_id', egreso.id).first()
         if (previa) {
             throw new Conflicto(`El egreso ${egreso.id} ya está anulado`, 'egreso_anulado', 'Egreso anulado')
+        }
+
+        // H22: el egreso de un premio de sorteo entregado se anula solo con la entrega
+        const premio = (await t.trx
+            .from('lealtad.sorteos_ganadores')
+            .where('egreso_id', egreso.id)
+            .where('estado', 'entregado')
+            .select('id', 'sorteo_id')
+            .first()) as { id: number; sorteo_id: number } | null
+        if (premio && !input.por_entrega_anulada) {
+            throw new ReglaNegocio(
+                `El egreso ${egreso.id} es el premio del ganador ${premio.id} del sorteo ${premio.sorteo_id}: se anula con su entrega (POST /lealtad/sorteos/${premio.sorteo_id}/ganadores/${premio.id}/anular-entrega)`,
+                'egreso_de_premio_sorteo',
+            )
         }
 
         // fase 5 (§3.4): el egreso de una compra al contado se anula con la compra; y un egreso que

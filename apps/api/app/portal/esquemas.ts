@@ -898,6 +898,10 @@ export const PortalSorteoPublico = definirEsquema(
             plazo_reclamo_dias: nulable(entero),
             no_reclamados: nulable(texto),
             publicacion_resultados: nulable(texto),
+            fuente_valor_publico: {
+                ...nulable(texto),
+                description: 'De dónde sale el valor público del acto (p. ej. un número de la lotería)',
+            },
             resolucion_gobernacion: nulable(texto),
         }),
         bases_hash: { ...texto, description: 'SHA-256 del JSON canónico de las bases y los premios' },

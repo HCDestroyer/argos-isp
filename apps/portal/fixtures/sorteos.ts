@@ -83,6 +83,7 @@ function publico(s: Schema<'PortalSorteo'>): Schema<'PortalSorteoPublico'> {
             plazo_reclamo_dias: 30,
             no_reclamados: 'Pasan al suplente en orden.',
             publicacion_resultados: 'En este portal y en nuestras redes el mismo día.',
+            fuente_valor_publico: 'Primer premio de la Lotería Santa Lucía del día del sorteo.',
             resolucion_gobernacion: 'GD-QZ-2026-118',
         },
         bases_hash: HASH_BASES,

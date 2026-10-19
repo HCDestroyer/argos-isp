@@ -183,6 +183,7 @@ describe('página pública /sorteos/:id', () => {
         expect(wrapper.find('[data-testid="base-participacion"]').text()).toContain('1 boleto por cada servicio')
         expect(wrapper.find('[data-testid="base-plazo"]').text()).toContain('30 días')
         expect(wrapper.find('[data-testid="base-resolucion"]').text()).toContain('GD-QZ-2026-118')
+        expect(wrapper.find('[data-testid="base-valor-publico"]').text()).toContain('Lotería Santa Lucía')
         expect(wrapper.findAll('[data-testid="ganador"]')).toHaveLength(3)
         expect(wrapper.find('[data-testid="gane"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="bases-hash"]').text()).toMatch(/^[0-9a-f]{64}$/)

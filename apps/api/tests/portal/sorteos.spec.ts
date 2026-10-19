@@ -29,6 +29,7 @@ function bases(): EntradaSorteo['bases'] {
         plazo_reclamo_dias: 30,
         no_reclamados: 'Pasan al suplente en orden',
         publicacion_resultados: 'Portal y redes sociales el mismo día',
+        fuente_valor_publico: 'Primer premio de la Lotería Santa Lucía del día del sorteo',
         resolucion_gobernacion: 'GD-2026-001',
     }
 }
@@ -183,7 +184,12 @@ test.group('Portal: sorteos', (group) => {
             )
         }
         await new EjecutarSorteo().execute(
-            { id: sorteo.id, valor_publico: '4821', asistentes: [{ nombre: 'Lic. Pérez', rol: 'notario' }] },
+            {
+                id: sorteo.id,
+                valor_publico: '4821',
+                valor_publico_evidencia: 'acta notarial 12',
+                asistentes: [{ nombre: 'Lic. Pérez', rol: 'notario' }],
+            },
             e.ctx,
         )
 

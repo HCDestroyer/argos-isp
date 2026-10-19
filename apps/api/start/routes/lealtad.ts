@@ -30,6 +30,7 @@ import CerrarCorteSorteo from '#lealtad/actions/cerrar_corte_sorteo'
 import CancelarSorteo from '#lealtad/actions/cancelar_sorteo'
 import MarcarRequisitoSorteo from '#lealtad/actions/marcar_requisito_sorteo'
 import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
+import AnularEntregaSorteo from '#lealtad/actions/anular_entrega_sorteo'
 import EntregarPremioSorteo from '#lealtad/actions/entregar_premio_sorteo'
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista } from '#shared/openapi/esquemas'
@@ -629,6 +630,25 @@ const sorteos: Ruta[] = [
         handler: (ctx, { cuerpo, params }) =>
             new EntregarPremioSorteo().execute(
                 { ...cuerpo, sorteo_id: Number(params.id), ganador_id: Number(params.ganadorId) },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega',
+        operacion: 'lealtadAnularEntregaSorteo',
+        resumen: 'Anular la entrega del premio de un ganador (todo junto)',
+        descripcion:
+            'H22: deshace la entrega en una transacción: anula el egreso (efectivo), revierte el asiento sorteo (bien) o el canje sin puntos (servicio; 409 canje_no_revertible si ya se aplicó a una factura) y el asiento del ISR. El ganador vuelve a por_notificar y un sorteo premios_entregados vuelve a ejecutado. Por separado, anular el egreso, revertir el canje o revertir el asiento responden 422. Evento sorteo.entrega_anulada.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.entregar',
+        cuerpo: v.motivoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new AnularEntregaSorteo().execute(
+                { motivo: cuerpo.motivo, sorteo_id: Number(params.id), ganador_id: Number(params.ganadorId) },
                 ctx.contextoAccion(),
             ),
     }),

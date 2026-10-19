@@ -41,6 +41,8 @@ export const ORIGENES_ASIENTO = [
     'banco',
     'provision',
     'castigo',
+    // B (decisión del líder): diferencia de cobro como gasto; origen_id = `billing.diferencias_cobro.id`
+    'diferencia_cobro',
     // fase 5 (§3.4, §10.10): compras, pagos a proveedores, activos fijos y diferidos
     'compra',
     'pago_proveedor',

@@ -1,4 +1,4 @@
-import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
+import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import {
     Dinero,
     auditable,
@@ -122,6 +122,7 @@ export const Asiento = definirEsquema(
                 'banco',
                 'provision',
                 'castigo',
+                'diferencia_cobro',
                 'compra',
                 'pago_proveedor',
                 'depreciacion',
@@ -129,6 +130,7 @@ export const Asiento = definirEsquema(
                 'diferido',
                 'alta_activo',
                 'lealtad',
+                'sorteo',
             ]),
             origen_id: nulable(id),
             reversa_de: {
@@ -317,7 +319,11 @@ export const Egreso = definirEsquema(
             },
             id,
             fecha,
-            categoria: enumerado(CLAVES_CATEGORIA_EGRESO),
+            categoria: {
+                ...enumerado(CLAVES_CATEGORIA_EGRESO_CONSULTA),
+                description:
+                    'Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos',
+            },
             categoria_nombre: texto,
             cuenta_codigo: { ...texto, description: 'Cuenta de gasto del plan' },
             proveedor: nulable(texto),

@@ -267,7 +267,7 @@ onMounted(cargar)
                                     name="i-lucide-link"
                                     class="size-3"
                                 />
-                                {{ ORIGENES_ASIENTO[movimiento.origen_tipo as OrigenAsiento]?.etiqueta ?? movimiento.origen_tipo }} · {{ movimiento.descripcion }} · {{ formatearQuetzales(movimiento.monto) }}
+                                {{ origenAsiento(movimiento.origen_tipo).etiqueta }} · {{ movimiento.descripcion }} · {{ formatearQuetzales(movimiento.monto) }}
                             </li>
                         </ul>
                         <span class="mt-1 sm:hidden">

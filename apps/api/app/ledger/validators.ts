@@ -1,7 +1,7 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, empresasConsulta, fechaIso, idEntidad, motivo } from '#shared/validadores'
-import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
+import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import { METODOS_EGRESO } from '#ledger/egresos'
 
 export const abrirCajaValidator = vine.compile(vine.object({ fondo_inicial: dinero() }))
@@ -96,6 +96,7 @@ export const diarioValidator = vine.compile(
                 'banco',
                 'provision',
                 'castigo',
+                'diferencia_cobro',
                 'compra',
                 'pago_proveedor',
                 'depreciacion',
@@ -103,6 +104,7 @@ export const diarioValidator = vine.compile(
                 'diferido',
                 'alta_activo',
                 'lealtad',
+                'sorteo',
             ] as const)
             .optional(),
         origen_id: idEntidad()
@@ -180,10 +182,15 @@ export const listarEgresosValidator = vine.compile(
         ...reglasPaginacion,
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
-        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO).optional(),
+        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO_CONSULTA).optional(),
         metodo: vine.enum(METODOS_EGRESO).optional(),
         estado: vine.enum(['registrado', 'anulado'] as const).optional(),
-        caja_id: idEntidad().optional(),
+        caja_id: idEntidad().optional().meta({
+            description: 'Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja)',
+        }),
+        turno_id: idEntidad()
+            .optional()
+            .meta({ description: 'Solo los de este turno de caja (alternativa a caja_id sin egresos.ver)' }),
         cuenta_bancaria_id: idEntidad().optional(),
     }),
 )

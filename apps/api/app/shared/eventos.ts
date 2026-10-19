@@ -273,6 +273,18 @@ export interface CatalogoEventos {
     'factura.anulada': PayloadFactura
     'pago.registrado': PayloadPago
     'pago.anulado': PayloadPago
+    /**
+     * B: el saldo pequeño que dejó el pago se cerró como gasto (`5.3.05 / CxC`, sin tocar IVA ni DTE);
+     * las facturas quedaron cubiertas y sus servicios ya se reevaluaron en la acción
+     */
+    'pago.diferencia_cerrada': {
+        pago_id: number
+        empresa_id: number
+        /** pagador */
+        cliente_id: number
+        facturas: number[]
+        monto: Dinero
+    }
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
     /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
@@ -553,6 +565,14 @@ export interface CatalogoEventos {
         posicion: number
     }
     'sorteo.cancelado': { sorteo_id: number; empresa_id: number; motivo: string }
+    /** H22: se deshizo la entrega de un premio (egreso, asiento o canje, e ISR) con `sorteos.anular_entrega` */
+    'sorteo.entrega_anulada': {
+        sorteo_id: number
+        empresa_id: number
+        cliente_id: number
+        posicion: number
+        motivo: string
+    }
     'lealtad.referido_calificado': {
         /** `lealtad.referidos.id` */
         referido_id: number
@@ -665,6 +685,7 @@ export const EVENTOS = [
     'factura.anulada',
     'pago.registrado',
     'pago.anulado',
+    'pago.diferencia_cerrada',
     'nota_credito.emitida',
     'nota_credito.anulada',
     'promesa.creada',
@@ -706,6 +727,7 @@ export const EVENTOS = [
     'sorteo.ejecutado',
     'sorteo.premio_entregado',
     'sorteo.cancelado',
+    'sorteo.entrega_anulada',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',

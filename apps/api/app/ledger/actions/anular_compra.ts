@@ -61,6 +61,21 @@ export default class AnularCompra extends DomainAction<EntradaAnularCompra, Comp
             throw new Conflicto(`La compra ${compra.id} ya está anulada`, 'compra_anulada', 'Compra anulada')
         }
 
+        // decisión del PM: un bien entregado como premio de sorteo se liga a su compra
+        const premio = (await t.trx
+            .from('lealtad.sorteos_ganadores as g')
+            .join('ledger.compras_lineas as l', 'l.id', 'g.compra_linea_id')
+            .where('l.compra_id', compra.id)
+            .select('g.id', 'g.sorteo_id')
+            .first()) as { id: number; sorteo_id: number } | null
+        if (premio) {
+            throw new Conflicto(
+                `La compra ${compra.id} es el premio del ganador ${premio.id} del sorteo ${premio.sorteo_id}: anula primero su entrega`,
+                'compra_de_premio_sorteo',
+                'Compra de un premio',
+            )
+        }
+
         const nota = await t.trx
             .from('ledger.compras as n')
             .where('n.compra_referencia_id', compra.id)

@@ -38,10 +38,12 @@ export const REQUISITOS_SORTEO = [
 ] as const
 export type RequisitoSorteo = (typeof REQUISITOS_SORTEO)[number]
 export const REQUISITOS_PARA_ABRIR: readonly RequisitoSorteo[] = ['bases_diaco']
+/**
+ * Decisión del PM (19 oct): no hace falta la autorización de la Gobernación; `autorizacion_gobernacion` y
+ * `fianza` se pueden marcar (quedan en el checklist) pero no bloquean la ejecución.
+ */
 export const REQUISITOS_PARA_EJECUTAR: readonly RequisitoSorteo[] = [
     'bases_diaco',
-    'autorizacion_gobernacion',
-    'fianza',
     'isr_premios',
     'timbre_fiscal',
     'delegado_o_notario',
@@ -57,6 +59,12 @@ export interface BasesSorteo {
     no_reclamados?: string
     publicacion_resultados?: string
     resolucion_gobernacion?: string | null
+    /**
+     * De dónde sale el valor público del acto (p. ej. «los números del sorteo X de la Lotería Santa Lucía
+     * del día D»): obligatoria al publicar y congelada con `bases_hash` (riesgo de manipulación: quien
+     * conoce la semilla no elige el valor)
+     */
+    fuente_valor_publico?: string
 }
 
 /** Criterios del corte: boletos por servicio activo sin facturas vencidas y si admite canjes. */
@@ -97,6 +105,8 @@ export interface SorteoVista {
     compromiso: string | null
     semilla: string | null
     valor_publico: string | null
+    /** cómo se obtuvo el valor público en el acto (acta del notario, enlace al resultado oficial…) */
+    valor_publico_evidencia: string | null
     lista_hash: string | null
     resultado: Record<string, unknown> | null
     motivo_cancelacion: string | null
@@ -129,6 +139,7 @@ const columnas = (cliente: QueryClientContract) => [
     'compromiso',
     'semilla',
     'valor_publico',
+    'valor_publico_evidencia',
     'lista_hash',
     'resultado',
     'motivo_cancelacion',
@@ -330,6 +341,12 @@ export function exigirBasesCompletas(s: SorteoVista): void {
             'Falta la forma y el medio de publicar los resultados',
         )
     }
+    if (!texto(b.fuente_valor_publico)) {
+        throw new BasesIncompletas(
+            'bases.fuente_valor_publico',
+            'Falta la fuente pública del valor que se usará en el acto (p. ej. un resultado de la Lotería Santa Lucía)',
+        )
+    }
 }
 
 export interface RequisitoVigente {
@@ -419,6 +436,8 @@ export interface GanadorVista {
     asiento_id: number | null
     egreso_id: number | null
     canje_id: number | null
+    /** decisión del PM: la línea de la compra (con factura) del bien entregado */
+    compra_linea_id: number | null
     entregado_en: Date | null
     version: number
 }
@@ -446,6 +465,7 @@ export async function ganadoresDe(
             'g.asiento_id',
             'g.egreso_id',
             'g.canje_id',
+            'g.compra_linea_id',
             'g.entregado_en',
             'g.version',
         )) as Array<Record<string, unknown>>
@@ -459,6 +479,7 @@ export async function ganadoresDe(
         asiento_id: n(f.asiento_id),
         egreso_id: n(f.egreso_id),
         canje_id: n(f.canje_id),
+        compra_linea_id: n(f.compra_linea_id),
         version: Number(f.version),
     }))
 }
@@ -496,6 +517,8 @@ export async function verificacionSorteo(id: number) {
         compromiso: sorteo.compromiso,
         semilla: sorteo.semilla,
         valor_publico: sorteo.valor_publico,
+        fuente_valor_publico: sorteo.bases.fuente_valor_publico ?? null,
+        valor_publico_evidencia: sorteo.valor_publico_evidencia,
         lista_hash: sorteo.lista_hash,
         lista: lista.map((p) => ({ codigo: p.codigo, boletos: p.boletos })),
         titulares: titularesDe(sorteo),

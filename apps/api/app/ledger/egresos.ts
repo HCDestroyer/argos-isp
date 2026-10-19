@@ -6,7 +6,12 @@ import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import type { ContextoAccion } from '#shared/contexto'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
-import { CLAVES_CATEGORIA_EGRESO, CUENTAS, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import {
+    CLAVES_CATEGORIA_EGRESO,
+    CLAVES_CATEGORIA_EGRESO_CONSULTA,
+    CUENTAS,
+    type ClaveCategoriaEgreso,
+} from '#ledger/plan_cuentas'
 
 /**
  * Egresos: lectura (lista, detalle, categorías). Las acciones (`registrarEgreso`, `anularEgreso`)
@@ -118,10 +123,11 @@ export async function verEgreso(id: number, cliente: QueryClientContract = db.co
 export interface FiltrosEgresos extends OpcionesPaginacion {
     desde?: string
     hasta?: string
-    categoria?: ClaveCategoriaEgreso
+    categoria?: (typeof CLAVES_CATEGORIA_EGRESO_CONSULTA)[number]
     metodo?: MetodoEgreso
     estado?: EstadoEgreso
     caja_id?: number
+    turno_id?: number
     cuenta_bancaria_id?: number
 }
 
@@ -137,6 +143,7 @@ export async function listarEgresos(
         .if(filtros.categoria, (q) => q.where('ec.clave', filtros.categoria!))
         .if(filtros.metodo, (q) => q.where('e.metodo', filtros.metodo!))
         .if(filtros.caja_id, (q) => q.where('e.caja_id', filtros.caja_id!))
+        .if(filtros.turno_id, (q) => q.where('e.turno_id', filtros.turno_id!))
         .if(filtros.cuenta_bancaria_id, (q) => q.where('e.cuenta_bancaria_id', filtros.cuenta_bancaria_id!))
         .if(filtros.estado === 'anulado', (q) => q.whereNotNull('an.id'))
         .if(filtros.estado === 'registrado', (q) => q.whereNull('an.id'))

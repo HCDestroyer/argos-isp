@@ -171,6 +171,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'sorteos.marcar_requisito': 'Requisito del sorteo marcado',
     'sorteos.ejecutar': 'Sorteo ejecutado',
     'sorteos.entregar': 'Premio de sorteo entregado',
+    'sorteos.anular_entrega': 'Entrega de premio de sorteo anulada',
     'lealtad.rechazar_referido': 'Referido rechazado',
     'lealtad.crear_premio': 'Premio de lealtad creado',
     'lealtad.editar_premio': 'Premio de lealtad editado',

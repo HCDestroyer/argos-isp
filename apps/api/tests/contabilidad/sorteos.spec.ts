@@ -7,6 +7,7 @@ import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libr
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { errorDe, lineas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
+import { proveedorEn } from '#tests/ledger/ayudas_compras'
 import { programaConReglas } from '#tests/lealtad/ayudas_lealtad'
 import { hoyGuatemala } from '#ledger/fechas'
 import AnularEgreso from '#ledger/actions/anular_egreso'
@@ -47,6 +48,7 @@ function bases(): EntradaSorteo['bases'] {
         no_reclamados: 'Pasan al suplente en orden',
         publicacion_resultados: 'Portal del ISP el mismo día',
         resolucion_gobernacion: 'GD-2026-077',
+        fuente_valor_publico: 'Números del primer premio de la Lotería Santa Lucía del día del sorteo',
     }
 }
 
@@ -100,20 +102,30 @@ async function ejecutado(e: EmpresasGt, valorPublico = '90210') {
             e.ctx,
         )
     }
-    return new EjecutarSorteo().execute({ id: creado.id, valor_publico: valorPublico }, e.ctx)
+    return new EjecutarSorteo().execute(
+        { id: creado.id, valor_publico: valorPublico, valor_publico_evidencia: 'acta del notario' },
+        e.ctx,
+    )
 }
 
-function datosDeEntrega(e: EmpresasGt, sorteo: Ejecutado, premioPosicion: number) {
+async function datosDeEntrega(e: EmpresasGt, sorteo: Ejecutado, premioPosicion: number) {
     const premio = sorteo.premios.find((p) => p.posicion === premioPosicion)!
     if (premio.tipo === 'efectivo') return { metodo: 'caja' as const, caja_id: e.cajas.get(e.B)! }
-    if (premio.tipo === 'bien') return { contrapartida: 'proveedor' as const }
+    if (premio.tipo === 'bien') {
+        const proveedor = await proveedorEn(e.B, e.ctx)
+        return { contrapartida: 'proveedor' as const, proveedor_id: Number(proveedor.id) }
+    }
     return {}
 }
 
 async function entregarTodo(e: EmpresasGt, sorteo: Ejecutado) {
     for (const g of sorteo.ganadores.filter((x) => x.tipo === 'titular')) {
         await new EntregarPremioSorteo().execute(
-            { sorteo_id: sorteo.id, ganador_id: g.id, ...datosDeEntrega(e, sorteo, g.premio_posicion!) },
+            {
+                sorteo_id: sorteo.id,
+                ganador_id: g.id,
+                ...(await datosDeEntrega(e, sorteo, g.premio_posicion!)),
+            },
             e.ctx,
         )
     }
@@ -339,7 +351,10 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
 
         // otra vez por la acción: 422 estado_sorteo
         const otraVez = await errorDe(
-            new EjecutarSorteo().execute({ id: sorteo.id, valor_publico: '1' }, e.ctx),
+            new EjecutarSorteo().execute(
+                { id: sorteo.id, valor_publico: '1', valor_publico_evidencia: 'acta del notario' },
+                e.ctx,
+            ),
         )
         assert.equal(otraVez.codigo, 'estado_sorteo')
         // ni devolviendo el estado a mano: el trigger rechaza otro resultado y el índice otros ganadores
@@ -353,7 +368,11 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
             for (const valor of ['1', '90210']) {
                 const sp = await trx.transaction()
                 const fallo = await errorDe(
-                    new EjecutarSorteo().execute({ id: sorteo.id, valor_publico: valor }, e.ctx, { trx: sp }),
+                    new EjecutarSorteo().execute(
+                        { id: sorteo.id, valor_publico: valor, valor_publico_evidencia: 'acta del notario' },
+                        e.ctx,
+                        { trx: sp },
+                    ),
                 ).catch((error: Error) => ({ codigo: error.message }))
                 await sp.rollback()
                 assert.exists(fallo.codigo, `re-ejecutar con ${valor} falla`)
@@ -409,7 +428,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 .catch(() => {})
         })
         assert.deepEqual(violaciones, [])
-    }).fails('H22: AnularEgreso no conoce el egreso de un premio de sorteo (ni el ISR ni el ganador)')
+    })
 
     test('H22: revertir el canje del premio de servicio deja al ganador entregado (y suma existencias)', async ({
         assert,
@@ -424,7 +443,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 .catch(() => {})
         })
         assert.deepEqual(violaciones, [])
-    }).fails('H22: RevertirCanje revierte el canje de un premio de sorteo')
+    })
 
     test('H23: el asiento sorteo no se revierte directo por el libro', async ({ assert }) => {
         const e = await prepararEmpresasGt()
@@ -437,7 +456,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 .catch(() => {})
         })
         assert.deepEqual(violaciones, [])
-    }).fails('H23: sorteo no está en POR_DOCUMENTO de ledger/reversos.ts')
+    })
 
     test('H24: los ganadores de un sorteo ejecutado no se reescriben en la base', async ({ assert }) => {
         const e = await prepararEmpresasGt()
@@ -470,9 +489,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 assert.isFalse(await intentar(trx, sql, valores), sql)
             }
         })
-    }).fails(
-        'H24: sorteos_ganadores no tiene trigger que congele sorteo_id, posicion, tipo, participante_id y premio_posicion',
-    )
+    })
 
     test('H25: el bien se entrega solo contra 2.1.03 o un activo que no sea cuenta control (caja, banco, tránsito, estimación)', async ({
         assert,
@@ -506,7 +523,5 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
             Object.entries(resultados).filter(([, v]) => v.length > 0),
             [],
         )
-    }).fails(
-        'H25: EntregarPremioSorteo acepta como contrapartida del bien una caja, un banco, 1.1.11 o 1.1.12 (cuentas control con su propio documento)',
-    )
+    })
 })

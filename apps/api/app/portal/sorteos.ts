@@ -102,6 +102,7 @@ export interface SorteoPublico {
         plazo_reclamo_dias: number | null
         no_reclamados: string | null
         publicacion_resultados: string | null
+        fuente_valor_publico: string | null
         resolucion_gobernacion: string | null
     }
     bases_hash: string
@@ -155,6 +156,7 @@ export async function sorteoPublico(id: number): Promise<SorteoPublico> {
                 typeof bases.plazo_reclamo_dias === 'number' ? bases.plazo_reclamo_dias : null,
             no_reclamados: textoONulo(bases.no_reclamados),
             publicacion_resultados: textoONulo(bases.publicacion_resultados),
+            fuente_valor_publico: textoONulo(bases.fuente_valor_publico),
             resolucion_gobernacion: textoONulo(bases.resolucion_gobernacion),
         },
         bases_hash: s.bases_hash,

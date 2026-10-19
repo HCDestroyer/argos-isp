@@ -471,7 +471,7 @@ export interface paths {
         };
         /**
          * Depósitos de caja (en tránsito o acreditados)
-         * @description Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.
+         * @description Permiso bancos.ver o cajas.ver. Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.
          */
         get: operations["bancosDepositos"];
         put?: never;
@@ -1736,7 +1736,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar egresos */
+        /**
+         * Listar egresos
+         * @description Permiso egresos.ver o cajas.ver. Con egresos.ver, los de sus empresas y su alcance (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero, para el esperado provisional de /caja), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422. Sin ninguno de los dos permisos, 403.
+         */
         get: operations["egresosListar"];
         put?: never;
         /**
@@ -3394,6 +3397,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/anular-entrega": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular la entrega del premio de un ganador (todo junto)
+         * @description H22: deshace la entrega en una transacción: anula el egreso (efectivo), revierte el asiento sorteo (bien) o el canje sin puntos (servicio; 409 canje_no_revertible si ya se aplicó a una factura) y el asiento del ISR. El ganador vuelve a por_notificar y un sorteo premios_entregados vuelve a ejecutado. Por separado, anular el egreso, revertir el canje o revertir el asiento responden 422. Evento sorteo.entrega_anulada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadAnularEntregaSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/entregar": {
         parameters: {
             query?: never;
@@ -4236,7 +4259,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)
-         * @description Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.
+         * @description El saldo de cada factura del pago se cierra como gasto: asiento diferencia_cobro 5.3.05 Diferencias de cobro / CxC, sin tocar IVA ni DTE (el DTE va por el total). pagado no cambia (solo dinero cobrado); la factura queda pagada porque pagado + diferencias vigentes = total. Emite pago.diferencia_cerrada y re-evalúa los servicios. Anular el pago revierte la diferencia. 422 diferencia_sobre_tope; 409 sin_diferencia, pago_anulado o anulacion_en_proceso.
          */
         post: operations["pagosCerrarDiferencia"];
         delete?: never;
@@ -6830,7 +6853,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad" | "sorteo";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -7924,12 +7947,13 @@ export interface components {
             monto: components["schemas"]["Dinero"];
             /** @description diferencia_cobro_tope de la empresa */
             tope: components["schemas"]["Dinero"];
-            notas: {
+            /** @description Una por factura: el saldo cerrado como gasto, sin tocar IVA ni DTE */
+            diferencias: {
                 factura_id: number;
-                nota_credito_id: number;
+                diferencia_id: number;
                 monto: components["schemas"]["Dinero"];
-                /** @description true = NCRE (la factura tenía DTE); false = nota interna */
-                ncre: boolean;
+                /** @description Asiento diferencia_cobro (5.3.05 / CxC) */
+                asiento_id: number;
             }[];
         };
         Diferimiento: {
@@ -8055,8 +8079,11 @@ export interface components {
             id: number;
             /** Format: date */
             fecha: string;
-            /** @enum {string} */
-            categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+            /**
+             * @description Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos
+             * @enum {string}
+             */
+            categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
             categoria_nombre: string;
             /** @description Cuenta de gasto del plan */
             cuenta_codigo: string;
@@ -8517,11 +8544,11 @@ export interface components {
             /** @description FACT, FPEQ… (null sin FEL) */
             tipo_dte?: string | null;
             /**
-             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)
+             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura
              * @enum {string}
              */
-            tipo?: "servicio" | "mora" | "cargo";
-            /** @description Factura que originó la mora o el cargo */
+            tipo?: "servicio" | "mora";
+            /** @description Factura que originó la mora */
             factura_origen_id?: number | null;
             /**
              * Format: date-time
@@ -9129,8 +9156,11 @@ export interface components {
             empresa_id?: number;
             /** Format: date */
             fecha: string;
-            /** @enum {string} */
-            tipo: "factura" | "pago" | "mora" | "nota_credito" | "ajuste";
+            /**
+             * @description diferencia_cobro = saldo pequeño de un pago cerrado como gasto (abono sin cobro)
+             * @enum {string}
+             */
+            tipo: "factura" | "pago" | "mora" | "nota_credito" | "diferencia_cobro" | "ajuste";
             referencia_id: number;
             descripcion: string;
             cargo: components["schemas"]["Dinero"];
@@ -10224,6 +10254,8 @@ export interface components {
                 plazo_reclamo_dias: number | null;
                 no_reclamados: string | null;
                 publicacion_resultados: string | null;
+                /** @description De dónde sale el valor público del acto (p. ej. un número de la lotería) */
+                fuente_valor_publico: string | null;
                 resolucion_gobernacion: string | null;
             };
             /** @description SHA-256 del JSON canónico de las bases y los premios */
@@ -11900,6 +11932,8 @@ export interface components {
             /** @description Revelada al ejecutar */
             semilla: string | null;
             valor_publico: string | null;
+            /** @description Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico */
+            valor_publico_evidencia?: string | null;
             lista_hash: string | null;
             resultado: {
                 [key: string]: unknown;
@@ -11956,6 +11990,8 @@ export interface components {
                 canje_id: number | null;
                 /** Format: date-time */
                 entregado_en: string | null;
+                /** @description Línea de la compra con factura del bien entregado */
+                compra_linea_id?: number | null;
                 version: number;
             }[];
         };
@@ -11990,6 +12026,8 @@ export interface components {
             /** @description Revelada al ejecutar */
             semilla: string | null;
             valor_publico: string | null;
+            /** @description Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico */
+            valor_publico_evidencia?: string | null;
             lista_hash: string | null;
             resultado: {
                 [key: string]: unknown;
@@ -12189,6 +12227,9 @@ export interface components {
             compromiso: string;
             semilla: string;
             valor_publico: string;
+            /** @description Fuente pública del valor declarada en las bases (congelada con bases_hash) */
+            fuente_valor_publico: string | null;
+            valor_publico_evidencia: string | null;
             lista_hash: string;
             lista: {
                 codigo: string;
@@ -14254,15 +14295,6 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso cajas.ver */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19574,10 +19606,13 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
                 estado?: "registrado" | "anulado";
+                /** @description Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja) */
                 caja_id?: number;
+                /** @description Solo los de este turno de caja (alternativa a caja_id sin egresos.ver) */
+                turno_id?: number;
                 cuenta_bancaria_id?: number;
             };
             header?: never;
@@ -19600,15 +19635,6 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso egresos.ver */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20606,7 +20632,7 @@ export interface operations {
                 estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
                 periodo?: string;
                 /** @description servicio = factura del periodo; mora = recargo por vencimiento */
-                tipo?: "servicio" | "mora" | "cargo";
+                tipo?: "servicio" | "mora";
             };
             header?: never;
             path?: never;
@@ -25688,6 +25714,8 @@ export interface operations {
                         no_reclamados?: string;
                         publicacion_resultados?: string;
                         resolucion_gobernacion?: string | null;
+                        /** @description Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash */
+                        fuente_valor_publico?: string;
                     };
                     criterios?: {
                         /** @description Boletos por servicio activo sin facturas vencidas al corte (por defecto 1) */
@@ -25848,6 +25876,8 @@ export interface operations {
                         no_reclamados?: string;
                         publicacion_resultados?: string;
                         resolucion_gobernacion?: string | null;
+                        /** @description Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash */
+                        fuente_valor_publico?: string;
                     };
                     criterios?: {
                         /** @description Boletos por servicio activo sin facturas vencidas al corte (por defecto 1) */
@@ -26205,8 +26235,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description Dato que nadie controla y se conoce en el acto (lo lee el notario o el delegado) */
+                    /** @description El valor de la fuente declarada en las bases (bases.fuente_valor_publico), conocido en el acto */
                     valor_publico: string;
+                    /** @description Cómo se obtuvo el valor (acta del notario, enlace o número de la publicación oficial) */
+                    valor_publico_evidencia: string;
                     asistentes?: {
                         nombre: string;
                         rol?: string | null;
@@ -26271,6 +26303,83 @@ export interface operations {
             };
         };
     };
+    lealtadAnularEntregaSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                ganadorId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     lealtadEntregarPremioSorteo: {
         parameters: {
             query?: never;
@@ -26292,9 +26401,11 @@ export interface operations {
                     caja_id?: number | null;
                     banco_id?: number | null;
                     cuenta_bancaria_id?: number | null;
-                    /** @description Solo bien: proveedor (2.1.03) o cuenta (cuenta_codigo de activo, p. ej. inventario) */
-                    contrapartida?: ("proveedor" | "cuenta") | null;
+                    /** @description Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra) */
+                    contrapartida?: ("compra" | "proveedor" | "cuenta") | null;
                     cuenta_codigo?: string | null;
+                    /** @description Con contrapartida compra: línea (bien) de una compra registrada de la empresa */
+                    compra_linea_id?: number | null;
                     nota?: string | null;
                 };
             };
@@ -26833,7 +26944,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad" | "sorteo";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };
@@ -33932,7 +34043,7 @@ export interface operations {
                 desde?: string;
                 /** @description Por defecto: hoy (Guatemala) */
                 hasta?: string;
-                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
             };
             header?: never;

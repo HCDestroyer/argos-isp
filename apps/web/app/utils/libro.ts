@@ -19,6 +19,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     banco: { etiqueta: 'Partida del extracto', icono: 'i-lucide-file-spreadsheet' },
     provision: { etiqueta: 'Estimación de incobrables', icono: 'i-lucide-shield-alert' },
     castigo: { etiqueta: 'Castigo de cartera', icono: 'i-lucide-file-x' },
+    diferencia_cobro: { etiqueta: 'Diferencia de cobro', icono: 'i-lucide-scissors' },
     compra: { etiqueta: 'Compra', icono: 'i-lucide-shopping-cart' },
     pago_proveedor: { etiqueta: 'Pago a proveedor', icono: 'i-lucide-hand-coins' },
     depreciacion: { etiqueta: 'Depreciación', icono: 'i-lucide-trending-down' },
@@ -26,6 +27,21 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     diferido: { etiqueta: 'Diferido', icono: 'i-lucide-calendar-range' },
     alta_activo: { etiqueta: 'Alta de activo', icono: 'i-lucide-package-plus' },
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
+    sorteo: { etiqueta: 'Sorteo', icono: 'i-lucide-ticket' },
+}
+
+interface OrigenVisual {
+    etiqueta: string
+    icono: string
+}
+
+/** Etiqueta e icono del origen de un asiento; uno desconocido se muestra por su nombre, sin romper la vista. */
+export function origenAsiento(tipo: string): OrigenVisual {
+    if (Object.hasOwn(ORIGENES_ASIENTO, tipo)) {
+        return ORIGENES_ASIENTO[tipo as Origen]
+    }
+    const texto = tipo.replace(/_/g, ' ')
+    return { etiqueta: texto.charAt(0).toUpperCase() + texto.slice(1), icono: 'i-lucide-file' }
 }
 
 export const TIPOS_CUENTA: Record<Schema<'Cuenta'>['tipo'], string> = {

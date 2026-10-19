@@ -27,6 +27,7 @@ const bases = computed(() => {
         { titulo: 'Plazo para reclamar', texto: b.plazo_reclamo_dias ? `${b.plazo_reclamo_dias} días después del sorteo` : null, prueba: 'base-plazo' },
         { titulo: 'Premios no reclamados', texto: b.no_reclamados, prueba: 'base-no-reclamados' },
         { titulo: 'Publicación de resultados', texto: b.publicacion_resultados, prueba: 'base-publicacion' },
+        { titulo: 'Valor público del sorteo', texto: b.fuente_valor_publico, prueba: 'base-valor-publico' },
         { titulo: 'Autorización de la Gobernación', texto: b.resolucion_gobernacion, prueba: 'base-resolucion' },
     ].filter(item => item.texto)
 })
