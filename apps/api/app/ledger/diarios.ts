@@ -132,6 +132,7 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     banco: 'VAR',
     provision: 'VAR',
     castigo: 'VAR',
+    sorteo: 'VAR',
 }
 
 export interface DiarioAsiento {

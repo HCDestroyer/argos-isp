@@ -455,6 +455,37 @@ export interface CatalogoEventos {
     'lealtad.canje_reservado': PayloadCanjeLealtad
     'lealtad.canje_aplicado': PayloadCanjeLealtad
     'lealtad.canje_revertido': PayloadCanjeLealtad
+    // sorteos (lealtad fase 3, `contratos/lealtad.md` §7 y §13)
+    /** bases congeladas y compromiso de la semilla publicados */
+    'sorteo.bases_publicadas': {
+        sorteo_id: number
+        empresa_id: number
+        bases_hash: string
+        compromiso: string
+        /** ISO 8601 */
+        fecha_sorteo: string
+    }
+    /** foto del corte: participantes, boletos y `lista_hash` */
+    'sorteo.corte_cerrado': {
+        sorteo_id: number
+        empresa_id: number
+        participantes: number
+        boletos: number
+        lista_hash: string
+    }
+    /** resultado calculado con `argos-sorteo-v1`; A6 avisa a los titulares */
+    'sorteo.ejecutado': {
+        sorteo_id: number
+        empresa_id: number
+        ganadores: Array<{ cliente_id: number; tipo: 'titular' | 'suplente'; posicion: number }>
+    }
+    'sorteo.premio_entregado': {
+        sorteo_id: number
+        empresa_id: number
+        cliente_id: number
+        posicion: number
+    }
+    'sorteo.cancelado': { sorteo_id: number; empresa_id: number; motivo: string }
     'lealtad.referido_calificado': {
         /** `lealtad.referidos.id` */
         referido_id: number
@@ -597,6 +628,11 @@ export const EVENTOS = [
     'lealtad.canje_reservado',
     'lealtad.canje_aplicado',
     'lealtad.canje_revertido',
+    'sorteo.bases_publicadas',
+    'sorteo.corte_cerrado',
+    'sorteo.ejecutado',
+    'sorteo.premio_entregado',
+    'sorteo.cancelado',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',

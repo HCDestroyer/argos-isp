@@ -38,6 +38,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/lealtad/programas',
     '/api/v1/lealtad/referidos',
     '/api/v1/lealtad/reglas',
+    '/api/v1/lealtad/sorteos',
     '/api/v1/libro/balance',
     '/api/v1/libro/bancos',
     '/api/v1/libro/cuentas',

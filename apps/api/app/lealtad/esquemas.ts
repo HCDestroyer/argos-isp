@@ -8,6 +8,7 @@ import {
     fecha,
     id,
     instante,
+    jsonLibre,
     lista,
     nulable,
     objeto,
@@ -19,6 +20,7 @@ import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
 import { CANALES_CANJE, ESTADOS_CANJE } from '#lealtad/canjes'
 import { ORIGENES_MOVIMIENTO, TIPOS_MOVIMIENTO } from '#lealtad/puntos'
 import { PERIODOS_TOPE, RECOMPENSAS, TIPOS_REGLA } from '#lealtad/reglas'
+import { ESTADOS_REQUISITO, ESTADOS_SORTEO, REQUISITOS_SORTEO, TIPOS_PREMIO_SORTEO } from '#lealtad/sorteos'
 
 /**
  * Schemas de respuesta del programa de lealtad (`contratos/lealtad.md` §11). Estrictos: todo lo
@@ -241,24 +243,29 @@ export const ReporteLealtad = definirEsquema(
 
 export const PremioLealtad = definirEsquema(
     'PremioLealtad',
-    objeto({
-        id,
-        empresa_id: id,
-        programa_id: id,
-        tipo: enumerado(TIPOS_PREMIO),
-        nombre: texto,
-        costo_puntos: entero,
-        descuento_tipo: nulable(enumerado(TIPOS_DESCUENTO)),
-        descuento_valor: nulable(Dinero),
-        tope: nulable(Dinero),
-        plan_destino_id: nulable(id),
-        dias: nulable(entero),
-        costo_unitario: nulable(Dinero),
-        existencias: { ...nulable(entero), description: 'null = sin límite' },
-        en_portal: booleano,
-        activo: booleano,
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            programa_id: id,
+            tipo: enumerado(TIPOS_PREMIO),
+            nombre: texto,
+            costo_puntos: entero,
+            descuento_tipo: nulable(enumerado(TIPOS_DESCUENTO)),
+            descuento_valor: nulable(Dinero),
+            tope: nulable(Dinero),
+            plan_destino_id: nulable(id),
+            dias: nulable(entero),
+            costo_unitario: nulable(Dinero),
+            existencias: { ...nulable(entero), description: 'null = sin límite' },
+            sorteo_id: { ...nulable(id), description: 'Solo boletos: el sorteo' },
+            boletos: { ...nulable(entero), description: 'Solo boletos: cuántos da cada canje' },
+            en_portal: booleano,
+            activo: booleano,
+            ...auditable,
+        },
+        ['sorteo_id', 'boletos'],
+    ),
 )
 
 export const PaginaPremiosLealtad = definirEsquema('PaginaPremiosLealtad', pagina(PremioLealtad))
@@ -291,3 +298,163 @@ export const CanjeLealtad = definirEsquema(
 )
 
 export const PaginaCanjesLealtad = definirEsquema('PaginaCanjesLealtad', pagina(CanjeLealtad))
+
+/*
+| Sorteos (fase 3, §7 y §8)
+*/
+
+const PremioSorteo = objeto({
+    id,
+    posicion: entero,
+    nombre: texto,
+    cantidad: entero,
+    imagen_url: nulable(texto),
+    valor: { ...Dinero, description: 'Valor de libre competencia' },
+    tipo: enumerado(TIPOS_PREMIO_SORTEO),
+    premio_id: { ...nulable(id), description: 'Solo servicio: premio del catálogo que se entrega' },
+    retiene_isr: booleano,
+    isr_pct: { type: 'string', description: 'Porcentaje del ISR del premio' },
+})
+
+const camposSorteo = {
+    id,
+    empresa_id: id,
+    programa_id: nulable(id),
+    nombre: texto,
+    descripcion: nulable(texto),
+    estado: enumerado(ESTADOS_SORTEO),
+    bases: { ...jsonLibre, description: 'Bases (§7.2): mecanica, regla_participacion, plazo_reclamo_dias…' },
+    criterios: objeto({ boletos_por_servicio: entero, admite_canje: booleano }),
+    bases_hash: nulable(texto),
+    inscripcion_desde: nulable(fecha),
+    corte_en: nulable(instante),
+    fecha_sorteo: nulable(instante),
+    lugar: nulable(texto),
+    suplentes: entero,
+    algoritmo: texto,
+    compromiso: {
+        ...nulable(texto),
+        description: 'SHA-256 de la semilla, público desde que se publican las bases',
+    },
+    semilla: { ...nulable(texto), description: 'Revelada al ejecutar' },
+    valor_publico: nulable(texto),
+    lista_hash: nulable(texto),
+    resultado: nulable(jsonLibre),
+    motivo_cancelacion: nulable(texto),
+    publicado_en: nulable(instante),
+    corte_cerrado_en: nulable(instante),
+    ejecutado_en: nulable(instante),
+    cancelado_en: nulable(instante),
+    premios: lista(PremioSorteo),
+    ...auditable,
+}
+
+export const SorteoLealtad = definirEsquema('SorteoLealtad', objeto(camposSorteo))
+export const PaginaSorteosLealtad = definirEsquema('PaginaSorteosLealtad', pagina(SorteoLealtad))
+
+export const RequisitoSorteo = definirEsquema(
+    'RequisitoSorteo',
+    objeto({
+        clave: enumerado(REQUISITOS_SORTEO),
+        estado: enumerado(ESTADOS_REQUISITO),
+        valor: nulable(texto),
+        evidencia: nulable(texto),
+        nota: nulable(texto),
+        marcado_en: nulable(instante),
+    }),
+)
+
+const GanadorSorteo = objeto({
+    id,
+    posicion: entero,
+    tipo: enumerado(['titular', 'suplente']),
+    participante_id: id,
+    cliente_id: id,
+    codigo_publico: texto,
+    premio_posicion: nulable(entero),
+    estado: enumerado(['por_notificar', 'notificado', 'entregado', 'no_reclamado', 'sustituido']),
+    retencion_isr: nulable(Dinero),
+    contrapartida: nulable(texto),
+    asiento_id: nulable(id),
+    egreso_id: nulable(id),
+    canje_id: nulable(id),
+    entregado_en: nulable(instante),
+    version: entero,
+})
+
+export const SorteoDetalle = definirEsquema(
+    'SorteoDetalle',
+    objeto({
+        ...camposSorteo,
+        requisitos: lista(RequisitoSorteo),
+        participantes: entero,
+        boletos: entero,
+        ganadores: lista(GanadorSorteo),
+    }),
+)
+
+const ElegidoPublico = objeto({
+    posicion: entero,
+    tipo: enumerado(['titular', 'suplente']),
+    codigo: { ...texto, description: 'Seudónimo del participante' },
+    premio_posicion: nulable(entero),
+})
+
+export const VerificacionSorteo = definirEsquema(
+    'VerificacionSorteo',
+    objeto({
+        sorteo_id: id,
+        algoritmo: texto,
+        bases_hash: texto,
+        bases: jsonLibre,
+        compromiso: texto,
+        semilla: texto,
+        valor_publico: texto,
+        lista_hash: texto,
+        lista: lista(objeto({ codigo: texto, boletos: entero })),
+        titulares: entero,
+        suplentes: entero,
+        ganadores: lista(ElegidoPublico),
+    }),
+)
+
+export const BasesSorteoPublicas = definirEsquema(
+    'BasesSorteoPublicas',
+    objeto({
+        sorteo_id: id,
+        estado: enumerado(ESTADOS_SORTEO),
+        bases_hash: texto,
+        compromiso: texto,
+        bases: { ...jsonLibre, description: 'Documento cuyo SHA-256 del JSON canónico es bases_hash' },
+    }),
+)
+
+export const PortalSorteo = definirEsquema(
+    'PortalSorteo',
+    objeto({
+        id,
+        empresa_id: id,
+        nombre: texto,
+        descripcion: nulable(texto),
+        estado: enumerado(ESTADOS_SORTEO),
+        regla_participacion: nulable(texto),
+        inscripcion_desde: nulable(fecha),
+        corte_en: nulable(instante),
+        fecha_sorteo: nulable(instante),
+        lugar: nulable(texto),
+        premios: lista(
+            objeto({
+                posicion: entero,
+                nombre: texto,
+                cantidad: entero,
+                imagen_url: nulable(texto),
+                valor: Dinero,
+            }),
+        ),
+        bases_hash: nulable(texto),
+        compromiso: nulable(texto),
+        mis_boletos: { ...entero, description: 'Boletos del cliente (al corte, los de la lista)' },
+        mi_codigo: { ...nulable(texto), description: 'Su seudónimo en la lista (desde el corte)' },
+        ganadores: { ...nulable(lista(ElegidoPublico)), description: 'Solo después de ejecutar' },
+    }),
+)

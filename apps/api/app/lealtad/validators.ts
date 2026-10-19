@@ -6,6 +6,7 @@ import { dinero, empresasConsulta, fechaIso, idEntidad, motivo, versionEsperada 
 import { ESTADOS_REFERIDO } from '#lealtad/referidos'
 import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
 import { ESTADOS_CANJE } from '#lealtad/canjes'
+import { ESTADOS_REQUISITO, ESTADOS_SORTEO, TIPOS_PREMIO_SORTEO } from '#lealtad/sorteos'
 import { completarCondiciones, TIPOS_REGLA, type CondicionesPorTipo, type TipoRegla } from '#lealtad/reglas'
 
 /**
@@ -277,6 +278,17 @@ const camposPremio = {
     dias: vine.number().withoutDecimals().range([1, 366]).nullable().optional(),
     costo_unitario: dinero().nullable().optional(),
     existencias: vine.number().withoutDecimals().min(0).nullable().optional(),
+    sorteo_id: idEntidad()
+        .nullable()
+        .optional()
+        .meta({ description: 'Solo boletos: el sorteo (que admita canjes)' }),
+    boletos: vine
+        .number()
+        .withoutDecimals()
+        .range([1, 1000])
+        .nullable()
+        .optional()
+        .meta({ description: 'Solo boletos: cuántos da cada canje' }),
     en_portal: vine.boolean().optional(),
     activo: vine.boolean().optional(),
 }
@@ -286,7 +298,7 @@ export const crearPremioValidator = vine.compile(
         programa_id: idEntidad(),
         tipo: vine.enum(TIPOS_PREMIO).meta({
             description:
-                'descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien; boletos llega en la fase 3',
+                'descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien, boletos (sorteo_id y boletos)',
         }),
         ...camposPremio,
     }),
@@ -331,5 +343,154 @@ export const listarCanjesValidator = vine.compile(
         cliente_id: idEntidad().optional(),
         servicio_id: idEntidad().optional(),
         estado: vine.enum(ESTADOS_CANJE).optional(),
+    }),
+)
+
+/*
+| Sorteos (fase 3, §7 y §8)
+*/
+
+const basesSorteo = vine
+    .object({
+        mecanica: vine.string().trim().maxLength(4000).optional(),
+        regla_participacion: vine.string().trim().maxLength(2000).optional().meta({
+            description: 'Cómo se ganan boletos; es lo que ve el cliente en el portal',
+        }),
+        plazo_reclamo_dias: vine.number().withoutDecimals().range([1, 365]).optional(),
+        no_reclamados: vine.string().trim().maxLength(2000).optional(),
+        publicacion_resultados: vine.string().trim().maxLength(2000).optional(),
+        resolucion_gobernacion: vine.string().trim().maxLength(200).nullable().optional(),
+    })
+    .optional()
+    .meta({ description: 'Bases (§7.2); todas obligatorias para publicar salvo la resolución' })
+
+const criteriosSorteo = vine
+    .object({
+        boletos_por_servicio: vine.number().withoutDecimals().range([0, 100]).optional().meta({
+            description: 'Boletos por servicio activo sin facturas vencidas al corte (por defecto 1)',
+        }),
+        admite_canje: vine.boolean().optional().meta({ description: 'Admite boletos canjeados con puntos' }),
+    })
+    .optional()
+
+const premioSorteo = vine.object({
+    nombre: vine.string().trim().minLength(1).maxLength(200),
+    cantidad: vine.number().withoutDecimals().range([1, 100]).optional(),
+    imagen_url: vine.string().trim().maxLength(1000).nullable().optional(),
+    valor: dinero(),
+    tipo: vine.enum(TIPOS_PREMIO_SORTEO).meta({
+        description:
+            'efectivo (egreso de Caja o Bancos), bien (5.1.03 / 2.1.03 o una cuenta de activo) o servicio (canje sin puntos)',
+    }),
+    premio_id: idEntidad().nullable().optional().meta({
+        description: 'Solo servicio: descuento o mes gratis del catálogo de lealtad de la empresa',
+    }),
+    retiene_isr: vine.boolean().optional(),
+    isr_pct: vine
+        .string()
+        .trim()
+        .regex(/^\d{1,3}(\.\d{1,2})?$/)
+        .nullable()
+        .optional()
+        .meta({ description: 'Porcentaje del ISR del premio (10 por defecto)' }),
+})
+
+const camposSorteo = {
+    descripcion: vine.string().trim().maxLength(4000).nullable().optional(),
+    bases: basesSorteo,
+    criterios: criteriosSorteo,
+    inscripcion_desde: fechaIso().nullable().optional(),
+    corte_en: vine
+        .date({ formats: ['iso8601'] })
+        .nullable()
+        .optional()
+        .meta({ type: 'string', format: 'date-time' }),
+    fecha_sorteo: vine
+        .date({ formats: ['iso8601'] })
+        .nullable()
+        .optional()
+        .meta({ type: 'string', format: 'date-time' }),
+    lugar: vine.string().trim().maxLength(300).nullable().optional(),
+    suplentes: vine.number().withoutDecimals().range([0, 20]).optional(),
+    premios: vine.array(premioSorteo).maxLength(50).optional(),
+}
+
+export const crearSorteoValidator = vine.compile(
+    vine.object({
+        empresa_id: idEntidad().nullable().optional(),
+        nombre: vine.string().trim().minLength(1).maxLength(200),
+        ...camposSorteo,
+    }),
+)
+
+export const editarSorteoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        nombre: vine.string().trim().minLength(1).maxLength(200).optional(),
+        ...camposSorteo,
+    }),
+)
+
+export const listarSorteosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        estado: vine.enum(ESTADOS_SORTEO).optional(),
+    }),
+)
+
+export const marcarRequisitoValidator = vine.compile(
+    vine.object({
+        estado: vine.enum(ESTADOS_REQUISITO),
+        valor: vine.string().trim().maxLength(500).nullable().optional().meta({
+            description: 'Número de resolución, monto de la fianza…',
+        }),
+        evidencia: vine.string().trim().maxLength(2000).nullable().optional().meta({
+            description:
+                'Obligatoria con cumplido o no_aplica: referencia o texto (archivos en la segunda PR)',
+        }),
+        nota: vine.string().trim().maxLength(2000).nullable().optional(),
+    }),
+)
+
+export const ejecutarSorteoValidator = vine.compile(
+    vine.object({
+        valor_publico: vine.string().trim().minLength(1).maxLength(500).meta({
+            description: 'Dato que nadie controla y se conoce en el acto (lo lee el notario o el delegado)',
+        }),
+        asistentes: vine
+            .array(
+                vine.object({
+                    nombre: vine.string().trim().minLength(1).maxLength(200),
+                    rol: vine.string().trim().maxLength(200).nullable().optional(),
+                }),
+            )
+            .maxLength(20)
+            .optional(),
+    }),
+)
+
+export const entregarPremioValidator = vine.compile(
+    vine.object({
+        metodo: vine
+            .enum(['caja', 'banco', 'cuenta_bancaria'] as const)
+            .nullable()
+            .optional()
+            .meta({
+                description: 'Solo efectivo: de dónde sale el dinero (como POST /egresos)',
+            }),
+        caja_id: idEntidad().nullable().optional(),
+        banco_id: idEntidad().nullable().optional(),
+        cuenta_bancaria_id: idEntidad().nullable().optional(),
+        contrapartida: vine
+            .enum(['proveedor', 'cuenta'] as const)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Solo bien: proveedor (2.1.03) o cuenta (cuenta_codigo de activo, p. ej. inventario)',
+            }),
+        cuenta_codigo: vine.string().trim().maxLength(30).nullable().optional(),
+        nota: vine.string().trim().maxLength(2000).nullable().optional(),
     }),
 )

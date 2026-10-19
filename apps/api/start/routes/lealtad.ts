@@ -1,12 +1,36 @@
 /*
 |--------------------------------------------------------------------------
-| Rutas del programa de lealtad (A3, contratos/lealtad.md §11; fase 1)
+| Rutas del programa de lealtad (A3, contratos/lealtad.md §11; fases 1 a 3)
 |--------------------------------------------------------------------------
 |
 | Programa, reglas, puntos del cliente, ajustes, referidos y el reporte que cuadra el pasivo con
-| 2.1.10. Canjes y premios (fase 2) y sorteos (fase 3) llegan con sus fases.
+| 2.1.10; premios y canjes (fase 2); sorteos (fase 3, §7 y §15.3) con sus páginas públicas y
+| `GET /portal/sorteos`.
 */
 import db from '@adonisjs/lucid/services/db'
+import type { HttpContext } from '@adonisjs/core/http'
+import { ipOrigenDelCliente } from '#portal/ip_origen'
+import { limitarPorIp } from '#portal/limite_peticiones'
+import { clienteDeLaSesion } from '#portal/acceso/sesion'
+import {
+    REQUISITOS_SORTEO,
+    basesPublicas,
+    detalleSorteo,
+    listarSorteos,
+    sorteosDelPortal,
+    verSorteo,
+    verificacionSorteo,
+    type RequisitoSorteo as RequisitoSorteoClave,
+} from '#lealtad/sorteos'
+import CrearSorteo from '#lealtad/actions/crear_sorteo'
+import EditarSorteo from '#lealtad/actions/editar_sorteo'
+import PublicarBasesSorteo from '#lealtad/actions/publicar_bases_sorteo'
+import AbrirSorteo from '#lealtad/actions/abrir_sorteo'
+import CerrarCorteSorteo from '#lealtad/actions/cerrar_corte_sorteo'
+import CancelarSorteo from '#lealtad/actions/cancelar_sorteo'
+import MarcarRequisitoSorteo from '#lealtad/actions/marcar_requisito_sorteo'
+import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
+import EntregarPremioSorteo from '#lealtad/actions/entregar_premio_sorteo'
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista } from '#shared/openapi/esquemas'
 import { NoEncontrado } from '#shared/errores'
@@ -29,6 +53,12 @@ import {
     PaginaCanjesLealtad,
     PaginaPremiosLealtad,
     PremioLealtad,
+    BasesSorteoPublicas,
+    PaginaSorteosLealtad,
+    PortalSorteo,
+    RequisitoSorteo,
+    SorteoDetalle,
+    VerificacionSorteo,
 } from '#lealtad/esquemas'
 import { listarProgramas, programaDeEmpresa } from '#lealtad/programas'
 import { listarReglas, verRegla } from '#lealtad/reglas'
@@ -418,6 +448,237 @@ const reportes: Ruta[] = [
     }),
 ]
 
+/** El sorteo es de una empresa del alcance de la petición (403 si no). */
+async function sorteoDeLaPeticion(ctx: HttpContext, id: number) {
+    const sorteo = await verSorteo(id)
+    exigirEmpresaPeticion(ctx.empresa, sorteo.empresa_id)
+    return sorteo
+}
+
+const ERRORES_SORTEO =
+    ' 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.'
+
+const sorteos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos',
+        operacion: 'lealtadSorteos',
+        resumen: 'Sorteos de la empresa',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.ver',
+        query: v.listarSorteosValidator,
+        respuesta: { status: 200, descripcion: 'Sorteos', esquema: PaginaSorteosLealtad },
+        handler: (ctx, { query }) => listarSorteos(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos/:id',
+        operacion: 'lealtadVerSorteo',
+        resumen: 'Ver un sorteo con su checklist, participantes y ganadores',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.ver',
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: async (ctx, { params }) => {
+            const sorteo = await sorteoDeLaPeticion(ctx, Number(params.id))
+            return detalleSorteo(sorteo.id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos',
+        operacion: 'lealtadCrearSorteo',
+        resumen: 'Crear un sorteo en borrador',
+        descripcion:
+            'Bases (§7.2), criterios del corte (boletos_por_servicio por servicio activo sin facturas vencidas; admite_canje) y premios (efectivo, bien o servicio; ISR parametrizado). Empresa: la indicada o la activa.',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.gestionar',
+        cuerpo: v.crearSorteoValidator,
+        idempotente: true,
+        respuesta: { status: 201, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo }) => new CrearSorteo().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/lealtad/sorteos/:id',
+        operacion: 'lealtadEditarSorteo',
+        resumen: 'Editar un sorteo en borrador',
+        descripcion: 'Solo en borrador; premios reemplaza la lista.' + ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.gestionar',
+        cuerpo: v.editarSorteoValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarSorteo().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/publicar-bases',
+        operacion: 'lealtadPublicarBasesSorteo',
+        resumen: 'Publicar las bases: congela, calcula bases_hash y compromete la semilla',
+        descripcion:
+            'borrador → bases_publicadas. 422 `bases_incompletas` con el campo que falta (§7.2). La semilla (32 bytes aleatorios) se guarda cifrada y se publica su SHA-256 (`compromiso`). Evento sorteo.bases_publicadas.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.publicar',
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { params }) =>
+            new PublicarBasesSorteo().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/abrir',
+        operacion: 'lealtadAbrirSorteo',
+        resumen: 'Abrir la participación (boletos por canje)',
+        descripcion:
+            'bases_publicadas → participacion_abierta. Exige el requisito bases_diaco (422 `requisito_pendiente`).' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.publicar',
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { params }) =>
+            new AbrirSorteo().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/cerrar-corte',
+        operacion: 'lealtadCerrarCorteSorteo',
+        resumen: 'Cerrar el corte: foto de participantes y lista_hash',
+        descripcion:
+            'participacion_abierta → corte_cerrado, en corte_en o después (422 `corte_no_vencido`). Boletos por criterio (servicios activos sin facturas vencidas) más los canjeados; seudónimo por participante y lista_hash. Evento sorteo.corte_cerrado.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.publicar',
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { params }) =>
+            new CerrarCorteSorteo().execute({ id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/cancelar',
+        operacion: 'lealtadCancelarSorteo',
+        resumen: 'Cancelar un sorteo antes de ejecutarlo',
+        descripcion: 'Con motivo. Evento sorteo.cancelado.' + ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.publicar',
+        cuerpo: v.motivoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new CancelarSorteo().execute(
+                { id: Number(params.id), motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/requisitos/:clave',
+        operacion: 'lealtadMarcarRequisitoSorteo',
+        resumen: 'Marcar un requisito del checklist legal',
+        descripcion:
+            'cumplido o no_aplica exigen evidencia (referencia o texto; archivos en la segunda PR). Solo inserción: vale la última marca por clave. Referencia; valídelo con su contador o abogado.',
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.marcar_requisito',
+        parametros: { clave: { type: 'string', enum: [...REQUISITOS_SORTEO] } },
+        cuerpo: v.marcarRequisitoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Checklist vigente', esquema: lista(RequisitoSorteo) },
+        handler: async (ctx, { cuerpo, params }) => {
+            const clave = String(params.clave)
+            if (!(REQUISITOS_SORTEO as readonly string[]).includes(clave)) {
+                throw new NoEncontrado(`El requisito ${clave} no existe`)
+            }
+            return new MarcarRequisitoSorteo().execute(
+                { ...cuerpo, sorteo_id: Number(params.id), clave: clave as RequisitoSorteoClave },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/ejecutar',
+        operacion: 'lealtadEjecutarSorteo',
+        resumen: 'Ejecutar el sorteo (argos-sorteo-v1)',
+        descripcion:
+            'corte_cerrado → ejecutado. Exige el checklist de ejecución (422 `requisito_pendiente` con la clave) y el valor_publico del acto. Revela la semilla, verifica el compromiso y elige titulares y suplentes; el resultado se audita y se reproduce con GET /lealtad/sorteos/:id/verificacion y scripts/verificar-sorteo.mjs. Evento sorteo.ejecutado.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.ejecutar',
+        cuerpo: v.ejecutarSorteoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new EjecutarSorteo().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/lealtad/sorteos/:id/ganadores/:ganadorId/entregar',
+        operacion: 'lealtadEntregarPremioSorteo',
+        resumen: 'Registrar la entrega del premio de un titular',
+        descripcion:
+            'Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: 5.1.03 / 2.1.03 (proveedor) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado.' +
+            ERRORES_SORTEO,
+        etiqueta: 'lealtad',
+        permiso: 'sorteos.entregar',
+        cuerpo: v.entregarPremioValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
+        handler: (ctx, { cuerpo, params }) =>
+            new EntregarPremioSorteo().execute(
+                { ...cuerpo, sorteo_id: Number(params.id), ganador_id: Number(params.ganadorId) },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos/:id/bases',
+        operacion: 'lealtadBasesSorteo',
+        resumen: 'Bases publicadas de un sorteo (público)',
+        descripcion:
+            'Sin sesión, desde bases_publicadas (404 antes): el documento cuyo SHA-256 es bases_hash y el compromiso.',
+        etiqueta: 'lealtad',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Bases', esquema: BasesSorteoPublicas },
+        handler: (_ctx, { params }) => basesPublicas(Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/lealtad/sorteos/:id/verificacion',
+        operacion: 'lealtadVerificacionSorteo',
+        resumen: 'Datos para recalcular el resultado (público)',
+        descripcion:
+            'Sin sesión, después de ejecutar (404 antes): algoritmo, bases_hash, compromiso, semilla, valor_publico, lista (seudónimos y boletos) y ganadores. scripts/verificar-sorteo.mjs hace el mismo cálculo.',
+        etiqueta: 'lealtad',
+        seguridad: 'publico',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Verificación', esquema: VerificacionSorteo },
+        handler: (_ctx, { params }) => verificacionSorteo(Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/sorteos',
+        operacion: 'portalSorteos',
+        resumen: 'Sorteos publicados y vigentes de las empresas del cliente (portal)',
+        descripcion:
+            'Sesión del portal (401 sin ella). Publicados y no cancelados, con fecha de sorteo desde hace 30 días: premios, regla de participación, sus boletos, su seudónimo y, al terminar, el resultado. Nunca nombres de otros clientes.',
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'Sorteos', esquema: lista(PortalSorteo) },
+        handler: async (ctx) => {
+            ctx.response.header('Cache-Control', 'no-store')
+            const ip = await ipOrigenDelCliente(ctx)
+            if (ip) await limitarPorIp(ctx, 'sorteos', ip)
+            return sorteosDelPortal(await clienteDeLaSesion(ctx))
+        },
+    }),
+]
+
 export default [
     ...programas,
     ...reglas,
@@ -426,4 +687,5 @@ export default [
     ...puntos,
     ...referidos,
     ...reportes,
+    ...sorteos,
 ] satisfies Ruta[]

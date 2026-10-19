@@ -184,6 +184,11 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `lealtad.puntos_por_vencer` / `lealtad.puntos_vencidos` | lealtad (cron) | empresa_id, cliente_id, puntos; por vencer: vence_en, lote_id; vencidos: movimiento_id |
 | `lealtad.referido_calificado` | lealtad | referido_id, empresa_id, referidor_id, cliente_id |
 | `lealtad.canje_reservado` / `lealtad.canje_aplicado` / `lealtad.canje_revertido` | lealtad | canje_id, empresa_id, cliente_id, servicio_id, premio_id, tipo, puntos, factura_id |
+| `sorteo.bases_publicadas` | lealtad (sorteos) | sorteo_id, empresa_id, bases_hash, compromiso, fecha_sorteo |
+| `sorteo.corte_cerrado` | lealtad (sorteos) | sorteo_id, empresa_id, participantes, boletos, lista_hash |
+| `sorteo.ejecutado` | lealtad (sorteos) | sorteo_id, empresa_id, ganadores[] (cliente_id, tipo, posicion) |
+| `sorteo.premio_entregado` | lealtad (sorteos) | sorteo_id, empresa_id, cliente_id, posicion |
+| `sorteo.cancelado` | lealtad (sorteos) | sorteo_id, empresa_id, motivo |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

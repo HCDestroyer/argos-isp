@@ -43,6 +43,8 @@ export const ORIGENES_ASIENTO = [
     'castigo',
     // pasivo del programa de lealtad (`contratos/lealtad.md` §6); origen_id = `lealtad.movimientos.id`
     'lealtad',
+    // lealtad fase 3: entrega de premios de sorteo en especie e ISR retenido; origen_id = el ganador
+    'sorteo',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 
