@@ -1,0 +1,92 @@
+# Runbook · Instalar ArgosIsp en un servidor
+
+Para el operador que instala ArgosIsp desde cero. El servidor solo descarga: las imágenes vienen compiladas de GitHub Container Registry y nunca necesita Node, pnpm ni el código fuente. Actualizar y revertir: `docs/runbooks/actualizacion.md`.
+
+## Requisitos
+
+| Qué | Mínimo |
+| --- | --- |
+| Sistema | Ubuntu 22.04/24.04 o Debian 12, amd64 o arm64, con systemd |
+| Memoria y disco | 2 GB de RAM (4 GB recomendados), 10 GB libres en `/opt` (más los respaldos) |
+| Puertos libres | TCP 80 y 443 (panel, API, portal y `/corte`), UDP 1812 y 1813 (RADIUS) |
+| DNS | `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>` apuntando a la IP pública del servidor |
+| Salida a internet | `github.com`, `ghcr.io`, `download.docker.com` (si falta Docker) y Let's Encrypt |
+
+El 443 debe ser alcanzable desde internet para que Let's Encrypt emita los certificados (reto TLS-ALPN; el HTTP-01 va por el 80). Docker se instala solo si falta (repositorio oficial); si ya está, se exige Engine 25+ y Compose 2.24+.
+
+## Instalar (un comando)
+
+```sh
+curl -fsSL https://github.com/HCDestroyer/argos-isp/releases/latest/download/instalar.sh | sudo bash
+```
+
+Pregunta dos cosas: el **dominio base** (`miisp.com.gt` → `panel.miisp.com.gt`, `api.…`, `portal.…`) y el **correo del administrador**. Sin preguntas:
+
+```sh
+curl -fsSL https://github.com/HCDestroyer/argos-isp/releases/latest/download/instalar.sh \
+  | sudo bash -s -- --dominio miisp.com.gt --correo admin@miisp.com.gt --si
+```
+
+Otras opciones: `--version 1.4.2` (por defecto la última del canal `estable`), `--dir /ruta` (por defecto `/opt/argosisp`). Dominios distintos del patrón: `ARGOSISP_DOMINIO_PANEL`, `ARGOSISP_DOMINIO_API`, `ARGOSISP_DOMINIO_PORTAL` en el entorno de `sudo`.
+
+Qué hace, en orden:
+
+1. Verifica sistema, arquitectura, RAM, disco, puertos y que no haya otra instalación (`/opt/argosisp/.env`).
+2. Instala `curl`, `jq` y, si falta, Docker con el plugin de Compose.
+3. Descarga el paquete de la versión (`argosisp-<v>.tar.gz` de la GitHub Release, verificado con su `.sha256`) en `/opt/argosisp/versiones/<v>/` y apunta `/opt/argosisp/actual` a él.
+4. Genera **todas** las contraseñas y claves (`APP_KEY`, `AAA_PPP_KEY`, usuarios de Postgres, secret RADIUS local, tokens internos, contraseña del admin) y escribe `/opt/argosisp/.env` con permisos `600` (solo root).
+5. Instala `/usr/local/bin/argosisp` y el timer de parches automáticos **apagado**.
+6. Descarga las imágenes y levanta todo; espera a que cada servicio esté sano (migraciones y seed incluidos) y comprueba que la API responde con la versión instalada.
+7. Muestra las URL y la clave del admin (también en `/opt/argosisp/credenciales-iniciales.txt`, 600).
+
+## Después de instalar
+
+1. Entra a `https://panel.<dominio>` con el correo y la clave mostrados, **cambia la clave** y borra `credenciales-iniciales.txt`.
+2. **Copia `/opt/argosisp/.env` fuera del servidor** (gestor de contraseñas o bóveda). `AAA_PPP_KEY` cifra las contraseñas PPPoE y los secrets RADIUS: sin ella un respaldo no sirve.
+3. Configuración → Notificaciones: SMTP y bot de Telegram (no van en el `.env`).
+4. Respaldos: `BACKUP_HOST_DIR` (por defecto `/opt/argosisp/respaldos`) debería ser un disco externo o NFS; cifrado con age y copia remota con rclone en `infra/README.md`, "Respaldos". Después de editar el `.env`: `sudo argosisp levantar`.
+5. RADIUS: en `.env`, `RADIUS_BIND_IP` = la IP por la que llegan los MikroTik (LAN o túnel WireGuard) y `COA_ORIGEN_IP`; da de alta los routers en el panel y genera los clientes de FreeRADIUS con `sudo argosisp radius-clientes`. Configuración del router: `infra/mikrotik/README.md`.
+6. HSTS del portal: empieza en 300 s (`PORTAL_HSTS_MAX_AGE`); súbelo a `31536000` cuando el certificado del portal funcione.
+7. Opcional: parches automáticos con `sudo argosisp auto activar` (`docs/runbooks/actualizacion.md`).
+
+## Qué queda en el servidor
+
+```
+/opt/argosisp/
+  .env                       configuración y secretos (600)
+  actual -> versiones/1.4.2  versión en uso
+  versiones/<v>/             docker-compose.yml, config/ (Postgres, Caddy, FreeRADIUS), argosisp, systemd/
+  respaldos/                 respaldo diario (y respaldos/actualizaciones/, los previos a cada actualización)
+  respaldos-config/          rclone.conf y, solo para restaurar un .age, age.key
+  estado/                    última actualización (para `argosisp revertir`)
+  registros/                 registro de cada actualización y reversión (90 días)
+```
+
+Los datos viven en volúmenes de Docker del proyecto `argosisp` (`pgdata`, `redisdata`, `comprobantes`, `caddydata`, `aaa-datos`, `radius-clientes`): no cambian entre versiones.
+
+Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `aaa-vigia`, `web`, `portal`, `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
+
+## Comandos
+
+| Comando | Qué hace |
+| --- | --- |
+| `sudo argosisp estado` | Versión instalada, última publicada, parches automáticos y estado de cada servicio |
+| `sudo argosisp levantar` | Levanta la versión instalada y espera a que esté sana (después de editar el `.env`) |
+| `sudo argosisp logs [servicio]` | Registros en vivo |
+| `sudo argosisp respaldar` | Respaldo ahora (el mismo del diario) |
+| `sudo argosisp compose …` | `docker compose` del proyecto con la versión instalada (`compose ps`, `compose exec api …`) |
+| `sudo argosisp actualizar` / `revertir` / `auto …` | `docs/runbooks/actualizacion.md` |
+
+## Problemas
+
+| Síntoma | Qué hacer |
+| --- | --- |
+| "el puerto TCP 80 ya está en uso" | Otro servidor web (Apache, nginx). Detenlo o usa otro servidor: el 80 lo necesita la página de corte |
+| "ArgosIsp no quedó sano" | `sudo argosisp logs migrate api`. El `.env` ya quedó escrito: corrige y corre `sudo argosisp levantar` (no reinstales: el instalador se niega si hay `.env`) |
+| El navegador avisa de certificado inválido | Los registros DNS aún no apuntan al servidor o el 443 no es alcanzable desde internet. `sudo argosisp logs proxy`; Caddy reintenta solo |
+| Reinstalar desde cero (borra **todos** los datos) | `sudo argosisp compose down -v && sudo rm -rf /opt/argosisp /usr/local/bin/argosisp` |
+| Servidor sin internet | Copia el paquete (`argosisp-<v>.tar.gz`, `.sha256`) y un archivo `estable` con la versión a una carpeta, carga las imágenes con `docker load`, y corre `sudo ARGOSISP_FUENTE=/carpeta ARGOSISP_SIN_DESCARGA=1 bash instalar.sh …` |
+
+## Cómo se prueba
+
+El job `distribucion` del CI (`infra/ci/probar-distribucion.sh`) construye las seis imágenes del commit, instala con `instalar.sh --si` en el runner (TLS con la CA interna de Caddy, `ARGOSISP_TLS=interno`), comprueba el `.env` en 600, el login del admin y `GET /api/v1/version` a través del proxy, `/corte` por HTTP con cualquier Host, y sigue con actualizar y revertir (`actualizacion.md`).

@@ -86,6 +86,8 @@ export const telegramActualizacionValidator = vine.compile(
 const TOKEN_BOT = /^\d{3,20}:[A-Za-z0-9_-]{20,100}$/
 /** Lo que Telegram acepta como `secret_token`. */
 const SECRETO_WEBHOOK = /^[A-Za-z0-9_-]{16,256}$/
+/** Direcciones de correo separadas por coma (vacío permitido: lo quita). */
+const LISTA_CORREOS = /^\s*(?:[^\s@,]+@[^\s@,]+\.[^\s@,]+\s*(?:,\s*|$))*$/
 
 const correoConfig = () =>
     vine
@@ -117,6 +119,17 @@ const correoConfig = () =>
             nombre_visible: vine.string().trim().maxLength(100).nullable().optional().meta({
                 description: 'Nombre visible del remitente',
             }),
+            contabilidad: vine
+                .string()
+                .trim()
+                .maxLength(1000)
+                .regex(LISTA_CORREOS)
+                .nullable()
+                .optional()
+                .meta({
+                    description:
+                        'Correo de contabilidad para los avisos fiscales; varias direcciones separadas por coma. Vacío o null lo quita',
+                }),
         })
         .optional()
 
@@ -166,6 +179,7 @@ const avisosConfig = () =>
             pago: vine.boolean().optional(),
             promesa: vine.boolean().optional(),
             comprobante: vine.boolean().optional(),
+            lealtad: vine.boolean().optional(),
         })
         .optional()
 

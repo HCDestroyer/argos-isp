@@ -14,6 +14,7 @@ const props = defineProps<{
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ guardada: [empresa: EmpresaGrupo] }>()
 
+const { puede } = usePermisos()
 const formulario = useTemplateRef('formulario')
 const idFormulario = useId()
 const estado = reactive<EntradaEmpresaGrupo>(entradaEmpresaGrupo(props.empresa))
@@ -23,6 +24,18 @@ const conflicto = ref(false)
 let clave = nuevaClaveIdempotencia()
 
 const editando = computed(() => props.empresa !== null)
+/** Países con paquete fiscal (`GET /empresas/paises`) para el alta; sin leerlos, la API usa GT. */
+const paises = shallowRef<PaisLocalizacion[]>([])
+const pais = ref('GT')
+const itemsPais = computed(() => paises.value.map(p => ({ label: `${p.nombre} (${p.codigo})`, value: p.codigo })))
+
+async function cargarPaises() {
+    if (!puede('empresas.ver')) {
+        return
+    }
+    const resultado = await useEmpresas().paises()
+    paises.value = resultado.ok ? resultado.data : []
+}
 const itemsRegimen = [
     { label: 'Sin indicar', value: SIN_REGIMEN },
     ...Object.entries(REGIMENES_ISR).map(([value, label]) => ({ label, value })),
@@ -34,6 +47,10 @@ watch(abierto, (valor) => {
         problema.value = null
         conflicto.value = false
         clave = nuevaClaveIdempotencia()
+        pais.value = 'GT'
+        if (!props.empresa && !paises.value.length) {
+            void cargarPaises()
+        }
     }
 })
 
@@ -44,7 +61,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
     const empresas = useEmpresas()
     const resultado = props.empresa
         ? await empresas.editar(props.empresa.id, { ...evento.data, version: props.empresa.version })
-        : await empresas.crear(evento.data, clave)
+        : await empresas.crear({ ...evento.data, ...(paises.value.length ? { pais: pais.value } : {}) }, clave)
     enviando.value = false
     if (resultado.ok) {
         abierto.value = false
@@ -114,12 +131,27 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
                     <UFormField
                         name="codigo_establecimiento"
                         label="Establecimiento (SAT)"
-                        hint="Para FEL"
+                        :hint="editando ? undefined : 'Para FEL'"
+                        :help="editando ? 'Se cambia en Configuración → Fiscal → Establecimientos.' : undefined"
                     >
                         <UInput
                             v-model="estado.codigo_establecimiento"
                             inputmode="numeric"
+                            :disabled="editando"
                             class="w-full font-mono"
+                        />
+                    </UFormField>
+                    <UFormField
+                        v-if="!editando && itemsPais.length"
+                        name="pais"
+                        label="País"
+                        help="Instala el paquete fiscal de ese país al crear la empresa."
+                        class="sm:col-span-2"
+                    >
+                        <USelect
+                            v-model="pais"
+                            :items="itemsPais"
+                            class="w-full"
                         />
                     </UFormField>
                     <UFormField
@@ -148,11 +180,13 @@ async function alEnviar(evento: FormSubmitEvent<SalidaEmpresaGrupo>) {
                     <UFormField
                         name="regimen_isr"
                         label="Régimen de ISR"
+                        :help="editando ? 'Se cambia en Configuración → Fiscal, con su vigencia y el aviso a la SAT.' : undefined"
                         class="sm:col-span-2"
                     >
                         <USelect
                             v-model="estado.regimen_isr"
                             :items="itemsRegimen"
+                            :disabled="editando"
                             class="w-full"
                         />
                     </UFormField>

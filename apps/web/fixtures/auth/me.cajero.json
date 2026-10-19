@@ -24,7 +24,10 @@
     "promesas.crear",
     "comprobantes.ver",
     "comprobantes.aprobar",
-    "comprobantes.rechazar"
+    "comprobantes.rechazar",
+    "fel.ver",
+    "lealtad.ver",
+    "lealtad.canjear"
   ],
   "alcance_global": false,
   "empresas": [

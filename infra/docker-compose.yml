@@ -67,6 +67,8 @@ x-api-env: &api-env
   TELEGRAM_CODIGO_VIGENCIA_S: ${TELEGRAM_CODIGO_VIGENCIA_S:-900}
   # Alertas internas (app/notify/alertas.ts): chat del equipo y gracia de los crons vigilados
   TELEGRAM_CHAT_EQUIPO: ${TELEGRAM_CHAT_EQUIPO:-}
+  # Avisos fiscales a contabilidad (valor inicial; después en el panel, correo.contabilidad)
+  NOTIFY_CORREO_CONTABILIDAD: ${NOTIFY_CORREO_CONTABILIDAD:-}
   NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}
   NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
   NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
@@ -106,7 +108,7 @@ x-api-env: &api-env
   # (el portal los sube y los pide a través de la API). El servicio backup los respalda.
   COMPROBANTES_DIR: /comprobantes
 
-# Procesos de fondo con la imagen de api (relay, billing-worker, sesiones-worker, routeros-worker,
+# Procesos de fondo con la imagen de api (relay, billing-worker, fiscal-worker, sesiones-worker, routeros-worker,
 # aaa-vigia, worker).
 x-proceso-fondo: &proceso-fondo
   image: argosisp/api:${IMAGE_TAG:-dev}
@@ -202,6 +204,10 @@ services:
       context: ..
       dockerfile: infra/backups/Dockerfile
     restart: unless-stopped
+    # La imagen corre como `respaldo` (uid 1000). En desarrollo y en el ensayo, BACKUP_HOST_DIR es una
+    # carpeta del host con otro dueño: root, como antes. Producción usa el de la imagen
+    # (infra/produccion/docker-compose.produccion.yml, servicio `permisos`).
+    user: ${BACKUP_USUARIO:-0:0}
     environment:
       TZ: UTC
       PGHOST: postgres
@@ -321,6 +327,20 @@ services:
     healthcheck:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js billing:worker'"]
+
+  # FEL (A3, contrato de localización fiscal §8.3): cola `fel-cron` cada minuto con lock; pide la
+  # certificación de los avisos cubiertos, envía los DTE pendientes, reintenta los de error temporal
+  # y envía las anulaciones al certificador (INFILE por HTTPS saliente). Las credenciales están en
+  # fiscal.fel_credenciales, cifradas con AAA_PPP_KEY (sin variables nuevas); el XML y el PDF del DTE
+  # se guardan en Postgres (fiscal.dte), así que no lleva volumen. Una réplica: el lock evita dobles.
+  fiscal-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, fiscal:worker]
+    deploy:
+      replicas: 1
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js fiscal:worker'"]
 
   # Sesiones (A2): cola de accounting de aaa → network.sesiones y eventos sesion.*.
   sesiones-worker:

@@ -48,7 +48,8 @@ export const PLANTILLA_AVISO_COBRO = `{{#empresa.logo}}<img src="empresa:logo" h
     <tr><td class="derecha grande"><strong>Saldo a pagar</strong></td><td class="derecha grande"><strong>{{factura.saldo}}</strong></td></tr>
 </table>
 {{#factura.fel}}
-<p class="tenue"><small>Factura electrónica (FEL) · Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}</small></p>
+<p class="tenue"><small>Documento Tributario Electrónico (FEL) · {{factura.fel_tipo}} · Serie {{factura.fel_serie}} · Número {{factura.fel_numero}}<br>Autorización {{factura.fel_uuid}}{{#factura.fel_fecha}}<br>Certificado el {{factura.fel_fecha}}{{/factura.fel_fecha}}</small></p>
+{{#factura.fel_anulado}}<p><strong>Documento anulado ante la SAT.</strong></p>{{/factura.fel_anulado}}
 {{/factura.fel}}
 {{^factura.fel}}
 <p class="tenue"><small>Este aviso de cobro no es una factura electrónica (FEL).</small></p>
@@ -58,5 +59,63 @@ export const PLANTILLA_AVISO_COBRO = `{{#empresa.logo}}<img src="empresa:logo" h
 <p>{{empresa.instrucciones_pago}}</p>
 {{/empresa.instrucciones_pago}}
 {{#empresa.horario}}<p class="tenue">Horario de atención: {{empresa.horario}}</p>{{/empresa.horario}}
+<p class="tenue centro"><small>Generado el {{generado}}</small></p>
+`
+
+/**
+ * Plantilla HTML por defecto de la nota de crédito (`tipo = nota_credito`): la representación
+ * gráfica de la NCRE (o de la nota interna mientras no se certifica), con la factura de origen.
+ * Variables: `VARIABLES_NOTA_CREDITO` (`documentos/variables_nota.ts`).
+ */
+export const PLANTILLA_NOTA_CREDITO = `{{#empresa.logo}}<img src="empresa:logo" height="48">{{/empresa.logo}}
+<table class="sin-borde">
+    <tr>
+        <td width="58%">
+            <h1>{{empresa.nombre}}</h1>
+            <p class="tenue">
+                {{#empresa.razon_social}}{{empresa.razon_social}}<br>{{/empresa.razon_social}}
+                {{#empresa.nit}}NIT {{empresa.nit}}<br>{{/empresa.nit}}
+                {{#empresa.direccion}}{{empresa.direccion}}<br>{{/empresa.direccion}}
+                {{#empresa.telefono}}Tel. {{empresa.telefono}}{{/empresa.telefono}}
+                {{#empresa.correo}} · {{empresa.correo}}{{/empresa.correo}}
+            </p>
+        </td>
+        <td width="42%" class="derecha">
+            <h2>{{nota.documento}}</h2>
+            <p>
+                No. <strong>{{nota.numero}}</strong><br>
+                Fecha: {{nota.fecha}}
+            </p>
+        </td>
+    </tr>
+</table>
+{{#nota.anulada}}<h2 class="centro">ANULADA</h2>{{/nota.anulada}}
+<hr>
+<table class="sin-borde">
+    <tr>
+        <td width="58%">
+            <p class="tenue">Cliente</p>
+            <p><strong>{{cliente.nombre}}</strong><br>NIT {{cliente.nit}}{{#cliente.direccion}}<br>{{cliente.direccion}}{{/cliente.direccion}}</p>
+        </td>
+        <td width="42%" class="derecha">
+            <p class="tenue">Documento que se acredita</p>
+            <p><strong>{{factura.documento}} {{factura.numero}}</strong><br>Emitido: {{factura.emitida}}{{#factura.fel_uuid}}<br><small>Autorización {{factura.fel_uuid}}</small>{{/factura.fel_uuid}}</p>
+        </td>
+    </tr>
+</table>
+<p><strong>Motivo:</strong> {{nota.motivo}}</p>
+{{nota.lineas}}
+<table class="sin-borde">
+    <tr><td width="70%" class="derecha">Subtotal</td><td width="30%" class="derecha">{{nota.subtotal}}</td></tr>
+    <tr><td class="derecha">IVA (12%)</td><td class="derecha">{{nota.iva}}</td></tr>
+    <tr><td class="derecha grande"><strong>Total acreditado</strong></td><td class="derecha grande"><strong>{{nota.monto}}</strong></td></tr>
+</table>
+{{#nota.fel}}
+<p class="tenue"><small>Documento Tributario Electrónico (FEL) · Nota de crédito · Serie {{nota.fel_serie}} · Número {{nota.fel_numero}}<br>Autorización {{nota.fel_uuid}}{{#nota.fel_fecha}}<br>Certificado el {{nota.fel_fecha}}{{/nota.fel_fecha}}</small></p>
+{{/nota.fel}}
+{{^nota.fel}}
+<p class="tenue"><small>Esta nota de crédito no es un documento tributario electrónico (FEL).</small></p>
+{{/nota.fel}}
+{{#nota.anulada}}<p><strong>{{nota.motivo_anulacion}}</strong></p>{{/nota.anulada}}
 <p class="tenue centro"><small>Generado el {{generado}}</small></p>
 `

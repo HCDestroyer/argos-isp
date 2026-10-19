@@ -12,6 +12,9 @@ export type CierrePeriodo = Schema<'CierrePeriodo'>
 export type BancoLibro = Schema<'BancoLibro'>
 export type BalanceSaldos = Schema<'BalanceSaldos'>
 export type EstadoResultados = Schema<'EstadoResultados'>
+export type IntegridadLibro = Schema<'IntegridadLibro'>
+export type Diario = Schema<'Diario'>
+export type FiltrosIntegridad = Omit<NonNullable<paths['/api/v1/libro/integridad']['get']['parameters']['query']>, 'empresas'>
 
 /** Libro contable: plan de cuentas, diario, mayor y cierre mensual. */
 export function useLibro() {
@@ -128,5 +131,24 @@ export function useLibro() {
         }))
     }
 
-    return { cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir, balance, estadoResultados }
+    /**
+     * `GET /libro/integridad` (`libro.ver`): recalcula la cadena de hash de cada empresa (una
+     * sección por empresa; consolidable). `desde`/`hasta` y `desde_sello`/`hasta_sello` limitan
+     * qué asientos se recalculan; el encadenamiento se revisa siempre completo. Es una lectura.
+     */
+    function integridad(filtros: FiltrosIntegridad = {}): Promise<Resultado<IntegridadLibro[]>> {
+        return resolver(api.GET('/api/v1/libro/integridad', { params: { query: filtros } })).then(r => (r.ok ? { ok: true, data: r.data.data } : r))
+    }
+
+    /** `GET /libro/diarios` (`libro.ver`, consolidable): diarios con su numeración por año. */
+    function diarios(): Promise<Resultado<Diario[]>> {
+        return resolver(api.GET('/api/v1/libro/diarios'))
+    }
+
+    /** `GET /libro/diarios/:id` (`libro.ver`): un diario con `secuencias[] { anio, ultimo }`. */
+    function verDiario(id: number): Promise<Resultado<Diario>> {
+        return resolver(api.GET('/api/v1/libro/diarios/{id}', { params: { path: { id } } }))
+    }
+
+    return { integridad, diarios, verDiario, cuentas, diario, mayor, asientosDe, periodos, cerrarPeriodo, reabrirPeriodo, bancos, asiento, revertir, balance, estadoResultados }
 }

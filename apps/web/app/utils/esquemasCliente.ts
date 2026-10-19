@@ -2,13 +2,14 @@ import type { Schema, paths } from '@argosisp/contracts'
 import * as z from 'zod'
 
 /**
- * Espejo de `crearClienteValidator` / `editarClienteValidator` (apps/api/app/core/validators.ts).
+ * Espejo de `crearClienteValidator` / `editarClienteValidator` (apps/api/app/core/validators.ts)
+ * y de `validarDocumentoFiscal` (`apps/api/app/core/nit_cui.ts`, localización fiscal fase 1).
  *
  * El formulario trabaja con strings (`''` = vacío) y el esquema los transforma a lo que espera
  * la API (`null` para vaciar un campo). Si cambia el validador del backend, cambia esto.
  */
 
-/** NIT con dígito verificador (numérico o K), CUI de 13 dígitos o CF. Igual que `nitCui()` del backend. */
+/** Forma de NIT con dígito verificador (numérico o K), CUI de 13 dígitos o CF; el verificador se revisa aparte. */
 export const PATRON_NIT_CUI = /^(CF|\d{13}|\d{1,12}-?[0-9K])$/
 /** "lat,lng", igual que `coordenadas()` del backend. */
 export const PATRON_COORDENADAS = /^-?\d+(\.\d+)?, ?-?\d+(\.\d+)?$/
@@ -29,11 +30,14 @@ export const esquemaCliente = z.object({
         .min(2, 'Escribe al menos 2 caracteres')
         .max(200, 'Máximo 200 caracteres'),
     tipo: z.enum(['persona', 'empresa']),
+    tipo_documento_fiscal: z.enum(['nit', 'cui', 'pasaporte', 'cf']),
+    /** Se guarda sin guiones ni espacios, como la API; consumidor final va sin número. */
     nit_cui: z.string()
         .trim()
-        .toUpperCase()
-        .refine(valor => valor === '' || PATRON_NIT_CUI.test(valor), 'NIT con dígito verificador (1234567-8), CUI de 13 dígitos o CF')
-        .transform(valor => valor || null),
+        .toUpperCase(),
+    pais_fiscal: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'Código de país de 2 letras (GT)'),
+    agente_retencion_iva: z.boolean(),
+    sector_publico: z.boolean(),
     nombre_fiscal: textoOpcional(200),
     direccion_fiscal: textoOpcional(300),
     email: z.string()
@@ -49,7 +53,15 @@ export const esquemaCliente = z.object({
         .transform(valor => valor || null),
     zona: z.string().transform(valor => (valor === SIN_ZONA || valor === '' ? null : Number(valor))),
     canal_preferido: z.enum(['correo', 'telegram', 'whatsapp']),
-})
+}).superRefine((datos, ctx) => {
+    const error = errorDocumentoFiscal(datos.tipo_documento_fiscal, datos.nit_cui, datos.pais_fiscal)
+    if (error) {
+        ctx.addIssue({ code: 'custom', path: [error.campo], message: error.mensaje })
+    }
+}).transform(datos => ({
+    ...datos,
+    nit_cui: datos.tipo_documento_fiscal === 'cf' ? null : limpiarDocumento(datos.nit_cui),
+}))
 
 /** Lo que el formulario edita (strings). */
 export type EntradaCliente = z.input<typeof esquemaCliente>
@@ -69,7 +81,12 @@ export function entradaDesdeCliente(cliente?: Schema<'Cliente'>): EntradaCliente
     return {
         nombre: cliente?.nombre ?? '',
         tipo: cliente?.tipo ?? 'persona',
-        nit_cui: cliente?.nit_cui ?? '',
+        // Clientes de antes de la localización: el tipo se deduce del número, como la API.
+        tipo_documento_fiscal: cliente?.tipo_documento_fiscal ?? deducirTipoDocumento(cliente?.nit_cui) ?? 'nit',
+        nit_cui: cliente?.nit_cui && cliente.nit_cui.toUpperCase() !== 'CF' ? cliente.nit_cui : '',
+        pais_fiscal: cliente?.pais_fiscal ?? 'GT',
+        agente_retencion_iva: cliente?.agente_retencion_iva ?? false,
+        sector_publico: cliente?.sector_publico ?? false,
         nombre_fiscal: cliente?.nombre_fiscal ?? '',
         direccion_fiscal: cliente?.direccion_fiscal ?? '',
         email: cliente?.email ?? '',

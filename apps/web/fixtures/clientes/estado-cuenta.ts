@@ -50,7 +50,7 @@ export function estadoCuentaDe(clienteId: number, empresaId?: number): Schema<'E
 /** El auxiliar del cliente en una empresa (o en todas con `null`). */
 function cuentaDe(clienteId: number, empresaId: number | null): Omit<Schema<'EstadoCuenta'>, 'empresas'> {
     const deEmpresa = (id: number | undefined) => empresaId === null || (id ?? 1) === empresaId
-    const facturas = bd.facturas.filter(f => f.cliente_id === clienteId && f.estado !== 'anulada' && deEmpresa(f.empresa_id))
+    const facturas = bd.facturas.filter(f => f.cliente_id === clienteId && f.estado !== 'anulada' && f.estado !== 'por_certificar' && deEmpresa(f.empresa_id))
     const eventos: Omit<Movimiento, 'saldo'>[] = []
     for (const factura of facturas) {
         eventos.push({

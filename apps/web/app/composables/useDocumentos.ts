@@ -3,6 +3,7 @@ import type { Schema } from '@argosisp/contracts'
 export type PlantillaDocumento = Schema<'PlantillaDocumento'>
 export type VariableDocumento = Schema<'VariableDocumento'>
 export type TipoDocumento = PlantillaDocumento['tipo']
+export type PlantillaDocumentoFabrica = Schema<'PlantillaDocumentoFabrica'>
 
 /**
  * Documentos PDF (A5): plantilla HTML con variables Mustache del aviso de cobro, su vista previa
@@ -39,5 +40,22 @@ export function useDocumentos() {
         }))
     }
 
-    return { plantilla, guardarPlantilla, vistaPrevia, avisoCobro }
+    /**
+     * `GET /documentos/plantillas/:tipo/fabrica` (`documentos.ver`): la plantilla de esta versión de
+     * ArgosIsp (con el bloque FEL) aunque la empresa haya guardado otra. No guarda nada: restaurar
+     * es enviar su `html` con `guardarPlantilla` y la `version` vigente.
+     */
+    function fabrica(tipo: TipoDocumento = 'aviso_cobro'): Promise<Resultado<PlantillaDocumentoFabrica>> {
+        return resolver(api.GET('/api/v1/documentos/plantillas/{tipo}/fabrica', { params: { path: { tipo } } }))
+    }
+
+    /** `GET /documentos/nota-credito/:notaId` (`facturas.ver`): el PDF de la nota (NCRE si la tiene). */
+    function notaCredito(notaId: number): Promise<Resultado<Blob>> {
+        return resolver(api.GET('/api/v1/documentos/nota-credito/{notaId}', {
+            params: { path: { notaId } },
+            parseAs: 'blob',
+        }))
+    }
+
+    return { plantilla, guardarPlantilla, vistaPrevia, avisoCobro, fabrica, notaCredito }
 }

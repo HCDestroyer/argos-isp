@@ -37,6 +37,7 @@ export const TIPOS_AVISO = [
     'pago',
     'promesa',
     'comprobante',
+    'lealtad',
 ] as const
 export type TipoAviso = (typeof TIPOS_AVISO)[number]
 
@@ -49,6 +50,8 @@ export const DESCRIPCION_AVISOS: Record<TipoAviso, string> = {
     pago: 'Pago registrado, también a los dueños de facturas pagadas por otro (`pago.*`)',
     promesa: 'Promesas de pago (`promesa.*`)',
     comprobante: 'Comprobantes de depósito recibidos, aprobados o rechazados (`comprobante.*`)',
+    lealtad:
+        'Programa de lealtad: puntos ganados, puntos por vencer y referido calificado (`lealtad.puntos_acumulados`, `lealtad.puntos_por_vencer`, `lealtad.referido_calificado`)',
 }
 
 /** Tipo de aviso de un evento de plantilla; `null` = no se puede apagar por tipo. */
@@ -60,6 +63,7 @@ export function tipoDeAviso(evento: string): TipoAviso | null {
     if (evento.startsWith('pago.')) return 'pago'
     if (evento.startsWith('promesa.')) return 'promesa'
     if (evento.startsWith('comprobante.')) return 'comprobante'
+    if (evento.startsWith('lealtad.')) return 'lealtad'
     return null
 }
 
@@ -87,6 +91,8 @@ export interface FilaConfiguracion {
     smtp_password_cifrada: string | null
     correo_remitente: string | null
     correo_nombre: string | null
+    /** direcciones de contabilidad para los avisos fiscales, separadas por coma */
+    correo_contabilidad: string | null
     telegram_clientes_activo: boolean
     telegram_alertas_activo: boolean
     telegram_token_cifrado: string | null
@@ -120,6 +126,8 @@ export interface ConfigCanales {
         password: string | null
         remitente: string | null
         nombre: string | null
+        /** destino de los avisos fiscales a contabilidad (direcciones separadas por coma) */
+        contabilidad: string | null
     }
     telegram: {
         clientesActivo: boolean
@@ -172,6 +180,7 @@ export function desdeFila(fila: FilaConfiguracion): ConfigCanales {
             password: descifrarCampo(fila.smtp_password_cifrada, 'smtp_password', errores),
             remitente: fila.correo_remitente,
             nombre: fila.correo_nombre,
+            contabilidad: fila.correo_contabilidad ?? null,
         },
         telegram: {
             clientesActivo: fila.telegram_clientes_activo,
@@ -236,6 +245,7 @@ export function desdeEntorno(entorno: NodeJS.ProcessEnv = process.env): ConfigCa
             password: entorno.SMTP_PASSWORD || null,
             remitente: remitente.correo,
             nombre: remitente.nombre,
+            contabilidad: entorno.NOTIFY_CORREO_CONTABILIDAD?.trim() || null,
         },
         telegram: {
             clientesActivo: true,

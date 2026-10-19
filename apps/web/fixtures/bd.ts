@@ -7,11 +7,16 @@ import type { RespuestaFixture } from '~/utils/fetchFixtures'
 import { bancos, cuentasBancarias } from './bancos/datos'
 import { cambios } from './bitacora/cambios'
 import { comprobantes } from './comprobantes/datos'
+import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
-import { empresa, plantillaAvisoCobro } from './documentos/datos'
+import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
 import { empresas } from './empresas/datos'
+import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
+import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
+import { horusInicial } from './horus/datos'
+import type { HorusFixtures } from './horus/datos'
 import { configuracionGlobal } from './notificaciones/datos'
 import { usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
@@ -82,6 +87,8 @@ interface BaseFixtures {
     /** Cobros de `POST /pagos` (`billing.cobros`): un pago por empresa con el mismo `cobro_id`. */
     cobros: CobroFixture[]
     plantillaAvisoCobro: Schema<'PlantillaDocumento'>
+    /** Plantilla del PDF de la nota de crédito (A5, fase 3). */
+    plantillaNotaCredito: Schema<'PlantillaDocumento'>
     /** Contraseñas PPPoE por servicio (la vista `Servicio` nunca las trae). */
     clavesPpp: Record<number, string>
     /** Respuestas guardadas por `Idempotency-Key`. */
@@ -109,6 +116,20 @@ interface BaseFixtures {
     migracionesAaa: Record<number, Schema<'MigracionAaaRouter'>>
     /** Notas de crédito internas (A3). */
     notasCredito: Schema<'NotaCredito'>[]
+    /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
+    programasLealtad: Schema<'ProgramaLealtad'>[]
+    reglasLealtad: Schema<'ReglaLealtad'>[]
+    movimientosPuntos: Schema<'MovimientoPuntos'>[]
+    lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
+    referidosLealtad: Schema<'ReferidoLealtad'>[]
+    /** Saldo de 2.1.10 por empresa cuando no es el de los lotes (para probar el aviso de `cuadra: false`). */
+    pasivoLibroLealtad: Record<number, string>
+    /** Localización fiscal por empresa (A3, fase 2). */
+    fiscal: FiscalFixtures
+    /** FEL por empresa: configuración, credenciales sin secretos, DTE y sustituciones (A3, fase 3). */
+    fel: FelFixtures
+    /** Integración con Horus: conector, tokens `atk_`, vinculaciones y tickets usados. */
+    horus: HorusFixtures
 }
 
 function inicial(): BaseFixtures {
@@ -144,6 +165,7 @@ function inicial(): BaseFixtures {
         enviosPrueba: 0,
         cobros: [],
         plantillaAvisoCobro,
+        plantillaNotaCredito,
         clavesPpp: {},
         idempotencia: {},
         fallas: {},
@@ -154,8 +176,18 @@ function inicial(): BaseFixtures {
         eventosRed,
         migracionesAaa: {},
         notasCredito: [],
+        fiscal: fiscalInicial(),
+        fel: felInicial(),
+        horus: horusInicial(),
+        programasLealtad,
+        reglasLealtad,
+        movimientosPuntos,
+        lotesPuntos,
+        referidosLealtad,
+        pasivoLibroLealtad: {},
     })
     sembrarNotasCredito(datos)
+    sembrarFel(datos)
     return datos
 }
 

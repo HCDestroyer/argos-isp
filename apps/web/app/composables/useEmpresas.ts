@@ -3,6 +3,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 export type EmpresaGrupo = Schema<'EmpresaGrupo'>
 export type DatosEmpresaNueva = paths['/api/v1/empresas']['post']['requestBody']['content']['application/json']
 export type CambiosEmpresaGrupo = paths['/api/v1/empresas/{id}']['put']['requestBody']['content']['application/json']
+export type PaisLocalizacion = Schema<'PaisLocalizacion'>
 
 /** Límites del logo que impone la API (`contratos/multiempresa.md`): PNG o SVG, hasta 512 KB. */
 export const LOGO_TIPOS = ['image/png', 'image/svg+xml'] as const
@@ -76,5 +77,21 @@ export function useEmpresas() {
         }))
     }
 
-    return { listar, ver, crear, editar, desactivar, cambiarLogo }
+    /** `GET /empresas/paises` (`empresas.ver`): países con paquete de localización fiscal. */
+    function paises(): Promise<Resultado<PaisLocalizacion[]>> {
+        return resolver(api.GET('/api/v1/empresas/paises'))
+    }
+
+    /**
+     * `POST /empresas/:id/cambiar-pais` (`empresas.cambiar_pais`): reinstala la localización del país
+     * nuevo. 422 `pais_no_soportado`, 409 `empresa_con_documentos` o si cambió la `version`.
+     */
+    function cambiarPais(id: number, pais: string, version: number, clave: string): Promise<Resultado<EmpresaGrupo>> {
+        return resolver(api.POST('/api/v1/empresas/{id}/cambiar-pais', {
+            params: { path: { id }, header: { 'Idempotency-Key': clave } },
+            body: { pais, version },
+        }))
+    }
+
+    return { listar, ver, crear, editar, desactivar, cambiarLogo, paises, cambiarPais }
 }

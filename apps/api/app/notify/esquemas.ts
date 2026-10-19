@@ -92,16 +92,25 @@ export const ConfiguracionNotificaciones = definirEsquema(
                 '`guardada`: fila del panel. `entorno`: global sin guardar, rigen las variables de entorno. `sin_configurar`: empresa sin fila (hereda la global)',
         },
         sembrada_desde_entorno: booleano,
-        correo: objeto({
-            activo: booleano,
-            host: nulable(texto),
-            puerto: nulable(entero),
-            tls: enumerado(['auto', 'starttls', 'tls', 'ninguno']),
-            usuario: nulable(texto),
-            password: secreto,
-            remitente: nulable(texto),
-            nombre_visible: nulable(texto),
-        }),
+        correo: objeto(
+            {
+                activo: booleano,
+                host: nulable(texto),
+                puerto: nulable(entero),
+                tls: enumerado(['auto', 'starttls', 'tls', 'ninguno']),
+                usuario: nulable(texto),
+                password: secreto,
+                remitente: nulable(texto),
+                nombre_visible: nulable(texto),
+                contabilidad: {
+                    ...nulable(texto),
+                    description:
+                        'Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada); direcciones separadas por coma. La API siempre lo devuelve',
+                },
+            },
+            // Opcional en el contrato solo para no romper fixtures existentes; la API siempre lo trae.
+            ['contabilidad'],
+        ),
         telegram: objeto({
             clientes_activo: booleano,
             alertas_activo: booleano,
@@ -123,6 +132,7 @@ export const ConfiguracionNotificaciones = definirEsquema(
             pago: booleano,
             promesa: booleano,
             comprobante: booleano,
+            lealtad: booleano,
         }),
         version: {
             type: 'integer',

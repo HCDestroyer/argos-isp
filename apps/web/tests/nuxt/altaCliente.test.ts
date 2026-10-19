@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
+import { bd } from '~~/fixtures/bd'
 
 describe('esquemaCliente (espejo de crearClienteValidator)', () => {
-    it('convierte vacíos en null, NIT a mayúsculas y la zona a número', () => {
+    it('convierte vacíos en null, el NIT sin guion y en mayúsculas, y la zona a número', () => {
         const salida = esquemaCliente.parse({
             ...entradaDesdeCliente(),
             nombre: '  Rosa Pérez ',
-            nit_cui: '7788990-k',
+            tipo_documento_fiscal: 'nit',
+            nit_cui: '576937-k',
             zona: '3',
         })
-        expect(salida).toMatchObject({ nombre: 'Rosa Pérez', nit_cui: '7788990-K', email: null, telefono: null })
+        expect(salida).toMatchObject({ nombre: 'Rosa Pérez', tipo_documento_fiscal: 'nit', nit_cui: '576937K', pais_fiscal: 'GT', email: null, telefono: null })
         expect(cuerpoCliente(salida)).toMatchObject({ zona_id: 3 })
         expect(cuerpoCliente(salida)).not.toHaveProperty('zona')
     })
@@ -19,16 +21,48 @@ describe('esquemaCliente (espejo de crearClienteValidator)', () => {
         expect(cuerpoCliente(salida).zona_id).toBeNull()
     })
 
+    // Espejo de `validarDocumentoFiscal` (A1): NIT con módulo 11 (SAT 16693949, INFILE 12521337),
+    // CUI con departamento 01-22 y municipio, pasaporte de 3 a 20, CF sin número.
     it.each([
-        ['CF', true],
-        ['1234567-8', true],
-        ['12345678', true],
-        ['2984561320101', true],
-        ['123-45', false],
-        ['ABC', false],
-    ])('NIT/CUI %s válido: %s', (nit, valido) => {
-        const resultado = esquemaCliente.safeParse({ ...entradaDesdeCliente(), nombre: 'Ana', nit_cui: nit })
+        ['cf', '', true],
+        ['cf', '1234567-9', false],
+        ['nit', '1234567-9', true],
+        ['nit', '1669394-9', true],
+        ['nit', '12521337', true],
+        ['nit', '576937K', true],
+        ['nit', '1234567-8', false],
+        ['nit', '', false],
+        ['cui', '2984561320101', true],
+        ['cui', '2984561322301', false],
+        ['cui', '298456132010', false],
+        ['pasaporte', 'A1234567', true],
+        ['pasaporte', 'AB', false],
+    ] as const)('%s %s válido: %s', (tipo, nit, valido) => {
+        const resultado = esquemaCliente.safeParse({ ...entradaDesdeCliente(), nombre: 'Ana', tipo_documento_fiscal: tipo, nit_cui: nit })
         expect(resultado.success).toBe(valido)
+    })
+
+    it('NIT y CUI son de Guatemala: con otro país va pasaporte (error en pais_fiscal)', () => {
+        const resultado = esquemaCliente.safeParse({ ...entradaDesdeCliente(), nombre: 'Ana', tipo_documento_fiscal: 'nit', nit_cui: '1234567-9', pais_fiscal: 'sv' })
+        expect(resultado.success).toBe(false)
+        expect(resultado.error?.issues.map(i => i.path.join('.'))).toEqual(['pais_fiscal'])
+        expect(esquemaCliente.safeParse({ ...entradaDesdeCliente(), nombre: 'Ana', tipo_documento_fiscal: 'pasaporte', nit_cui: 'A1234567', pais_fiscal: 'SV' }).success).toBe(true)
+    })
+
+    it('consumidor final manda nit_cui null y un cliente viejo sin tipo lo deduce del número', () => {
+        const cf = esquemaCliente.parse({ ...entradaDesdeCliente(), nombre: 'Ana' })
+        expect(cf).toMatchObject({ tipo_documento_fiscal: 'cf', nit_cui: null })
+        expect(entradaDesdeCliente({ ...bd.clientes[3]!, tipo_documento_fiscal: undefined })).toMatchObject({ tipo_documento_fiscal: 'cui', nit_cui: '2984561320101' })
+    })
+
+    it('la API rechaza un NIT con dígito verificador malo con el mismo mensaje (422 en nit_cui)', async () => {
+        reiniciarFixtures()
+        sesionFixture('fixture-admin')
+        const malo = await useClientes().crear({ nombre: 'Verificador Malo', tipo_documento_fiscal: 'nit', nit_cui: '1234567-8' }, nuevaClaveIdempotencia())
+        expect(!malo.ok && erroresDeFormulario(malo.problema)).toEqual([{ name: 'nit_cui', message: 'El NIT no es válido (dígito verificador)' }])
+        const bueno = await useClientes().crear({ nombre: 'Verificador Bueno', tipo_documento_fiscal: 'nit', nit_cui: '1234567-9' }, nuevaClaveIdempotencia())
+        expect(bueno.ok && bueno.data).toMatchObject({ nit_cui: '12345679', tipo_documento_fiscal: 'nit', nit_cui_invalido: false })
+        sesionFixture(null)
     })
 
     it('rechaza nombre corto, correo y coordenadas inválidas con mensajes en español', () => {

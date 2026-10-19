@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { estado, usuarioConRoles } from '#tests/ayudas'
 import { crearCliente, crearServicio } from '#tests/notify/ayudas_notify'
 import { descifrar } from '#shared/cifrado'
-import { RUTA_CANJE_HORUS } from '#integraciones/horus/actions/conectar_con_enlace_horus'
+import { RUTA_CANJE_HORUS, partirEnlace } from '#integraciones/horus/actions/conectar_con_enlace_horus'
 import { RUTA_TICKETS_HORUS } from '#integraciones/horus/actions/abrir_en_horus'
 import { RUTA_RECEPTOR } from '#integraciones/horus/panel'
 import {
@@ -129,8 +129,28 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
             'sso.emitir',
         ])
 
-        // un solo uso
-        await estado(client.post('/api/v1/integraciones/horus/conexion/canjear').json(canje(codigo)), 410)
+        // un solo uso; la MISMA petición repetida (corte de red) recibe la misma respuesta (1.5.0)
+        // sin emitir otro atk_
+        const contarTokens = async () => {
+            const filas = await db.from('core.tokens_api').select('id')
+            return filas.length
+        }
+        const tokensAntes = await contarTokens()
+        const repetida = await estado(
+            client.post('/api/v1/integraciones/horus/conexion/canjear').json(canje(codigo)),
+            200,
+        )
+        assert.deepEqual(repetida.body(), cuerpo)
+        assert.equal(await contarTokens(), tokensAntes)
+        await estado(
+            client
+                .post('/api/v1/integraciones/horus/conexion/canjear')
+                .json(canje(codigo, { token: `hf_pat_${'O'.repeat(40)}` })),
+            410,
+        )
+        const filaUsada = await db.from('integraciones.horus_enlaces').first()
+        assert.match(filaUsada.peticion_sha256, /^[0-9a-f]{64}$/)
+        assert.notInclude(String(filaUsada.respuesta_cifrada), cuerpo.token)
 
         // auditado sin secretos ni el código
         const acciones = await db
@@ -198,6 +218,77 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
         assert.isNotNull(
             await db.from('core.tokens_api').where('hash', '!=', '').whereNotNull('revocado_en').first(),
         )
+    })
+
+    test('un enlace nuevo anula el anterior sin usar; base_url con /api/v1 se guarda como origen (1.5.0)', async ({
+        client,
+        assert,
+    }) => {
+        const { token: admin } = await usuarioConRoles(['admin'])
+        const viejo = await cuerpoDe(
+            client.post('/api/v1/integraciones/horus/enlace').bearerToken(admin),
+            201,
+        )
+        const nuevo = await cuerpoDe(
+            client.post('/api/v1/integraciones/horus/enlace').bearerToken(admin),
+            201,
+        )
+        await estado(
+            client
+                .post('/api/v1/integraciones/horus/conexion/canjear')
+                .json(canje(viejo.enlace.split('#')[1])),
+            410,
+        )
+        const generar = await db
+            .from('audit.acciones')
+            .where('accion', 'horus.generar_enlace')
+            .orderBy('id', 'desc')
+            .first()
+        assert.lengthOf(generar.entrada.auditoria.enlaces_anulados, 1)
+        await estado(
+            client
+                .post('/api/v1/integraciones/horus/conexion/canjear')
+                .json(canje(nuevo.enlace.split('#')[1], { base_url: 'https://horus.isp.example/api/v1/' })),
+            200,
+        )
+        const conector = await db.from('integraciones.horus_conector').where('id', 1).first()
+        assert.equal(conector.url_base, 'https://horus.isp.example')
+        // un origen con otra ruta o con credenciales no sirve
+        const otro = await cuerpoDe(client.post('/api/v1/integraciones/horus/enlace').bearerToken(admin), 201)
+        for (const base of ['https://horus.isp.example/otra', 'https://u:p@horus.isp.example']) {
+            await estado(
+                client
+                    .post('/api/v1/integraciones/horus/conexion/canjear')
+                    .json(canje(otro.enlace.split('#')[1], { base_url: base })),
+                422,
+            )
+        }
+    })
+
+    test('partirEnlace: la API de Horus en ?api= cuando el panel está en otro origen (1.5.0)', async ({
+        assert,
+    }) => {
+        const codigo = 'c'.repeat(43)
+        assert.deepEqual(partirEnlace(`https://horus.isp.example/conectar#${codigo}`), {
+            url_horus: 'https://horus.isp.example',
+            codigo,
+        })
+        assert.deepEqual(
+            partirEnlace(`https://panel.isp.example/conectar?api=https%3A%2F%2Fapi.isp.example#${codigo}`),
+            { url_horus: 'https://api.isp.example', codigo },
+        )
+        assert.deepEqual(
+            partirEnlace(`https://panel.isp.example/conectar?api=https://api.isp.example/api/v1#${codigo}`),
+            {
+                url_horus: 'https://api.isp.example',
+                codigo,
+            },
+        )
+        assert.isNull(
+            partirEnlace(`https://panel.isp.example/conectar?api=https://api.isp.example/x#${codigo}`),
+        )
+        assert.isNull(partirEnlace(`https://panel.isp.example/conectar?otra=1#${codigo}`))
+        assert.isNull(partirEnlace('https://panel.isp.example/conectar'))
     })
 
     test('conectar con enlace de Horus: Argos manda su atk_ y su receptor, guarda lo de Horus apagado; 410 de Horus → 422 sin token', async ({
@@ -280,9 +371,10 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
             const { usuario, token: admin } = await usuarioConRoles(['admin'])
             const servicioId = await crearServicio(await crearCliente())
             await fijarConector({ url_base: horus.url })
+            const ticket = `t${'k'.repeat(42)}`
             horus.responder(RUTA_TICKETS_HORUS, () => ({
                 status: 201,
-                cuerpo: { url: `${horus.url}/sso/entrar#ticket-1`, expira_en: '2026-10-17T10:01:00Z' },
+                cuerpo: { url: `${horus.url}/sso/entrar#${ticket}`, expira_en: '2026-10-17T10:01:00Z' },
             }))
             const r = await estado(
                 client
@@ -292,7 +384,7 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
                 200,
             )
             assert.deepEqual(r.body(), {
-                url: `${horus.url}/sso/entrar#ticket-1`,
+                url: `${horus.url}/sso/entrar#${ticket}`,
                 expira_en: '2026-10-17T10:01:00Z',
             })
             const pedido = horus.de(RUTA_TICKETS_HORUS)[0]!
@@ -308,18 +400,36 @@ test.group('integraciones · horus · enlace de conexión y autologin', (group) 
                 .first()
             assert.equal(auditada.entidad_id, servicioId)
 
-            // URL de otro sitio: no se abre
+            // El panel de Horus puede estar en otro origen que su API (1.5.0): se acepta si tiene la
+            // forma https://<panel>/sso/entrar#<ticket>.
             horus.responder(RUTA_TICKETS_HORUS, () => ({
                 status: 201,
-                cuerpo: { url: 'https://malo.example/x' },
+                cuerpo: { url: `https://panel.horus.example/sso/entrar#${ticket}` },
             }))
-            await estado(
+            const otroPanel = await estado(
                 client
                     .post('/api/v1/integraciones/horus/abrir')
                     .bearerToken(admin)
                     .json({ destino: { tipo: 'router', id_externo: '3' } }),
-                502,
+                200,
             )
+            assert.equal(otroPanel.body().url, `https://panel.horus.example/sso/entrar#${ticket}`)
+            // Otra forma: otra ruta, ticket en la consulta, credenciales o http sin laboratorio → no se abre
+            for (const mala of [
+                'https://malo.example/x',
+                `https://panel.horus.example/sso/entrar?t=${ticket}`,
+                `https://u:p@panel.horus.example/sso/entrar#${ticket}`,
+                `https://panel.horus.example/sso/entrar#corto`,
+            ]) {
+                horus.responder(RUTA_TICKETS_HORUS, () => ({ status: 201, cuerpo: { url: mala } }))
+                await estado(
+                    client
+                        .post('/api/v1/integraciones/horus/abrir')
+                        .bearerToken(admin)
+                        .json({ destino: { tipo: 'router', id_externo: '3' } }),
+                    502,
+                )
+            }
 
             const { token: soporte } = await usuarioConRoles(['soporte'])
             await estado(

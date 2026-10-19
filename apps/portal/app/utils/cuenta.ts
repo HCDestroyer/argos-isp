@@ -25,6 +25,19 @@ export const ESTADOS_FACTURA: Record<Schema<'PortalFactura'>['estado'], Presenta
     anulada: { etiqueta: 'Anulada', color: 'neutral', icono: 'i-lucide-ban' },
 }
 
+/** Una factura reemplazada por otra (sustitución) se muestra así, sea cual sea su estado. */
+export const FACTURA_SUSTITUIDA: Presentacion = { etiqueta: 'Sustituida', color: 'neutral', icono: 'i-lucide-replace' }
+
+/** Insignia de una factura: «Sustituida» manda sobre su estado de cobro. */
+export function presentacionFactura(factura: Pick<Schema<'PortalFactura'>, 'estado' | 'sustituida'>): Presentacion {
+    return factura.sustituida ? FACTURA_SUSTITUIDA : ESTADOS_FACTURA[factura.estado]
+}
+
+export const ESTADOS_NOTA_CREDITO: Record<Schema<'PortalNotaCredito'>['estado'], Presentacion> = {
+    vigente: { etiqueta: 'Aplicada', color: 'success', icono: 'i-lucide-circle-check' },
+    anulada: { etiqueta: 'Anulada', color: 'neutral', icono: 'i-lucide-ban' },
+}
+
 export const ESTADOS_PAGO: Record<Schema<'PortalPago'>['estado'], Presentacion> = {
     registrado: { etiqueta: 'Aplicado', color: 'success', icono: 'i-lucide-circle-check' },
     pendiente_verificacion: { etiqueta: 'En verificación', color: 'warning', icono: 'i-lucide-hourglass' },
@@ -69,9 +82,25 @@ export function formatearPeriodo(periodo: string): string {
     return partes && mes ? `${mes} ${partes[1]}` : periodo
 }
 
-/** "Aviso de cobro 1203" o "Factura A-123" (con FEL, semana 5). */
+const DOCUMENTOS: Record<Schema<'PortalFactura'>['documento'], string> = {
+    aviso_cobro: 'Aviso de cobro',
+    factura: 'Factura',
+    nota_debito: 'Nota de débito',
+}
+
+/** "Aviso de cobro 1203"; "Factura A1B2C3D4-2814509" solo con su DTE certificado. */
 export function nombreDocumento(factura: Pick<Schema<'PortalFactura'>, 'documento' | 'numero'>): string {
-    return `${factura.documento === 'factura' ? 'Factura' : 'Aviso de cobro'} ${factura.numero}`
+    return `${DOCUMENTOS[factura.documento]} ${factura.numero}`
+}
+
+/** "Nota de crédito 312" (interna) o "Nota de crédito (NCRE) 5D41402A-2874519" (certificada). */
+export function nombreNotaCredito(nota: Pick<Schema<'PortalNotaCredito'>, 'documento' | 'numero'>): string {
+    return `Nota de crédito${nota.documento === 'ncre' ? ' (NCRE)' : ''} ${nota.numero}`
+}
+
+/** Texto del botón del PDF según el documento. */
+export function etiquetaPdf(factura: Pick<Schema<'PortalFactura'>, 'documento'>): string {
+    return `Ver ${DOCUMENTOS[factura.documento].toLowerCase()} (PDF)`
 }
 
 /** Concepto corto de la factura: "Servicio de octubre 2026" o "Recargo por mora". */

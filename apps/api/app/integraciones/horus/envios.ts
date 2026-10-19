@@ -22,14 +22,22 @@ import { cabecerasFirmadas } from '#integraciones/horus/firma'
  *   entre reintentos (Horus deduplica).
  */
 
-/** Eventos del bus que van a Horus. `cliente.actualizado` lo emite A1 (puede no existir aún). */
+/**
+ * Eventos del bus que van a Horus (§2.3). `servicio.config_cambiada` (1.7.0) solo cuando cambian
+ * el plan o la empresa del servicio, lo que Horus muestra en su identidad (`CAMPOS_CONFIG_A_HORUS`);
+ * los cambios de IP llegan con `asignacion.cambiada`.
+ */
 export const EVENTOS_A_HORUS = [
     'asignacion.cambiada',
     'sesion.iniciada',
     'sesion.terminada',
     'cliente.actualizado',
     'servicio.estado_cambiado',
+    'servicio.config_cambiada',
 ] as const
+
+/** Campos de `servicio.config_cambiada` que cambian lo que Horus guarda del servicio (§2.4). */
+export const CAMPOS_CONFIG_A_HORUS = ['plan', 'empresa'] as const
 
 /** Esperas antes de cada reintento (contrato §1.3): 1 min, 5 min, 30 min, 2 h, 12 h. */
 export const REINTENTOS_S = [60, 300, 1800, 7200, 43200] as const
@@ -120,6 +128,21 @@ export async function payloadParaHorus(evento: string, p: Payload): Promise<Payl
             const clienteId = entero(p.cliente_id)
             if (!clienteId) return null
             return { cliente_id: clienteId, campos: Array.isArray(p.campos) ? p.campos : [] }
+        }
+        case 'servicio.config_cambiada': {
+            const servicioId = entero(p.servicio_id)
+            const campos = (Array.isArray(p.campos) ? p.campos : []).filter((c): c is string =>
+                (CAMPOS_CONFIG_A_HORUS as readonly unknown[]).includes(c),
+            )
+            if (!servicioId || campos.length === 0) return null
+            return {
+                servicio_id: servicioId,
+                empresa_id: entero(p.empresa_id) ?? (await empresaDeServicio(servicioId)),
+                campos,
+                ...(entero(p.empresa_anterior_id)
+                    ? { empresa_anterior_id: entero(p.empresa_anterior_id) }
+                    : {}),
+            }
         }
         case 'servicio.estado_cambiado': {
             const servicioId = entero(p.servicio_id)

@@ -4,10 +4,10 @@ import { actualizarConVersion } from '#shared/version'
 import {
     pdfDesdePlantilla,
     plantillaVigente,
+    vistaEjemplo,
     type PlantillaDocumento,
     type TipoDocumento,
 } from '#portal/documentos/render'
-import { vistaDeEjemplo } from '#portal/documentos/variables'
 
 export interface EntradaEditarPlantillaDocumento {
     tipo: TipoDocumento
@@ -33,7 +33,7 @@ export default class EditarPlantillaDocumento extends DomainAction<
         input: EntradaEditarPlantillaDocumento,
         t: Transaccion,
     ): Promise<PlantillaDocumento> {
-        await pdfDesdePlantilla(input.html, await vistaDeEjemplo(t.trx))
+        await pdfDesdePlantilla(input.html, await vistaEjemplo(input.tipo, t.trx))
 
         await t.trx.rawQuery('LOCK TABLE core.plantillas_documentos IN SHARE ROW EXCLUSIVE MODE')
         const antes = await plantillaVigente(input.tipo, t.trx)

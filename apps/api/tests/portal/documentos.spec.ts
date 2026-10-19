@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { test } from '@japa/runner'
 import type { ApiClient } from '@japa/api-client'
@@ -87,6 +88,24 @@ test.group('Documentos: HTML a PDF', () => {
         ]) {
             assert.include(texto, esperado)
         }
+    })
+
+    test('el texto se lee aunque el flujo comprimido termine en 0x0D', async ({ assert }) => {
+        // pdfkit escribe `stream\n<datos>\nendstream`; ~1 de cada 256 documentos termina sus datos
+        // en `\r` (byte bajo del Adler-32) y un extractor que busca `\r?\nendstream` lo perdía.
+        let encontrado: { pdf: Buffer; serie: string } | null = null
+        for (let i = 0; i < 5000 && !encontrado; i++) {
+            const serie = `ABCD1234-1449${i}`
+            const pdf = await htmlAPdf(`<h1>Factura</h1><p>Serie ${serie}</p>`)
+            const binario = pdf.toString('latin1')
+            const flujo = /\/Length (\d+)\n\/Filter \/FlateDecode\n>>\nstream\n/.exec(binario)!
+            const inicio = flujo.index + flujo[0].length
+            if (pdf[inicio + Number(flujo[1]) - 1] === 0x0d) encontrado = { pdf, serie }
+        }
+        assert.isNotNull(encontrado, 'ningún documento terminó su flujo en 0x0D')
+        const texto = textoDePdf(encontrado!.pdf)
+        assert.include(texto, 'Factura')
+        assert.include(texto, `Serie ${encontrado!.serie}`)
     })
 
     test('tabla larga pasa a otra página', async ({ assert }) => {
@@ -186,10 +205,24 @@ test.group('Documentos: aviso de cobro del portal y del panel', (group) => {
         const nit = nitAleatorio()
         const s = await crearServicio({ nit })
         const facturaId = await facturaConLinea(s.clienteId)
-        await db.from('billing.facturas').where('id', facturaId).update({
-            fel_uuid: 'ABCD1234-5678-90EF-1234-567890ABCDEF',
-            fel_serie: 'ABCD1234',
-            fel_numero: '1449658872',
+        // FEL fase 3: los datos salen del DTE certificado (`fiscal.dte`), no de `billing.facturas.fel_*`
+        const factura = await db.from('billing.facturas').where('id', facturaId).firstOrFail()
+        await db.table('fiscal.dte').insert({
+            empresa_id: factura.empresa_id,
+            documento_tipo: 'factura',
+            documento_id: facturaId,
+            tipo_dte: 'FACT',
+            estado: 'certificado',
+            proveedor: 'falso',
+            ambiente: 'pruebas',
+            identificador: randomUUID(),
+            autorizacion: `ABCD1234-5678-90EF-1234-${String(facturaId).padStart(12, '0')}`,
+            serie: 'ABCD1234',
+            numero: `1449${facturaId}`,
+            certificado_en: new Date(),
+            receptor: JSON.stringify({ tipo: 'nit', id: nit, nombre: 'Prueba' }),
+            total: factura.total,
+            iva: factura.iva,
         })
         const cookie = await entrar(client, nit)
         const respuesta = await estado(
@@ -198,13 +231,13 @@ test.group('Documentos: aviso de cobro del portal y del panel', (group) => {
         )
         assert.equal(
             respuesta.header('content-disposition'),
-            'inline; filename="factura-ABCD1234-1449658872.pdf"',
+            `inline; filename="factura-ABCD1234-1449${facturaId}.pdf"`,
         )
         const texto = textoDePdf(Buffer.from(respuesta.body() as Buffer))
         guardar('factura-fel', Buffer.from(respuesta.body() as Buffer))
         assert.include(texto, 'Factura')
-        assert.include(texto, 'ABCD1234-1449658872')
-        assert.include(texto, 'Autorización ABCD1234-5678-90EF-1234-567890ABCDEF')
+        assert.include(texto, `ABCD1234-1449${facturaId}`)
+        assert.include(texto, `Autorización ABCD1234-5678-90EF-1234-${String(facturaId).padStart(12, '0')}`)
         assert.notInclude(texto, 'no es una factura electrónica')
     })
 

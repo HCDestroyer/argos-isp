@@ -56,9 +56,26 @@ export interface ServicioVista {
     zona_nombre: string | null
     /** excepciones a la plantilla de facturación `{ campo: valor }` (tarea 11) */
     excepciones: Record<string, unknown>
+    /**
+     * Plan temporal `programado` o `activo` (lealtad, `core.servicios_planes_temporales`), o null.
+     * Activo: `plan_id` ya es el temporal y `plan_original_id` es el plan base al que vuelve.
+     */
+    plan_temporal: PlanTemporalResumen | null
     version: number
     created_at: string
     updated_at: string
+}
+
+export interface PlanTemporalResumen {
+    id: number
+    plan_id: number
+    plan_original_id: number
+    inicio: string
+    fin: string
+    estado: 'programado' | 'activo'
+    origen: 'lealtad' | 'manual'
+    origen_id: number | null
+    version: number
 }
 
 function columnas(cliente: QueryClientContract) {
@@ -108,6 +125,9 @@ function columnas(cliente: QueryClientContract) {
         ),
         cliente.raw(
             `(SELECT coalesce(jsonb_object_agg(e.campo, e.valor ORDER BY e.campo), '{}'::jsonb) FROM core.servicios_excepciones e WHERE e.servicio_id = s.id) AS excepciones`,
+        ),
+        cliente.raw(
+            `(SELECT jsonb_build_object('id', pt.id, 'plan_id', pt.plan_id, 'plan_original_id', pt.plan_original_id, 'inicio', pt.inicio, 'fin', pt.fin, 'estado', pt.estado, 'origen', pt.origen, 'origen_id', pt.origen_id, 'version', pt.version) FROM core.servicios_planes_temporales pt WHERE pt.servicio_id = s.id AND pt.estado IN ('programado', 'activo') LIMIT 1) AS plan_temporal`,
         ),
         's.version',
         's.created_at',

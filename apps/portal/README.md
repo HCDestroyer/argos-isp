@@ -134,7 +134,12 @@ la descripción pasaba por debajo del botón de cerrar.
 `pnpm test` corre dos tandas: `vitest.config.ts` (entorno `nuxt` con happy-dom, componentes y
 composables contra los fixtures) y `vitest.servidor.config.ts` (`tests/servidor/`, entorno node:
 compila el portal en `.nuxt/test/servidor` y lo levanta con una API falsa; unos 40 s).
-`pnpm test:servidor` corre solo la segunda.
+`pnpm test:servidor` corre solo la segunda. El servidor se levanta con `servidorCon(env)`
+(`tests/servidor/ayudas.ts`), no con `setup({ server: true })`: `startServer` elige un puerto libre y
+lo suelta antes de que Nitro escuche, y con varias apps probando en paralelo otro proceso puede
+tomarlo (`EADDRINUSE`). `servidorCon` reintenta con otro puerto (hasta 5 veces) y solo da por
+arrancado el servidor cuando el que responde es el nuestro (su `Listening on …:<puerto>`). Nitro no
+acepta `PORT=0` (`destr('0') || 3000`).
 
 ## Walled garden
 
@@ -180,6 +185,7 @@ Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos person
 | Listas por cursor con "Ver más" (un composable por recurso) | `useListaCursor`, `useFacturas`, `usePagos`, `usePromesas` |
 | Correo, teléfonos y canal preferido con `UForm` + zod (espejo de `editarContactoValidator`), 409 si cambió la `version`; Telegram deshabilitado hasta vincularlo (semana 2) | `app/components/cuenta/Contacto.vue`, `useContacto` |
 | "Ver aviso de cobro (PDF)" en cada factura: enlace a `/api/v1/portal/facturas/:id/pdf` en el mismo origen (la API genera el PDF; la cookie viaja sola) | `app/components/cuenta/Facturas.vue`, `useFacturas().urlPdf` |
+| FEL: «Factura» (o «Nota de débito») solo con el DTE certificado, autorización y fecha, "Descargar XML" (`/api/v1/portal/facturas/:id/xml`), «Sustituida» con la factura que la reemplaza, anulación en trámite o ante la SAT, notas de crédito (PDF con la marca de la empresa; NCRE con su XML; anuladas como tales) | `app/components/cuenta/Facturas.vue`, `app/components/cuenta/NotasCredito.vue`, `useNotasCredito` |
 | Fixtures: el código correcto es `123456`; la sesión es un estado en memoria (`fijarSesionFixture` en pruebas) | `fixtures/cuenta.ts`, `fixtures/index.ts` |
 
 Dependencia nueva: `zod` (misma versión que `apps/web`) para los esquemas de `UForm`.

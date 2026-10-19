@@ -12,9 +12,19 @@
 | `argosisp_cola_trabajos`                                                                  | `cola`, `estado` | `getJobCounts` de `notify-envios`, `notify-cron`, `billing-cron`, `aaa-accounting`, `routeros-cron`, `routeros-prefijos` (prefijo `COLAS_PREFIJO`)                                                                                            |
 | `argosisp_eventos_stream_longitud`, `argosisp_eventos_lag`, `argosisp_eventos_pendientes` | `grupo`          | `XLEN` y `XINFO GROUPS` de `argos:eventos`: lag = entradas que el grupo aún no leyó; pendientes = entregadas sin `XACK`                                                                                                                       |
 | `argosisp_outbox_sin_publicar`                                                            |                  | `audit.outbox` con `publicado_en` nulo (relay detenido)                                                                                                                                                                                       |
-| `argosisp_cron_ultima_ejecucion_timestamp_seconds`                                        | `cron`           | última fila `ok` con canal `cron` en `audit.acciones` de `facturas.generar`, `facturas.vencer_pendientes`, `servicios.corte`, `notificaciones.recordatorios`, `notificaciones.vigilar_crons`, `auditoria.crear_particiones` (últimos 40 días) |
+| `argosisp_cron_ultima_ejecucion_timestamp_seconds`                                        | `cron`           | última fila `ok` con canal `cron` en `audit.acciones` de `facturas.generar`, `facturas.vencer_pendientes`, `servicios.corte`, `lealtad.otorgar_antiguedad`, `lealtad.vencer`, `notificaciones.recordatorios`, `notificaciones.vigilar_crons`, `auditoria.crear_particiones` (últimos 40 días) |
 | `argosisp_incidentes_abiertos`                                                            | `tipo`           | `notify.incidentes` abiertos (alertas internas)                                                                                                                                                                                               |
 | `argosisp_metricas_error`                                                                 | `seccion`        | 1 si la sección falló en este scrape                                                                                                                                                                                                          |
 | `process_resident_memory_bytes`, `nodejs_heap_used_bytes`, `process_start_time_seconds`   |                  | proceso de la API                                                                                                                                                                                                                             |
 
 Prometheus, reglas de alerta y el servicio del compose: `infra/monitoring/README.md`. Pruebas: `tests/monitoreo/metricas.spec.ts`.
+
+## Versión instalada · `GET /api/v1/version` (distribución)
+
+`version.ts` + `esquemas.ts`, ruta en `start/routes/monitoreo.ts`. Cualquier usuario con sesión (sin permiso del ACL, como `/me`); no audita ni emite eventos.
+
+- `version`, `commit`, `compilada`: `ARGOSISP_VERSION`, `ARGOSISP_COMMIT` y `ARGOSISP_COMPILADA` que pone la imagen (`ARG` de los Dockerfiles, `.github/workflows/imagenes.yml`). Fuera de una imagen publicada, `desarrollo` y null.
+- `notas_url`: `https://github.com/HCDestroyer/argos-isp/releases/tag/v<versión>` (`ARGOSISP_REPO_URL` cambia el repositorio); null en desarrollo.
+- `cambios`: la sección de la versión en el `CHANGELOG.md` que la imagen trae en `/app/CHANGELOG.md` (en desarrollo, el de la raíz del monorepo; `ARGOSISP_CHANGELOG` cambia la ruta), en Markdown. Se lee una vez por proceso.
+
+Pruebas: `tests/monitoreo/version.spec.ts`. Distribución completa: `infra/produccion/README.md`.

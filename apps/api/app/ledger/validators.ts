@@ -96,6 +96,7 @@ export const diarioValidator = vine.compile(
                 'banco',
                 'provision',
                 'castigo',
+                'lealtad',
             ] as const)
             .optional(),
         origen_id: idEntidad()

@@ -38,6 +38,9 @@ const pestanas = computed<TabsItem[]>(() => {
     if (puede('clientes.estado_cuenta')) {
         lista.push({ label: 'Estado de cuenta', value: 'cuenta', icon: 'i-lucide-wallet' })
     }
+    if (puede('lealtad.ver')) {
+        lista.push({ label: 'Puntos', value: 'puntos', icon: 'i-lucide-gem' })
+    }
     if (puede('bitacora.ver')) {
         lista.push({ label: 'Línea de tiempo', value: 'linea', icon: 'i-lucide-history' })
     }
@@ -72,7 +75,9 @@ const camposPersonalizados = computed(() => Object.entries(cliente.value?.campos
  */
 const filtrosLinea = computed<FiltrosAcciones>(() => ({ cliente_id: clienteId.value, excluir_canal: 'portal' }))
 
-const consumidorFinal = computed(() => cliente.value?.nit_cui?.toUpperCase() === 'CF')
+const consumidorFinal = computed(() => cliente.value?.tipo_documento_fiscal === 'cf' || cliente.value?.nit_cui?.toUpperCase() === 'CF')
+/** Tipo de documento (A1 lo envía siempre; clientes de fixtures viejos: se deduce del número). */
+const tipoDocumento = computed(() => cliente.value?.tipo_documento_fiscal ?? deducirTipoDocumento(cliente.value?.nit_cui))
 
 async function cargarServicios() {
     if (!puede('servicios.ver')) {
@@ -121,6 +126,11 @@ onMounted(cargar)
         icono="i-lucide-user"
     >
         <template #acciones>
+            <VerEnHorusBoton
+                v-if="cliente"
+                tipo="cliente"
+                :id-externo="cliente.id"
+            />
             <UButton
                 to="/clientes"
                 icon="i-lucide-arrow-left"
@@ -319,7 +329,16 @@ onMounted(cargar)
                 class="flex flex-col gap-4"
             >
                 <UAlert
-                    v-if="consumidorFinal || !cliente.nit_cui"
+                    v-if="cliente.nit_cui_invalido"
+                    color="warning"
+                    variant="subtle"
+                    icon="i-lucide-badge-alert"
+                    title="NIT o CUI por corregir"
+                    description="El número no pasó la validación al activar la localización fiscal (se conservó tal cual). Corrígelo en «Editar»: la factura FEL lo exige válido."
+                    data-prueba="nit-invalido"
+                />
+                <UAlert
+                    v-else-if="consumidorFinal || !cliente.nit_cui"
                     color="neutral"
                     variant="subtle"
                     icon="i-lucide-info"
@@ -328,9 +347,18 @@ onMounted(cargar)
                 />
                 <dl class="surface-card grid gap-x-8 gap-y-5 p-4 sm:grid-cols-2 sm:p-6">
                     <DatoFicha
-                        etiqueta="NIT / CUI"
-                        :valor="cliente.nit_cui"
+                        :etiqueta="tipoDocumento ? TIPOS_DOCUMENTO_FISCAL[tipoDocumento] : 'Documento'"
+                        :valor="consumidorFinal ? 'CF' : formatearDocumento(tipoDocumento, cliente.nit_cui)"
                         mono
+                    />
+                    <DatoFicha
+                        etiqueta="País"
+                        :valor="cliente.pais_fiscal ?? 'GT'"
+                        mono
+                    />
+                    <DatoFicha
+                        etiqueta="Retención y sector"
+                        :valor="[cliente.agente_retencion_iva ? 'Agente de retención de IVA' : null, cliente.sector_publico ? 'Sector público' : null].filter(Boolean).join(' · ') || 'Ninguno'"
                     />
                     <DatoFicha
                         etiqueta="Nombre fiscal"
@@ -362,6 +390,12 @@ onMounted(cargar)
                 v-else-if="pestana === 'cuenta'"
                 :cliente-id="cliente.id"
                 :servicios="servicios"
+            />
+
+            <ClientePuntos
+                v-else-if="pestana === 'puntos'"
+                :cliente-id="cliente.id"
+                :cliente-nombre="cliente.nombre"
             />
 
             <LineaTiempoBitacora

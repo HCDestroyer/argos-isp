@@ -13,6 +13,8 @@ export interface EstadoFiltrosClientes {
     planId: number | null
     conDeuda: boolean
     conPromesa: boolean
+    /** NIT/CUI marcado inválido al migrar a la localización fiscal (A1). */
+    nitInvalido: boolean
 }
 
 export const FILTROS_CLIENTES_VACIOS: Readonly<EstadoFiltrosClientes> = Object.freeze({
@@ -23,6 +25,7 @@ export const FILTROS_CLIENTES_VACIOS: Readonly<EstadoFiltrosClientes> = Object.f
     planId: null,
     conDeuda: false,
     conPromesa: false,
+    nitInvalido: false,
 })
 
 /** Accesos rápidos de la lista: "Todos", "Cortados" (suspendido) y "Con deuda" vencida. */
@@ -58,6 +61,7 @@ export function leerFiltrosClientes(query: LocationQuery): EstadoFiltrosClientes
         planId: idPositivo(query.plan),
         conDeuda: bandera(query.deuda),
         conPromesa: bandera(query.promesa),
+        nitInvalido: bandera(query.nit_invalido),
     }
 }
 
@@ -85,6 +89,9 @@ export function queryFiltrosClientes(filtros: EstadoFiltrosClientes): Record<str
     }
     if (filtros.conPromesa) {
         query.promesa = '1'
+    }
+    if (filtros.nitInvalido) {
+        query.nit_invalido = '1'
     }
     return query
 }
@@ -117,12 +124,15 @@ export function filtrosApiClientes(filtros: EstadoFiltrosClientes): FiltrosClien
     if (filtros.conPromesa) {
         resultado.con_promesa_activa = true
     }
+    if (filtros.nitInvalido) {
+        resultado.nit_cui_invalido = true
+    }
     return resultado
 }
 
 /** Filtros del panel puestos (la búsqueda no cuenta: se ve en su propia caja). */
 export function contarFiltrosClientes(filtros: EstadoFiltrosClientes): number {
-    return [filtros.zonaId, filtros.estado, filtros.routerId, filtros.planId, filtros.conDeuda, filtros.conPromesa]
+    return [filtros.zonaId, filtros.estado, filtros.routerId, filtros.planId, filtros.conDeuda, filtros.conPromesa, filtros.nitInvalido]
         .filter(valor => valor !== null && valor !== false)
         .length
 }

@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
-import { errorUrl } from '#integraciones/horus/configuracion'
+import { errorUrl, origenHorus } from '#integraciones/horus/configuracion'
 import { generarSecretoWebhook } from '#integraciones/horus/firma'
 import { bloquearConector, guardarConector } from '#integraciones/horus/escritura'
 import { vistaDeFila, type VistaConector } from '#integraciones/horus/panel'
@@ -56,9 +56,10 @@ export default class ConfigurarHorus extends DomainAction<EntradaConfigurarHorus
 
         const url = limpio(input.url_base)
         if (url !== undefined) {
-            const error = url === null ? null : errorUrl(url)
+            // Origen de Horus; se tolera que traiga `/api/v1` (contrato 1.5.0), que se quita.
+            const { origen, error } = url === null ? { origen: null, error: null } : origenHorus(url)
             if (error) errores.push({ field: 'url_base', message: error, rule: 'url' })
-            cambios.url_base = url === null ? null : url.replace(/\/+$/, '')
+            cambios.url_base = origen
         }
         const token = limpio(input.token)
         if (token !== undefined) {
