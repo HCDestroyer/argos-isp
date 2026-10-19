@@ -5586,6 +5586,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}/bloqueos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Historial de bloqueos y desbloqueos de un adicional (por la suspensión del servicio)
+         * @description Del más reciente al más viejo. El bloqueo lo pone y lo quita el estado del servicio.
+         */
+        get: operations["serviciosBloqueosAdicional"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/adicionales/{asignacionId}/credencial": {
         parameters: {
             query?: never;
@@ -6308,6 +6328,23 @@ export interface components {
             plan_id: number | null;
             /** @enum {string} */
             estado: "activo" | "baja";
+            /**
+             * @description bloqueado mientras el servicio está suspendido (lo pone el estado del servicio)
+             * @enum {string}
+             */
+            bloqueo?: "vigente" | "bloqueado";
+            /** Format: date-time */
+            bloqueado_en?: string | null;
+            /**
+             * @description Solo con cobrado: cómo se cobra el periodo en curso (lo factura A3)
+             * @enum {string|null}
+             */
+            primer_periodo?: "prorrateado" | "sin_costo" | null;
+            /**
+             * Format: date-time
+             * @description Solo con cobrado: desde cuándo se cobra
+             */
+            cobrado_desde?: string | null;
             /** Format: date-time */
             alta_en: string;
             /** Format: date-time */
@@ -6470,6 +6507,17 @@ export interface components {
             /** @description Cuenta contable del plan (1.1.02.xx) */
             cuenta_codigo: string;
             cuenta_nombre: string;
+        };
+        BloqueoAdicional: {
+            id: number;
+            asignacion_id: number;
+            /** @enum {string} */
+            accion: "bloqueado" | "desbloqueado";
+            /** @enum {string} */
+            estado_servicio: "activo" | "limitado" | "suspendido" | "retirado";
+            motivo: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         Caja: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
@@ -33546,6 +33594,8 @@ export interface operations {
                     /** @description Motivo de cortesía (GET /adicionales/motivos); obligatorio con cortesia */
                     motivo_id?: number | null;
                     motivo_detalle?: string | null;
+                    /** @description Solo con cobrado: prorrateado (por defecto) cobra la parte proporcional del periodo en curso; sin_costo no lo cobra */
+                    primer_periodo?: ("prorrateado" | "sin_costo") | null;
                 };
             };
         };
@@ -33637,6 +33687,8 @@ export interface operations {
                     precio?: string | null;
                     motivo_id?: number | null;
                     motivo_detalle?: string | null;
+                    /** @description Solo con cobrado: prorrateado (por defecto) cobra la parte proporcional del periodo en curso; sin_costo no lo cobra */
+                    primer_periodo?: ("prorrateado" | "sin_costo") | null;
                 };
             };
         };
@@ -33679,6 +33731,73 @@ export interface operations {
             };
             /** @description Conflicto de versión */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosBloqueosAdicional: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+                asignacionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de bloqueos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BloqueoAdicional"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

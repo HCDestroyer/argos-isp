@@ -140,6 +140,8 @@ Streaming, IPTV y similares asignados a un servicio: `incluido` (en el plan), `c
 
 - `servicios.crear` agrega los incluidos del plan; `servicios.editar` con otro plan los reconcilia (`reconciliarIncluidos`: conserva los que el plan nuevo también trae, da de baja el resto y agrega los que faltan; `cortesia` y `cobrado` se quedan); un plan temporal no los toca; `servicios.retirar` da de baja todos; `servicios.cambiar_empresa` responde 422 `servicio_con_adicionales` con cortesías o cobrados vigentes y re-deriva los incluidos.
 - La credencial va cifrada v1 (`#shared/cifrado`) y como `***` en auditoría; las vistas solo traen `tiene_credencial`.
+- Suspensión: `CambiarEstadoServicio` llama anidada a `aplicarBloqueoPorEstado`. Entrar a `suspendido` bloquea los adicionales activos y salir los desbloquea; `limitado` no bloquea. Cada cambio deja diff, historial en `core.servicios_adicionales_bloqueos` (solo inserción; `GET …/:asignacionId/bloqueos`) y `adicional.bloqueado` o `adicional.desbloqueado`. Un adicional agregado a un servicio suspendido nace bloqueado.
+- `cobrado`: `primer_periodo` (`prorrateado` por defecto o `sin_costo`) y `cobrado_desde`; la línea de factura es de A3.
 
 ## Lealtad: planes temporales y referidos (`planes_temporales.ts`, `referidos.ts`, `jobs.ts`; contrato `.claude/integration/contratos/lealtad.md` §3, §5 y §16)
 
@@ -189,7 +191,7 @@ Streaming, IPTV y similares asignados a un servicio: `incluido` (en el plan), `c
 - Contrato: `.claude/integration/contratos/eventos.md`. `node ace eventos:relay` publica `audit.outbox` (pendientes, en orden de `id`, por lotes) en el stream `argos:eventos` (`EVENTOS_STREAM`; en pruebas `<COLAS_PREFIJO>:argos:eventos`) y marca `publicado_en`. Un solo relay activo (lock en Redis con dueño y renovación).
 - `EjecutorGrupo` (genérico para A1, A3 y A6): `XREADGROUP` + `XACK`, `XAUTOCLAIM` tras 60 s si un consumidor lanzó. Interfaz `ConsumidorEventos` / `EventoEntrante` (reexportada en `app/notify/consumidor.ts`).
 - Grupo `aaa-cache` (`consumidor_aaa.ts`): `servicio.*` y `asignacion.cambiada` reescriben `aaa:user:<user_ppp>`. Corre dentro de `eventos:relay`. El grupo `notify` corre dentro de `node ace notify:worker`.
-- Eventos que emite el núcleo: `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.adicional_agregado`, `servicio.adicional_cambiado`, `servicio.adicional_quitado`. Consume: los cuatro primeros (grupo `aaa-cache`; los de adicionales no cambian RADIUS).
+- Eventos que emite el núcleo: `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.adicional_agregado`, `servicio.adicional_cambiado`, `servicio.adicional_quitado`, `adicional.bloqueado`, `adicional.desbloqueado`. Consume: los cuatro primeros (grupo `aaa-cache`; los de adicionales no cambian RADIUS).
 - Dependencias con otros módulos: llama `EvaluarEstadoServicio` de A3 (solo al cambiar excepciones que afectan el corte) y lee `configuracionDeServicio` de `app/billing/configuracion.ts`. Pedidos y avisos en `.claude/integration/a1.md`.
 
 ## Seguridad de la API (semana 3)

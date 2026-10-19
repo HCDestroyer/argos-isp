@@ -3,7 +3,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { cifrar, descifrar } from '#shared/cifrado'
 import { actualizarConVersion, verificarVersion } from '#shared/version'
-import type { CampoAdicionalCambiado, ModalidadAdicional } from '#shared/eventos'
+import type { CampoAdicionalCambiado, ModalidadAdicional, PrimerPeriodoAdicional } from '#shared/eventos'
 import {
     exigirMotivoCortesia,
     filaAsignacion,
@@ -11,7 +11,11 @@ import {
     verAsignacion,
     type AsignacionAdicionalVista,
 } from '#core/adicionales'
-import { exigirPermisoCortesia, validarModalidad } from '#core/actions/agregar_adicional_servicio'
+import {
+    exigirPermisoCortesia,
+    exigirPrimerPeriodo,
+    validarModalidad,
+} from '#core/actions/agregar_adicional_servicio'
 
 export interface EntradaEditarAdicionalServicio {
     servicio_id: number
@@ -26,6 +30,8 @@ export interface EntradaEditarAdicionalServicio {
     precio?: string | null
     motivo_id?: number | null
     motivo_detalle?: string | null
+    /** solo con `cobrado` (ver `AgregarAdicionalServicio`) */
+    primer_periodo?: PrimerPeriodoAdicional | null
     /** ver `AgregarAdicionalServicio`; ausente = sí */
     permiteCortesia?: boolean
 }
@@ -42,6 +48,8 @@ function mismoPrecio(a: unknown, b: string | null): boolean {
  * - Al dejar de ser `cobrado` se borra el precio; al dejar de ser `cortesia`, el motivo; al dejar
  *   de ser `incluido`, el plan que lo trajo (un cambio de plan ya no lo da de baja).
  * - Pasar a `cobrado` exige `precio`; a `cortesia`, `motivo_id` y `servicios.adicional_cortesia`.
+ * - Pasar a `cobrado` fija `cobrado_desde` = ahora y `primer_periodo` (`prorrateado` si no viene);
+ *   dejar de ser `cobrado` los borra. El bloqueo no se edita: lo pone el estado del servicio.
  * - Dado de baja: 422 `adicional_dado_de_baja`. Sin cambios: 200 sin tocar la versión.
  * - Emite `servicio.adicional_cambiado` con `campos` (`credencial` sin su valor).
  */
@@ -86,6 +94,7 @@ export default class EditarAdicionalServicio extends DomainAction<
         )
         const final = { modalidad, precio, motivo_id: motivoId, motivo_detalle: motivoDetalle }
         validarModalidad(final)
+        exigirPrimerPeriodo(modalidad, input.primer_periodo)
 
         const campos: CampoAdicionalCambiado[] = []
         const columnas: Record<string, unknown> = {}
@@ -93,6 +102,22 @@ export default class EditarAdicionalServicio extends DomainAction<
             campos.push('modalidad')
             columnas.modalidad = modalidad
             if (modalidad !== 'incluido') columnas.plan_id = null
+            // pasar a cobrado empieza a cobrar ahora; dejar de serlo borra el primer periodo
+            columnas.cobrado_desde = modalidad === 'cobrado' ? t.trx.knexRawQuery('now()') : null
+            if (modalidad !== 'cobrado') columnas.primer_periodo = null
+        }
+        const primerPeriodo =
+            modalidad !== 'cobrado'
+                ? null
+                : (input.primer_periodo ??
+                  (antes.modalidad === 'cobrado'
+                      ? (antes.primer_periodo as PrimerPeriodoAdicional)
+                      : 'prorrateado'))
+        if (primerPeriodo !== ((antes.primer_periodo as string | null) ?? null)) {
+            if (modalidad === 'cobrado' || antes.modalidad === 'cobrado') {
+                if (antes.modalidad === modalidad) campos.push('primer_periodo')
+                columnas.primer_periodo = primerPeriodo
+            }
         }
         if (input.identificador !== undefined && input.identificador !== (antes.identificador ?? null)) {
             campos.push('identificador')

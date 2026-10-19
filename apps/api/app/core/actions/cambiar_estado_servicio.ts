@@ -3,6 +3,7 @@ import { NoEncontrado, ReglaNegocio } from '#shared/errores'
 import type { EstadoServicio } from '#shared/eventos'
 import { verServicio } from '#core/consultas/servicios'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
+import { aplicarBloqueoPorEstado } from '#core/adicionales'
 
 /** Estados entre los que se mueve un servicio vivo. `retirado` solo se alcanza con `RetirarServicio`. */
 export type EstadoOperativo = Exclude<EstadoServicio, 'retirado'>
@@ -34,6 +35,9 @@ export interface ResultadoCambiarEstado {
  * - Bloquea la fila (`FOR UPDATE`) para que dos evaluaciones concurrentes no se pisen.
  * - Emite `servicio.estado_cambiado` por outbox y registra el diff en `audit.cambios`.
  * - Después del COMMIT reescribe `aaa:user:<user_ppp>` en Redis (tarea 9).
+ * - Adicionales (`contratos/adicionales.md`): al entrar a `suspendido` bloquea los del servicio y al
+ *   salir los desbloquea, en esta misma transacción (`aplicarBloqueoPorEstado`). `limitado` no
+ *   bloquea.
  */
 export default class CambiarEstadoServicio extends DomainAction<
     EntradaCambiarEstado,
@@ -79,6 +83,13 @@ export default class CambiarEstadoServicio extends DomainAction<
             a: input.nuevo,
             motivo: input.motivo,
         })
+        await aplicarBloqueoPorEstado(
+            t,
+            { id: input.servicioId, empresa_id: Number(fila.empresa_id), cliente_id: despues.cliente_id },
+            fila.estado,
+            input.nuevo,
+            input.motivo,
+        )
         refrescarAaaAlConfirmar(t, { servicioId: input.servicioId })
         return { servicioId: input.servicioId, de: fila.estado, a: input.nuevo, cambiado: true }
     }
