@@ -72,6 +72,8 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.activos_cuotas': 'cuota de depreciación (§10.10)',
     'ledger.diferimientos': 'diferimiento (§10.10)',
     'ledger.diferimientos_cuotas': 'cuota de diferimiento (§10.10)',
+    // fase 5 (A3): diferimiento cancelado al anular su compra antes de amortizarlo (§10.10)
+    'ledger.diferimientos_cancelaciones': 'cancelación de un diferimiento (§10.10)',
 }
 
 /** Solo cambian una vez: al cerrarse. Un trigger rechaza UPDATE/DELETE de la fila ya cerrada. */

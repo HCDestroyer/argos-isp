@@ -24,6 +24,7 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     depreciacion: { etiqueta: 'Depreciación', icono: 'i-lucide-trending-down' },
     baja_activo: { etiqueta: 'Baja de activo', icono: 'i-lucide-package-x' },
     diferido: { etiqueta: 'Diferido', icono: 'i-lucide-calendar-range' },
+    alta_activo: { etiqueta: 'Alta de activo', icono: 'i-lucide-package-plus' },
 }
 
 export const TIPOS_CUENTA: Record<Schema<'Cuenta'>['tipo'], string> = {

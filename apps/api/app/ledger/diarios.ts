@@ -138,6 +138,7 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     depreciacion: 'VAR',
     baja_activo: 'VAR',
     diferido: 'VAR',
+    alta_activo: 'VAR',
 }
 
 export interface DiarioAsiento {

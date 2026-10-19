@@ -42,6 +42,7 @@ import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
 import bancos from '#start/routes/bancos'
 import compras from '#start/routes/compras'
+import activos from '#start/routes/activos'
 
 const cajas: Ruta[] = [
     definirRuta({
@@ -416,4 +417,4 @@ const periodos: Ruta[] = [
     }),
 ]
 
-export default [...cajas, ...libro, ...egresos, ...periodos, ...bancos, ...compras]
+export default [...cajas, ...libro, ...egresos, ...periodos, ...bancos, ...compras, ...activos]

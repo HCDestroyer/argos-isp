@@ -127,6 +127,7 @@ export const Asiento = definirEsquema(
                 'depreciacion',
                 'baja_activo',
                 'diferido',
+                'alta_activo',
             ]),
             origen_id: nulable(id),
             reversa_de: {

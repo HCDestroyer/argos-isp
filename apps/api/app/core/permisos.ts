@@ -138,6 +138,9 @@ export const PERMISOS = {
     'compras.registrar': 'Registrar compras, también desde un egreso',
     'compras.anular': 'Anular compras con asiento de reverso',
     'compras.pagar': 'Registrar y anular pagos a proveedores',
+    'activos.ver': 'Ver activos fijos, su depreciación y sus bajas',
+    'activos.registrar': 'Dar de alta activos fijos sin compra y registrar la depreciación pendiente',
+    'activos.dar_de_baja': 'Dar de baja (venta o retiro) un activo fijo con su asiento',
     'libros.ver': 'Ver los libros legales (vista previa) y sus habilitaciones',
     'libros.emitir': 'Emitir libros legales con folio sobre un periodo bloqueado',
     'libros.habilitar': 'Registrar habilitaciones de folios de libros',
@@ -192,7 +195,7 @@ const lectura = NOMBRES_PERMISOS.filter((p) => p.endsWith('.ver'))
 const PERMISOS_FISCALES = NOMBRES_PERMISOS.filter(
     (p) =>
         p === 'empresas.cambiar_pais' ||
-        /^(fiscal|fel|proveedores|compras|libros|declaraciones)\./.test(p) ||
+        /^(fiscal|fel|proveedores|compras|libros|declaraciones|activos)\./.test(p) ||
         /^libro\.(cerrar_ejercicio|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear)$/.test(p),
 )
 const SOLO_ADMIN_FISCAL: readonly Permiso[] = [

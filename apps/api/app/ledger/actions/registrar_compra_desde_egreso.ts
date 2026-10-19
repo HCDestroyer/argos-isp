@@ -138,7 +138,7 @@ export default class RegistrarCompraDesdeEgreso extends DomainAction<EntradaComp
             usuarioDelActor(t.ctx.actor),
         )
         t.fijarEntidad('compra', compraId)
-        const altas = await altasDeLaCompra(t, compraId, compra)
+        const altas = await altasDeLaCompra(t, compraId, compra, input.lineas)
         await new RegistrarAsiento().execute(
             {
                 empresa_id: compra.empresaId,

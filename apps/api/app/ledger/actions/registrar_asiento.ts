@@ -47,6 +47,7 @@ export const ORIGENES_ASIENTO = [
     'depreciacion',
     'baja_activo',
     'diferido',
+    'alta_activo',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 

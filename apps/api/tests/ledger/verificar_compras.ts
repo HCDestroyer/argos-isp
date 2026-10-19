@@ -16,7 +16,7 @@ import { SUPERADOS_POR_FASE4, verificarLibroFase4 } from '#tests/ledger/verifica
  */
 export const SUPERADOS_POR_FASE5: Record<string, string> = {
     'F4.origen_de_asiento_desconocido':
-        'orígenes de la fase 5: compra, pago_proveedor, depreciacion, baja_activo, diferido',
+        'orígenes de la fase 5: compra, pago_proveedor, depreciacion, baja_activo, diferido, alta_activo',
     'F4.saldo_de_caja_o_banco_distinto_de_sus_documentos':
         'los pagos a proveedores sacan dinero de caja y bancos; un pago con retenciones recibidas entra neto de ellas',
     'F4.caja_cerrada_no_cuadra':
@@ -90,7 +90,7 @@ export async function invariantesFase5(empresas: number[]): Promise<Violacion[]>
             AND a.origen_tipo NOT IN ('factura', 'mora', 'pago', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
                                       'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
                                       'provision', 'castigo', 'compra', 'pago_proveedor', 'depreciacion',
-                                      'baja_activo', 'diferido')`,
+                                      'baja_activo', 'diferido', 'alta_activo')`,
     )
 
     // R2 · pago vigente: dinero = monto − comisión − retenido; constancias = retenido (1.1.05 + 1.1.06)
@@ -148,6 +148,12 @@ export async function invariantesFase5(empresas: number[]): Promise<Violacion[]>
              SELECT pp.empresa_id, -pp.monto, pp.cuenta_id FROM ledger.pagos_proveedores pp
               WHERE ${E('pp.empresa_id')} AND NOT EXISTS (SELECT 1 FROM ledger.pagos_proveedores_anulaciones x WHERE x.pago_id = pp.id)`
         : ''
+    const ventasActivos = conActivos
+        ? `UNION ALL
+             SELECT ac.empresa_id, b.precio_venta, b.cuenta_cobro_id FROM ledger.activos_bajas b
+               JOIN ledger.activos ac ON ac.id = b.activo_id
+              WHERE ${E('ac.empresa_id')} AND b.tipo = 'venta'`
+        : ''
     await revisar(
         'F5.saldo_de_caja_o_banco_distinto_de_sus_documentos',
         `WITH docs AS (
@@ -183,6 +189,7 @@ export async function invariantesFase5(empresas: number[]): Promise<Violacion[]>
                  ${depositos}
                  ${extracto}
                  ${pagosProveedores}
+                 ${ventasActivos}
              ) x (empresa_id, monto, cuenta_id) GROUP BY 1, 2
          ), libro AS (
              SELECT a.empresa_id, m.cuenta_id, sum(m.debe - m.haber) AS saldo
@@ -421,19 +428,21 @@ export async function invariantesFase5(empresas: number[]): Promise<Violacion[]>
 
     if (conActivos) {
         await revisar(
-            'F5.activo_depreciado_de_mas (Σ cuotas ≤ costo − residual; una cuota por activo y mes)',
+            'F5.activo_depreciado_de_mas (inicial + Σ cuotas ≤ costo − residual; una cuota por activo y mes)',
             `SELECT ac.id, ac.costo::text, ac.valor_residual::text, coalesce(sum(q.monto), 0)::text AS depreciado
                FROM ledger.activos ac LEFT JOIN ledger.activos_cuotas q ON q.activo_id = ac.id
               WHERE ${E('ac.empresa_id')}
-              GROUP BY ac.id, ac.costo, ac.valor_residual
-             HAVING coalesce(sum(q.monto), 0) > ac.costo - ac.valor_residual
+              GROUP BY ac.id, ac.costo, ac.valor_residual, ac.depreciacion_inicial
+             HAVING ac.depreciacion_inicial + coalesce(sum(q.monto), 0) > ac.costo - ac.valor_residual
                  OR count(q.id) <> count(DISTINCT q.mes)`,
         )
         await revisar(
             'F5.depreciacion_acumulada_distinta (1.2.02.NN = Σ cuotas de los activos vivos de su clase)',
             `WITH docs AS (
-                 SELECT ac.empresa_id, ac.cuenta_depreciacion_id AS cuenta_id, sum(q.monto) AS monto
-                   FROM ledger.activos ac JOIN ledger.activos_cuotas q ON q.activo_id = ac.id
+                 SELECT ac.empresa_id, ac.cuenta_depreciacion_id AS cuenta_id,
+                        sum(ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q
+                                                                 WHERE q.activo_id = ac.id), 0)) AS monto
+                   FROM ledger.activos ac
                   WHERE ${E('ac.empresa_id')} AND NOT EXISTS (SELECT 1 FROM ledger.activos_bajas b WHERE b.activo_id = ac.id)
                   GROUP BY 1, 2
              ), libro AS (

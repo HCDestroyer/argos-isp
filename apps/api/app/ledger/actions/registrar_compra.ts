@@ -158,7 +158,7 @@ export default class RegistrarCompra extends DomainAction<EntradaRegistrarCompra
                 })
         }
 
-        const altas = await altasDeLaCompra(t, compraId, compra)
+        const altas = await altasDeLaCompra(t, compraId, compra, input.lineas)
         await new RegistrarAsiento().execute(
             {
                 empresa_id: compra.empresaId,

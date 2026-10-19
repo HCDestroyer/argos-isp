@@ -101,6 +101,7 @@ export const diarioValidator = vine.compile(
                 'depreciacion',
                 'baja_activo',
                 'diferido',
+                'alta_activo',
             ] as const)
             .optional(),
         origen_id: idEntidad()

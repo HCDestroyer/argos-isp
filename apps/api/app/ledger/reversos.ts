@@ -58,6 +58,7 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         documento: 'la cuota con un asiento de ajuste (las cuotas de depreciación no se anulan)',
     },
     baja_activo: { accion: 'activos.dar_de_baja', documento: 'la baja con un asiento de ajuste' },
+    alta_activo: { accion: 'activos.dar_de_baja', documento: 'el activo dándolo de baja (retiro)' },
     diferido: {
         accion: 'libro.registrar_asiento',
         documento: 'el diferimiento con un asiento de ajuste (las cuotas no se anulan)',
