@@ -5,15 +5,15 @@ import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import { avisosPorCertificar } from '#fiscal/fel/cola'
 
 /**
- * Consumidor de `pago.registrado` (grupo `billing`, en `node ace billing:worker`): los avisos de
- * cobro que el pago dejó cubiertos piden su certificación al momento (contrato §8.3), sin esperar a
- * la corrida de la cola `fel`. Idempotente: `fel.certificar` devuelve el DTE vigente si ya existe.
+ * Consumidor de `pago.registrado` y `pago.diferencia_cerrada` (grupo `billing`, en `node ace
+ * billing:worker`): los avisos de cobro que el pago (o el cierre de su diferencia, decisión B) dejó
+ * cubiertos piden su certificación al momento (contrato §8.3), sin esperar a la corrida de la cola `fel`. Idempotente: `fel.certificar` devuelve el DTE vigente si ya existe.
  */
 export class ConsumidorFel implements ConsumidorEventos {
     readonly nombre = 'fiscal-fel'
 
     acepta(evento: string): boolean {
-        return evento === 'pago.registrado'
+        return evento === 'pago.registrado' || evento === 'pago.diferencia_cerrada'
     }
 
     async procesar(evento: EventoEntrante): Promise<void> {

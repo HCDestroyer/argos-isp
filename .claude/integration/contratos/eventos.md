@@ -58,6 +58,7 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `banco.extracto_importado` | A3 (`ImportarExtracto`, `POST /bancos/extractos`; lo llaman los adaptadores por banco de A6) | `extracto_id`, `empresa_id`, `cuenta_bancaria_id` (o null), `cuenta_id`, `lineas` (número), `monto` (Σ con signo) | Nadie aún |
 | `banco.conciliado` | A3 (`ConciliarLinea`, también desde `RegistrarDesdeExtracto` y `AplicarReglasConciliacion`) | `conciliacion_id` (primera fila del grupo), `empresa_id`, `cuenta_bancaria_id` (o null), `cuenta_id`, `linea_id`, `lineas` (1), `monto` | Nadie aún |
 | `cartera.castigada` | A3 (`CastigarCartera`, `POST /cartera/castigos`; §10.9) | `castigo_id`, `empresa_id`, `cliente_id`, `facturas[]`, `monto` | A6 (aviso a contabilidad, opcional). El servicio ya se re-evaluó dentro de la acción |
+| `pago.diferencia_cerrada` | A3 (`CerrarDiferenciaPago`, `POST /pagos/:id/cerrar-diferencia`; decisión B) | `pago_id`, `empresa_id`, `cliente_id` (pagador), `facturas[]` (ids), `monto` | `fiscal-fel` (A3): pide la certificación de los avisos que quedaron cubiertos, como con `pago.registrado`. A6 (opcional). Los servicios ya se re-evaluaron dentro de la acción |
 | `compra.registrada` | A3 (`RegistrarCompra`, `RegistrarCompraDesdeEgreso`; `POST /compras`, `POST /compras/desde-egreso/:egresoId`; localización fiscal §3.4) | `compra_id`, `empresa_id`, `proveedor_id`, `total`, `iva`, `periodo_iva` (YYYY-MM, mes del libro de compras) | Nadie aún (A6: importación de compras; A4: libro de compras) |
 | `compra.anulada` | A3 (`AnularCompra`, `POST /compras/:id/anular`) | Igual que `compra.registrada` | Nadie aún |
 | `activo.dado_de_baja` | A3 (`DarDeBajaActivo`, `POST /activos/:id/dar-de-baja`; §10.10) | `activo_id`, `empresa_id`, `motivo`, `valor_libros` | Nadie aún (A6 opcional: aviso a contabilidad) |
@@ -141,6 +142,8 @@ Los consumidores no deben fallar con un campo que no conocen: el dispatcher reca
 - `cliente_id` es **quien paga**. `clientes` (desde 2026-10-16, decisión del PM) es el pagador seguido de los dueños de las facturas a las que se aplicó (pago de terceros: una persona paga con una sola transferencia su factura y la de un familiar). Eventos anteriores no lo traen: los consumidores usan `clientes ?? [cliente_id]`.
 - `metodo`: `caja`, `pasarela`, `deposito`, `transferencia`, `ach`, `remesa`, `agente`, `debito`.
 - Consumidores: `billing` revisa las promesas de cada cliente de `clientes`; `notify` avisa al pagador (`pago.registrado`) y a cada dueño de factura distinto del pagador (`pago.registrado.tercero`: "Recibimos el pago de tu factura N, hecho por <pagador>"), idempotente por (evento, cliente).
+
+`pago.diferencia_cerrada` (decisión B, 2026-10-19): `{ pago_id, empresa_id, cliente_id, facturas[], monto }`. El saldo pequeño que dejó el pago en cada factura se cerró como gasto (`5.3.05 / CxC`, asiento `diferencia_cobro`), sin nota de crédito ni cambio de IVA o DTE; `pagado` no cambia (solo dinero cobrado) y las facturas quedan `pagada`. Anular el pago revierte la diferencia (sin evento propio: va dentro de `pago.anulado`).
 
 ## Payloads de notas de crédito (A3)
 

@@ -122,6 +122,7 @@ export interface FiltrosEgresos extends OpcionesPaginacion {
     metodo?: MetodoEgreso
     estado?: EstadoEgreso
     caja_id?: number
+    turno_id?: number
     cuenta_bancaria_id?: number
 }
 
@@ -137,6 +138,7 @@ export async function listarEgresos(
         .if(filtros.categoria, (q) => q.where('ec.clave', filtros.categoria!))
         .if(filtros.metodo, (q) => q.where('e.metodo', filtros.metodo!))
         .if(filtros.caja_id, (q) => q.where('e.caja_id', filtros.caja_id!))
+        .if(filtros.turno_id, (q) => q.where('e.turno_id', filtros.turno_id!))
         .if(filtros.cuenta_bancaria_id, (q) => q.where('e.cuenta_bancaria_id', filtros.cuenta_bancaria_id!))
         .if(filtros.estado === 'anulado', (q) => q.whereNotNull('an.id'))
         .if(filtros.estado === 'registrado', (q) => q.whereNull('an.id'))
