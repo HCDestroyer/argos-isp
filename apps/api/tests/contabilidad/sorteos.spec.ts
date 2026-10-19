@@ -111,8 +111,12 @@ async function ejecutado(e: EmpresasGt, valorPublico = '90210') {
     )
 }
 
-/** Cuenta de activo (no control) de donde sale el bien: «otros bienes muebles», como inventario de premios. */
-const CUENTA_BIEN = '1.2.01.07'
+/**
+ * Cuenta de la línea de la compra del bien: un gasto (otros gastos) que la entrega reclasifica a
+ * 5.1.03. Ya no `1.2.01.07`: una línea bien no va a propiedad, planta y equipo sin su activo
+ * (observación del propio auditor, 422 `cuenta_activo_fijo`).
+ */
+const CUENTA_BIEN = '5.2.99'
 
 /** Línea de una compra a crédito con factura de un bien de la empresa B. */
 async function lineaDeCompra(e: EmpresasGt, total: string, cuenta: string): Promise<number> {
@@ -228,7 +232,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
         }
         assert.deepEqual(await lineas('sorteo', Number(porPremio(2)[0]!.id)), [
             ['5.1.03', '340.00', '0.00'],
-            ['1.2.01.07', '0.00', '340.00'],
+            ['5.2.99', '0.00', '340.00'],
             ['5.1.03', '33.34', '0.00'],
             ['2.1.05', '0.00', '33.34'],
         ])
@@ -639,5 +643,5 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 assert.isFalse(await intentar(trx, sql, [suplente.id]), sql)
             }
         })
-    }).fails('H26: congelar_ganador no congela sustituye_a ni premio_sustitucion una vez asignados')
+    })
 })
