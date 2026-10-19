@@ -64,7 +64,24 @@ Qué hace, en orden:
 
 Los datos viven en volúmenes de Docker del proyecto `argosisp` (`pgdata`, `redisdata`, `comprobantes`, `caddydata`, `aaa-datos`, `radius-clientes`): no cambian entre versiones.
 
-Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `aaa-vigia`, `web`, `portal`, `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
+Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `aaa-vigia`, `web`, `portal`, `api-portal` (si `ARGOSISP_API_PORTAL=si`), `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
+
+## API del portal (`api-portal`)
+
+Un segundo proceso de la misma API (misma imagen, misma base, mismo Redis) que atiende solo `/api/v1/portal/**`, para que el tráfico de los clientes y la página de corte no hagan lenta la API del panel. No guarda datos propios: no hay nada que sincronizar. El instalador lo deja encendido (`ARGOSISP_API_PORTAL=si` en el `.env`), salvo con menos de 3 GB de RAM, donde lo deja apagado y avisa. Para apagarlo: `ARGOSISP_API_PORTAL=no` en `/opt/argosisp/.env` y `sudo argosisp levantar` (todo vuelve a `api`). Detalle: `infra/produccion/README.md`.
+
+## Nodo portal (otro servidor, opcional)
+
+Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para llevar el portal a otro VPS:
+
+1. En el servidor principal: `sudo argosisp nodo-portal crear <nombre>`. Copia el token: se muestra una sola vez.
+2. En el VPS del nodo (con `portal.<dominio>`, o el que pongas en `ARGOSISP_DOMINIO_PORTAL`, apuntando a él):
+   ```sh
+   curl -fsSL https://github.com/HCDestroyer/argos-isp/releases/latest/download/instalar.sh | sudo bash -s -- \
+     --rol portal --central https://api.<dominio> --token '<token>' --dominio <dominio> --correo <correo>
+   ```
+   Instala solo el portal y Caddy (sin Postgres, Redis ni workers), en la versión del central.
+3. `sudo argosisp nodo-portal listar` y `revocar <nombre>` en el principal. Un token revocado deja al nodo sin API.
 
 ## Comandos
 
@@ -89,4 +106,4 @@ Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `
 
 ## Cómo se prueba
 
-El job `distribucion` del CI (`infra/ci/probar-distribucion.sh`) construye las seis imágenes del commit, instala con `instalar.sh --si` en el runner (TLS con la CA interna de Caddy, `ARGOSISP_TLS=interno`), comprueba el `.env` en 600, el login del admin y `GET /api/v1/version` a través del proxy, `/corte` por HTTP con cualquier Host, y sigue con actualizar y revertir (`actualizacion.md`).
+El job `distribucion` del CI (`infra/ci/probar-distribucion.sh`) construye las seis imágenes del commit, instala con `instalar.sh --si` en el runner (TLS con la CA interna de Caddy, `ARGOSISP_TLS=interno`), comprueba el `.env` en 600, el login del admin y `GET /api/v1/version` a través del proxy, `/corte` por HTTP con cualquier Host, sigue con actualizar y revertir (`actualizacion.md`), comprueba en cada versión que `/api/v1/portal/*` lo sirve `api-portal` (por su log de acceso) y al final instala un nodo portal en el mismo runner (segundo proyecto de compose, puertos 8080/8443) y comprueba que sus peticiones llegan a `api-portal` del central.

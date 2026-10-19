@@ -32,6 +32,11 @@ La aplicación no atiende entre el paso 3 y el 5 (unos minutos, la mayor parte e
 
 Cada corrida deja su registro en `/opt/argosisp/registros/actualizar-<fecha>.log`. Solo una operación a la vez (bloqueo en `/opt/argosisp/.bloqueo`).
 
+## API del portal y nodos portal
+
+- `api-portal` (la misma API para el tráfico del portal) se actualiza, se vigila y se revierte junto con `api`: misma imagen, misma base. Si una instalación anterior no tiene `ARGOSISP_API_PORTAL` en el `.env`, `argosisp actualizar` lo escribe: `si`, o `no` con menos de 3 GB de RAM (lo avisa en el registro). Apagarlo: `ARGOSISP_API_PORTAL=no` y `sudo argosisp levantar`.
+- **Nodos portal:** actualiza primero el servidor principal y después cada nodo con `sudo argosisp actualizar`. El nodo solo cambia su imagen del portal, toma como objetivo la versión de `GET /api/v1/version` del central y se niega a pasarla (ni con `--version`). Si no puede leer la versión del central (token revocado, central caído), no se actualiza. `argosisp estado` en el nodo avisa si no coincide. `argosisp revertir` en un nodo solo vuelve a la imagen anterior (no tiene base que restaurar).
+
 ## Parches automáticos (opcional, apagado por defecto)
 
 ```sh
