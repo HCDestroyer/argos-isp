@@ -220,8 +220,18 @@ export default class VigilarCrons extends DomainAction<EntradaVigilar, Resultado
     }
 }
 
-/** Última corrida correcta por cron de `accion` (últimos 35 días, para no recorrer todas las particiones). */
-async function ultimaCorrida(
+/**
+ * Última corrida correcta por cron de `accion` hasta `ahora` (últimos 35 días, para no recorrer
+ * todas las particiones).
+ *
+ * `created_at` tiene microsegundos y `ahora` solo milisegundos (luxon), y la fila vuelve truncada
+ * al milisegundo (`Date`). Por eso cuenta toda corrida de ese mismo milisegundo
+ * (`created_at < ahora + 1 ms`, lo mismo que `date_trunc('milliseconds', created_at) <= ahora` sin
+ * perder el índice): así la corrida devuelta nunca es posterior a `ahora` truncada, y una revisión
+ * en el instante devuelto la ve. Con `<= ahora` una corrida a las 03:19:59.9995 solo se veía desde
+ * las 03:20:00.000, cuando ya contaba la hora de hoy y quedaba «antes de su hora».
+ */
+export async function ultimaCorrida(
     trx: TransactionClientContract,
     accion: string,
     ahora: DateTime,
@@ -232,7 +242,7 @@ async function ultimaCorrida(
         .where('canal', 'cron')
         .where('resultado', 'ok')
         .where('created_at', '>', ahora.minus({ days: 35 }).toJSDate())
-        .where('created_at', '<=', ahora.toJSDate())
+        .where('created_at', '<', ahora.plus({ milliseconds: 1 }).toJSDate())
         .max('created_at as ultima')
         .first()) as { ultima: Date | null } | null
     return fila?.ultima ? DateTime.fromJSDate(fila.ultima) : null
