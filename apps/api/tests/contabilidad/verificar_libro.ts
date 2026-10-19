@@ -684,6 +684,16 @@ async function verificarLibroCon(
           GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
     )
     await revisar(
+        '9.linea_de_adicional_ajena (la línea de un adicional cobrado es de una asignación del servicio de su factura, tipo otro con IVA, dada de alta antes del periodo siguiente y sin baja antes del periodo)',
+        `SELECT l.id, l.factura_id, l.servicio_adicional_id, f.servicio_id, sa.servicio_id AS servicio_asignacion, l.tipo, l.gravable,
+                to_char(f.periodo, 'YYYY-MM-DD') AS periodo
+           FROM billing.facturas_lineas l JOIN billing.facturas f ON f.id = l.factura_id
+           LEFT JOIN core.servicios_adicionales sa ON sa.id = l.servicio_adicional_id
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND l.servicio_adicional_id IS NOT NULL
+            AND (sa.id IS NULL OR sa.servicio_id IS DISTINCT FROM f.servicio_id OR l.tipo <> 'otro' OR NOT l.gravable
+                 OR (sa.baja_en IS NOT NULL AND (sa.baja_en AT TIME ZONE 'America/Guatemala')::date <= f.periodo))`,
+    )
+    await revisar(
         '9.origen_de_asiento_desconocido (promesas y demás no mueven dinero)',
         `SELECT a.id, a.origen_tipo FROM ledger.asientos a
           WHERE ${E('a.empresa_id')}
