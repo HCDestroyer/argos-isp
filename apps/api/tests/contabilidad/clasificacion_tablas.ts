@@ -84,6 +84,8 @@ export const MUTABLES: Record<string, string> = {
     'lealtad.reglas':
         'reglas para ganar con version y audit.cambios; se desactivan, no se borran (lealtad §3)',
     'lealtad.referidos': 'estado del referido por acción, con version y audit.cambios (lealtad §3)',
+    'lealtad.premios': 'catálogo de premios con version y audit.cambios; existencias por canje (lealtad §3, fase 2)',
+    'lealtad.canjes': 'estado del canje por acción, con version y audit.cambios; los puntos van en movimientos (lealtad §3, fase 2)',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */

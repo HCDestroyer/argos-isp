@@ -179,6 +179,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `lealtad.puntos_revertidos` | lealtad | movimiento_id, empresa_id, cliente_id, puntos, origen_tipo, origen_id |
 | `lealtad.puntos_por_vencer` / `lealtad.puntos_vencidos` | lealtad (cron) | empresa_id, cliente_id, puntos; por vencer: vence_en, lote_id; vencidos: movimiento_id |
 | `lealtad.referido_calificado` | lealtad | referido_id, empresa_id, referidor_id, cliente_id |
+| `lealtad.canje_reservado` / `lealtad.canje_aplicado` / `lealtad.canje_revertido` | lealtad | canje_id, empresa_id, cliente_id, servicio_id, premio_id, tipo, puntos, factura_id |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

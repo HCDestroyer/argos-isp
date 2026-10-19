@@ -19,7 +19,13 @@ import {
 } from '#lealtad/errores'
 import { programaActivo } from '#lealtad/programas'
 import { verPremio, type PremioVista } from '#lealtad/premios'
-import { camposAuditables, descuentoReservado, verCanje, type CanalCanje, type CanjeVista } from '#lealtad/canjes'
+import {
+    camposAuditables,
+    descuentoReservado,
+    verCanje,
+    type CanalCanje,
+    type CanjeVista,
+} from '#lealtad/canjes'
 import { bloquearClienteLealtad, saldoPuntos, salidaCanje } from '#lealtad/puntos'
 
 /**
@@ -79,11 +85,16 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
         }
         if (premio.tipo === 'bien') throw new ParametroSinConfirmar('premio_bien_iva')
         if (premio.tipo === 'boletos') {
-            throw new ReglaNegocio('Los canjes por boletos llegan con los sorteos (fase 3)', 'recompensa_no_disponible')
+            throw new ReglaNegocio(
+                'Los canjes por boletos llegan con los sorteos (fase 3)',
+                'recompensa_no_disponible',
+            )
         }
         const descuento = premio.tipo === 'descuento_factura' || premio.tipo === 'mes_gratis'
         if (input.factura_id && !descuento) {
-            throw new ValidacionFallida([{ field: 'factura_id', message: 'Solo un descuento se aplica a una factura' }])
+            throw new ValidacionFallida([
+                { field: 'factura_id', message: 'Solo un descuento se aplica a una factura' },
+            ])
         }
 
         const servicio = (await t.trx
@@ -168,7 +179,10 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
         } else if (lineaFactura) {
             const monto = descuentoDe(premio, dec(lineaFactura.total))
             if (!monto.greaterThan(0)) {
-                throw new ReglaNegocio('La línea del plan de la factura ya no admite descuento', 'descuento_sin_base')
+                throw new ReglaNegocio(
+                    'La línea del plan de la factura ya no admite descuento',
+                    'descuento_sin_base',
+                )
             }
             const nota = await new EmitirNotaCredito().execute(
                 {
@@ -219,10 +233,23 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
             .from('billing.facturas')
             .where('id', facturaId)
             .select('servicio_id', 'empresa_id', 'estado', 'emitida_en')
-            .first()) as { servicio_id: number | null; empresa_id: number; estado: string; emitida_en: Date } | null
-        if (!factura || Number(factura.servicio_id) !== servicioId || Number(factura.empresa_id) !== empresaId) {
+            .first()) as {
+            servicio_id: number | null
+            empresa_id: number
+            estado: string
+            emitida_en: Date
+        } | null
+        if (
+            !factura ||
+            Number(factura.servicio_id) !== servicioId ||
+            Number(factura.empresa_id) !== empresaId
+        ) {
             throw new ValidacionFallida([
-                { field: 'factura_id', message: 'La factura no es del servicio en la empresa', rule: 'exists' },
+                {
+                    field: 'factura_id',
+                    message: 'La factura no es del servicio en la empresa',
+                    rule: 'exists',
+                },
             ])
         }
         let meses = 2
@@ -240,7 +267,9 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
             .select('id', 'total')
             .first()) as { id: number; total: string } | null
         if (!linea) {
-            throw new ValidacionFallida([{ field: 'factura_id', message: 'La factura no tiene línea del plan' }])
+            throw new ValidacionFallida([
+                { field: 'factura_id', message: 'La factura no tiene línea del plan' },
+            ])
         }
         return { id: Number(linea.id), total: linea.total }
     }

@@ -105,7 +105,10 @@ export interface FiltrosPremios extends OpcionesPaginacion {
     en_portal?: boolean
 }
 
-export async function listarPremios(empresas: number[] | null, filtros: FiltrosPremios): Promise<Pagina<PremioVista>> {
+export async function listarPremios(
+    empresas: number[] | null,
+    filtros: FiltrosPremios,
+): Promise<Pagina<PremioVista>> {
     const q = db
         .from('lealtad.premios')
         .if(empresas !== null, (c) => c.whereIn('empresa_id', empresas!))

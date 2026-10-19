@@ -8,8 +8,9 @@ import { bloquearClienteLealtad, devolverCanje, movimientoPorClave } from '#leal
 /**
  * `lealtad.revertir_canje` (`POST /lealtad/canjes/:id/revertir { motivo }`, permiso
  * `lealtad.revertir_canje`, `Idempotency-Key`): solo un canje `reservado` (§5). Los puntos vuelven
- * con un movimiento `reverso` por cada lote que pagó el canje, con su vencimiento original y su
- * valor (asiento `4.1.06 / 2.1.10`, espejo del canje); nunca se edita el movimiento del canje. Si el
+ * en un lote nuevo por cada lote que pagó el canje, con su vencimiento original y su valor
+ * (`devolverCanje`: `ajuste` positivo con origen `canje`, asiento `4.1.05 / 2.1.10`); nunca se edita el
+ * movimiento del canje. Si el
  * premio lleva existencias, se devuelve la unidad. Un canje aplicado (nota de crédito emitida o plan
  * temporal programado) responde 409 `canje_no_revertible`. Evento `lealtad.canje_revertido`.
  */
@@ -24,7 +25,9 @@ export default class RevertirCanje extends DomainAction<{ id: number; motivo: st
         await bloquearClienteLealtad(t.trx, previo.cliente_id)
         const actual = await verCanje(input.id, t.trx, true)
         if (actual.estado !== 'reservado') {
-            throw new CanjeNoRevertible(`El canje ${actual.id} está ${actual.estado}: solo se revierte uno reservado`)
+            throw new CanjeNoRevertible(
+                `El canje ${actual.id} está ${actual.estado}: solo se revierte uno reservado`,
+            )
         }
         const motivo = input.motivo.trim()
         const salida = await movimientoPorClave(t.trx, actual.empresa_id, `canje:${actual.id}`)
@@ -39,7 +42,10 @@ export default class RevertirCanje extends DomainAction<{ id: number; motivo: st
             await t.trx
                 .from('lealtad.premios')
                 .where('id', actual.premio_id)
-                .update({ existencias: Number(premio.existencias) + 1, updated_at: t.trx.knexRawQuery('now()') })
+                .update({
+                    existencias: Number(premio.existencias) + 1,
+                    updated_at: t.trx.knexRawQuery('now()'),
+                })
         }
         await t.trx
             .from('lealtad.canjes')

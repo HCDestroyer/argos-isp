@@ -132,6 +132,10 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'lealtad.otorgar_antiguedad': 'Puntos por antigüedad otorgados',
     'lealtad.vencer': 'Puntos vencidos y avisos de vencimiento',
     'lealtad.rechazar_referido': 'Referido rechazado',
+    'lealtad.crear_premio': 'Premio de lealtad creado',
+    'lealtad.editar_premio': 'Premio de lealtad editado',
+    'lealtad.canjear': 'Puntos canjeados',
+    'lealtad.revertir_canje': 'Canje de puntos revertido',
     'libro.cerrar_periodo': 'Periodo contable cerrado',
     'libro.reabrir_periodo': 'Periodo contable reabierto',
     'libro.sellar': 'Asientos sellados en la cadena de hash',
@@ -293,6 +297,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     programa_lealtad: { etiqueta: 'Programa de lealtad' },
     regla_lealtad: { etiqueta: 'Regla de lealtad' },
     referido_lealtad: { etiqueta: 'Referido' },
+    premio_lealtad: { etiqueta: 'Premio de lealtad' },
+    canje_lealtad: { etiqueta: 'Canje de puntos' },
     // Mejora de plan temporal (A1, `core.servicios_planes_temporales`): se ve en la ficha del servicio.
     plan_temporal: { etiqueta: 'Plan temporal' },
 }

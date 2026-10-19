@@ -622,7 +622,14 @@ async function consumirLotes(
 export async function salidaCanje(
     t: Transaccion,
     programa: Pick<ProgramaVista, 'id' | 'empresa_id'>,
-    datos: { canje_id: number; cliente_id: number; servicio_id: number; puntos: number; fecha: string; concepto: string },
+    datos: {
+        canje_id: number
+        cliente_id: number
+        servicio_id: number
+        puntos: number
+        fecha: string
+        concepto: string
+    },
 ): Promise<MovimientoPuntos> {
     const consumos = await consumirLotes(t, programa.empresa_id, datos.cliente_id, datos.puntos)
     return insertarMovimiento(t, {
@@ -648,9 +655,11 @@ export async function salidaCanje(
 }
 
 /**
- * Devuelve los puntos de un canje revertido (§5): un movimiento `reverso` por cada lote que pagó el
- * canje, con los puntos, el valor y el **vencimiento original** de ese lote (son lotes nuevos), y el
- * asiento espejo `4.1.06 / 2.1.10`. Idempotente por `reverso:canje:<canje>:lote:<lote>`.
+ * Devuelve los puntos de un canje revertido (§5): un lote nuevo por cada lote que pagó el canje, con
+ * sus puntos, su valor y su **vencimiento original**. Nunca se toca el movimiento del canje. Cada
+ * devolución es un movimiento `ajuste` positivo con origen `canje` (no `reverso`: el auditor exige que
+ * un reverso nunca sea lote, invariante 14) y su asiento `4.1.05 / 2.1.10`, como todo lote. Idempotente
+ * por `reverso:canje:<canje>:lote:<lote>`.
  */
 export async function devolverCanje(
     t: Transaccion,
@@ -669,7 +678,13 @@ export async function devolverCanje(
             'c.puntos',
             'c.valor',
             t.trx.raw(`to_char(l.vence_en, 'YYYY-MM-DD') as vence_en`),
-        )) as Array<{ lote_id: number; puntos: number; valor: string; servicio_id: number | null; vence_en: string | null }>
+        )) as Array<{
+        lote_id: number
+        puntos: number
+        valor: string
+        servicio_id: number | null
+        vence_en: string | null
+    }>
     const devueltos: MovimientoPuntos[] = []
     for (const c of consumos) {
         const clave = `reverso:canje:${canjeId}:lote:${c.lote_id}`
@@ -683,7 +698,7 @@ export async function devolverCanje(
                 programa: { id: salida.programa_id, empresa_id: salida.empresa_id },
                 cliente_id: salida.cliente_id,
                 servicio_id: salida.servicio_id,
-                tipo: 'reverso',
+                tipo: 'ajuste',
                 puntos: Number(c.puntos),
                 regla_id: null,
                 origen_tipo: 'canje',
@@ -691,11 +706,10 @@ export async function devolverCanje(
                 clave,
                 vence_en: c.vence_en,
                 valor: dec(c.valor),
-                reversa_de: salida.id,
-                motivo,
+                motivo: `Canje ${canjeId} revertido: ${motivo}`,
                 fecha,
                 asiento: {
-                    debe: CUENTAS_GT.INGRESOS_PUNTOS,
+                    debe: CUENTAS_GT.INGRESOS_DIFERIDOS_LEALTAD,
                     haber: CUENTAS_GT.PASIVO_LEALTAD,
                     descripcion: `Lealtad · canje ${canjeId} revertido: vuelven ${c.puntos} puntos del cliente ${salida.cliente_id}`,
                 },

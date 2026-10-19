@@ -3,7 +3,13 @@ import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errore
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { verPrograma } from '#lealtad/programas'
-import { camposAuditables, verPremio, type PremioVista, type TipoDescuento, type TipoPremio } from '#lealtad/premios'
+import {
+    camposAuditables,
+    verPremio,
+    type PremioVista,
+    type TipoDescuento,
+    type TipoPremio,
+} from '#lealtad/premios'
 
 /**
  * `lealtad.crear_premio` (`POST /lealtad/premios`, permiso `lealtad.configurar`): premio del
@@ -13,11 +19,12 @@ import { camposAuditables, verPremio, type PremioVista, type TipoDescuento, type
  *   opcional (Q máximos de un porcentaje). Se aplica sobre la línea del plan, nunca bajo cero.
  * - `mes_gratis`: el 100 % de la línea del plan (sin más campos).
  * - `mejora_plan`: `plan_destino_id` (plan activo) y `dias`.
- * - `bien`: `costo_unitario` y `existencias` opcionales (el canje queda bloqueado hasta que el
+ * - `bien`: `costo_unitario` opcional (el canje queda bloqueado hasta que el
  *   contador decida el IVA del premio en especie, `premio_bien_iva`).
  * - `boletos`: llega con los sorteos (fase 3): 422 `recompensa_no_disponible`.
  *
- * `audit.cambios` y `lealtad.programa_cambiado` (`premios`).
+ * `existencias` (cualquier tipo): unidades disponibles; null = sin límite. `audit.cambios` y
+ * `lealtad.programa_cambiado` (`premios`).
  */
 
 export interface EntradaPremio {
@@ -53,7 +60,10 @@ export async function camposDelTipo(
     c: CamposPremio,
 ): Promise<CamposPremio> {
     if (tipo === 'boletos') {
-        throw new ReglaNegocio('Los premios de boletos llegan con los sorteos (fase 3)', 'recompensa_no_disponible')
+        throw new ReglaNegocio(
+            'Los premios de boletos llegan con los sorteos (fase 3)',
+            'recompensa_no_disponible',
+        )
     }
     const errores: ErrorCampo[] = []
     const vacio: CamposPremio = {
@@ -63,11 +73,16 @@ export async function camposDelTipo(
         plan_destino_id: null,
         dias: null,
         costo_unitario: null,
-        existencias: null,
+        // las existencias aplican a cualquier premio (null = sin límite)
+        existencias: c.existencias,
     }
     if (tipo === 'descuento_factura') {
-        if (!c.descuento_tipo) errores.push({ field: 'descuento_tipo', message: 'Obligatorio en un descuento' })
-        if (!c.descuento_valor) errores.push({ field: 'descuento_valor', message: 'Obligatorio en un descuento' })
+        if (!c.descuento_tipo) {
+            errores.push({ field: 'descuento_tipo', message: 'Obligatorio en un descuento' })
+        }
+        if (!c.descuento_valor) {
+            errores.push({ field: 'descuento_valor', message: 'Obligatorio en un descuento' })
+        }
         if (c.descuento_tipo === 'porcentaje' && c.descuento_valor && Number(c.descuento_valor) > 100) {
             errores.push({ field: 'descuento_valor', message: 'Un porcentaje no pasa de 100' })
         }
@@ -80,18 +95,28 @@ export async function camposDelTipo(
         }
     }
     if (tipo === 'mejora_plan') {
-        if (!c.plan_destino_id) errores.push({ field: 'plan_destino_id', message: 'Obligatorio en una mejora de plan' })
+        if (!c.plan_destino_id) {
+            errores.push({ field: 'plan_destino_id', message: 'Obligatorio en una mejora de plan' })
+        }
         if (!c.dias) errores.push({ field: 'dias', message: 'Obligatorio en una mejora de plan' })
         if (c.plan_destino_id) {
-            const plan = await cliente.from('network.planes').where('id', c.plan_destino_id).select('activo').first()
+            const plan = await cliente
+                .from('network.planes')
+                .where('id', c.plan_destino_id)
+                .select('activo')
+                .first()
             if (!plan || !plan.activo) {
-                errores.push({ field: 'plan_destino_id', message: 'El plan no existe o está inactivo', rule: 'exists' })
+                errores.push({
+                    field: 'plan_destino_id',
+                    message: 'El plan no existe o está inactivo',
+                    rule: 'exists',
+                })
             }
         }
         if (errores.length > 0) throw new ValidacionFallida(errores)
         return { ...vacio, plan_destino_id: c.plan_destino_id, dias: c.dias }
     }
-    if (tipo === 'bien') return { ...vacio, costo_unitario: c.costo_unitario, existencias: c.existencias }
+    if (tipo === 'bien') return { ...vacio, costo_unitario: c.costo_unitario }
     return vacio
 }
 

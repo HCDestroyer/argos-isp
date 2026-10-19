@@ -1996,6 +1996,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lealtad/canjes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Canjes de puntos y su estado */
+        get: operations["lealtadCanjes"];
+        put?: never;
+        /**
+         * Canjear puntos por un premio
+         * @description Los puntos salen al crear el canje (lotes que vencen antes primero; con diferimiento, asiento 2.1.10 / 4.1.06). mejora_plan programa el plan temporal (falla todo si no se puede); un descuento con factura_id emite la nota de crédito sobre la línea del plan (422 `nota_fuera_de_plazo`); sin factura queda reservado para la próxima factura. 422 `programa_inactivo`, `premio_inactivo`, `servicio_no_valido`, `saldo_insuficiente`, `parametro_sin_confirmar` (bien); 409 `sin_existencias`, `canje_pendiente`.
+         */
+        post: operations["lealtadCanjear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/canjes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un canje */
+        get: operations["lealtadVerCanje"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/canjes/{id}/revertir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revertir un canje reservado (devuelve los puntos)
+         * @description Solo reservado: los puntos vuelven con su vencimiento original (un lote nuevo por cada lote que pagó el canje, asiento 4.1.05 / 2.1.10). 409 `canje_no_revertible`.
+         */
+        post: operations["lealtadRevertirCanje"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/premios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catálogo de premios */
+        get: operations["lealtadPremios"];
+        put?: never;
+        /**
+         * Agregar un premio al catálogo
+         * @description Campos por tipo (§5): descuento_factura con descuento_tipo y descuento_valor (tope opcional en porcentaje); mes_gratis; mejora_plan con plan_destino_id y dias; bien (el canje espera la decisión premio_bien_iva). 422 `recompensa_no_disponible` con boletos (fase 3).
+         */
+        post: operations["lealtadCrearPremio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/premios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un premio */
+        get: operations["lealtadVerPremio"];
+        /**
+         * Editar o desactivar un premio
+         * @description El tipo no cambia; activo = false lo saca del catálogo (no se borra).
+         */
+        put: operations["lealtadEditarPremio"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lealtad/programa": {
         parameters: {
             query?: never;
@@ -4998,6 +5098,40 @@ export interface components {
             };
             conector_id: string;
         };
+        CanjeLealtad: {
+            id: number;
+            empresa_id: number;
+            programa_id: number;
+            cliente_id: number;
+            servicio_id: number;
+            premio_id: number;
+            premio_nombre: string;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            puntos: number;
+            /** @enum {string} */
+            estado: "reservado" | "aplicado" | "revertido" | "rechazado";
+            /** @description Q descontados; null en un descuento aún reservado */
+            descuento: components["schemas"]["Dinero"] | null;
+            factura_id: number | null;
+            nota_credito_id: number | null;
+            plan_temporal_id: number | null;
+            movimiento_id: number | null;
+            /** @enum {string} */
+            canal: "panel" | "portal";
+            /** Format: date-time */
+            aplicado_en: string | null;
+            /** Format: date-time */
+            revertido_en: string | null;
+            motivo: string | null;
+            creado_por: number | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         CanjeSso: {
             /**
              * @description `sesion`: cookie del panel puesta, ir a `ruta`. `vinculacion_requerida`: mostrar el login normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`
@@ -6747,10 +6881,18 @@ export interface components {
             /** @description Cómo quedó el servicio de la factura (reactivación inmediata) */
             servicios: components["schemas"]["ServicioEvaluado"][];
         };
+        PaginaCanjesLealtad: {
+            data: components["schemas"]["CanjeLealtad"][];
+            nextCursor: string | null;
+        };
         PaginaComprobantes: {
             data: components["schemas"]["Comprobante"][];
             nextCursor: string | null;
             resumen: components["schemas"]["ResumenComprobantes"];
+        };
+        PaginaPremiosLealtad: {
+            data: components["schemas"]["PremioLealtad"][];
+            nextCursor: string | null;
         };
         PaginaReferidosLealtad: {
             data: components["schemas"]["ReferidoLealtad"][];
@@ -7444,6 +7586,32 @@ export interface components {
             vence_en: string;
             /** @description Empresa cuyo bot se vincula (null = el bot global) */
             empresa_id: number | null;
+        };
+        PremioLealtad: {
+            id: number;
+            empresa_id: number;
+            programa_id: number;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            nombre: string;
+            costo_puntos: number;
+            /** @enum {string|null} */
+            descuento_tipo: "monto" | "porcentaje" | null;
+            descuento_valor: components["schemas"]["Dinero"] | null;
+            tope: components["schemas"]["Dinero"] | null;
+            plan_destino_id: number | null;
+            dias: number | null;
+            costo_unitario: components["schemas"]["Dinero"] | null;
+            /** @description null = sin límite */
+            existencias: number | null;
+            en_portal: boolean;
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         Problem: {
             type: string;
@@ -16238,6 +16406,554 @@ export interface operations {
                 };
             };
             /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCanjes: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cliente_id?: number;
+                servicio_id?: number;
+                estado?: "reservado" | "aplicado" | "revertido" | "rechazado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canjes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaCanjesLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCanjear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cliente_id: number;
+                    servicio_id: number;
+                    premio_id: number;
+                    /** @description Solo descuentos: aplicarlo a una factura ya emitida con nota de crédito (NCRE con FEL) */
+                    factura_id?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Canje */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.canjear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerCanje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canje */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadRevertirCanje: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Canje revertido */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.revertir_canje; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadPremios: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                programa_id?: number;
+                tipo?: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+                activo?: boolean;
+                en_portal?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Premios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaPremiosLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCrearPremio: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    programa_id: number;
+                    /**
+                     * @description descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien; boletos llega en la fase 3
+                     * @enum {string}
+                     */
+                    tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+                    nombre: string;
+                    costo_puntos: number;
+                    descuento_tipo?: ("monto" | "porcentaje") | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    descuento_valor?: string | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    tope?: string | null;
+                    plan_destino_id?: number | null;
+                    dias?: number | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    costo_unitario?: string | null;
+                    existencias?: number | null;
+                    en_portal?: boolean;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Premio creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PremioLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerPremio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Premio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PremioLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadEditarPremio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    costo_puntos?: number;
+                    descuento_tipo?: ("monto" | "porcentaje") | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    descuento_valor?: string | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    tope?: string | null;
+                    plan_destino_id?: number | null;
+                    dias?: number | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    costo_unitario?: string | null;
+                    existencias?: number | null;
+                    en_portal?: boolean;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Premio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PremioLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
             409: {
                 headers: {
                     [name: string]: unknown;

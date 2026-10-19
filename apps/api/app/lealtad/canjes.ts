@@ -123,7 +123,10 @@ export interface FiltrosCanjes extends OpcionesPaginacion {
     estado?: EstadoCanje
 }
 
-export async function listarCanjes(empresas: number[] | null, filtros: FiltrosCanjes): Promise<Pagina<CanjeVista>> {
+export async function listarCanjes(
+    empresas: number[] | null,
+    filtros: FiltrosCanjes,
+): Promise<Pagina<CanjeVista>> {
     const q = consulta(db.connection())
         .if(empresas !== null, (c) => c.whereIn('c.empresa_id', empresas!))
         .if(filtros.cliente_id !== undefined, (c) => c.where('c.cliente_id', filtros.cliente_id!))

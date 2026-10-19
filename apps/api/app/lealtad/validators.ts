@@ -310,7 +310,8 @@ export const canjearValidator = vine.compile(
         servicio_id: idEntidad(),
         premio_id: idEntidad(),
         factura_id: idEntidad().optional().meta({
-            description: 'Solo descuentos: aplicarlo a una factura ya emitida con nota de crédito (NCRE con FEL)',
+            description:
+                'Solo descuentos: aplicarlo a una factura ya emitida con nota de crédito (NCRE con FEL)',
         }),
     }),
 )

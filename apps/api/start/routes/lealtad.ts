@@ -280,7 +280,6 @@ const referidos: Ruta[] = [
     }),
 ]
 
-
 const premios: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -375,7 +374,8 @@ const canjes: Ruta[] = [
         cuerpo: v.canjearValidator,
         idempotente: true,
         respuesta: { status: 201, descripcion: 'Canje', esquema: CanjeLealtad },
-        handler: (ctx, { cuerpo }) => new Canjear().execute({ ...cuerpo, canal: 'panel' }, ctx.contextoAccion()),
+        handler: (ctx, { cuerpo }) =>
+            new Canjear().execute({ ...cuerpo, canal: 'panel' }, ctx.contextoAccion()),
     }),
     definirRuta({
         metodo: 'post',
@@ -383,14 +383,17 @@ const canjes: Ruta[] = [
         operacion: 'lealtadRevertirCanje',
         resumen: 'Revertir un canje reservado (devuelve los puntos)',
         descripcion:
-            'Solo reservado: los puntos vuelven con su vencimiento original (movimientos de reverso, asiento 4.1.06 / 2.1.10). 409 `canje_no_revertible`.',
+            'Solo reservado: los puntos vuelven con su vencimiento original (un lote nuevo por cada lote que pagó el canje, asiento 4.1.05 / 2.1.10). 409 `canje_no_revertible`.',
         etiqueta: 'lealtad',
         permiso: 'lealtad.revertir_canje',
         cuerpo: v.motivoValidator,
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Canje revertido', esquema: CanjeLealtad },
         handler: (ctx, { cuerpo, params }) =>
-            new RevertirCanje().execute({ id: Number(params.id), motivo: cuerpo.motivo }, ctx.contextoAccion()),
+            new RevertirCanje().execute(
+                { id: Number(params.id), motivo: cuerpo.motivo },
+                ctx.contextoAccion(),
+            ),
     }),
 ]
 
@@ -415,4 +418,12 @@ const reportes: Ruta[] = [
     }),
 ]
 
-export default [...programas, ...reglas, ...premios, ...canjes, ...puntos, ...referidos, ...reportes] satisfies Ruta[]
+export default [
+    ...programas,
+    ...reglas,
+    ...premios,
+    ...canjes,
+    ...puntos,
+    ...referidos,
+    ...reportes,
+] satisfies Ruta[]
