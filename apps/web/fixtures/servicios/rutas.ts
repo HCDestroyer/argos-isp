@@ -22,6 +22,8 @@ import {
     versionCambiada,
 } from '../comun'
 import { nuevaSesion } from '../sesiones/datos'
+import { asignarIncluidos, bajaPorRetiro, bloqueoCambioEmpresa, reconciliarIncluidos } from '../adicionales/rutas'
+import { advertenciasServicio, TIPOS_PLAN } from '../planes/tipos'
 
 type Servicio = Schema<'Servicio'>
 type Errores = NonNullable<Problem['errors']>
@@ -51,11 +53,14 @@ function ipLibre(routerId: number, redId?: number): string | null {
 }
 
 /** Nombres que la vista `Servicio` de la API trae con subconsultas (día 3). */
-export function nombresDe(clienteId: number, planId: number, routerId: number): Pick<Servicio, 'cliente_nombre' | 'plan_nombre' | 'router_nombre' | 'zona_nombre'> {
+export function nombresDe(clienteId: number, planId: number, routerId: number): Pick<Servicio, 'cliente_nombre' | 'plan_nombre' | 'plan_tipo' | 'router_nombre' | 'zona_nombre'> {
     const cliente = bd.clientes.find(c => c.id === clienteId)
+    const plan = bd.planes.find(p => p.id === planId)
     return {
         cliente_nombre: cliente?.nombre ?? '',
-        plan_nombre: bd.planes.find(p => p.id === planId)?.nombre ?? '',
+        plan_nombre: plan?.nombre ?? '',
+        // Tipo del plan (A1, solo lectura): sigue al plan si se cambia ahí.
+        plan_tipo: plan?.tipo ?? 'residencial',
         router_nombre: bd.routers.find(r => r.id === routerId)?.nombre ?? '',
         zona_nombre: bd.zonas.find(z => z.id === cliente?.zona_id)?.nombre ?? null,
     }
@@ -345,6 +350,10 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
                     ...(ruta === 'reactivar' ? { suspension_manual: false, suspension_manual_motivo: null } : {}),
                 }
         bd.servicios[indice] = despues
+        if (regla.a === 'retirado') {
+            // Retirar da de baja todos sus adicionales activos con el motivo del retiro (A1).
+            bajaPorRetiro(actual.id, motivo)
+        }
         // Suspender y limitar van por CoA (la sesión sigue); reactivar va por Disconnect-Request
         // (decisión del PM en lideres.md), igual que desconectar y retirar.
         if (regla.a === null || regla.a === 'retirado' || ruta === 'reactivar') {
@@ -403,8 +412,14 @@ const cambiarEmpresa: ManejadorFixture = (solicitud) => {
     if (nueva.id === actual.empresa_id) {
         return { status: 200, cuerpo: vista(actual) }
     }
+    // Adicionales (A1): con cortesía o cobrado vigentes no se cambia; los incluidos se rehacen.
+    const conAdicionales = bloqueoCambioEmpresa(actual.id)
+    if (conAdicionales) {
+        return conAdicionales
+    }
     const despues: Servicio = { ...actual, empresa_id: nueva.id, version: actual.version + 1, updated_at: ahora() }
     bd.servicios[indice] = despues
+    reconciliarIncluidos(despues, 'cambio_empresa')
     registrarAccion(solicitud, 'servicios.cambiar_empresa', { tipo: 'servicio', id: actual.id }, cuerpo)
     return { status: 200, cuerpo: vista(despues) }
 }
@@ -420,9 +435,14 @@ export const rutasServicios: RutasFixture = {
         const zona = numeroQuery(solicitud, 'zona_id')
         const deuda = solicitud.query.get('con_deuda_vencida')
         const tipo = solicitud.query.get('tipo_conexion')
+        const tipoPlan = solicitud.query.get('tipo')
+        if (tipoPlan && !(TIPOS_PLAN as readonly string[]).includes(tipoPlan)) {
+            return datosInvalidos([{ field: 'tipo', message: 'Debe ser residencial, empresarial o dedicado', rule: 'enum' }])
+        }
         const empresas = empresasDeLista(solicitud)
         const filas = bd.servicios
             .filter(s => empresas === null || empresas.includes(s.empresa_id))
+            .filter(s => !tipoPlan || (bd.planes.find(p => p.id === s.plan_id)?.tipo ?? 'residencial') === tipoPlan)
             .filter(s => !tipo || (s.tipo_conexion ?? 'pppoe') === tipo)
             .filter(s => zona === undefined || bd.clientes.find(c => c.id === s.cliente_id)?.zona_id === zona)
             .filter(s => deuda === null || bd.facturas.some(f => f.servicio_id === s.id && f.estado === 'vencida') === (deuda === 'true'))
@@ -457,7 +477,9 @@ export const rutasServicios: RutasFixture = {
             bd.clavesPpp[resultado.id] = typeof clave === 'string' && clave ? clave : claveGenerada(resultado.id)
         }
         registrarAccion(solicitud, 'servicios.crear', { tipo: 'servicio', id: resultado.id }, { ...entrada, pass_ppp: '***' })
-        return { status: 201, cuerpo: resultado }
+        // Adicionales incluidos del plan (A1) y `warnings[]` del tipo de plan (nunca bloquean).
+        asignarIncluidos(resultado)
+        return { status: 201, cuerpo: { ...resultado, warnings: advertenciasServicio(resultado) } }
     })),
 
     /**
@@ -521,8 +543,11 @@ export const rutasServicios: RutasFixture = {
             bd.clavesPpp = Object.fromEntries(Object.entries(bd.clavesPpp).filter(([id]) => Number(id) !== actual.id))
         }
         bd.servicios[indice] = actualizado
+        if (actualizado.plan_id !== actual.plan_id) {
+            reconciliarIncluidos(actualizado)
+        }
         registrarAccion(solicitud, 'servicios.editar', { tipo: 'servicio', id: actual.id }, cuerpo)
-        return { status: 200, cuerpo: vista(actualizado) }
+        return { status: 200, cuerpo: { ...vista(actualizado), warnings: advertenciasServicio(actualizado) } }
     }),
 
     'GET /api/v1/servicios/:id/credenciales': conPermiso('servicios.ver_credenciales', (solicitud) => {

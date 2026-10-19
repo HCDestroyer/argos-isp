@@ -109,6 +109,20 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'pagos.cerrar_diferencia': 'Diferencia de cobro cerrada',
     'cartera.provisionar': 'Estimación de incobrables registrada',
     'cartera.castigar': 'Cartera castigada',
+    // Localización fiscal, fase 5 (A3): proveedores, compras, retenciones, activos y diferidos
+    'proveedores.crear': 'Proveedor creado',
+    'proveedores.editar': 'Proveedor editado',
+    'compras.registrar': 'Compra registrada',
+    'compras.registrar_desde_egreso': 'Compra registrada desde un egreso',
+    'compras.anular': 'Compra anulada',
+    'compras.registrar_constancia': 'Constancia de retención emitida registrada',
+    'compras.pagar': 'Pago a proveedor registrado',
+    'compras.anular_pago': 'Pago a proveedor anulado',
+    'activos.registrar': 'Activo fijo dado de alta',
+    'activos.depreciar': 'Depreciación registrada',
+    'activos.dar_de_baja': 'Activo fijo dado de baja',
+    'libro.registrar_diferimiento': 'Diferimiento registrado',
+    'libro.amortizar_diferidos': 'Cuotas de diferidos registradas',
     'empresa.editar': 'Datos de la empresa editados',
     'empresas.crear': 'Empresa creada',
     'empresas.editar': 'Empresa editada',
@@ -307,7 +321,7 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     caja: { etiqueta: 'Caja', ruta: id => `/caja?caja=${id}` },
     asiento: { etiqueta: 'Asiento' },
     sesion: { etiqueta: 'Sesión PPPoE' },
-    plan: { etiqueta: 'Plan' },
+    plan: { etiqueta: 'Plan', ruta: id => `/planes/${id}` },
     plan_router: { etiqueta: 'Plan en router' },
     plantilla_facturacion: { etiqueta: 'Plantilla de facturación' },
     plantilla_notificacion: { etiqueta: 'Plantilla de notificación' },
@@ -323,6 +337,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     referido_lealtad: { etiqueta: 'Referido' },
     // Mejora de plan temporal (A1, `core.servicios_planes_temporales`): se ve en la ficha del servicio.
     plan_temporal: { etiqueta: 'Plan temporal' },
+    adicional: { etiqueta: 'Adicional', ruta: () => '/adicionales' },
+    motivo_cortesia: { etiqueta: 'Motivo de cortesía', ruta: () => '/adicionales/motivos' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

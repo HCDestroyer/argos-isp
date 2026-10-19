@@ -447,6 +447,33 @@ export interface CatalogoEventos {
         facturas: number[]
         monto: Dinero
     }
+    /**
+     * Compras, activos y diferidos (contrato de localización fiscal §3.4 y §10.10, fase 5).
+     * `periodo_iva` es el mes del libro de compras (YYYY-MM).
+     */
+    'compra.registrada': {
+        compra_id: number
+        empresa_id: number
+        proveedor_id: number
+        total: Dinero
+        iva: Dinero
+        periodo_iva: string
+    }
+    'compra.anulada': {
+        compra_id: number
+        empresa_id: number
+        proveedor_id: number
+        total: Dinero
+        iva: Dinero
+        periodo_iva: string
+    }
+    /** Baja (venta, retiro o anulación de su compra) de un activo fijo; `valor_libros` al darlo de baja. */
+    'activo.dado_de_baja': {
+        activo_id: number
+        empresa_id: number
+        motivo: string
+        valor_libros: Dinero
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -614,6 +641,9 @@ export const EVENTOS = [
     'banco.extracto_importado',
     'banco.conciliado',
     'cartera.castigada',
+    'compra.registrada',
+    'compra.anulada',
+    'activo.dado_de_baja',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

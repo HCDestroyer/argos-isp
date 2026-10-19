@@ -331,6 +331,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
             color: 'success',
             icon: 'i-lucide-circle-check',
         })
+        avisarAdvertencias(toast, resultado.data.warnings, 'Servicio creado con advertencias')
         await navigateTo(destinoPermitido(`/clientes/${resultado.data.cliente_id}?tab=servicios`))
         return
     }

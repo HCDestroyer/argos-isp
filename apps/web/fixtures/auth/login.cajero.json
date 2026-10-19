@@ -30,7 +30,8 @@
       "cajas.depositar",
       "fel.ver",
       "lealtad.ver",
-      "lealtad.canjear"
+      "lealtad.canjear",
+      "adicionales.ver"
     ],
     "alcance_global": false,
     "empresas": [
