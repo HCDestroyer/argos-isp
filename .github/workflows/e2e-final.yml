@@ -1,0 +1,62 @@
+# Prueba de punta a punta final (A6): instala desde cero una versión PUBLICADA (instalar.sh de su
+# GitHub Release e imágenes de GHCR) en un runner limpio, carga `pnpm demo:datos`, recorre los
+# chequeos de humo por la API y actualiza y revierte comprobando los datos después de cada paso.
+# Todo en infra/ci/e2e-final.sh. A mano: Actions → «E2E final» → Run workflow.
+name: E2E final
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Versión publicada a instalar (sin la v)
+        type: string
+        default: 0.9.0
+        required: true
+      siguiente:
+        description: Versión publicada a la que actualizar (vacío = copia local de la misma versión, prueba el mecanismo)
+        type: string
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: e2e-final
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: Instalar publicada → demo → humo → actualizar → revertir
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Script (bash -n y shellcheck)
+        run: |
+          bash -n infra/ci/e2e-final.sh
+          shellcheck -x infra/ci/e2e-final.sh
+
+      # Las imágenes de GHCR pueden ser privadas: el token del workflow las lee (packages: read).
+      # También para root: instalar.sh y `argosisp` corren con sudo y bajan las imágenes como root.
+      - name: Acceso a GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "$TOKEN" | sudo docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: e2e final
+        env:
+          ARGOSISP_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          SIGUIENTE: ${{ inputs.siguiente }}
+        run: infra/ci/e2e-final.sh "$VERSION" ${SIGUIENTE:+"$SIGUIENTE"}

@@ -207,6 +207,32 @@ test.group('Clientes', () => {
         assert.deepEqual(await ids('198.18.77.21'), [])
     })
 
+    test('el teléfono se busca solo con una búsqueda con forma de teléfono, no por los dígitos de un texto', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['soporte'])
+        // ocho dígitos únicos de la corrida para que ningún otro cliente los tenga
+        const digitos = String(Date.now()).slice(-8)
+        const id = await crearClienteFila({
+            nombre: unico('Telefono'),
+            telefono: `${digitos.slice(0, 4)}-${digitos.slice(4)}`,
+        })
+        const ids = async (q: string) => {
+            const r = await estado(
+                client.get('/api/v1/clientes').qs({ q, limit: 200 }).bearerToken(token),
+                200,
+            )
+            return r.body().data.map((c: { id: number }) => c.id) as number[]
+        }
+        assert.include(await ids(digitos), id)
+        assert.include(await ids(`${digitos.slice(0, 4)} ${digitos.slice(4)}`), id)
+        assert.include(await ids(`(${digitos.slice(0, 4)}).${digitos.slice(4)}`), id)
+        // un texto con esos dígitos mezclados (como la marca de otra prueba) no lo trae
+        assert.notInclude(await ids(`Pagina${digitos}ab`), id)
+        assert.notInclude(await ids(`${digitos}x`), id)
+    })
+
     test('paginación por cursor', async ({ client, assert }) => {
         const { token } = await usuarioConRoles(['soporte'])
         const marca = unico('Pagina').replace('-', '')
