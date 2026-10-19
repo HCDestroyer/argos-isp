@@ -473,8 +473,10 @@ async function verificarLibroCon(
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado = 'anulada'
             AND (EXISTS (SELECT 1 FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
                           WHERE a.factura_id = f.id AND p.estado = 'registrado')
-                 OR EXISTS (SELECT 1 FROM billing.notas_credito_aplicaciones a JOIN billing.notas_credito n ON n.id = a.nota_credito_id
-                             WHERE a.factura_id = f.id AND NOT ${anulada('n')})
+                 -- el saldo a favor de notas que recibió: lo neto de sus filas (la anulación las revierte en espejo)
+                 OR (SELECT coalesce(sum(a.monto), 0) FROM billing.notas_credito_aplicaciones a
+                       JOIN billing.notas_credito n ON n.id = a.nota_credito_id
+                      WHERE a.factura_id = f.id AND NOT ${anulada('n')}) <> 0
                  OR EXISTS (SELECT 1 FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')})
                  OR EXISTS (SELECT 1 FROM ledger.asientos a
                              WHERE a.origen_tipo IN ('factura', 'mora') AND a.origen_id = f.id AND a.reversa_de IS NULL
@@ -731,6 +733,22 @@ async function verificarLibroCon(
             AND (coalesce(apl.monto, 0) > n.a_favor OR NOT coalesce(apl.propias, true)
                  OR coalesce(mov.anticipos, 0) <> coalesce(apl.monto, 0) OR coalesce(mov.cxc, 0) <> coalesce(apl.monto, 0)
                  OR coalesce(mov.ajenos, 0) <> 0 OR NOT coalesce(mov.cliente_ok, true))`,
+    )
+    await revisar(
+        '9.reverso_de_aplicacion_de_nota_mal_formado (fila espejo: misma nota y factura, monto = −original, una por aplicación, solo de una factura anulada; nunca un reverso de un reverso)',
+        `SELECT r.id, r.reversa_de, r.monto::text, o.monto::text AS original, f.estado
+           FROM billing.notas_credito_aplicaciones r
+           LEFT JOIN billing.notas_credito_aplicaciones o ON o.id = r.reversa_de
+           LEFT JOIN billing.facturas f ON f.id = r.factura_id
+           JOIN billing.notas_credito n ON n.id = r.nota_credito_id
+          WHERE ${E('n.empresa_id')} AND r.reversa_de IS NOT NULL
+            AND (o.id IS NULL OR o.reversa_de IS NOT NULL OR r.monto <> -o.monto OR r.nota_credito_id <> o.nota_credito_id
+                 OR r.factura_id <> o.factura_id OR f.estado <> 'anulada'
+                 OR (SELECT count(*) FROM billing.notas_credito_aplicaciones x WHERE x.reversa_de = o.id) <> 1)
+         UNION ALL
+         SELECT a.id, NULL, a.monto::text, NULL, NULL
+           FROM billing.notas_credito_aplicaciones a JOIN billing.notas_credito n ON n.id = a.nota_credito_id
+          WHERE ${E('n.empresa_id')} AND a.reversa_de IS NULL AND a.monto <= 0`,
     )
     await revisar(
         '9.notas_credito_exceden_la_factura (Σ notas > total o Σ IVA de notas > IVA de la factura)',
