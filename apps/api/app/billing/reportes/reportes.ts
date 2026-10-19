@@ -852,3 +852,64 @@ export async function egresosPorCategoria(
         filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })
 }
+
+/*
+|--------------------------------------------------------------------------
+| Facturas en Q0 por motivo (cargo único sin costo)
+|--------------------------------------------------------------------------
+*/
+
+export const COLUMNAS_SIN_COSTO = definirColumnas([
+    { clave: 'periodo', titulo: 'Periodo', tipo: 'texto' },
+    { clave: 'motivo_id', titulo: 'Motivo (id)', tipo: 'entero' },
+    { clave: 'motivo', titulo: 'Motivo', tipo: 'texto' },
+    { clave: 'facturas', titulo: 'Facturas', tipo: 'entero' },
+    { clave: 'valor_bruto', titulo: 'Valor bruto', tipo: 'dinero' },
+])
+
+/**
+ * Facturas en Q0 con motivo (cargos únicos sin costo) por mes de emisión y motivo, sin anuladas.
+ * `valor_bruto` = Σ líneas antes de descuentos (IVA incluido): lo que se entregó sin cobrar.
+ */
+export async function facturasSinCosto(
+    filtros: { desde?: string; hasta?: string; motivo_id?: number; cliente_id?: number },
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
+    const { desde, hasta } = rangoPorDefecto(filtros)
+    const periodo = `to_char(f.periodo, 'YYYY-MM')`
+    const consulta = db
+        .from('billing.facturas as f')
+        .join('billing.motivos_sin_costo as ms', 'ms.id', 'f.motivo_sin_costo_id')
+        .join('core.clientes as c', 'c.id', 'f.cliente_id')
+        .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
+        .whereNot('f.estado', 'anulada')
+        .whereRaw(`f.periodo between date_trunc('month', ?::date) and ?::date`, [desde, hasta])
+        .if(filtros.motivo_id, (q) => q.where('f.motivo_sin_costo_id', filtros.motivo_id!))
+        .if(filtros.cliente_id, (q) => q.where('f.cliente_id', filtros.cliente_id!))
+        .groupByRaw(`${periodo}, ms.id, ms.nombre`)
+        .orderByRaw(`${periodo} asc, ms.nombre asc`)
+        .select(
+            db.raw(`${periodo} as periodo`),
+            'ms.id as motivo_id',
+            'ms.nombre as motivo',
+            db.raw('count(*)::int as facturas'),
+            db.raw(
+                `coalesce(sum((select sum(l.total) from billing.facturas_lineas l where l.factura_id = f.id and l.tipo <> 'descuento')), 0)::text as valor_bruto`,
+            ),
+        )
+    filtrarPorAlcance(consulta, alcance, dimensionesClienteServicio)
+    porEmpresa(consulta, 'f.empresa_id', op)
+    const filas = ((await consulta) as Fila[]).map((f) => ({
+        ...f,
+        motivo_id: Number(f.motivo_id),
+        valor_bruto: dinero(f.valor_bruto),
+    }))
+    return armarReporte({
+        reporte: 'facturas_sin_costo',
+        titulo: 'Facturas en Q0 por motivo',
+        columnas: columnasCon(op, COLUMNAS_SIN_COSTO),
+        filas,
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
+    })
+}

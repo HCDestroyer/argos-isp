@@ -190,6 +190,7 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
                 'iva',
                 'total',
                 'linea_id',
+                'cuenta_codigo',
             )) as Array<LineaCalculada & { id: number; linea_id: number | null }>
         // los descuentos siguen ligados a su línea en la factura nueva (por posición)
         const posicion = new Map(originales.map((l, i) => [Number(l.id), i]))

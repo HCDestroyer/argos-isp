@@ -7,6 +7,7 @@ import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, D, aTexto, dec, redondear, type Dec, type Monto } from '#ledger/dinero'
 import { notasDeFactura } from '#billing/notas_credito'
 import { emisorDeFactura } from '#billing/empresa'
+import { CUENTAS } from '#ledger/plan_cuentas'
 
 /**
  * Facturas: montos (IVA incluido), estado según lo pagado y consultas de lectura.
@@ -31,6 +32,23 @@ export interface LineaCalculada {
      * guarda como `linea_id` (contrato de localización fiscal §3.5).
      */
     linea_indice?: number
+    /**
+     * Cuenta de ingreso de la línea (código de `ledger.cuentas`) cuando viene de un concepto de cargo
+     * (`billing.conceptos_cargo`); null o ausente = la de su tipo (`cuentaIngresoDeLinea`).
+     */
+    cuenta_codigo?: string | null
+}
+
+/**
+ * Cuenta de ingreso de una línea: la de su concepto de cargo si la tiene; si no, la de su tipo
+ * (`servicio` → 4.1.01, `mora` → 4.1.02, el resto → 4.1.03). Las líneas `descuento` usan la de la
+ * línea que descuentan (su contrapartida es 5.1.01).
+ */
+export function cuentaIngresoDeLinea(linea: { tipo: string; cuenta_codigo?: string | null }): string {
+    if (linea.cuenta_codigo) return linea.cuenta_codigo
+    if (linea.tipo === 'servicio') return CUENTAS.INGRESOS_INTERNET
+    if (linea.tipo === 'mora') return CUENTAS.RECARGOS_MORA
+    return CUENTAS.OTROS_INGRESOS
 }
 
 export interface DescuentoPedido {
@@ -214,6 +232,12 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('tipo_dte'),
         c('anulada_en'),
         c('motivo_anulacion'),
+        cliente.raw(`starts_with(${alias}.clave_unica, 'cargo-') as cargo_unico`),
+        c('motivo_sin_costo_id'),
+        cliente.raw(
+            `(select ms.nombre from billing.motivos_sin_costo ms where ms.id = ${alias}.motivo_sin_costo_id) as motivo_sin_costo_nombre`,
+        ),
+        c('motivo_sin_costo_texto'),
         c('origen'),
         cliente.raw(`${alias}.clave_externa as id_externo`),
         cliente.raw(
@@ -305,6 +329,7 @@ export async function verFactura(id: number, cliente: QueryClientContract = db.c
             'total',
             'linea_id',
             'descuento',
+            'cuenta_codigo',
         )
     const notas = await notasDeFactura(id, cliente)
     // FEL (semana 5): la factura se certifica con el NIT y los datos fiscales de su empresa
