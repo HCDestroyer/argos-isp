@@ -182,17 +182,14 @@ export const pagos: Pago[] = facturas
 
 /** H16 (A3, fase 4 final): aviso sin DTE cubierto entero por notas internas, sin cobro. */
 export const FACTURA_ACREDITADA_ID = 9101
-/** H18: cargo interno no fiscal sin IVA por la diferencia de cobro de la factura 1909. */
-export const FACTURA_CARGO_ID = 9102
 
 function facturaExtra(base: Factura, datos: Partial<Factura>): Factura {
     return { ...base, fel_uuid: null, fel_serie: null, fel_numero: null, fel_estado: null, vencida_en: null, anulada_en: null, motivo_anulacion: null, version: 1, ...datos }
 }
 
 const avisoServicio3 = facturas.find(f => f.servicio_id === 3)
-const avisoCliente18 = facturas.find(f => f.id === 1909)
-if (avisoServicio3 && avisoCliente18) {
-    // Después de los pagos: ninguna de las dos tiene un pago (la acreditada se cubrió con notas).
+if (avisoServicio3) {
+    // Después de los pagos: no tiene un pago (se cubrió con notas).
     facturas.push(
         facturaExtra(avisoServicio3, {
             id: FACTURA_ACREDITADA_ID,
@@ -205,21 +202,6 @@ if (avisoServicio3 && avisoCliente18) {
             acreditado: avisoServicio3.total,
             created_at: '2026-08-01T14:00:00.000Z',
             updated_at: '2026-08-05T16:00:00.000Z',
-        }),
-        facturaExtra(avisoCliente18, {
-            id: FACTURA_CARGO_ID,
-            tipo: 'cargo',
-            factura_origen_id: avisoCliente18.id,
-            clave_unica: 'cargo-diferencia-1',
-            emitida_en: '2026-10-14T17:00:00.000Z',
-            vence_en: '2026-10-14',
-            estado: 'emitida',
-            subtotal: '0.37',
-            iva: '0.00',
-            total: '0.37',
-            pagado: '0.00',
-            created_at: '2026-10-14T17:00:00.000Z',
-            updated_at: '2026-10-14T17:00:00.000Z',
         }),
     )
 }

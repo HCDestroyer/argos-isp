@@ -400,7 +400,7 @@ describe('fase 4 · cobros y bancos', () => {
             vista.unmount()
 
             const cerrada = await usePagos().cerrarDiferencia(pago.data.id, 'Redondeo', nuevaClaveIdempotencia())
-            expect(cerrada.ok && cerrada.data).toMatchObject({ monto: '0.33', tope: '1.00', notas: [{ factura_id: factura.id, monto: '0.33', ncre: false }] })
+            expect(cerrada.ok && cerrada.data).toMatchObject({ monto: '0.33', tope: '1.00', diferencias: [{ factura_id: factura.id, monto: '0.33' }] })
             const otraVez = await usePagos().cerrarDiferencia(pago.data.id, null, nuevaClaveIdempotencia())
             expect(!otraVez.ok && otraVez.problema.type).toBe('urn:argosisp:problema:sin_diferencia')
             const leida = await useFacturas().ver(factura.id)
