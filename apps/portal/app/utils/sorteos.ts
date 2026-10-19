@@ -9,13 +9,14 @@ export const ESTADOS_SORTEO: Record<EstadoSorteo, { etiqueta: string, color: Non
     participacion_abierta: { etiqueta: 'Participación abierta', color: 'success', icono: 'i-lucide-ticket' },
     corte_cerrado: { etiqueta: 'Lista cerrada', color: 'warning', icono: 'i-lucide-list-checks' },
     ejecutado: { etiqueta: 'Sorteado', color: 'primary', icono: 'i-lucide-trophy' },
+    acta_cerrada: { etiqueta: 'Sorteado', color: 'primary', icono: 'i-lucide-trophy' },
     premios_entregados: { etiqueta: 'Premios entregados', color: 'primary', icono: 'i-lucide-gift' },
     cancelado: { etiqueta: 'Cancelado', color: 'error', icono: 'i-lucide-circle-x' },
 }
 
 /** ¿Ya hay resultado? */
 export function sorteoTerminado(estado: EstadoSorteo): boolean {
-    return estado === 'ejecutado' || estado === 'premios_entregados'
+    return estado === 'ejecutado' || estado === 'acta_cerrada' || estado === 'premios_entregados'
 }
 
 /** Ruta de la página pública de bases, resultado y verificación. */

@@ -11,6 +11,8 @@ import AbrirSorteo from '#lealtad/actions/abrir_sorteo'
 import CerrarCorteSorteo from '#lealtad/actions/cerrar_corte_sorteo'
 import MarcarRequisitoSorteo from '#lealtad/actions/marcar_requisito_sorteo'
 import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
+import CambiarAvisoPortalSorteo from '#lealtad/actions/cambiar_aviso_portal_sorteo'
+import db from '@adonisjs/lucid/services/db'
 import { REQUISITOS_PARA_EJECUTAR } from '#lealtad/sorteos'
 
 /**
@@ -66,6 +68,15 @@ async function abrir(e: EmpresasGt, sorteoId: number) {
     await new AbrirSorteo().execute({ id: sorteoId }, e.ctx)
 }
 
+/** Enciende o apaga el aviso del portal como lo hace el panel (`sorteos.cambiar_aviso_portal`). */
+async function aviso(e: EmpresasGt, sorteoId: number, encendido: boolean) {
+    const fila = await db.from('lealtad.sorteos').where('id', sorteoId).select('version').firstOrFail()
+    await new CambiarAvisoPortalSorteo().execute(
+        { id: sorteoId, version: Number(fila.version), aviso_portal: encendido },
+        e.ctx,
+    )
+}
+
 async function cuerpo(peticion: Parameters<typeof estado>[0], status: number) {
     const respuesta = await estado(peticion, status)
     return respuesta.body()
@@ -86,7 +97,7 @@ test.group('Portal: sorteos', (group) => {
     })
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    test('aviso solo con las bases publicadas: en el inicio por la sesión y en el corte por la IP', async ({
+    test('aviso solo con las bases publicadas y el aviso encendido en el panel: inicio por la sesión, corte por la IP', async ({
         client,
         assert,
     }) => {
@@ -108,6 +119,10 @@ test.group('Portal: sorteos', (group) => {
         await estado(client.get(`/api/v1/portal/sorteos/${sorteo.id}/publico`), 404)
 
         await abrir(e, sorteo.id)
+        // publicado pero con el aviso apagado en el panel (así nace): no se anuncia
+        assert.deepEqual(await cuerpo(inicio(), 200), { data: [] })
+        assert.deepEqual(await cuerpo(corte(), 200), { data: [] })
+        await aviso(e, sorteo.id, true)
         for (const peticion of [inicio, corte]) {
             const { data } = await cuerpo(peticion(), 200)
             assert.lengthOf(data, 1)
@@ -119,6 +134,10 @@ test.group('Portal: sorteos', (group) => {
                 premios: 3,
             })
         }
+        // apagarlo lo quita del portal; encenderlo otra vez lo devuelve
+        await aviso(e, sorteo.id, false)
+        assert.deepEqual(await cuerpo(inicio(), 200), { data: [] })
+        await aviso(e, sorteo.id, true)
         // sin cliente identificado (ni sesión ni IP conocida): nada
         const anonimo = await cuerpo(
             client
@@ -173,6 +192,7 @@ test.group('Portal: sorteos', (group) => {
         const e = await prepararEmpresasGt()
         const sorteo = await sorteoEn(e, new Date(Date.now() - DIA), new Date(Date.now() + DIA))
         await abrir(e, sorteo.id)
+        await aviso(e, sorteo.id, true)
         const a = await servicioEn(e.B, { instalacion: '2026-10-01' })
         await servicioEn(e.B, { instalacion: '2026-10-01' })
         await servicioEn(e.B, { instalacion: '2026-10-01' })
@@ -209,9 +229,7 @@ test.group('Portal: sorteos', (group) => {
             assert.match(g.codigo, /\S/)
             assert.notProperty(g, 'cliente_id')
         }
-        const nombres = await import('@adonisjs/lucid/services/db').then(({ default: db }) =>
-            db.from('core.clientes').whereIn('id', [a.clienteId]).select('nombre'),
-        )
+        const nombres = await db.from('core.clientes').whereIn('id', [a.clienteId]).select('nombre')
         for (const { nombre } of nombres) assert.notInclude(respuesta.text(), nombre)
 
         const verificacion = await cuerpo(client.get(`/api/v1/portal/sorteos/${sorteo.id}/verificacion`), 200)

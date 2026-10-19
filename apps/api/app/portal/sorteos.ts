@@ -6,8 +6,9 @@ import { marcaDeEmpresa, type MarcaEmpresa } from '#portal/marca'
 /**
  * Sorteos en el portal (contrato `lealtad.md` §7 y §12), lecturas de `lealtad.sorteos*` de A3:
  *
- * - **Avisos** (`GET /portal/avisos-sorteo`): los sorteos que el panel ya activó para el público
- *   (bases publicadas o participación abierta) y que aún no se sortean, de las empresas del cliente.
+ * - **Avisos** (`GET /portal/avisos-sorteo`): los sorteos con el aviso del portal encendido en el
+ *   panel (`aviso_portal`), ya abiertos al público (bases publicadas o participación abierta) y que
+ *   aún no se sortean, de las empresas del cliente.
  *   Van en el carrusel del inicio y de la página de corte. Sin imágenes: en la página de corte el
  *   cliente suspendido solo alcanza el walled garden.
  * - **Página pública** (`GET /portal/sorteos/:id/publico`): bases, premios, compromiso y, al
@@ -17,7 +18,7 @@ import { marcaDeEmpresa, type MarcaEmpresa } from '#portal/marca'
  */
 
 const ESTADOS_AVISO: readonly EstadoSorteo[] = ['bases_publicadas', 'participacion_abierta']
-const ESTADOS_TERMINADOS: readonly EstadoSorteo[] = ['ejecutado', 'premios_entregados']
+const ESTADOS_TERMINADOS: readonly EstadoSorteo[] = ['ejecutado', 'acta_cerrada', 'premios_entregados']
 
 export interface AvisoSorteo {
     id: number
@@ -57,6 +58,8 @@ export async function avisosDeSorteo(clienteId: number | null, empresaId?: numbe
         .from('lealtad.sorteos')
         .whereIn('empresa_id', empresas)
         .whereIn('estado', [...ESTADOS_AVISO])
+        // el panel lo activa (`sorteos.cambiar_aviso_portal`, decisión del PM): apagado, no se anuncia
+        .where('aviso_portal', true)
         .whereRaw('fecha_sorteo > now()')
         .orderBy('fecha_sorteo', 'asc')
         .orderBy('id', 'asc')
