@@ -25,6 +25,10 @@ import {
 export interface PremioSorteoEntrada {
     nombre: string
     cantidad?: number
+    /**
+     * Ya no se acepta una URL (el portal no carga imágenes externas): la imagen se sube con
+     * `POST /lealtad/sorteos/:id/premios/:posicion/imagen`. Solo `null`.
+     */
     imagen_url?: string | null
     valor: string
     tipo: TipoPremioSorteo
@@ -46,6 +50,8 @@ export interface EntradaSorteo {
     lugar?: string | null
     suplentes?: number
     premios?: PremioSorteoEntrada[]
+    /** el panel lo anuncia en el portal (pedido del PM); editable hasta antes de ejecutar */
+    aviso_portal?: boolean
 }
 
 export function criteriosDe(
@@ -73,6 +79,14 @@ export async function filasPremios(
                 field: `premios.${i}.valor`,
                 message: 'El valor debe ser mayor que 0',
                 rule: 'valor',
+            })
+        }
+        if (p.imagen_url?.trim()) {
+            errores.push({
+                field: `premios.${i}.imagen_url`,
+                message:
+                    'La imagen del premio se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen): el portal no carga URLs externas',
+                rule: 'imagen_externa',
             })
         }
         if (p.tipo === 'servicio') {
@@ -106,7 +120,7 @@ export async function filasPremios(
             posicion: i + 1,
             nombre: p.nombre.trim(),
             cantidad: p.cantidad ?? 1,
-            imagen_url: p.imagen_url?.trim() || null,
+            imagen_url: null,
             valor: valor.toFixed(2),
             tipo: p.tipo,
             premio_id: p.tipo === 'servicio' ? p.premio_id : null,
@@ -161,6 +175,7 @@ export default class CrearSorteo extends DomainAction<
                 fecha_sorteo: fechaHora(input.fecha_sorteo),
                 lugar: input.lugar?.trim() || null,
                 suplentes: input.suplentes ?? 0,
+                aviso_portal: input.aviso_portal ?? false,
             })
             .returning('id')) as Array<{ id: number }>
         const id = Number(fila!.id)
@@ -178,6 +193,7 @@ export default class CrearSorteo extends DomainAction<
             bases: detalle.bases,
             criterios: detalle.criterios,
             premios: detalle.premios.length,
+            aviso_portal: detalle.aviso_portal,
         })
         return detalle
     }

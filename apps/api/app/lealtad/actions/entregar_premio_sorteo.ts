@@ -13,6 +13,8 @@ import { bloquearCliente } from '#billing/cobros'
 import { verPremio } from '#lealtad/premios'
 import { camposAuditables, verCanje } from '#lealtad/canjes'
 import { detalleSorteo, exigirEstado, ganadoresDe, verSorteo } from '#lealtad/sorteos'
+import { verArchivo } from '#lealtad/sorteos_archivos'
+import { cerrarSiTodoResuelto } from '#lealtad/sorteos_entrega'
 
 /**
  * `sorteos.entregar` (`POST /lealtad/sorteos/:id/ganadores/:g/entregar`, permiso `sorteos.entregar`):
@@ -48,6 +50,8 @@ export interface EntradaEntregarPremio {
     cuenta_codigo?: string | null
     /** con `compra`: la línea de la compra registrada con la que se compró el bien (decisión del PM) */
     compra_linea_id?: number | null
+    /** constancia firmada de la entrega (`POST /lealtad/sorteos/:id/archivos`, uso `constancia`) */
+    constancia_archivo_id?: number | null
     nota?: string | null
 }
 
@@ -133,14 +137,14 @@ export default class EntregarPremioSorteo extends DomainAction<
         const sorteo = await verSorteo(input.sorteo_id, t.trx, true)
         exigirAccesoEmpresa(t.ctx, sorteo.empresa_id)
         t.fijarEmpresa(sorteo.empresa_id)
-        exigirEstado(sorteo, ['ejecutado'], 'entregar premios')
+        exigirEstado(sorteo, ['ejecutado', 'acta_cerrada'], 'entregar premios')
         const todos = await ganadoresDe(sorteo.id, t.trx)
         const ganador = todos.find((g) => g.id === input.ganador_id)
         if (!ganador) throw new NoEncontrado(`El ganador ${input.ganador_id} no es del sorteo ${sorteo.id}`)
-        if (ganador.tipo !== 'titular') {
+        if (ganador.premio === null) {
             throw new ReglaNegocio(
-                'Solo se entrega el premio de un titular (los suplentes, en la segunda PR)',
-                'no_titular',
+                'Solo se entrega el premio de un titular o de un suplente que tomó el de un ganador que no lo reclamó',
+                'sin_premio',
             )
         }
         if (!['por_notificar', 'notificado'].includes(ganador.estado)) {
@@ -149,7 +153,21 @@ export default class EntregarPremioSorteo extends DomainAction<
                 'premio_entregado',
             )
         }
-        const premio = sorteo.premios.find((p) => p.posicion === ganador.premio_posicion)!
+        const premio = sorteo.premios.find((p) => p.posicion === ganador.premio)!
+        let constanciaId: number | null = null
+        if (input.constancia_archivo_id) {
+            const archivo = await verArchivo(sorteo.id, input.constancia_archivo_id, t.trx).catch(() => null)
+            if (!archivo || archivo.uso !== 'constancia') {
+                throw new ValidacionFallida([
+                    {
+                        field: 'constancia_archivo_id',
+                        message: 'La constancia debe ser un archivo de uso constancia subido a este sorteo',
+                        rule: 'archivo',
+                    },
+                ])
+            }
+            constanciaId = archivo.id
+        }
         const valor = dec(premio.valor)
         const isr: Dec = premio.retiene_isr ? redondear(valor.times(premio.isr_pct).dividedBy(100)) : CERO
         const descripcion = `Premio ${premio.posicion} del sorteo ${sorteo.id} (${premio.nombre}) al ganador ${ganador.posicion} (${ganador.codigo_publico})`
@@ -282,6 +300,7 @@ export default class EntregarPremioSorteo extends DomainAction<
                 estado: 'entregado',
                 retencion_isr: aTexto(isr),
                 nota: input.nota?.trim() || null,
+                constancia_archivo_id: constanciaId,
                 entregado_en: t.trx.knexRawQuery('now()'),
                 entregado_por: usuarioDelActor(t.ctx.actor),
                 version: t.trx.knexRawQuery('version + 1'),
@@ -292,23 +311,8 @@ export default class EntregarPremioSorteo extends DomainAction<
             { estado: ganador.estado },
             { estado: 'entregado', retencion_isr: aTexto(isr), ...cambios },
         )
-        const despues = await ganadoresDe(sorteo.id, t.trx)
-        const pendientes = despues.filter((g) => g.tipo === 'titular' && g.estado !== 'entregado')
-        if (pendientes.length === 0) {
-            await t.trx
-                .from('lealtad.sorteos')
-                .where('id', sorteo.id)
-                .update({
-                    estado: 'premios_entregados',
-                    version: t.trx.knexRawQuery('version + 1'),
-                    updated_at: t.trx.knexRawQuery('now()'),
-                } as Record<string, unknown>)
-            await t.registrarCambios(
-                { tipo: 'sorteo', id: sorteo.id },
-                { estado: 'ejecutado' },
-                { estado: 'premios_entregados' },
-            )
-        }
+        // con el acta cerrada y ningún premio pendiente, el sorteo queda `premios_entregados`
+        await cerrarSiTodoResuelto(t, sorteo, await ganadoresDe(sorteo.id, t.trx))
         t.fijarEntidad('sorteo', sorteo.id)
         await t.emit('sorteo.premio_entregado', {
             sorteo_id: sorteo.id,

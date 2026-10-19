@@ -35,7 +35,9 @@ Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6
   como canje sin puntos) con el ISR a `2.1.05`. Portal: `GET /portal/sorteos`. Correcciones del auditor
   (contrato §15.3): anular una entrega todo junto (H22), `sorteo` sin reverso directo (H23), ganadores
   congelados (H24), lista blanca de la cuenta del bien (H25), fuente y evidencia del valor público y estado
-  que no retrocede.
+  que no retrocede. Segunda PR (§15.4): archivos de evidencia y constancias, imágenes de premios subidas,
+  `aviso_portal`, notificación a ganadores, suplentes y no reclamados, acta en PDF (`acta_cerrada`) y
+  exportación de participantes en CSV/XLSX.
 
 ## Acciones
 
@@ -44,7 +46,9 @@ Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6
 `lealtad.rechazar_referido`, `lealtad.crear_premio`, `lealtad.editar_premio`, `lealtad.canjear`,
 `lealtad.revertir_canje`, `sorteos.crear`, `sorteos.editar`, `sorteos.publicar_bases`,
 `sorteos.abrir`, `sorteos.cerrar_corte`, `sorteos.cancelar`, `sorteos.marcar_requisito`,
-`sorteos.ejecutar`, `sorteos.entregar`, `sorteos.anular_entrega`, `lealtad.evaluar_evento` (consumidor), `lealtad.otorgar_antiguedad` y
+`sorteos.ejecutar`, `sorteos.entregar`, `sorteos.anular_entrega`, `sorteos.cambiar_aviso_portal`,
+`sorteos.subir_archivo`, `sorteos.subir_imagen_premio`, `sorteos.notificar_ganadores`,
+`sorteos.marcar_no_reclamado`, `sorteos.cerrar_acta`, `lealtad.evaluar_evento` (consumidor), `lealtad.otorgar_antiguedad` y
 `lealtad.vencer` (crons).
 
 ## Eventos
@@ -53,7 +57,8 @@ Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6
   `lealtad.puntos_por_vencer`, `lealtad.puntos_vencidos`, `lealtad.referido_calificado`,
   `lealtad.canje_reservado`, `lealtad.canje_aplicado`, `lealtad.canje_revertido`,
   `sorteo.bases_publicadas`, `sorteo.corte_cerrado`, `sorteo.ejecutado`, `sorteo.premio_entregado`,
-  `sorteo.cancelado`, `sorteo.entrega_anulada`.
+  `sorteo.cancelado`, `sorteo.entrega_anulada`, `sorteo.ganador_notificado`, `sorteo.premio_no_reclamado`,
+  `sorteo.acta_cerrada`.
 - Consume (grupo `lealtad` en `node ace billing:worker`, `consumidor.ts`): `pago.registrado`,
   `pago.anulado`, `factura.emitida`, `factura.anulada`, `nota_credito.emitida`,
   `nota_credito.anulada`, `servicio.creado`, `servicio.estado_cambiado`. Idempotente por

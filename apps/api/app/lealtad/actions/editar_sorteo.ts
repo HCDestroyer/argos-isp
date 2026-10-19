@@ -46,9 +46,26 @@ export default class EditarSorteo extends DomainAction<
                 input.fecha_sorteo === undefined ? actual.fecha_sorteo : fechaHora(input.fecha_sorteo),
             lugar: o(input.lugar, actual.lugar),
             suplentes: input.suplentes ?? actual.suplentes,
+            aviso_portal: input.aviso_portal ?? actual.aviso_portal,
         }
         if (input.premios) {
             const filas = await filasPremios(t.trx, actual.empresa_id, input.premios)
+            // la imagen subida se queda con el premio de la misma posición
+            const imagenes = (await t.trx
+                .from('lealtad.sorteos_premios')
+                .where('sorteo_id', actual.id)
+                .select('posicion', 'imagen_url', 'imagen_archivo_id')) as Array<{
+                posicion: number
+                imagen_url: string | null
+                imagen_archivo_id: number | null
+            }>
+            for (const fila of filas) {
+                const previa = imagenes.find((x) => Number(x.posicion) === fila.posicion)
+                if (previa?.imagen_archivo_id) {
+                    fila.imagen_url = previa.imagen_url
+                    fila.imagen_archivo_id = previa.imagen_archivo_id
+                }
+            }
             await t.trx.from('lealtad.sorteos_premios').where('sorteo_id', actual.id).delete()
             if (filas.length > 0) {
                 await t.trx
@@ -77,6 +94,7 @@ export default class EditarSorteo extends DomainAction<
                 lugar: actual.lugar,
                 suplentes: actual.suplentes,
                 premios: actual.premios.length,
+                aviso_portal: actual.aviso_portal,
             },
             {
                 nombre: despues.nombre,
@@ -86,6 +104,7 @@ export default class EditarSorteo extends DomainAction<
                 lugar: despues.lugar,
                 suplentes: despues.suplentes,
                 premios: input.premios ? input.premios.length : actual.premios.length,
+                aviso_portal: despues.aviso_portal,
             },
         )
         return detalleSorteo(actual.id, t.trx)
