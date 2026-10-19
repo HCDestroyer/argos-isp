@@ -46,7 +46,9 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
         expect(cuentaParaBienDePremio(cuenta('1.1.14', { empresa_id: 2 }), 1)).toBe(false)
         expect(cuentaParaBienDePremio(cuenta('1.1.14', { auxiliar_cliente: true }), 1)).toBe(false)
         expect(cuentaParaBienDePremio(cuenta('5.1.03', { tipo: 'gasto' }), 1)).toBe(false)
-        expect(lineasDeBien(bd.compras, 1).map(({ linea }) => linea.id)).toEqual([11, 21, 22])
+        expect(lineasDeBien(bd.compras, 1).map(({ linea, quedan }) => [linea.id, quedan])).toEqual([[11, 2], [21, 1], [22, 1]])
+        expect(lineasDeBien(bd.compras, 1, { 11: 1, 21: 1 }).map(({ linea, quedan }) => [linea.id, quedan])).toEqual([[11, 1], [22, 1]])
+        expect(esCuentaDeActivoFijo('1.2.01.03') && esCuentaDeActivoFijo('1.2.02') && !esCuentaDeActivoFijo('1.1.14')).toBe(true)
     })
 
     it('bien: proveedor es 422; línea anulada, de otra empresa o de servicio es 422; con la compra queda entregado', async () => {
@@ -60,10 +62,13 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
         }
         const cuentaControl = await entregar({ contrapartida: 'cuenta', cuenta_codigo: '1.1.01.01' })
         expect(!cuentaControl.ok && cuentaControl.problema.errors?.[0]?.field).toBe('cuenta_codigo')
+        const demasiadas = await entregar({ contrapartida: 'compra', compra_linea_id: 11, unidades: 3 })
+        expect(!demasiadas.ok && problemaSorteoLegible(demasiadas.problema).title).toBe('No quedan unidades de esa línea de compra')
         const hecho = await entregar({ contrapartida: 'compra', compra_linea_id: 11 })
         expect(hecho.ok).toBe(true)
         const entregado = hecho.ok ? hecho.data.ganadores.find(g => g.id === ganador.id) : undefined
-        expect(entregado && [entregado.estado, entregado.contrapartida, entregado.compra_linea_id]).toEqual(['entregado', 'compra 1', 11])
+        // 1 de las 2 unidades: la mitad de la base de la línea (Q 4,464.29 / 2, redondeado).
+        expect(entregado && [entregado.estado, entregado.contrapartida, entregado.compra_linea_id, entregado.compra_unidades, entregado.compra_base]).toEqual(['entregado', 'compra 1', 11, 1, '2232.15'])
         expect(contrapartidaLegible('compra 1')).toBe('Compra #1')
         expect(contrapartidaLegible('cuenta 1.1.14')).toBe('Cuenta 1.1.14')
     })
@@ -107,7 +112,7 @@ describe('sorteos · entrega con compra, fuente del valor y anular entrega', () 
         }
         const ganador = await ganadorDe('bien')
         const modal = await mountSuspended(SorteoEntregarModal, {
-            props: { open: false, sorteoId: SORTEO_EJECUTADO_ID, ganador, premio: premioDeGanador(sorteo.data, ganador), nombre: 'Ganador', empresaId: 1, lineasUsadas: [21] },
+            props: { open: false, sorteoId: SORTEO_EJECUTADO_ID, ganador, premio: premioDeGanador(sorteo.data, ganador), nombre: 'Ganador', empresaId: 1, unidadesUsadas: { 21: 1 } },
         })
         await modal.setProps({ open: true })
         await esperar(() => expect(document.querySelector('[data-prueba="entrega-compra-linea"]')).not.toBeNull())

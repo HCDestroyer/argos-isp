@@ -271,7 +271,18 @@ export function problemaSorteoLegible(problema: Problem): Problem {
     if (codigo === 'sin_participantes') {
         return { ...problema, title: 'Sin participantes' }
     }
-    return problema
+    const titulos: Record<string, string> = {
+        compra_ya_entregada: 'No quedan unidades de esa línea de compra',
+        linea_activo_fijo: 'Esa línea de compra es un activo fijo',
+        cuenta_activo_fijo: 'La cuenta es de activo fijo',
+        contrapartida_proveedor: 'Registre primero la compra del bien',
+        plazo_reclamo_vigente: 'El plazo para reclamar sigue vigente',
+        ganador_no_notificado: 'El ganador no está notificado',
+        imagen_externa: 'La imagen se sube desde la ficha',
+        premio_no_entregado: 'Ese premio no está entregado',
+        canje_no_revertible: 'El canje ya se aplicó a una factura',
+    }
+    return codigo && Object.hasOwn(titulos, codigo) ? { ...problema, title: titulos[codigo] ?? problema.title } : problema
 }
 
 /* Formulario del sorteo (borrador). */
@@ -464,6 +475,8 @@ export const esquemaEntregaPremio = z.object({
     cuenta_bancaria_id: z.number().int().positive().nullable(),
     contrapartida: z.enum(['compra', 'cuenta']).nullable(),
     compra_linea_id: z.number().int().positive().nullable(),
+    /** Unidades de la línea que se entregan (1 por defecto; la API no deja pasar de su cantidad). */
+    unidades: z.number({ message: 'Número de unidades' }).int('Sin decimales').min(1, 'Al menos 1').max(10_000, 'Hasta 10,000'),
     cuenta_codigo: textoBases(30),
     nota: textoBases(2000),
 }).superRefine((d, ctx) => {
@@ -504,7 +517,7 @@ export const esquemaAnularEntrega = z.object({
 export type EntradaAnularEntrega = z.input<typeof esquemaAnularEntrega>
 
 export function entradaEntregaVacia(tipo: Premio['tipo']): EntradaEntregaPremio {
-    return { tipo, metodo: tipo === 'efectivo' ? 'caja' : null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: tipo === 'bien' ? 'compra' : null, compra_linea_id: null, cuenta_codigo: '', nota: '' }
+    return { tipo, metodo: tipo === 'efectivo' ? 'caja' : null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: tipo === 'bien' ? 'compra' : null, compra_linea_id: null, unidades: 1, cuenta_codigo: '', nota: '' }
 }
 
 /** Cuerpo de la entrega: solo la contrapartida del tipo del premio (servicio no lleva ninguna). */
@@ -521,7 +534,7 @@ export function cuerpoEntregaPremio(datos: z.output<typeof esquemaEntregaPremio>
     }
     if (datos.tipo === 'bien') {
         return datos.contrapartida === 'compra'
-            ? { contrapartida: 'compra', compra_linea_id: datos.compra_linea_id, nota }
+            ? { contrapartida: 'compra', compra_linea_id: datos.compra_linea_id, unidades: datos.unidades, nota }
             : { contrapartida: datos.contrapartida, cuenta_codigo: datos.cuenta_codigo || null, nota }
     }
     return { nota }
@@ -570,9 +583,32 @@ export function cuentaParaBienDePremio(c: Pick<Schema<'Cuenta'>, 'codigo' | 'tip
     return !CUENTAS_CONTROL_BIEN.some(p => c.codigo === p || c.codigo.startsWith(`${p}.`))
 }
 
-/** Línea de una compra que puede ser el bien entregado: un bien de una compra vigente que no sea NCRE. */
-export function lineasDeBien(compras: readonly Schema<'Compra'>[], empresaId: number | null): { compra: Schema<'Compra'>, linea: Schema<'LineaCompra'> }[] {
+/** Una línea que fue a propiedad, planta y equipo (1.2.01) o a su depreciación (1.2.02) es un activo fijo: no se entrega (422 `linea_activo_fijo`). */
+export function esCuentaDeActivoFijo(codigo: string): boolean {
+    return ['1.2.01', '1.2.02'].some(c => codigo === c || codigo.startsWith(`${c}.`))
+}
+
+/**
+ * Líneas de compra que pueden ser el bien entregado: un bien (no activo fijo) de una compra vigente
+ * que no sea NCRE, con las unidades que le quedan según las entregas de este sorteo (`usadas`: línea →
+ * unidades ya entregadas). La API cuenta también las de otros sorteos (422 `compra_ya_entregada`).
+ */
+export function lineasDeBien(compras: readonly Schema<'Compra'>[], empresaId: number | null, usadas: Readonly<Record<number, number>> = {}): { compra: Schema<'Compra'>, linea: Schema<'LineaCompra'>, quedan: number }[] {
     return compras
         .filter(c => c.estado === 'vigente' && c.tipo_documento !== 'NCRE' && (empresaId === null || c.empresa_id === empresaId))
-        .flatMap(compra => compra.lineas.filter(l => l.tipo === 'bien').map(linea => ({ compra, linea })))
+        .flatMap(compra => compra.lineas
+            .filter(l => l.tipo === 'bien' && !esCuentaDeActivoFijo(l.cuenta_codigo))
+            .map(linea => ({ compra, linea, quedan: (linea.cantidad ?? 1) - (usadas[linea.id] ?? 0) })))
+        .filter(l => l.quedan > 0)
+}
+
+/** Unidades ya entregadas de cada línea de compra en este sorteo (las entregas anuladas no cuentan). */
+export function unidadesEntregadas(ganadores: readonly Ganador[]): Record<number, number> {
+    const usadas: Record<number, number> = {}
+    for (const g of ganadores) {
+        if (g.compra_linea_id && g.estado === 'entregado') {
+            usadas[g.compra_linea_id] = (usadas[g.compra_linea_id] ?? 0) + (g.compra_unidades ?? 1)
+        }
+    }
+    return usadas
 }

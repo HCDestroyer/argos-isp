@@ -121,8 +121,6 @@ const faltantes = computed<RequisitoSorteo['clave'][]>(() => {
     return []
 })
 const corteFuturo = computed(() => estado.value === 'participacion_abierta' && !!sorteo.value?.corte_en && new Date(sorteo.value.corte_en).getTime() > Date.now())
-/** Líneas de compra ya entregadas en este sorteo (no se ofrecen otra vez). */
-const lineasEntregadas = computed(() => (sorteo.value?.ganadores ?? []).flatMap(g => (g.compra_linea_id ? [g.compra_linea_id] : [])))
 const premioAAnular = computed(() => (sorteo.value && ganadorAAnular.value ? premioDeGanador(sorteo.value, ganadorAAnular.value) : null))
 const premioAEntregar = computed(() => (sorteo.value && ganadorAEntregar.value ? premioDeGanador(sorteo.value, ganadorAEntregar.value) : null))
 
@@ -835,7 +833,7 @@ onMounted(() => {
                 :premio="premioAEntregar"
                 :nombre="ganadorAEntregar ? nombres.nombre(ganadorAEntregar.cliente_id) : ''"
                 :empresa-id="sorteo.empresa_id"
-                :lineas-usadas="lineasEntregadas"
+                :unidades-usadas="unidadesEntregadas(sorteo.ganadores)"
                 @hecho="alEntregar"
             />
             <SorteoImagenPremioModal

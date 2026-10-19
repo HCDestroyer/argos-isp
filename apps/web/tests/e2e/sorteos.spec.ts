@@ -136,10 +136,11 @@ test('entregar un bien con la línea de su compra', async ({ page }) => {
     await entrega.getByRole('radio', { name: /Compra registrada/ }).check()
     await entrega.locator('[data-prueba="entrega-compra-linea"]').click()
     await expect(page.getByRole('option', { name: /Instalación del soporte/ })).toHaveCount(0)
-    await page.getByRole('option', { name: /Bicicleta de montaña aro 29/ }).click()
+    await page.getByRole('option', { name: /Bicicleta de montaña aro 29 \(quedan 2 de 2\)/ }).click()
+    await expect(entrega.getByLabel('Unidades que se entregan')).toHaveValue('1')
     await entrega.getByRole('button', { name: 'Registrar entrega' }).click()
     await expect(resultado.locator('[data-ganador="2"] [data-prueba="ganador-estado"]')).toHaveText('Entregado')
-    await expect(resultado.locator('[data-ganador="2"] [data-prueba="ganador-entrega"]')).toContainText('Compra #1')
+    await expect(resultado.locator('[data-ganador="2"] [data-prueba="ganador-entrega"]')).toContainText('Compra #1 · 1 unidad, base Q 2,232.15')
 })
 
 /**

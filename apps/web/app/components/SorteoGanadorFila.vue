@@ -83,7 +83,9 @@ const sustituido = computed(() => (props.ganador.sustituye_a ? props.sorteo.gana
                     class="text-xs text-muted"
                     data-prueba="ganador-entrega"
                 >
-                    {{ contrapartidaLegible(ganador.contrapartida) }}<template v-if="ganador.retencion_isr && ganador.retencion_isr !== '0.00'">
+                    {{ contrapartidaLegible(ganador.contrapartida) }}<template v-if="ganador.compra_unidades">
+                        · {{ ganador.compra_unidades }} {{ ganador.compra_unidades === 1 ? 'unidad' : 'unidades' }}<template v-if="ganador.compra_base">, base {{ formatearQuetzales(ganador.compra_base) }}</template>
+                    </template><template v-if="ganador.retencion_isr && ganador.retencion_isr !== '0.00'">
                         · ISR {{ formatearQuetzales(ganador.retencion_isr) }}
                     </template><template v-if="ganador.entregado_en">
                         · {{ formatearFechaHora(ganador.entregado_en) }}

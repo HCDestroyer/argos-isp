@@ -123,6 +123,8 @@ async function sortearFixture(s: Sorteo, valorPublico: string, evidencia: string
             reclamar_antes: null,
             no_reclamado_en: null,
             constancia_archivo_id: null,
+            compra_unidades: null,
+            compra_base: null,
             version: 1,
         }
     })
@@ -411,11 +413,23 @@ function contabilizarBien(s: Sorteo, ganador: Ganador, cuerpo: Record<string, un
         if (!compra || !linea || compra.estado !== 'vigente' || compra.empresa_id !== s.empresa_id || linea.tipo !== 'bien' || compra.tipo_documento === 'NCRE') {
             return invalido([{ field: 'compra_linea_id', message: 'La línea debe ser un bien de una compra registrada (no anulada, no nota de crédito) de la empresa', rule: 'compra' }])
         }
-        const usada = bd.sorteos.flatMap(x => x.ganadores).find(g => g.compra_linea_id === linea.id && g.id !== ganador.id)
-        if (usada) {
-            return regla('compra_ya_entregada', `La línea ${linea.id} de la compra ${compra.id} ya es el premio del ganador ${usada.id}`)
+        if (['1.2.01', '1.2.02'].some(c => linea.cuenta_codigo === c || linea.cuenta_codigo.startsWith(`${c}.`))) {
+            return regla('linea_activo_fijo', `La línea ${linea.id} de la compra ${compra.id} fue a la cuenta de activo fijo ${linea.cuenta_codigo}: no se entrega como premio`)
         }
-        return { contrapartida: `compra ${compra.id}`, compra_linea_id: linea.id }
+        // Cada entrega consume sus unidades de la línea, prorrateadas (la última lleva el resto).
+        const unidades = typeof cuerpo.unidades === 'number' ? cuerpo.unidades : 1
+        if (!Number.isInteger(unidades) || unidades < 1) {
+            return invalido([{ field: 'unidades', message: 'Al menos 1 unidad', rule: 'min' }])
+        }
+        const cantidad = linea.cantidad ?? 1
+        const previas = bd.sorteos.flatMap(x => x.ganadores).filter(g => g.compra_linea_id === linea.id && g.estado === 'entregado')
+        const usadas = previas.reduce((suma, g) => suma + (g.compra_unidades ?? 1), 0)
+        if (usadas + unidades > cantidad) {
+            return regla('compra_ya_entregada', `La línea ${linea.id} de la compra ${compra.id} tiene ${cantidad} unidad(es) y ya se entregaron ${usadas}: quedan ${cantidad - usadas}`)
+        }
+        const baseTomada = previas.reduce((suma, g) => suma.plus(g.compra_base ?? '0'), new Decimal(0))
+        const parte = new Decimal(linea.base).times(usadas + unidades).div(cantidad).toDecimalPlaces(2).minus(baseTomada)
+        return { contrapartida: `compra ${compra.id}`, compra_linea_id: linea.id, compra_unidades: unidades, compra_base: parte.toFixed(2) }
     }
     if (contrapartida === 'cuenta') {
         if (!cuentaPermitida(cuerpo.cuenta_codigo, s.empresa_id)) {
@@ -1102,7 +1116,7 @@ export const rutasSorteos: RutasFixture = {
         if (ganador.estado !== 'entregado') {
             return regla('premio_no_entregado', `El premio del ganador ${ganador.id} no está entregado`)
         }
-        Object.assign(ganador, { estado: 'por_notificar', retencion_isr: null, contrapartida: null, asiento_id: null, egreso_id: null, canje_id: null, compra_linea_id: null, constancia_archivo_id: null, entregado_en: null, version: ganador.version + 1 })
+        Object.assign(ganador, { estado: 'por_notificar', retencion_isr: null, contrapartida: null, asiento_id: null, egreso_id: null, canje_id: null, compra_linea_id: null, compra_unidades: null, compra_base: null, constancia_archivo_id: null, entregado_en: null, version: ganador.version + 1 })
         // Reabre al estado del que venía: con el acta cerrada, acta_cerrada.
         avanzar(s, s.estado === 'premios_entregados' ? { estado: s.acta_hash ? 'acta_cerrada' : 'ejecutado' } : {})
         registrarAccion(solicitud, 'sorteos.anular_entrega', { tipo: 'sorteo', id: s.id }, { ganador_id: ganador.id, motivo })

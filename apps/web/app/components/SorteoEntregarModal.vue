@@ -18,8 +18,8 @@ const props = defineProps<{
     nombre: string
     /** Empresa del sorteo: las compras y cuentas se filtran por ella. */
     empresaId: number
-    /** Líneas de compra ya entregadas en este sorteo (la API respondería 422 `compra_ya_entregada`). */
-    lineasUsadas: number[]
+    /** Unidades ya entregadas por línea de compra en este sorteo (la API respondería 422 `compra_ya_entregada`). */
+    unidadesUsadas: Record<number, number>
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
@@ -74,10 +74,18 @@ const compras = shallowRef<Compra[]>([])
 const cuentasLibro = shallowRef<Cuenta[]>([])
 const problemaBien = ref<Problem | null>(null)
 const cargandoBien = ref(false)
-const itemsLinea = computed<SelectItem[]>(() => lineasDeBien(compras.value, props.empresaId)
-    .filter(({ linea }) => !props.lineasUsadas.includes(linea.id))
-    .map(({ compra, linea }) => ({
-        label: linea.descripcion,
+const lineas = computed(() => lineasDeBien(compras.value, props.empresaId, props.unidadesUsadas))
+const lineaElegida = computed(() => lineas.value.find(l => l.linea.id === estado.compra_linea_id) ?? null)
+
+// Otra línea: las unidades no pasan de lo que le queda.
+watch(lineaElegida, (linea) => {
+    if (linea && estado.unidades > linea.quedan) {
+        estado.unidades = linea.quedan
+    }
+})
+const itemsLinea = computed<SelectItem[]>(() => lineas.value
+    .map(({ compra, linea, quedan }) => ({
+        label: (linea.cantidad ?? 1) > 1 ? `${linea.descripcion} (quedan ${quedan} de ${linea.cantidad})` : linea.descripcion,
         value: linea.id,
         // Lo que distingue la línea primero (base y documento), para que en 390 px no se corte el monto.
         description: `${formatearQuetzales(linea.base)} sin IVA · ${compra.serie}-${compra.numero} · ${compra.proveedor_nombre}`,
@@ -321,6 +329,21 @@ async function enviar(evento: FormSubmitEvent<EntradaEntregaPremio>) {
                         >
                             Sin el permiso compras.ver no se pueden listar las compras: use una cuenta de activo o pida la entrega a quien lo tenga.
                         </p>
+                    </UFormField>
+                    <UFormField
+                        v-if="estado.contrapartida === 'compra' && lineaElegida"
+                        label="Unidades que se entregan"
+                        name="unidades"
+                        required
+                        :help="`De ${lineaElegida.quedan} disponibles en esta línea. El gasto es la parte de la base por unidad.`"
+                    >
+                        <UInputNumber
+                            v-model="estado.unidades"
+                            :min="1"
+                            :max="lineaElegida.quedan"
+                            class="w-full"
+                            data-prueba="entrega-unidades"
+                        />
                     </UFormField>
                     <p
                         v-if="estado.contrapartida === 'compra' && puede('compras.ver') && !cargandoBien && !problemaBien && !itemsLinea.length"

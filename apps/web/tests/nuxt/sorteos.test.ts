@@ -61,13 +61,13 @@ describe('sorteos · utilidades', () => {
         expect(isrPremio(efectivo).toFixed(2)).toBe('100.00')
         expect(netoPremio(efectivo).toFixed(2)).toBe('900.00')
         expect(netoPremio({ ...efectivo, tipo: 'bien' }).toFixed(2)).toBe('1000.00')
-        expect(cuerpoEntregaPremio({ tipo: 'efectivo', metodo: 'caja', caja_id: 2, banco_id: 1, cuenta_bancaria_id: null, contrapartida: null, compra_linea_id: null, cuenta_codigo: '', nota: '' }))
+        expect(cuerpoEntregaPremio({ tipo: 'efectivo', metodo: 'caja', caja_id: 2, banco_id: 1, cuenta_bancaria_id: null, contrapartida: null, compra_linea_id: null, unidades: 1, cuenta_codigo: '', nota: '' }))
             .toEqual({ metodo: 'caja', caja_id: 2, banco_id: null, cuenta_bancaria_id: null, nota: null })
-        expect(cuerpoEntregaPremio({ tipo: 'bien', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: 'cuenta', compra_linea_id: 11, cuenta_codigo: '1.1.14', nota: 'Recibió el titular' }))
+        expect(cuerpoEntregaPremio({ tipo: 'bien', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: 'cuenta', compra_linea_id: 11, unidades: 1, cuenta_codigo: '1.1.14', nota: 'Recibió el titular' }))
             .toEqual({ contrapartida: 'cuenta', cuenta_codigo: '1.1.14', nota: 'Recibió el titular' })
-        expect(cuerpoEntregaPremio({ tipo: 'bien', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: 'compra', compra_linea_id: 11, cuenta_codigo: '1.1.14', nota: '' }))
-            .toEqual({ contrapartida: 'compra', compra_linea_id: 11, nota: null })
-        expect(cuerpoEntregaPremio({ tipo: 'servicio', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: null, compra_linea_id: null, cuenta_codigo: '', nota: '' })).toEqual({ nota: null })
+        expect(cuerpoEntregaPremio({ tipo: 'bien', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: 'compra', compra_linea_id: 11, unidades: 2, cuenta_codigo: '1.1.14', nota: '' }))
+            .toEqual({ contrapartida: 'compra', compra_linea_id: 11, unidades: 2, nota: null })
+        expect(cuerpoEntregaPremio({ tipo: 'servicio', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: null, compra_linea_id: null, unidades: 1, cuenta_codigo: '', nota: '' })).toEqual({ nota: null })
     })
 
     it('cuerpo del sorteo: fechas en hora de Guatemala a UTC, montos con 2 decimales, premio_id solo en servicio', () => {

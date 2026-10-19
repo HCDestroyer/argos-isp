@@ -9,8 +9,8 @@ import type { Schema } from '@argosisp/contracts'
 type Compra = Schema<'Compra'>
 type Linea = Schema<'LineaCompra'>
 
-function linea(id: number, descripcion: string, base: string, iva: string, cuenta: { id: number, codigo: string }, tipo: Linea['tipo'] = 'bien'): Linea {
-    return { id, descripcion, tipo, cuenta_id: cuenta.id, cuenta_codigo: cuenta.codigo, exento: false, base, iva, clase_activo: null, diferir_meses: null }
+function linea(id: number, descripcion: string, base: string, iva: string, cuenta: { id: number, codigo: string }, tipo: Linea['tipo'] = 'bien', cantidad = 1): Linea {
+    return { id, descripcion, tipo, cuenta_id: cuenta.id, cuenta_codigo: cuenta.codigo, exento: false, base, iva, clase_activo: null, diferir_meses: null, cantidad }
 }
 
 const INVENTARIO = { id: 22, codigo: '1.1.14' }
@@ -63,12 +63,12 @@ export const compras: Compra[] = [
         fecha_documento: '2026-08-20',
         condicion: 'credito',
         vence_en: '2026-09-19',
-        base_bienes: '2232.14',
-        iva: '267.86',
-        total: '2500.00',
-        saldo: '2500.00',
-        descripcion: 'Premio del sorteo Día del cliente',
-        lineas: [linea(11, 'Bicicleta de montaña aro 29', '2232.14', '267.86', INVENTARIO)],
+        base_bienes: '4464.29',
+        iva: '535.71',
+        total: '5000.00',
+        saldo: '5000.00',
+        descripcion: 'Premios de los sorteos (2 bicicletas)',
+        lineas: [linea(11, 'Bicicleta de montaña aro 29', '4464.29', '535.71', INVENTARIO, 'bien', 2)],
     }),
     compra(2, {
         proveedor_nombre: 'Electrónica Central',
