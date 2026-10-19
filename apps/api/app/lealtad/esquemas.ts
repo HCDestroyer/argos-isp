@@ -55,6 +55,11 @@ export const ProgramaLealtad = definirEsquema(
         minimo_canje: entero,
         terminos: texto,
         terminos_hash: { ...texto, description: 'SHA-256 de los términos publicados' },
+        visible_portal: { ...booleano, description: 'El cliente ve sus puntos en el portal' },
+        canje_portal: {
+            ...booleano,
+            description: 'El cliente canjea desde el portal (solo con visible_portal)',
+        },
         vigente_desde: fecha,
         vigente_hasta: nulable(fecha),
         ...auditable,

@@ -14470,6 +14470,14 @@
                     "maxLength": 20000,
                     "description": "Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24)"
                   },
+                  "visible_portal": {
+                    "description": "El cliente ve sus puntos en el portal",
+                    "type": "boolean"
+                  },
+                  "canje_portal": {
+                    "description": "El cliente canjea desde el portal (necesita visible_portal)",
+                    "type": "boolean"
+                  },
                   "vigente_desde": {
                     "type": "string",
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
@@ -44924,6 +44932,8 @@
           "minimo_canje",
           "terminos",
           "terminos_hash",
+          "visible_portal",
+          "canje_portal",
           "vigente_desde",
           "vigente_hasta",
           "version",
@@ -44985,6 +44995,14 @@
           "terminos_hash": {
             "type": "string",
             "description": "SHA-256 de los términos publicados"
+          },
+          "visible_portal": {
+            "type": "boolean",
+            "description": "El cliente ve sus puntos en el portal"
+          },
+          "canje_portal": {
+            "type": "boolean",
+            "description": "El cliente canjea desde el portal (solo con visible_portal)"
           },
           "vigente_desde": {
             "type": "string",

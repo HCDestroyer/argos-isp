@@ -15,6 +15,7 @@ import { hoyGuatemala } from '#ledger/fechas'
 import { saldoPuntos } from '#lealtad/puntos'
 import { sumarMeses } from '#lealtad/condiciones'
 import AjustarPuntos from '#lealtad/actions/ajustar_puntos'
+import { contextoCliente } from '#shared/contexto'
 import EditarPrograma from '#lealtad/actions/editar_programa'
 import CrearPremio, { type EntradaPremio } from '#lealtad/actions/crear_premio'
 import Canjear from '#lealtad/actions/canjear'
@@ -468,6 +469,52 @@ test.group('Lealtad · canjes', (group) => {
     }).fails(
         'H-lealtad-nota-a-favor: los invariantes 3 y 5 del auditor aún no cuentan el saldo a favor de las notas de crédito (notas_credito.a_favor y notas_credito_aplicaciones)',
     )
+
+    test('portal: el cliente canjea solo con visible_portal y canje_portal activos, y solo lo suyo', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const s = await conPuntos(e, 100)
+        const p = await premio(e, s.programa.id, { tipo: 'mes_gratis', costo_puntos: 30 })
+        const portal = contextoCliente(s.clienteId)
+        const cuerpo = { cliente_id: s.clienteId, servicio_id: s.servicioId, premio_id: p.id }
+        const apagado = await errorDe(new Canjear().execute(cuerpo, portal))
+        assert.deepInclude(apagado, { status: 403, codigo: 'canje_portal_inactivo' })
+
+        const actual = await db
+            .from('lealtad.programas')
+            .where('id', s.programa.id)
+            .select('version')
+            .firstOrFail()
+        const sinVer = await errorDe(
+            new EditarPrograma().execute(
+                { id: s.programa.id, version: Number(actual.version), canje_portal: true },
+                e.ctx,
+            ),
+        )
+        assert.equal(sinVer.status, 422)
+        const editado = await new EditarPrograma().execute(
+            { id: s.programa.id, version: Number(actual.version), visible_portal: true, canje_portal: true },
+            e.ctx,
+        )
+        assert.include(editado, { visible_portal: true, canje_portal: true })
+
+        const otro = await servicioEn(e.B)
+        const ajeno = await errorDe(new Canjear().execute(cuerpo, contextoCliente(otro.clienteId)))
+        assert.equal(ajeno.status, 403)
+        const canje = await new Canjear().execute(cuerpo, portal)
+        assert.equal(canje.canal, 'portal')
+        const auditoria = await db
+            .from('audit.acciones')
+            .where('accion', 'lealtad.canjear')
+            .where('entidad_id', canje.id)
+            .where('resultado', 'ok')
+            .firstOrFail()
+        assert.include(auditoria, { actor_tipo: 'cliente', canal: 'portal' })
+        assert.equal(Number(auditoria.actor_id), s.clienteId)
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 
     test('HTTP: canje con Idempotency-Key no se duplica; cajero canjea y no revierte', async ({
         client,

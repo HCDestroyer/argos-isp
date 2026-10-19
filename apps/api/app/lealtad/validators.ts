@@ -73,6 +73,14 @@ export const editarProgramaValidator = vine.compile(
         aviso_vencimiento_dias: camposPrograma.aviso_vencimiento_dias,
         minimo_canje: camposPrograma.minimo_canje,
         terminos: camposPrograma.terminos,
+        visible_portal: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'El cliente ve sus puntos en el portal' }),
+        canje_portal: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'El cliente canjea desde el portal (necesita visible_portal)' }),
         vigente_desde: fechaIso().optional(),
         vigente_hasta: fechaIso().nullable().optional(),
     }),

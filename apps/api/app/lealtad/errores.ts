@@ -54,6 +54,18 @@ export class ReferidoInvalido extends Problema {
     }
 }
 
+/** 403 `canje_portal_inactivo`: el programa no permite canjear desde el portal. */
+export class CanjePortalInactivo extends Problema {
+    constructor(empresaId: number) {
+        super(
+            403,
+            'canje_portal_inactivo',
+            'Canje en el portal inactivo',
+            `El programa de lealtad de la empresa ${empresaId} no permite canjear desde el portal`,
+        )
+    }
+}
+
 /** 409 `sin_existencias`: premio agotado. */
 export class SinExistencias extends Conflicto {
     constructor(premioId: number) {

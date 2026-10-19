@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Prohibido, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { usuarioDelActor } from '#shared/contexto'
 import { dec, redondear, type Dec } from '#ledger/dinero'
@@ -17,6 +17,7 @@ import {
     ServicioNoValido,
     SinExistencias,
     CanjePendiente,
+    CanjePortalInactivo,
 } from '#lealtad/errores'
 import { programaActivo } from '#lealtad/programas'
 import { verPremio, type PremioVista } from '#lealtad/premios'
@@ -51,6 +52,10 @@ import { bloquearClienteLealtad, saldoPuntos, salidaCanje } from '#lealtad/punto
  * - `descuento_factura` / `mes_gratis` sin factura: `reservado` para la próxima factura del servicio.
  * - `bien`: 422 `parametro_sin_confirmar` (`premio_bien_iva`, decisión del contador). `boletos`: fase 3.
  *
+ * Portal (A5): con actor `cliente` o canal `portal`, exige `visible_portal` y `canje_portal` del programa
+ * (403 `canje_portal_inactivo`) y que el cliente sea el del canje (403); queda con canal `portal` y
+ * auditado como el cliente.
+ *
  * Eventos `lealtad.canje_reservado` o `lealtad.canje_aplicado`.
  */
 
@@ -82,6 +87,14 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
         t.fijarEmpresa(empresaId)
         const programa = await programaActivo(empresaId, t.trx)
         if (!programa) throw new ProgramaInactivo(empresaId)
+        // portal (A5): un cliente solo canjea sus propios puntos y si el programa lo permite
+        const desdePortal = t.ctx.actor.tipo === 'cliente' || t.ctx.canal === 'portal'
+        if (desdePortal) {
+            if (!programa.visible_portal || !programa.canje_portal) throw new CanjePortalInactivo(empresaId)
+            if (t.ctx.actor.tipo === 'cliente' && t.ctx.actor.id !== input.cliente_id) {
+                throw new Prohibido('Un cliente solo canjea sus propios puntos')
+            }
+        }
         if (premio.programa_id !== programa.id || !premio.activo) {
             throw new ReglaNegocio(`El premio ${premio.id} no está activo en el programa`, 'premio_inactivo')
         }
@@ -150,7 +163,7 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
                 premio_id: premio.id,
                 tipo: premio.tipo,
                 puntos: premio.costo_puntos,
-                canal: input.canal ?? 'panel',
+                canal: desdePortal ? 'portal' : (input.canal ?? 'panel'),
                 creado_por: usuarioDelActor(t.ctx.actor),
             })
             .returning('id')) as Array<{ id: number }>

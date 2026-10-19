@@ -7658,6 +7658,10 @@ export interface components {
             terminos: string;
             /** @description SHA-256 de los términos publicados */
             terminos_hash: string;
+            /** @description El cliente ve sus puntos en el portal */
+            visible_portal: boolean;
+            /** @description El cliente canjea desde el portal (solo con visible_portal) */
+            canje_portal: boolean;
             /** Format: date */
             vigente_desde: string;
             /** Format: date */
@@ -17191,6 +17195,10 @@ export interface operations {
                     minimo_canje?: number;
                     /** @description Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24) */
                     terminos?: string;
+                    /** @description El cliente ve sus puntos en el portal */
+                    visible_portal?: boolean;
+                    /** @description El cliente canjea desde el portal (necesita visible_portal) */
+                    canje_portal?: boolean;
                     /** Format: date */
                     vigente_desde?: string;
                     /** Format: date */
