@@ -138,6 +138,8 @@
       "lealtad.ver",
       "lealtad.configurar",
       "lealtad.ajustar",
+      "anuncios.ver",
+      "anuncios.administrar",
       "servicios.agregar_adicional",
       "servicios.editar_adicional",
       "servicios.quitar_adicional",

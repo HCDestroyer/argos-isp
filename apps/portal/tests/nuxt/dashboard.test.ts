@@ -182,13 +182,14 @@ describe('/cuenta: inicio y secciones', () => {
         expect(navegar).toHaveBeenCalledWith('/cuenta?seccion=pagar')
     })
 
-    it('cada sección se elige por la URL', async () => {
+    // Un montaje de /cuenta por prueba: tres en una sola sumaban el tiempo de los tres.
+    it.each(['pagar', 'facturas', 'cuenta'] as const)('la sección %s se elige por la URL', async (seccion) => {
         fijarSesionFixture(true)
-        for (const seccion of ['pagar', 'facturas', 'cuenta'] as const) {
-            const wrapper = await montarCuenta(`/cuenta?seccion=${seccion}`)
-            expect(wrapper.find(`[data-testid="seccion-${seccion}"]`).exists(), seccion).toBe(true)
-            wrapper.unmount()
-        }
+        const wrapper = await montarCuenta(`/cuenta?seccion=${seccion}`)
+        expect(wrapper.find(`[data-testid="seccion-${seccion}"]`).exists(), seccion).toBe(true)
+    })
+
+    it('una sección desconocida o sin sección es el inicio', () => {
         expect(seccionDeLaRuta('otra')).toBe('inicio')
         expect(seccionDeLaRuta(undefined)).toBe('inicio')
     })

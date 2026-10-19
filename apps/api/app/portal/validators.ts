@@ -183,6 +183,94 @@ export const vincularTelegramValidator = vine.compile(
     }),
 )
 
+/*
+|--------------------------------------------------------------------------
+| Anuncios (contrato `anuncios.md`)
+|--------------------------------------------------------------------------
+| Sin `.meta()` en los campos obligatorios: en VineJS 4.4 los deja aceptar `null`.
+*/
+
+const AUDIENCIAS_ANUNCIO = ['todos', 'suspendidos', 'con_puntos', 'al_dia'] as const
+const LUGARES_ANUNCIO = ['portal_inicio', 'pagina_corte'] as const
+const ESTADOS_ANUNCIO = ['borrador', 'publicado', 'archivado'] as const
+
+// `type` con `null`: el `type` del `.meta()` reemplaza el que deduce el generador del OpenAPI y
+// sin él `inicio: null` / `fin: null` (que borran la vigencia) quedarían fuera de los tipos.
+const instanteOpcional = () =>
+    vine
+        .date({ formats: ['iso8601'] })
+        .nullable()
+        .optional()
+        .meta({ type: ['string', 'null'], format: 'date-time' })
+
+const camposAnuncio = {
+    texto: vine.string().trim().maxLength(500).optional().meta({
+        description: 'Texto plano (sin HTML; el portal lo muestra tal cual, con saltos de línea)',
+    }),
+    boton_texto: vine.string().trim().minLength(1).maxLength(40).nullable().optional(),
+    boton_url: vine.string().trim().maxLength(500).nullable().optional().meta({
+        description: '`https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`)',
+    }),
+    inicio: instanteOpcional(),
+    fin: instanteOpcional(),
+    audiencia: vine.enum(AUDIENCIAS_ANUNCIO).optional(),
+    lugares: vine.array(vine.enum(LUGARES_ANUNCIO)).minLength(1).maxLength(2).optional(),
+    orden: vine.number().withoutDecimals().min(-1000).max(1000).optional().meta({
+        description: 'Mayor primero en el carrusel; a igual orden, el más nuevo',
+    }),
+}
+
+export const crearAnuncioValidator = vine.compile(
+    vine.object({
+        titulo: vine.string().trim().minLength(1).maxLength(80),
+        ...camposAnuncio,
+    }),
+)
+
+export const editarAnuncioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        titulo: vine.string().trim().minLength(1).maxLength(80).optional(),
+        imagen_alt: vine.string().trim().minLength(1).maxLength(200).optional().meta({
+            description: 'Texto alternativo de la imagen (solo si el anuncio tiene imagen)',
+        }),
+        ...camposAnuncio,
+    }),
+)
+
+export const imagenAnuncioValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        alt: vine.string().trim().minLength(1).maxLength(200).optional().meta({
+            description: 'Texto alternativo; obligatorio al subir si el anuncio aún no tiene',
+        }),
+        quitar: vine.boolean().optional().meta({ description: 'true = quitar la imagen (sin archivo)' }),
+    }),
+)
+
+export const estadoAnuncioValidator = vine.compile(vine.object({ version: versionEsperada() }))
+
+export const listarAnunciosValidator = vine.compile(
+    vine.object({
+        ...reglasPaginacion,
+        estado: vine.enum(ESTADOS_ANUNCIO).optional(),
+    }),
+)
+
+export const anunciosPortalValidator = vine.compile(
+    vine.object({
+        lugar: vine.enum(LUGARES_ANUNCIO),
+    }),
+)
+
+export const eventoAnuncioValidator = vine.compile(
+    vine.object({
+        tipo: vine.enum(['vista', 'clic'] as const),
+        visitante: vine.string().trim().uuid(),
+        lugar: vine.enum(LUGARES_ANUNCIO),
+    }),
+)
+
 /** `POST /nodos-portal` (contrato `nodo-portal.md`). */
 export const crearNodoPortalValidator = vine.compile(
     vine.object({
