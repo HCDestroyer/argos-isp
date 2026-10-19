@@ -25,6 +25,7 @@ import {
 import { EMPRESA_FIXTURE, EMPRESA_SUR_FIXTURE, MARCA_SUR_FIXTURE } from './empresa'
 import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
 import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
+import { ANUNCIOS_FIXTURE } from './anuncios'
 import {
     condicionesConPagoPrevioFixture,
     condicionesConPromesaFixture,
@@ -309,7 +310,56 @@ function conFallas(rutas: RutasFixture): RutasFixture {
     ]))
 }
 
+/**
+ * Anuncios: `fijarAnunciosFixture(lista)` en pruebas o `?anuncios=1|3` en la URL (desarrollo; se
+ * recuerda en la pestaña). Por defecto ninguno: el portal y `/corte` quedan como sin esta función.
+ * Los eventos (vistas y clics) se anotan para las pruebas.
+ */
+const CLAVE_ANUNCIOS = 'argos:fixture:anuncios'
+const anuncios: {
+    lista: Schema<'PortalAnuncio'>[] | null
+    eventos: Array<{ id: number, tipo: string, visitante: string, lugar: string }>
+} = { lista: null, eventos: [] }
+
+export function fijarAnunciosFixture(lista: Schema<'PortalAnuncio'>[] | null): void {
+    anuncios.lista = lista
+    anuncios.eventos = []
+}
+
+export function eventosAnunciosFixture() {
+    return anuncios.eventos
+}
+
+function anunciosDeLaUrl(): Schema<'PortalAnuncio'>[] {
+    if (typeof window === 'undefined') {
+        return []
+    }
+    let pedido = new URL(window.location.href).searchParams.get('anuncios')
+    try {
+        if (pedido) {
+            sessionStorage.setItem(CLAVE_ANUNCIOS, pedido)
+        }
+        else {
+            pedido = sessionStorage.getItem(CLAVE_ANUNCIOS)
+        }
+    }
+    catch {
+        // Sin almacenamiento: solo cuenta la URL.
+    }
+    const cuantos = Number(pedido)
+    return Number.isInteger(cuantos) && cuantos > 0 ? ANUNCIOS_FIXTURE.slice(0, cuantos) : []
+}
+
 const rutasBase: RutasFixture = {
+    'GET /api/v1/portal/anuncios': () => ({
+        status: 200,
+        cuerpo: { data: anuncios.lista ?? anunciosDeLaUrl() },
+    }),
+    'POST /api/v1/portal/anuncios/:id/eventos': ({ params, cuerpo }) => {
+        const evento = cuerpo as { tipo: string, visitante: string, lugar: string }
+        anuncios.eventos.push({ id: Number(params.id), ...evento })
+        return { status: 204 }
+    },
     'GET /api/v1/portal/quien-soy': () => {
         consultasEstado = 0
         return { status: 200, cuerpo: ESCENARIOS_CORTE[escenarioCorte()] }

@@ -7,7 +7,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import { definirRuta, etagCoincide, sinCambios, type Ruta } from '#shared/rutas'
 import { NoEncontrado, ValidacionFallida } from '#shared/errores'
-import { lista, pagina } from '#shared/openapi/esquemas'
+import { lista, objeto, pagina } from '#shared/openapi/esquemas'
 import {
     Empresa,
     EmpresaPublica,
@@ -115,6 +115,34 @@ import {
     urlRetornoPortal,
 } from '#portal/pagos_en_linea'
 import { exigirAlcance } from '#core/acl'
+import { readFile } from 'node:fs/promises'
+import { exigirAccesoEmpresa, empresasDeLaLista } from '#shared/empresa_activa'
+import { Anuncio, MetricasAnuncio, PortalAnuncio } from '#portal/esquemas'
+import {
+    anunciosPortalValidator,
+    crearAnuncioValidator,
+    editarAnuncioValidator,
+    estadoAnuncioValidator,
+    eventoAnuncioValidator,
+    imagenAnuncioValidator,
+    listarAnunciosValidator,
+} from '#portal/validators'
+import {
+    anuncioVigente,
+    anunciosParaCliente,
+    filaDeAnuncio,
+    listarAnuncios,
+    metricasDeAnuncio,
+    verAnuncio,
+    type AnuncioVista,
+} from '#portal/anuncios'
+import { TAMANO_MAXIMO_IMAGEN, leerImagenAnuncio } from '#portal/anuncios_imagenes'
+import CrearAnuncio from '#portal/actions/crear_anuncio'
+import EditarAnuncio from '#portal/actions/editar_anuncio'
+import CambiarImagenAnuncio from '#portal/actions/cambiar_imagen_anuncio'
+import PublicarAnuncio from '#portal/actions/publicar_anuncio'
+import ArchivarAnuncio from '#portal/actions/archivar_anuncio'
+import RegistrarEventoAnuncio from '#portal/actions/registrar_evento_anuncio'
 import { dimensionesDeFactura } from '#billing/facturas'
 
 /** Responde un PDF en línea (se abre en el navegador; el usuario lo guarda si quiere). */
@@ -1035,6 +1063,306 @@ const comprobantes: Ruta[] = [
     }),
 ]
 
+/*
+|--------------------------------------------------------------------------
+| Anuncios (contrato `anuncios.md`): panel y portal
+|--------------------------------------------------------------------------
+*/
+
+async function imagenDeLaPeticion(ctx: HttpContext): Promise<Uint8Array> {
+    const archivos = ctx.request.files('imagen')
+    if (archivos.length > 1) {
+        throw new ValidacionFallida([{ field: 'imagen', rule: 'unico', message: 'Más de un archivo' }])
+    }
+    const archivo = archivos[0]
+    if (!archivo?.tmpPath) {
+        throw new ValidacionFallida([
+            { field: 'imagen', rule: 'required', message: 'Falta el archivo de la imagen' },
+        ])
+    }
+    if (archivo.size > TAMANO_MAXIMO_IMAGEN) {
+        throw new ValidacionFallida([
+            {
+                field: 'imagen',
+                rule: 'tamano',
+                message: `La imagen pesa ${Math.ceil(archivo.size / 1024)} KB; el máximo es 1024 KB`,
+            },
+        ])
+    }
+    return readFile(archivo.tmpPath)
+}
+
+/** Anuncio de la empresa que el usuario puede ver (403 `empresa_no_permitida` si no). */
+async function anuncioDelPanel(ctx: HttpContext, id: number): Promise<AnuncioVista> {
+    const anuncio = await verAnuncio(id)
+    exigirAccesoEmpresa(ctx.contextoAccion(), anuncio.empresa_id)
+    return anuncio
+}
+
+/** Imagen con ETag y caché; `nosniff` porque el tipo sale de la firma guardada. */
+async function enviarImagenAnuncio(
+    ctx: HttpContext,
+    fila: { imagen: string | null; imagen_tipo: string | null; imagen_etag: string | null },
+    cache: string,
+) {
+    if (!fila.imagen || !fila.imagen_tipo || !fila.imagen_etag) {
+        throw new NoEncontrado('El anuncio no tiene imagen')
+    }
+    ctx.response.header('ETag', `"${fila.imagen_etag}"`)
+    ctx.response.header('Cache-Control', cache)
+    ctx.response.header('X-Content-Type-Options', 'nosniff')
+    if (etagCoincide(ctx, fila.imagen_etag)) return sinCambios()
+    const contenido = await leerImagenAnuncio(fila.imagen)
+    ctx.response.header('Content-Type', fila.imagen_tipo)
+    return contenido
+}
+
+const SOBRE_EL_ANUNCIO =
+    'Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.'
+
+const anuncios: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/anuncios',
+        operacion: 'anunciosListar',
+        resumen: 'Anuncios del portal (de la empresa activa)',
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.ver',
+        query: listarAnunciosValidator,
+        respuesta: { status: 200, descripcion: 'Página de anuncios', esquema: pagina(Anuncio) },
+        handler: (ctx, { query }) => listarAnuncios({ ...query, empresas: empresasDeLaLista(ctx.empresa) }),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/anuncios',
+        operacion: 'anunciosCrear',
+        resumen: 'Crear un anuncio (en borrador)',
+        descripcion:
+            'En la empresa activa (`X-Empresa-Id`; 422 `empresa_requerida` si el usuario tiene varias y no ' +
+            'eligió). Texto plano. El botón lleva texto y URL juntos: `http(s)://…` o una ruta del portal (`/…`).',
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.administrar',
+        cuerpo: crearAnuncioValidator,
+        respuesta: { status: 201, descripcion: 'Anuncio creado', esquema: Anuncio },
+        handler: (ctx, { cuerpo }) => new CrearAnuncio().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/anuncios/:id',
+        operacion: 'anunciosVer',
+        resumen: 'Ver un anuncio',
+        descripcion: SOBRE_EL_ANUNCIO,
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.ver',
+        respuesta: { status: 200, descripcion: 'Anuncio', esquema: Anuncio },
+        handler: (ctx, { params }) => anuncioDelPanel(ctx, Number(params.id)),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/anuncios/:id',
+        operacion: 'anunciosEditar',
+        resumen: 'Editar un anuncio (borrador o publicado)',
+        descripcion: `Solo los campos enviados; \`null\` borra los opcionales. Archivado: 422 \`anuncio_archivado\`. ${SOBRE_EL_ANUNCIO}`,
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.administrar',
+        cuerpo: editarAnuncioValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Anuncio actualizado', esquema: Anuncio },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarAnuncio().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/anuncios/:id/imagen',
+        operacion: 'anunciosCambiarImagen',
+        resumen: 'Subir o quitar la imagen de un anuncio',
+        descripcion:
+            '`multipart/form-data` con `imagen`: PNG, JPEG o WebP (por su contenido), hasta 1 MB y de 64 a 4096 px ' +
+            'por lado; `alt` (texto alternativo) obligatorio si el anuncio aún no tiene. `quitar=true` sin archivo ' +
+            `la quita. ${SOBRE_EL_ANUNCIO}`,
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.administrar',
+        cuerpo: imagenAnuncioValidator,
+        multipart: { archivos: { imagen: 'PNG, JPEG o WebP, hasta 1 MB' }, archivosOpcionales: ['imagen'] },
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Anuncio con su imagen', esquema: Anuncio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const contenido = cuerpo.quitar ? new Uint8Array() : await imagenDeLaPeticion(ctx)
+            return new CambiarImagenAnuncio().execute(
+                {
+                    id: Number(params.id),
+                    version: cuerpo.version,
+                    contenido,
+                    alt: cuerpo.alt,
+                    quitar: cuerpo.quitar === true,
+                },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/anuncios/:id/imagen',
+        operacion: 'anunciosImagen',
+        resumen: 'Imagen de un anuncio (vista previa del panel, con ETag)',
+        descripcion: SOBRE_EL_ANUNCIO,
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.ver',
+        respuesta: { status: 200, descripcion: 'Imagen', contenido: 'image/*', etag: true },
+        handler: async (ctx, { params }) => {
+            const fila = await filaDeAnuncio(Number(params.id))
+            exigirAccesoEmpresa(ctx.contextoAccion(), fila.empresa_id)
+            return enviarImagenAnuncio(ctx, fila, 'private, max-age=60')
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/anuncios/:id/publicar',
+        operacion: 'anunciosPublicar',
+        resumen: 'Publicar un anuncio (se ve en el portal dentro de su vigencia)',
+        descripcion: `Desde borrador o archivado; ya publicado no cambia nada. Con \`fin\` pasado, 422 \`anuncio_vencido\`. ${SOBRE_EL_ANUNCIO}`,
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.administrar',
+        cuerpo: estadoAnuncioValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Anuncio publicado', esquema: Anuncio },
+        handler: (ctx, { cuerpo, params }) =>
+            new PublicarAnuncio().execute(
+                { id: Number(params.id), version: cuerpo.version },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/anuncios/:id/archivar',
+        operacion: 'anunciosArchivar',
+        resumen: 'Archivar un anuncio (deja de verse; conserva sus métricas)',
+        descripcion: `Desde borrador o publicado; ya archivado no cambia nada. ${SOBRE_EL_ANUNCIO}`,
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.administrar',
+        cuerpo: estadoAnuncioValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Anuncio archivado', esquema: Anuncio },
+        handler: (ctx, { cuerpo, params }) =>
+            new ArchivarAnuncio().execute(
+                { id: Number(params.id), version: cuerpo.version },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/anuncios/:id/metricas',
+        operacion: 'anunciosMetricas',
+        resumen: 'Vistas y clics de un anuncio (totales, por lugar y por día)',
+        descripcion: `Visitantes distintos (uno por sesión del navegador), sin datos personales. ${SOBRE_EL_ANUNCIO}`,
+        etiqueta: 'anuncios',
+        permiso: 'anuncios.ver',
+        respuesta: { status: 200, descripcion: 'Métricas', esquema: MetricasAnuncio },
+        handler: async (ctx, { params }) => {
+            await anuncioDelPanel(ctx, Number(params.id))
+            return metricasDeAnuncio(Number(params.id))
+        },
+    }),
+]
+
+/**
+ * Cliente al que se le muestran anuncios: en la página de corte, el del servicio de la IP (y solo su
+ * empresa); si no hay servicio en la IP o en el inicio del portal, el de la sesión. Sin ninguno, null.
+ */
+async function clienteDeLosAnuncios(
+    ctx: HttpContext,
+    ip: string,
+    lugar: 'portal_inicio' | 'pagina_corte',
+): Promise<{ clienteId: number | null; empresaId?: number }> {
+    if (lugar === 'pagina_corte') {
+        const servicioId = await resolverServicio(db.connection(), ip)
+        if (servicioId) {
+            const fila = (await db
+                .from('core.servicios')
+                .where('id', servicioId)
+                .select('cliente_id', db.raw('coalesce(empresa_id, 1)::int as empresa_id'))
+                .first()) as { cliente_id: number; empresa_id: number } | null
+            if (fila) return { clienteId: Number(fila.cliente_id), empresaId: Number(fila.empresa_id) }
+        }
+    }
+    return { clienteId: await clienteDeLaSesionSiHay(ctx) }
+}
+
+const anunciosPortal: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/anuncios',
+        operacion: 'portalAnuncios',
+        resumen: 'Anuncios vigentes para el cliente en un lugar del portal',
+        descripcion:
+            '`lugar=pagina_corte`: el cliente del servicio de la IP (solo su empresa) o, si no, el de la sesión. ' +
+            '`lugar=portal_inicio`: el de la sesión. Solo publicados, dentro de su vigencia y cuya audiencia le ' +
+            'aplica (`todos`, `suspendidos`: algún servicio suspendido o limitado, `al_dia`: sin eso ni facturas ' +
+            `vencidas, \`con_puntos\`: saldo de puntos > 0). Sin cliente identificado: lista vacía. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        query: anunciosPortalValidator,
+        respuesta: { status: 200, descripcion: 'Anuncios', esquema: objeto({ data: lista(PortalAnuncio) }) },
+        // el límite va antes de validar: un `lugar` inválido también consume el cupo
+        antes: async (ctx) => {
+            await ipDelCliente(ctx, 'anuncios')
+        },
+        handler: async (ctx, { query }) => {
+            const ip = ipOrigenDeLaPeticion(ctx)!
+            const { clienteId, empresaId } = await clienteDeLosAnuncios(ctx, ip, query.lugar)
+            return { data: await anunciosParaCliente(clienteId, query.lugar, empresaId) }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/anuncios/:id/imagen',
+        operacion: 'portalAnuncioImagen',
+        resumen: 'Imagen de un anuncio vigente (mismo origen del portal, con ETag)',
+        descripcion: `Solo de anuncios publicados y vigentes; si no, 404. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Imagen', contenido: 'image/*', etag: true },
+        handler: async (ctx, { params }) => {
+            await ipDelCliente(ctx, 'anuncios-imagen')
+            const fila = await anuncioVigente(Number(params.id))
+            return enviarImagenAnuncio(ctx, fila, 'public, max-age=300')
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/anuncios/:id/eventos',
+        operacion: 'portalAnuncioEvento',
+        resumen: 'Cuenta una vista o un clic de un anuncio vigente',
+        descripcion:
+            '`visitante` es un UUID que el navegador genera por sesión (sin datos personales; nada va en la URL). ' +
+            'Idempotente: una vista y un clic por visitante y anuncio. 404 si el anuncio no está vigente. ' +
+            SOBRE_LA_IP,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        cuerpo: eventoAnuncioValidator,
+        respuesta: { status: 204, descripcion: 'Contado (o ya estaba)' },
+        antes: async (ctx) => {
+            await ipDelCliente(ctx, 'anuncios-eventos')
+        },
+        handler: async (ctx, { cuerpo, params }) => {
+            const fila = await anuncioVigente(Number(params.id))
+            if (!fila.lugares.includes(cuerpo.lugar)) {
+                throw new NoEncontrado('El anuncio no está en ese lugar')
+            }
+            await new RegistrarEventoAnuncio().execute(
+                { anuncio_id: fila.id, tipo: cuerpo.tipo, visitante: cuerpo.visitante, lugar: cuerpo.lugar },
+                ctx.contextoAccion('portal'),
+            )
+        },
+    }),
+]
+
 const portal: Ruta[] = [
     ...publicas,
     ...autenticadas,
@@ -1044,6 +1372,8 @@ const portal: Ruta[] = [
     ...pagosEnLinea,
     ...documentos,
     ...empresa,
+    ...anuncios,
+    ...anunciosPortal,
 ]
 
 export default portal
