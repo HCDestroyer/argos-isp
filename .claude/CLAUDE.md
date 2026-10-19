@@ -156,6 +156,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sesion.iniciada` / `sesion.terminada` | aaa | servicio_id, nas_ip, acct_session_id, ipv4, prefijos_v6; `sesion.terminada` además motivo (causa de fin) |
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence |
 | `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
+| `pago.diferencia_cerrada` | billing | pago_id, empresa_id, cliente_id (pagador), facturas[], monto (saldo pequeño cerrado como gasto 5.3.05) |
 | `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
 | `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, empresa_id, servicio_id, vence, monto |

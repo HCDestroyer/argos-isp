@@ -22,7 +22,10 @@ type Movimiento = Schema<'MovimientoEstadoCuenta'>
 const { puede } = usePermisos()
 const { conSelector: porEmpresa } = useEmpresaActiva()
 
-/** Enlace al documento del movimiento (factura, mora, pago o nota de crédito), si el usuario puede verlo. */
+/**
+ * Enlace al documento del movimiento (factura, mora, pago o nota de crédito), si el usuario puede verlo.
+ * Una `diferencia_cobro` no tiene ficha propia (`referencia_id` es la diferencia): va sin enlace.
+ */
 function enlaceMovimiento(movimiento: Movimiento): string | null {
     if ((movimiento.tipo === 'factura' || movimiento.tipo === 'mora') && puede('facturas.ver')) {
         return `/facturas/${movimiento.referencia_id}`
@@ -98,7 +101,7 @@ const gruposFacturas = computed<GrupoCuenta[]>(() => {
 })
 
 function pendiente(factura: Factura): Decimal {
-    return new Decimal(factura.total).minus(factura.pagado)
+    return saldoFactura(factura)
 }
 
 function esCero(monto: string): boolean {
@@ -311,6 +314,20 @@ onMounted(cargar)
                 </template>
                 <template #descripcion-cell="{ row }">
                     <div class="flex flex-col">
+                        <!-- Decisión B (A3): el saldo pequeño de un pago cerrado como gasto; abona sin cobro. -->
+                        <span
+                            v-if="row.original.tipo === 'diferencia_cobro'"
+                            class="mb-0.5"
+                        >
+                            <UBadge
+                                label="Diferencia cerrada (gasto)"
+                                icon="i-lucide-scissors"
+                                color="neutral"
+                                variant="subtle"
+                                size="sm"
+                                data-prueba="movimiento-diferencia"
+                            />
+                        </span>
                         <ULink
                             v-if="enlaceMovimiento(row.original)"
                             :to="enlaceMovimiento(row.original) ?? undefined"

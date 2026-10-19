@@ -22,7 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
-const saldo = computed(() => new Decimal(props.factura.total).minus(props.factura.pagado))
+const saldo = computed(() => saldoFactura(props.factura))
 const conNcre = computed(() => props.factura.fel_estado === 'certificado')
 
 const modos: TabsItem[] = [
