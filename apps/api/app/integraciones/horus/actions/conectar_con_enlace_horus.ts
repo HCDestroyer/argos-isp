@@ -1,7 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { cifrar } from '#shared/cifrado'
-import { errorUrl } from '#integraciones/horus/configuracion'
+import { errorUrl, origenHorus } from '#integraciones/horus/configuracion'
 import { generarSecretoWebhook } from '#integraciones/horus/firma'
 import { bloquearConector, guardarConector } from '#integraciones/horus/escritura'
 import { RUTA_RECEPTOR, vistaDeFila, type VistaConector } from '#integraciones/horus/panel'
@@ -21,7 +21,12 @@ export interface EntradaConectarConEnlace {
     base_url: string
 }
 
-/** Separa `https://<horus>/conectar#<codigo>` en origen y código; null si no tiene esa forma. */
+/**
+ * Separa `https://<horus>/conectar[?api=<origen>]#<codigo>` en la URL de la API de Horus y el
+ * código; null si no tiene esa forma. Si el panel y la API de Horus están en orígenes distintos,
+ * el enlace trae el origen de la API en `?api=` (contrato 1.5.0); sin él, la API está en el
+ * origen del enlace.
+ */
 export function partirEnlace(enlace: string): { url_horus: string; codigo: string } | null {
     let url: URL
     try {
@@ -31,6 +36,12 @@ export function partirEnlace(enlace: string): { url_horus: string; codigo: strin
     }
     const codigo = url.hash.replace(/^#/, '')
     if (!codigo || !/^[A-Za-z0-9_-]{16,200}$/.test(codigo)) return null
+    if ([...url.searchParams.keys()].some((clave) => clave !== 'api')) return null
+    const api = url.searchParams.get('api')
+    if (api) {
+        const { origen } = origenHorus(api)
+        return origen ? { url_horus: origen, codigo } : null
+    }
     const ruta = url.pathname.replace(/\/conectar\/?$/, '')
     return { url_horus: `${url.origin}${ruta === '/' ? '' : ruta}`, codigo }
 }

@@ -6,6 +6,7 @@ import { crearClienteFila, crearServicioFila } from '#tests/core/fabricas'
 import GenerarTokenHorus from '#core/actions/generar_token_horus'
 import { csrfDeSesion } from '#core/auth/sesion_panel'
 import { PERMISOS_HORUS } from '#core/integraciones_horus'
+import { cifrar } from '#shared/cifrado'
 
 /**
  * Autologin desde Horus, lado receptor (contrato Horus §1.5, pedido A9): ticket de un solo uso,
@@ -90,13 +91,48 @@ test.group('SSO desde Horus · ticket, canje y vinculación', () => {
             201,
         )
         await estado(client.post(TICKETS).bearerToken(otro.body().token).json(cuerpo), 403)
-        await estado(
-            client
-                .post(TICKETS)
-                .bearerToken(h.token)
-                .json({ ...cuerpo, destino: { tipo: 'hallazgo', id_externo: '1' } }),
-            422,
-        )
+        // router y hallazgo llevan ids de Horus: solo existen con Horus como destino (1.7.0)
+        for (const tipo of ['hallazgo', 'router']) {
+            await estado(
+                client
+                    .post(TICKETS)
+                    .bearerToken(h.token)
+                    .json({ ...cuerpo, destino: { tipo, id_externo: '1' } }),
+                422,
+            )
+        }
+    })
+
+    test('conector preparado con un enlace: solo el atk_ de ese canje y con el conector encendido (409 apagado)', async ({
+        client,
+    }) => {
+        const delCanje = await horus()
+        const otro = await horus()
+        const cuerpo = { usuario: { id_externo: 'u-9' }, destino: { tipo: 'servicio', id_externo: '1' } }
+        await db.from('integraciones.horus_conector').delete()
+        await db.table('integraciones.horus_conector').insert({
+            id: 1,
+            activo: false,
+            url_base: 'https://horus.isp.example',
+            token_cifrado: cifrar(`hf_pat_${'h'.repeat(40)}`),
+            token_argos_id: delCanje.datos.id,
+            conectado_por_enlace_en: new Date(),
+        })
+        try {
+            await estado(client.post(TICKETS).bearerToken(delCanje.token).json(cuerpo), 409)
+            await estado(client.post(TICKETS).bearerToken(otro.token).json(cuerpo), 403)
+            await db.from('integraciones.horus_conector').where('id', 1).update({ activo: true })
+            await estado(client.post(TICKETS).bearerToken(otro.token).json(cuerpo), 403)
+            await pedirTicket(client, delCanje.token, 'u-9', cuerpo.destino)
+            // configurado a mano (sin enlace): cualquier atk_ vigente del usuario Horus
+            await db
+                .from('integraciones.horus_conector')
+                .where('id', 1)
+                .update({ conectado_por_enlace_en: null })
+            await pedirTicket(client, otro.token, 'u-9', cuerpo.destino)
+        } finally {
+            await db.from('integraciones.horus_conector').delete()
+        }
     })
 
     test('sin vinculación pide login; el correo coincidente NO entra; tras el login queda vinculado', async ({
@@ -277,7 +313,7 @@ test.group('SSO desde Horus · ticket, canje y vinculación', () => {
             .table('core.vinculaciones_externas')
             .insert({ conector: 'horus', id_externo: idExterno, usuario_id: tecnico.usuario.id })
             .returning('id')) as Array<{ id: number }>
-        const destino = { tipo: 'router', id_externo: '3' }
+        const destino = { tipo: 'cliente', id_externo: '3' }
 
         // el usuario ve y quita la suya
         const mias = await estado(client.get('/api/v1/me/vinculaciones').bearerToken(tecnico.token), 200)
@@ -294,7 +330,7 @@ test.group('SSO desde Horus · ticket, canje y vinculación', () => {
         const t1 = await pedirTicket(client, h.token, idExterno, destino)
         const c1 = await estado(canjear(client, t1.ticket), 200)
         assert.equal(c1.body().resultado, 'vinculacion_requerida')
-        assert.equal(c1.body().ruta, '/routers/3')
+        assert.equal(c1.body().ruta, '/clientes/3')
 
         // se vuelve a vincular; un admin revoca todas las del usuario
         await estado(
