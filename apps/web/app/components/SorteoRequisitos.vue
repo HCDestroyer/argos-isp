@@ -5,7 +5,10 @@
  * (`sorteos.marcar_requisito`, decide quien lo abre) y el sorteo no está cancelado.
  */
 const props = defineProps<{
+    sorteoId: number
     requisitos: RequisitoSorteo[]
+    /** Archivos del sorteo (`SorteoDetalle.archivos`): la evidencia adjunta se descarga desde aquí. */
+    archivos: ArchivoSorteo[]
     /** Quien lo abre ya comprobó `sorteos.marcar_requisito` y el estado del sorteo. */
     puedeMarcar: boolean
     /** Requisitos que el siguiente paso exige y faltan (se resaltan). */
@@ -94,6 +97,13 @@ const grupos = computed(() => (Object.keys(PASOS_REQUISITO) as PasoRequisito[])
                                 class="text-muted"
                             >Evidencia: {{ requisito.evidencia }}</span>
                         </p>
+                        <SorteoArchivoBoton
+                            v-if="requisito.archivo_id"
+                            :sorteo-id="sorteoId"
+                            :archivo-id="requisito.archivo_id"
+                            :archivos="archivos"
+                            class="self-start"
+                        />
                         <p
                             v-if="requisito.marcado_en"
                             class="text-xs text-dimmed"

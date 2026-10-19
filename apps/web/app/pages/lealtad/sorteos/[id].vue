@@ -174,6 +174,85 @@ function cancelar(motivo: string, clave: string) {
     return useSorteos().cancelar(sorteoId.value, motivo, clave)
 }
 
+/* Segunda PR (A3, `a3/sorteos-2`): acta, notificación, no reclamado y exportación. */
+const cerrandoActa = ref(false)
+const notificando = ref(false)
+const ganadorNoReclamado = shallowRef<GanadorSorteo | null>(null)
+const marcandoNoReclamado = computed({
+    get: () => ganadorNoReclamado.value !== null,
+    set: (valor: boolean) => {
+        if (!valor) {
+            ganadorNoReclamado.value = null
+        }
+    },
+})
+const descargandoActa = ref(false)
+const exportando = ref<'csv' | 'xlsx' | null>(null)
+
+const puedeCerrarActa = computed(() => puede('sorteos.ejecutar') && estado.value === 'ejecutado')
+const puedeNoReclamado = computed(() => puede('sorteos.entregar') && (estado.value === 'ejecutado' || estado.value === 'acta_cerrada'))
+const porNotificar = computed(() => (sorteo.value ? ganadoresPorNotificar(sorteo.value.ganadores) : []))
+const puedeNotificar = computed(() => puedeNoReclamado.value && porNotificar.value.length > 0)
+const puedeExportar = computed(() => puede('sorteos.exportar') && !!sorteo.value?.lista_hash)
+/** Cerrar el acta exige la publicación de los resultados marcada (422 `requisito_pendiente`). */
+const faltaPublicacion = computed(() => (sorteo.value?.requisitos.find(r => r.clave === 'publicacion_resultados')?.estado ?? 'pendiente') === 'pendiente')
+/** Quién toma el premio si el ganador no lo reclama: el primer suplente en espera, como la API. */
+const suplenteSiguiente = computed(() => (sorteo.value?.ganadores ?? [])
+    .filter(g => g.tipo === 'suplente' && premioDeGanador(sorteo.value ?? { premios: [] }, g) === null && g.estado === 'por_notificar')
+    .sort((a, b) => a.posicion - b.posicion)[0] ?? null)
+
+function cerrarActa(constancia: string, clave: string) {
+    return useSorteos().cerrarActa(sorteoId.value, constancia, clave)
+}
+
+function notificar() {
+    return useSorteos().notificarGanadores(sorteoId.value, nuevaClaveIdempotencia())
+}
+
+/** El modal se cierra (y suelta al ganador) antes de `hecho`: el id se guarda al confirmar. */
+let idNoReclamado: number | null = null
+
+function marcarNoReclamado(motivo: string, clave: string) {
+    const ganador = ganadorNoReclamado.value
+    idNoReclamado = ganador?.id ?? null
+    return ganador
+        ? useSorteos().noReclamado(sorteoId.value, ganador.id, motivo, clave)
+        : Promise.resolve<Resultado<SorteoDetalle>>({ ok: false, problema: { type: 'about:blank', title: 'Sin ganador', status: 0 } })
+}
+
+function alNoReclamado(nuevo: SorteoDetalle) {
+    const sustituto = idNoReclamado === null ? undefined : nuevo.ganadores.find(g => g.sustituye_a === idNoReclamado)
+    alAvanzar(nuevo, 'Premio no reclamado', sustituto ? `Pasó al suplente ${sustituto.posicion}.º, que ya se notificó.` : 'Sin suplentes en espera: el premio sigue lo que dicen las bases.')
+}
+
+async function descargarActa() {
+    if (!puede('sorteos.ver') || !sorteo.value || descargandoActa.value) {
+        return
+    }
+    descargandoActa.value = true
+    const resultado = await useSorteos().acta(sorteo.value.id)
+    descargandoActa.value = false
+    if (!resultado.ok) {
+        toast.add({ title: 'No se pudo descargar el acta', description: resultado.problema.detail ?? resultado.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+        return
+    }
+    guardarBlob(resultado.data, `acta-sorteo-${sorteo.value.id}.pdf`)
+}
+
+async function exportar(formato: 'csv' | 'xlsx') {
+    if (!puede('sorteos.exportar') || !sorteo.value || exportando.value) {
+        return
+    }
+    exportando.value = formato
+    const resultado = await useSorteos().descargarParticipantes(sorteo.value.id, formato)
+    exportando.value = null
+    if (!resultado.ok) {
+        toast.add({ title: 'No se pudo exportar', description: resultado.problema.detail ?? resultado.problema.title, icon: 'i-lucide-circle-alert', color: 'error' })
+        return
+    }
+    guardarBlob(resultado.data, `participantes-sorteo-${sorteo.value.id}.${formato}`)
+}
+
 function alAvanzar(nuevo: SorteoDetalle, titulo: string, descripcion?: string) {
     sorteo.value = nuevo
     problemaAccion.value = null
@@ -189,9 +268,10 @@ function alEjecutar(nuevo: SorteoDetalle) {
     alAvanzar(nuevo, 'Sorteo ejecutado', `${titulares} ${titulares === 1 ? 'titular' : 'titulares'} y ${nuevo.ganadores.length - titulares} suplentes. El resultado ya es verificable.`)
 }
 
-function alMarcar(requisitos: RequisitoSorteo[]) {
+function alMarcar(requisitos: RequisitoSorteo[], archivo: ArchivoSorteo | null) {
     if (sorteo.value) {
-        sorteo.value = { ...sorteo.value, requisitos }
+        const archivos = sorteo.value.archivos ?? []
+        sorteo.value = { ...sorteo.value, requisitos, archivos: archivo && !archivos.some(a => a.id === archivo.id) ? [...archivos, archivo] : archivos }
     }
     toast.add({ title: 'Requisito marcado', icon: 'i-lucide-check-square', color: 'success' })
 }
@@ -313,6 +393,33 @@ onMounted(() => {
                         @click="ejecutando = true"
                     />
                     <UButton
+                        v-if="puedeExportar"
+                        label="Participantes CSV"
+                        icon="i-lucide-file-down"
+                        color="neutral"
+                        variant="outline"
+                        :loading="exportando === 'csv'"
+                        data-prueba="exportar-participantes-csv"
+                        @click="exportar('csv')"
+                    />
+                    <UButton
+                        v-if="puedeExportar"
+                        label="Participantes XLSX"
+                        icon="i-lucide-file-spreadsheet"
+                        color="neutral"
+                        variant="outline"
+                        :loading="exportando === 'xlsx'"
+                        data-prueba="exportar-participantes-xlsx"
+                        @click="exportar('xlsx')"
+                    />
+                    <UButton
+                        v-if="puedeCerrarActa"
+                        label="Cerrar acta"
+                        icon="i-lucide-file-signature"
+                        data-prueba="cerrar-acta"
+                        @click="cerrandoActa = true"
+                    />
+                    <UButton
                         v-if="puedeCancelar"
                         label="Cancelar sorteo"
                         icon="i-lucide-ban"
@@ -408,13 +515,65 @@ onMounted(() => {
                 variant="subtle"
                 data-prueba="sorteo-resultado"
             >
+                <div
+                    v-if="puedeNotificar"
+                    class="mb-4 flex flex-wrap gap-2"
+                >
+                    <UButton
+                        v-if="puedeNotificar"
+                        :label="`Notificar ganadores (${porNotificar.length})`"
+                        icon="i-lucide-send"
+                        size="sm"
+                        data-prueba="notificar-ganadores"
+                        @click="notificando = true"
+                    />
+                </div>
                 <SorteoResultado
                     :sorteo="sorteo"
                     :puede-entregar="puedeEntregar"
                     :puede-anular-entrega="puedeAnularEntrega"
+                    :puede-no-reclamado="puedeNoReclamado"
                     @entregar="ganadorAEntregar = $event"
                     @anular-entrega="ganadorAAnular = $event"
+                    @no-reclamado="ganadorNoReclamado = $event"
                 />
+            </UPageCard>
+
+            <UPageCard
+                v-if="sorteo.acta_hash"
+                title="Acta"
+                :description="sorteo.acta_cerrada_en ? `Cerrada el ${formatearFechaHora(sorteo.acta_cerrada_en)}. El PDF se generó una sola vez; su SHA-256 lo identifica.` : 'El PDF se generó una sola vez; su SHA-256 lo identifica.'"
+                icon="i-lucide-file-signature"
+                variant="subtle"
+                data-prueba="sorteo-acta"
+            >
+                <div class="flex flex-col gap-3">
+                    <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <DatoFicha
+                            etiqueta="SHA-256 del acta"
+                            :valor="sorteo.acta_hash"
+                            mono
+                            class="min-w-0 [&_dd]:break-all"
+                            data-prueba="acta-hash"
+                        />
+                        <DatoFicha
+                            etiqueta="Constancia del notario o delegado"
+                            :valor="sorteo.acta_constancia ?? null"
+                        />
+                    </dl>
+                    <UButton
+                        v-if="puede('sorteos.ver')"
+                        label="Descargar acta (PDF)"
+                        icon="i-lucide-file-down"
+                        color="neutral"
+                        variant="outline"
+                        size="sm"
+                        class="self-start"
+                        :loading="descargandoActa"
+                        data-prueba="descargar-acta"
+                        @click="descargarActa"
+                    />
+                </div>
             </UPageCard>
 
             <UPageCard
@@ -448,6 +607,8 @@ onMounted(() => {
                 data-prueba="sorteo-checklist"
             >
                 <SorteoRequisitos
+                    :sorteo-id="sorteo.id"
+                    :archivos="sorteo.archivos ?? []"
                     :requisitos="sorteo.requisitos"
                     :puede-marcar="puedeMarcar"
                     :faltantes="faltantes"
@@ -609,6 +770,47 @@ onMounted(() => {
                 placeholder="Ej.: la Gobernación no autorizó el sorteo a tiempo"
                 :ejecutar="cancelar"
                 @hecho="alAvanzar($event, 'Sorteo cancelado')"
+            />
+            <AccionMotivoModal
+                v-if="puedeCerrarActa"
+                v-model:open="cerrandoActa"
+                titulo="Cerrar acta"
+                :descripcion="sorteo.nombre"
+                :efecto="faltaPublicacion
+                    ? 'Antes marque «Resultados publicados» en el checklist: la API no cierra el acta sin la publicación (422).'
+                    : 'Genera una sola vez el PDF del acta (bases, checklist, hashes, semilla, valor público con su fuente y evidencia, ganadores y asistentes) con su SHA-256. Después no cambia.'"
+                confirmar="Cerrar acta"
+                icono="i-lucide-file-signature"
+                color="primary"
+                placeholder="Firma o constancia del notario o delegado (nombre, colegiado, fecha)"
+                :ejecutar="cerrarActa"
+                @hecho="alAvanzar($event, 'Acta cerrada', $event.estado === 'premios_entregados' ? 'Con todos los premios resueltos, el sorteo queda con los premios entregados.' : 'Ya se puede descargar el PDF con su hash.')"
+            />
+            <ConfirmacionModal
+                v-if="puedeNotificar"
+                v-model:open="notificando"
+                titulo="Notificar ganadores"
+                :efecto="`Avisa a ${porNotificar.length} ${porNotificar.length === 1 ? 'ganador' : 'ganadores'} con su premio y el plazo para reclamar (${typeof sorteo.bases.plazo_reclamo_dias === 'number' ? sorteo.bases.plazo_reclamo_dias : 30} días, según las bases). Quien ya fue notificado no recibe otro aviso.`"
+                confirmar="Notificar"
+                icono="i-lucide-send"
+                color="primary"
+                :ejecutar="notificar"
+                @hecho="alAvanzar($event, 'Ganadores notificados')"
+            />
+            <AccionMotivoModal
+                v-if="puedeNoReclamado"
+                v-model:open="marcandoNoReclamado"
+                titulo="Premio no reclamado"
+                :descripcion="ganadorNoReclamado ? `${ganadorNoReclamado.posicion}.º · ${nombres.nombre(ganadorNoReclamado.cliente_id)}` : undefined"
+                :efecto="suplenteSiguiente
+                    ? `El premio pasa al suplente ${suplenteSiguiente.posicion}.º (${nombres.nombre(suplenteSiguiente.cliente_id)}), que se notifica en el mismo paso. El resultado del sorteo no cambia.`
+                    : 'No quedan suplentes en espera: el premio queda no reclamado y sigue lo que dicen las bases.'"
+                confirmar="Dar por no reclamado"
+                icono="i-lucide-user-x"
+                color="warning"
+                placeholder="Ej.: no se presentó en el plazo de 30 días"
+                :ejecutar="marcarNoReclamado"
+                @hecho="alNoReclamado"
             />
             <SorteoFormulario
                 v-model:open="editando"

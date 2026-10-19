@@ -226,8 +226,23 @@ export function netoPremio(premio: Pick<Premio, 'valor' | 'retiene_isr' | 'isr_p
 }
 
 /** Premio que le toca a un titular (`premio_posicion`), o `null` para un suplente. */
-export function premioDeGanador(sorteo: Pick<Sorteo, 'premios'>, ganador: Pick<Ganador, 'premio_posicion'>): Premio | null {
-    return ganador.premio_posicion === null ? null : sorteo.premios.find(p => p.posicion === ganador.premio_posicion) ?? null
+/**
+ * Premio que le toca al ganador (`premio` de la API): el de su puesto o, un suplente que tomó el de un
+ * ganador que no lo reclamó, `premio_sustitucion`.
+ */
+export function premioDeGanador(sorteo: Pick<Sorteo, 'premios'>, ganador: Pick<Ganador, 'premio_posicion' | 'premio' | 'premio_sustitucion'>): Premio | null {
+    const posicion = ganador.premio ?? ganador.premio_posicion ?? ganador.premio_sustitucion ?? null
+    return posicion === null ? null : sorteo.premios.find(p => p.posicion === posicion) ?? null
+}
+
+/** Si el plazo para reclamar de un ganador notificado ya venció (entonces se puede dar por no reclamado). */
+export function plazoReclamoVencido(ganador: Pick<Ganador, 'estado' | 'reclamar_antes'>, ahora = Date.now()): boolean {
+    return ganador.estado === 'notificado' && !!ganador.reclamar_antes && new Date(ganador.reclamar_antes).getTime() <= ahora
+}
+
+/** Ganadores con premio que siguen por notificar (`POST .../notificar-ganadores` los avisa). */
+export function ganadoresPorNotificar(ganadores: readonly Ganador[]): Ganador[] {
+    return ganadores.filter(g => g.estado === 'por_notificar' && (g.premio ?? g.premio_posicion ?? g.premio_sustitucion ?? null) !== null)
 }
 
 /** Texto de un 422 `requisito_pendiente` con el nombre del requisito (`errors[0].message` = la clave). */
@@ -421,9 +436,11 @@ export const esquemaRequisitoSorteo = z.object({
     valor: textoBases(500),
     evidencia: textoBases(2000),
     nota: textoBases(2000),
-}).refine(d => d.estado === 'pendiente' || d.evidencia.length > 0, {
+    /** Hay un archivo de evidencia (ya subido o por subir): entonces el texto es opcional. */
+    con_archivo: z.boolean(),
+}).refine(d => d.estado === 'pendiente' || d.evidencia.length > 0 || d.con_archivo, {
     path: ['evidencia'],
-    message: 'Un requisito cumplido o que no aplica lleva su evidencia (número, referencia o texto)',
+    message: 'Un requisito cumplido o que no aplica lleva su evidencia (número, referencia, texto o un archivo)',
 })
 
 export type EntradaRequisitoSorteo = z.input<typeof esquemaRequisitoSorteo>

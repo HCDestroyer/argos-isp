@@ -12,14 +12,16 @@ const props = defineProps<{
     puedeEntregar: boolean
     /** `sorteos.entregar` con el sorteo ejecutado o con todos los premios entregados (H22). */
     puedeAnularEntrega: boolean
+    /** `sorteos.entregar` con el sorteo ejecutado o con el acta cerrada (premio no reclamado). */
+    puedeNoReclamado?: boolean
 }>()
 
 const emit = defineEmits<{
     entregar: [ganador: GanadorSorteo]
     anularEntrega: [ganador: GanadorSorteo]
+    noReclamado: [ganador: GanadorSorteo]
 }>()
 
-const { enlace } = usePermisos()
 const nombres = useNombresClientes()
 
 const titulares = computed(() => props.sorteo.ganadores.filter(g => g.tipo === 'titular'))
@@ -54,10 +56,6 @@ async function comprobar() {
     comprobando.value = false
 }
 
-function premio(ganador: GanadorSorteo): PremioSorteo | null {
-    return premioDeGanador(props.sorteo, ganador)
-}
-
 watch(() => props.sorteo.ganadores, (ganadores) => {
     void nombres.cargar(ganadores.map(g => g.cliente_id))
     comprobacion.value = null
@@ -74,74 +72,19 @@ watch(() => props.sorteo.ganadores, (ganadores) => {
                 Titulares
             </h4>
             <ul class="flex flex-col divide-y divide-default rounded-lg border border-default">
-                <li
+                <SorteoGanadorFila
                     v-for="ganador in titulares"
                     :key="ganador.id"
-                    class="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between"
-                    :data-ganador="ganador.posicion"
-                >
-                    <div class="flex min-w-0 items-start gap-3">
-                        <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{{ ganador.posicion }}</span>
-                        <div class="flex min-w-0 flex-col">
-                            <ULink
-                                v-if="enlace(`/clientes/${ganador.cliente_id}`)"
-                                :to="enlace(`/clientes/${ganador.cliente_id}`)"
-                                class="text-sm font-medium text-highlighted hover:text-primary"
-                            >
-                                {{ nombres.nombre(ganador.cliente_id) }}
-                            </ULink>
-                            <span
-                                v-else
-                                class="text-sm font-medium text-highlighted"
-                            >{{ nombres.nombre(ganador.cliente_id) }}</span>
-                            <span class="text-xs text-muted">
-                                <span class="font-mono">{{ ganador.codigo_publico }}</span>
-                                <template v-if="premio(ganador)">
-                                    · {{ premio(ganador)?.nombre }} ({{ TIPOS_PREMIO_SORTEO[premio(ganador)?.tipo ?? 'efectivo'].etiqueta.toLowerCase() }})
-                                </template>
-                            </span>
-                            <span
-                                v-if="ganador.estado === 'entregado'"
-                                class="text-xs text-muted"
-                                data-prueba="ganador-entrega"
-                            >
-                                {{ contrapartidaLegible(ganador.contrapartida) }}<template v-if="ganador.retencion_isr && ganador.retencion_isr !== '0.00'">
-                                    · ISR {{ formatearQuetzales(ganador.retencion_isr) }}
-                                </template><template v-if="ganador.entregado_en">
-                                    · {{ formatearFechaHora(ganador.entregado_en) }}
-                                </template>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 self-start sm:self-center">
-                        <UBadge
-                            :label="ESTADOS_GANADOR[ganador.estado].etiqueta"
-                            :color="ESTADOS_GANADOR[ganador.estado].color"
-                            variant="subtle"
-                            data-prueba="ganador-estado"
-                        />
-                        <UButton
-                            v-if="puedeEntregar && (ganador.estado === 'por_notificar' || ganador.estado === 'notificado')"
-                            label="Entregar"
-                            icon="i-lucide-gift"
-                            size="sm"
-                            :aria-label="`Entregar el premio a ${nombres.nombre(ganador.cliente_id)}`"
-                            data-prueba="entregar-premio"
-                            @click="emit('entregar', ganador)"
-                        />
-                        <UButton
-                            v-if="puedeAnularEntrega && ganador.estado === 'entregado'"
-                            label="Anular entrega"
-                            icon="i-lucide-undo-2"
-                            size="sm"
-                            color="neutral"
-                            variant="outline"
-                            :aria-label="`Anular la entrega del premio a ${nombres.nombre(ganador.cliente_id)}`"
-                            data-prueba="anular-entrega"
-                            @click="emit('anularEntrega', ganador)"
-                        />
-                    </div>
-                </li>
+                    :sorteo="sorteo"
+                    :ganador="ganador"
+                    :nombre="nombres.nombre(ganador.cliente_id)"
+                    :puede-entregar="puedeEntregar"
+                    :puede-anular-entrega="puedeAnularEntrega"
+                    :puede-no-reclamado="puedeNoReclamado ?? false"
+                    @entregar="emit('entregar', $event)"
+                    @anular-entrega="emit('anularEntrega', $event)"
+                    @no-reclamado="emit('noReclamado', $event)"
+                />
             </ul>
         </section>
 
@@ -154,24 +97,19 @@ watch(() => props.sorteo.ganadores, (ganadores) => {
                 Suplentes
             </h4>
             <ol class="flex flex-col divide-y divide-default rounded-lg border border-default">
-                <li
+                <SorteoGanadorFila
                     v-for="ganador in suplentes"
                     :key="ganador.id"
-                    class="flex items-center justify-between gap-2 p-3"
-                    :data-suplente="ganador.posicion"
-                >
-                    <span class="min-w-0 text-sm">
-                        <span class="text-muted">{{ ganador.posicion }}.</span>
-                        {{ nombres.nombre(ganador.cliente_id) }}
-                        <span class="font-mono text-xs text-muted">{{ ganador.codigo_publico }}</span>
-                    </span>
-                    <UBadge
-                        :label="ESTADOS_GANADOR[ganador.estado].etiqueta"
-                        :color="ESTADOS_GANADOR[ganador.estado].color"
-                        variant="subtle"
-                        size="sm"
-                    />
-                </li>
+                    :sorteo="sorteo"
+                    :ganador="ganador"
+                    :nombre="nombres.nombre(ganador.cliente_id)"
+                    :puede-entregar="puedeEntregar"
+                    :puede-anular-entrega="puedeAnularEntrega"
+                    :puede-no-reclamado="puedeNoReclamado ?? false"
+                    @entregar="emit('entregar', $event)"
+                    @anular-entrega="emit('anularEntrega', $event)"
+                    @no-reclamado="emit('noReclamado', $event)"
+                />
             </ol>
         </section>
 

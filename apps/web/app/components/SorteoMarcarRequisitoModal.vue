@@ -4,8 +4,9 @@ import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
 
 /**
  * Marca un requisito del checklist legal (`POST /lealtad/sorteos/:id/requisitos/:clave`,
- * `sorteos.marcar_requisito`). Cumplido o «No aplica» llevan evidencia (en esta fase, referencia o
- * texto; los archivos llegan con la segunda PR). Solo inserción: vale la última marca.
+ * `sorteos.marcar_requisito`). Cumplido o «No aplica» llevan evidencia: referencia o texto, o un
+ * archivo (PDF, JPEG, PNG o WebP, hasta 5 MB) que se sube antes (`POST .../archivos`, uso `evidencia`)
+ * y se cita con `archivo_id`. Solo inserción: vale la última marca.
  */
 const props = defineProps<{
     sorteoId: number
@@ -15,11 +16,32 @@ const props = defineProps<{
 const abierto = defineModel<boolean>('open', { default: false })
 
 const emit = defineEmits<{
-    hecho: [requisitos: RequisitoSorteo[]]
+    /** Los requisitos vigentes y, si se subió, el archivo nuevo (la respuesta no trae `archivos`). */
+    hecho: [requisitos: RequisitoSorteo[], archivo: ArchivoSorteo | null]
 }>()
 
 const formulario = useTemplateRef('formulario')
-const estado = reactive<EntradaRequisitoSorteo>({ estado: 'cumplido', valor: '', evidencia: '', nota: '' })
+const estado = reactive<EntradaRequisitoSorteo>({ estado: 'cumplido', valor: '', evidencia: '', nota: '', con_archivo: false })
+const archivo = ref<File | null>(null)
+const errorArchivo = ref<string | null>(null)
+const revisandoArchivo = shallowRef<Promise<void> | null>(null)
+/** El archivo de la marca anterior se conserva si no se elige otro. */
+const archivoPrevio = computed(() => props.requisito?.archivo_id ?? null)
+
+watch(archivo, async (nuevo) => {
+    // Al elegirlo ya cuenta como evidencia (el envío espera la revisión del contenido).
+    estado.con_archivo = !!nuevo || archivoPrevio.value !== null
+    errorArchivo.value = null
+    revisandoArchivo.value = nuevo ? revisar(nuevo) : null
+    await revisandoArchivo.value
+})
+
+async function revisar(nuevo: File): Promise<void> {
+    const error = errorArchivoSorteo(new Uint8Array(await nuevo.arrayBuffer()))
+    if (archivo.value === nuevo) {
+        errorArchivo.value = error
+    }
+}
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 let clave = nuevaClaveIdempotencia()
@@ -35,7 +57,10 @@ watch(abierto, (valor) => {
             valor: r.valor ?? '',
             evidencia: r.evidencia ?? '',
             nota: r.nota ?? '',
+            con_archivo: (r.archivo_id ?? null) !== null,
         })
+        archivo.value = null
+        errorArchivo.value = null
         problema.value = null
         clave = nuevaClaveIdempotencia()
     }
@@ -45,19 +70,39 @@ async function enviar(evento: FormSubmitEvent<EntradaRequisitoSorteo>) {
     if (!props.requisito) {
         return
     }
+    await revisandoArchivo.value
+    if (errorArchivo.value) {
+        return
+    }
     enviando.value = true
     problema.value = null
     const datos = evento.data
+    let archivoId = archivoPrevio.value
+    let subidoAhora: ArchivoSorteo | null = null
+    if (archivo.value) {
+        const subido = await useSorteos().subirArchivo(props.sorteoId, 'evidencia', archivo.value)
+        if (!subido.ok) {
+            enviando.value = false
+            const enCampo = subido.problema.errors?.find(e => e.field === 'archivo')
+            errorArchivo.value = enCampo?.message ?? null
+            problema.value = enCampo ? null : subido.problema
+            return
+        }
+        archivoId = subido.data.id
+        subidoAhora = subido.data
+        archivo.value = null
+    }
     const resultado = await useSorteos().marcarRequisito(props.sorteoId, props.requisito.clave, {
         estado: datos.estado,
         valor: datos.valor || null,
         evidencia: datos.evidencia || null,
+        archivo_id: archivoId,
         nota: datos.nota || null,
     }, clave)
     enviando.value = false
     if (resultado.ok) {
         abierto.value = false
-        emit('hecho', resultado.data)
+        emit('hecho', resultado.data, subidoAhora)
         return
     }
     const errores = erroresDeFormulario(resultado.problema).filter(e => e.name && e.name in estado)
@@ -117,14 +162,30 @@ async function enviar(evento: FormSubmitEvent<EntradaRequisitoSorteo>) {
                 <UFormField
                     label="Evidencia"
                     name="evidencia"
-                    :required="estado.estado !== 'pendiente'"
-                    help="Referencia o texto: dónde consta (expediente, edición, recibo)."
+                    :required="estado.estado !== 'pendiente' && !estado.con_archivo"
+                    help="Referencia o texto: dónde consta (expediente, edición, recibo). Opcional si adjunta un archivo."
                 >
                     <UTextarea
                         v-model="estado.evidencia"
                         :rows="2"
                         autoresize
                         class="w-full"
+                    />
+                </UFormField>
+                <UFormField
+                    label="Archivo de evidencia"
+                    :error="errorArchivo ?? undefined"
+                    :help="archivoPrevio && !archivo ? `Se conserva el archivo #${archivoPrevio} de la marca anterior.` : 'PDF, JPEG, PNG o WebP, hasta 5 MB. Queda con su SHA-256 y no se borra.'"
+                >
+                    <UFileUpload
+                        v-model="archivo"
+                        :accept="TIPOS_ARCHIVO_SORTEO"
+                        label="Elija o arrastre el archivo"
+                        description="Resolución, póliza, recibo, publicación…"
+                        icon="i-lucide-paperclip"
+                        layout="list"
+                        class="w-full"
+                        data-prueba="requisito-archivo"
                     />
                 </UFormField>
                 <UFormField

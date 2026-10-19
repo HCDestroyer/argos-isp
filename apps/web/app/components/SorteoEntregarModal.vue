@@ -53,6 +53,23 @@ const itemsContrapartida: RadioGroupItem[] = [
     { label: 'Cuenta de activo', value: 'cuenta', description: 'P. ej. inventario de premios' },
 ]
 
+/* Constancia firmada de la entrega (opcional): se sube antes (`POST .../archivos`, uso `constancia`). */
+const constancia = ref<File | null>(null)
+const errorConstancia = ref<string | null>(null)
+
+const revisandoConstancia = shallowRef<Promise<void> | null>(null)
+
+watch(constancia, (nuevo) => {
+    errorConstancia.value = null
+    revisandoConstancia.value = nuevo
+        ? nuevo.arrayBuffer().then((datos) => {
+                if (constancia.value === nuevo) {
+                    errorConstancia.value = errorArchivoSorteo(new Uint8Array(datos))
+                }
+            })
+        : null
+})
+
 const compras = shallowRef<Compra[]>([])
 const cuentasLibro = shallowRef<Cuenta[]>([])
 const problemaBien = ref<Problem | null>(null)
@@ -110,6 +127,8 @@ async function cargarCatalogos() {
 watch(abierto, (valor) => {
     if (valor && props.premio) {
         Object.assign(estado, entradaEntregaVacia(props.premio.tipo))
+        constancia.value = null
+        errorConstancia.value = null
         problema.value = null
         clave = nuevaClaveIdempotencia()
         if (props.premio.tipo === 'efectivo') {
@@ -125,9 +144,27 @@ async function enviar(evento: FormSubmitEvent<EntradaEntregaPremio>) {
     if (!props.ganador) {
         return
     }
+    await revisandoConstancia.value
+    if (errorConstancia.value) {
+        return
+    }
     enviando.value = true
     problema.value = null
-    const resultado = await useSorteos().entregar(props.sorteoId, props.ganador.id, cuerpoEntregaPremio(esquemaEntregaPremio.parse(evento.data)), clave)
+    let constanciaId: number | null = null
+    if (constancia.value && puede('sorteos.marcar_requisito')) {
+        const subida = await useSorteos().subirArchivo(props.sorteoId, 'constancia', constancia.value)
+        if (!subida.ok) {
+            enviando.value = false
+            const enCampo = subida.problema.errors?.find(e => e.field === 'archivo')
+            errorConstancia.value = enCampo?.message ?? null
+            problema.value = enCampo ? null : subida.problema
+            return
+        }
+        constanciaId = subida.data.id
+        constancia.value = null
+    }
+    const cuerpo = cuerpoEntregaPremio(esquemaEntregaPremio.parse(evento.data))
+    const resultado = await useSorteos().entregar(props.sorteoId, props.ganador.id, constanciaId ? { ...cuerpo, constancia_archivo_id: constanciaId } : cuerpo, clave)
     enviando.value = false
     if (resultado.ok) {
         abierto.value = false
@@ -334,9 +371,25 @@ async function enviar(evento: FormSubmitEvent<EntradaEntregaPremio>) {
                 />
 
                 <UFormField
+                    v-if="puede('sorteos.marcar_requisito')"
+                    label="Constancia firmada"
+                    :error="errorConstancia ?? undefined"
+                    help="Opcional: la constancia de entrega firmada (PDF o foto, hasta 5 MB). Queda con su SHA-256."
+                >
+                    <UFileUpload
+                        v-model="constancia"
+                        :accept="TIPOS_ARCHIVO_SORTEO"
+                        label="Elija o arrastre la constancia"
+                        icon="i-lucide-file-signature"
+                        layout="list"
+                        class="w-full"
+                        data-prueba="entrega-constancia"
+                    />
+                </UFormField>
+                <UFormField
                     label="Nota"
                     name="nota"
-                    help="Constancia de entrega, quién recibió…"
+                    help="Quién recibió, observaciones…"
                 >
                     <UTextarea
                         v-model="estado.nota"

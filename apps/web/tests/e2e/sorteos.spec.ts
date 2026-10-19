@@ -26,7 +26,7 @@ test('ejecutar un sorteo: el requisito pendiente se explica, se marca y el resul
 
     await page.locator('[data-requisito="timbre_fiscal"] [data-prueba="marcar-requisito"]').click()
     const requisito = page.getByRole('dialog', { name: 'Timbre fiscal' })
-    await requisito.getByLabel('Evidencia').fill('Recibo de la Gobernación 63')
+    await requisito.getByLabel('Evidencia', { exact: true }).fill('Recibo de la Gobernación 63')
     await requisito.getByRole('button', { name: 'Guardar marca' }).click()
     await expect(page.locator('[data-requisito="timbre_fiscal"] [data-prueba="requisito-estado"]')).toHaveText('Cumplido')
     await expect(page.locator('[data-prueba="sorteo-faltantes"]')).toHaveCount(0)
@@ -140,4 +140,52 @@ test('entregar un bien con la línea de su compra', async ({ page }) => {
     await entrega.getByRole('button', { name: 'Registrar entrega' }).click()
     await expect(resultado.locator('[data-ganador="2"] [data-prueba="ganador-estado"]')).toHaveText('Entregado')
     await expect(resultado.locator('[data-ganador="2"] [data-prueba="ganador-entrega"]')).toContainText('Compra #1')
+})
+
+/**
+ * Segunda PR (A3): en «Día del cliente» (ejecutado) el 3.er puesto ya se notificó y su plazo venció.
+ * Se marca la publicación de resultados con un PDF de evidencia, se notifica a los demás, el premio no
+ * reclamado pasa al primer suplente y se cierra el acta, que se descarga con su SHA-256.
+ */
+test('evidencia en archivo, notificar, no reclamado con suplente y acta cerrada', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await ir(page, 'Sorteos', /\/lealtad\/sorteos/)
+    await page.getByRole('link', { name: 'Día del cliente' }).click()
+    const resultado = page.locator('[data-prueba="sorteo-resultado"]')
+    await expect(resultado.locator('[data-ganador]')).toHaveCount(3)
+
+    await page.locator('[data-requisito="publicacion_resultados"] [data-prueba="marcar-requisito"]').click()
+    const requisito = page.getByRole('dialog', { name: 'Resultados publicados' })
+    await requisito.locator('input[type="file"]').setInputFiles({ name: 'publicacion.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% Prensa Libre 6/9/2026\n%%EOF\n') })
+    await requisito.getByRole('button', { name: 'Guardar marca' }).click()
+    await expect(page.locator('[data-requisito="publicacion_resultados"] [data-prueba="archivo-sorteo"]')).toHaveText('publicacion.pdf')
+
+    await page.locator('[data-prueba="notificar-ganadores"]').click()
+    await page.getByRole('dialog', { name: 'Notificar ganadores' }).getByRole('button', { name: 'Notificar' }).click()
+    await expect(resultado.locator('[data-ganador="1"] [data-prueba="ganador-estado"]')).toHaveText('Notificado')
+    await expect(page.locator('[data-prueba="notificar-ganadores"]')).toHaveCount(0)
+
+    await resultado.locator('[data-ganador="3"] [data-prueba="no-reclamado"]').click()
+    const noReclamado = page.getByRole('dialog', { name: 'Premio no reclamado' })
+    await expect(noReclamado).toContainText('pasa al suplente 4.º')
+    await noReclamado.getByRole('textbox').fill('No se presentó en el plazo de 30 días')
+    await noReclamado.getByRole('button', { name: 'Dar por no reclamado' }).click()
+    await expect(resultado.locator('[data-ganador="3"] [data-prueba="ganador-estado"]')).toHaveText('Sustituido')
+    await expect(page.getByText('Pasó al suplente 4.º, que ya se notificó.').first()).toBeVisible()
+    await expect(resultado.locator('[data-suplente="4"] [data-prueba="ganador-sustituye"]')).toContainText('3.º puesto')
+    await expect(resultado.locator('[data-suplente="4"] [data-prueba="entregar-premio"]')).toBeVisible()
+
+    await page.locator('[data-prueba="cerrar-acta"]').click()
+    const acta = page.getByRole('dialog', { name: 'Cerrar acta' })
+    await acta.getByRole('textbox').fill('Lic. Marta Sosa, colegiado 9921, 6/9/2026')
+    await acta.getByRole('button', { name: 'Cerrar acta' }).click()
+    await expect(page.locator('[data-prueba="sorteo-estado"]')).toHaveText('Acta cerrada')
+    await expect(page.locator('[data-prueba="acta-hash"]')).toContainText(/[0-9a-f]{64}/)
+    const descarga = page.waitForEvent('download')
+    await page.locator('[data-prueba="descargar-acta"]').click()
+    expect((await descarga).suggestedFilename()).toBe('acta-sorteo-5.pdf')
+
+    const csv = page.waitForEvent('download')
+    await page.locator('[data-prueba="exportar-participantes-csv"]').click()
+    expect((await csv).suggestedFilename()).toBe('participantes-sorteo-5.csv')
 })

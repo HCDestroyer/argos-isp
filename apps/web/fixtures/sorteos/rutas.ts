@@ -11,6 +11,7 @@ import { bytesDeHex, hashListaSorteo, jsonCanonicoSorteo, semillaFinalSorteo, sh
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { bancosLibro } from '../libro/datos'
+import { errorArchivoSorteo, tipoArchivoSorteo } from '~/utils/archivosSorteo'
 import { errorImagenPremio, leerImagenPremio } from '~/utils/imagenPremio'
 import { IMAGEN_DE_ARCHIVO, type ParticipanteSorteo, type SorteoPrivado } from './datos'
 import { bytesBase64, IMAGENES_SEMILLA } from './imagenes'
@@ -164,6 +165,12 @@ function prepararSorteos(): Promise<void> {
             }
             if (privado?.ejecutarCon && !s.resultado) {
                 await sortearFixture(s, privado.ejecutarCon.valor_publico, privado.ejecutarCon.valor_publico_evidencia, privado.ejecutarCon.ejecutado_en)
+                for (const n of privado.ejecutarCon.notificados ?? []) {
+                    const g = s.ganadores.find(x => x.posicion === n.posicion)
+                    if (g) {
+                        Object.assign(g, { estado: 'notificado', notificado_en: n.notificado_en, reclamar_antes: n.reclamar_antes })
+                    }
+                }
             }
         }
     })()
@@ -419,6 +426,56 @@ function contabilizarBien(s: Sorteo, ganador: Ganador, cuerpo: Record<string, un
     return invalido([{ field: 'contrapartida', message: 'compra (compra_linea_id) o cuenta (cuenta_codigo)', rule: 'required' }])
 }
 
+/** Premio que le toca al ganador: el de su puesto o, un suplente que tomó uno no reclamado, `premio_sustitucion`. */
+function premioDe(g: Ganador): number | null {
+    return g.premio ?? g.premio_posicion ?? g.premio_sustitucion ?? null
+}
+
+/** Con el acta cerrada y ningún premio por resolver, `acta_cerrada → premios_entregados` (`cerrarSiTodoResuelto`). */
+function cerrarSiTodoResuelto(s: Sorteo): Partial<Sorteo> {
+    const pendientes = s.ganadores.filter(g => premioDe(g) !== null && (g.estado === 'por_notificar' || g.estado === 'notificado'))
+    return s.estado === 'acta_cerrada' && pendientes.length === 0 ? { estado: 'premios_entregados' } : {}
+}
+
+/** Como `notificarGanador`: notificado con su plazo de reclamo (`bases.plazo_reclamo_dias`, 30 por defecto). */
+function notificarGanador(s: Sorteo, g: Ganador, momento: string): void {
+    if (g.estado !== 'por_notificar') {
+        return
+    }
+    const dias = Number(s.bases.plazo_reclamo_dias ?? 30)
+    Object.assign(g, { estado: 'notificado', notificado_en: momento, reclamar_antes: new Date(new Date(momento).getTime() + dias * 86_400_000).toISOString(), version: g.version + 1 })
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+    const huella = await crypto.subtle.digest('SHA-256', bytes.slice())
+    return [...new Uint8Array(huella)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Registra un archivo del sorteo (solo inserción) y guarda sus bytes. */
+async function registrarArchivoSorteo(s: Sorteo, uso: Schema<'ArchivoSorteo'>['uso'], nombre: string, bytes: Uint8Array): Promise<Schema<'ArchivoSorteo'>> {
+    const id = Math.max(9700, ...bd.sorteos.flatMap(x => (x.archivos ?? []).map(a => a.id))) + 1
+    const tipo = tipoArchivoSorteo(bytes) ?? 'application/pdf'
+    const archivo: Schema<'ArchivoSorteo'> = { id, sorteo_id: s.id, empresa_id: s.empresa_id, uso, nombre: nombre.trim().slice(0, 200) || `${uso}.pdf`, tipo, tamano: bytes.length, sha256: await sha256Hex(bytes), ancho: null, alto: null, created_at: ahora() }
+    s.archivos = [...(s.archivos ?? []), archivo]
+    bd.archivosSorteos[id] = bytes
+    return archivo
+}
+
+/** Un PDF mínimo del acta (la API lo arma con todos los datos; aquí basta con que sea un PDF). */
+function pdfActa(s: Sorteo, constancia: string): Uint8Array {
+    const lineas = [`Acta del sorteo ${s.id}: ${s.nombre}`, `Valor publico: ${s.valor_publico ?? ''}`, `Constancia: ${constancia}`]
+    return new TextEncoder().encode(`%PDF-1.4\n% ${lineas.join(' | ')}\n%%EOF\n`)
+}
+
+const COLUMNAS_PARTICIPANTES: Schema<'ColumnaReporte'>[] = [
+    { clave: 'orden', titulo: 'Orden', tipo: 'entero' },
+    { clave: 'codigo_publico', titulo: 'Código público', tipo: 'texto' },
+    { clave: 'boletos', titulo: 'Boletos', tipo: 'entero' },
+    { clave: 'cliente_id', titulo: 'Cliente (id)', tipo: 'id' },
+    { clave: 'cliente', titulo: 'Cliente', tipo: 'texto' },
+    { clave: 'servicio_id', titulo: 'Servicio (id)', tipo: 'id' },
+]
+
 /** Como `exigirRequisitos`: 422 `requisito_pendiente` con la primera clave que falta. */
 function requisitoPendiente(s: Sorteo, claves: readonly Requisito['clave'][], paso: string): RespuestaFixture | null {
     const clave = claves.find(c => (s.requisitos.find(r => r.clave === c)?.estado ?? 'pendiente') === 'pendiente')
@@ -666,14 +723,22 @@ export const rutasSorteos: RutasFixture = {
         if (!estado) {
             return invalido([{ field: 'estado', message: 'Estado inválido', rule: 'enum' }])
         }
-        const evidencia = texto(cuerpo.evidencia)
+        let evidencia = texto(cuerpo.evidencia)
+        const archivoId = typeof cuerpo.archivo_id === 'number' ? cuerpo.archivo_id : null
+        if (archivoId !== null) {
+            const archivo = (s.archivos ?? []).find(a => a.id === archivoId)
+            if (!archivo || archivo.uso !== 'evidencia') {
+                return invalido([{ field: 'archivo_id', message: 'El archivo debe ser una evidencia subida a este sorteo', rule: 'archivo' }])
+            }
+            evidencia ??= `Archivo ${archivo.id}: ${archivo.nombre} (SHA-256 ${archivo.sha256})`
+        }
         if (estado !== 'pendiente' && !evidencia) {
             return invalido([{ field: 'evidencia', message: 'Un requisito cumplido o que no aplica lleva su evidencia (número, referencia o texto)', rule: 'required' }])
         }
         if (s.estado === 'cancelado') {
             return invalido([{ field: 'sorteo_id', message: 'El sorteo está cancelado', rule: 'estado' }])
         }
-        const marca: Requisito = { clave, estado, valor: texto(cuerpo.valor), evidencia, nota: texto(cuerpo.nota), marcado_en: ahora() }
+        const marca: Requisito = { clave, estado, valor: texto(cuerpo.valor), evidencia, archivo_id: archivoId, nota: texto(cuerpo.nota), marcado_en: ahora() }
         s.requisitos = s.requisitos.map(r => (r.clave === clave ? marca : r))
         registrarAccion(solicitud, 'sorteos.marcar_requisito', { tipo: 'sorteo', id: s.id }, { clave, ...cuerpo })
         return { status: 200, cuerpo: s.requisitos }
@@ -726,17 +791,21 @@ export const rutasSorteos: RutasFixture = {
         if (!ganador) {
             return noEncontrado('el ganador')
         }
-        if (ganador.tipo !== 'titular') {
-            return regla('no_titular', 'Solo se entrega el premio de un titular (los suplentes, en la segunda PR)')
+        if (premioDe(ganador) === null) {
+            return regla('sin_premio', 'Solo se entrega el premio de un titular o de un suplente que tomó el de un ganador que no lo reclamó')
         }
         if (!['por_notificar', 'notificado'].includes(ganador.estado)) {
             return regla('premio_entregado', `El premio del ganador ${ganador.id} está ${ganador.estado}`)
         }
-        const premio = s.premios.find(p => p.posicion === ganador.premio_posicion)
+        const premio = s.premios.find(p => p.posicion === premioDe(ganador))
         if (!premio) {
             return noEncontrado('el premio')
         }
         const cuerpo = cuerpoObjeto(solicitud)
+        const constanciaId = typeof cuerpo.constancia_archivo_id === 'number' ? cuerpo.constancia_archivo_id : null
+        if (constanciaId !== null && !(s.archivos ?? []).some(a => a.id === constanciaId && a.uso === 'constancia')) {
+            return invalido([{ field: 'constancia_archivo_id', message: 'La constancia debe ser un archivo de uso constancia subido a este sorteo', rule: 'archivo' }])
+        }
         const isr = premio.retiene_isr ? new Decimal(premio.valor).times(premio.isr_pct).div(100).toDecimalPlaces(2) : new Decimal(0)
         const cambios: Partial<Ganador> = { asiento_id: isr.gt(0) || premio.tipo === 'bien' ? ASIENTOS_PREMIO + ganador.id : null }
         if (premio.tipo === 'efectivo') {
@@ -774,10 +843,8 @@ export const rutasSorteos: RutasFixture = {
             }
             Object.assign(cambios, { canje_id: 770000 + ganador.id, contrapartida: 'canje' })
         }
-        Object.assign(ganador, cambios, { estado: 'entregado', retencion_isr: isr.toFixed(2), entregado_en: ahora(), version: ganador.version + 1 })
-        // Segunda PR: solo con el acta cerrada y nada pendiente pasa a premios_entregados.
-        const pendientes = s.ganadores.filter(g => g.tipo === 'titular' && g.estado !== 'entregado')
-        avanzar(s, pendientes.length === 0 && s.estado === 'acta_cerrada' ? { estado: 'premios_entregados' } : {})
+        Object.assign(ganador, cambios, { estado: 'entregado', retencion_isr: isr.toFixed(2), constancia_archivo_id: constanciaId, entregado_en: ahora(), version: ganador.version + 1 })
+        avanzar(s, cerrarSiTodoResuelto(s))
         registrarAccion(solicitud, 'sorteos.entregar', { tipo: 'sorteo', id: s.id }, { ganador_id: ganador.id, ...cuerpo })
         return { status: 200, cuerpo: s }
     })),
@@ -844,6 +911,174 @@ export const rutasSorteos: RutasFixture = {
             return { status: 200, cuerpo: subida.bytes, contentType: subida.tipo }
         }
         return semilla ? { status: 200, cuerpo: bytesBase64(IMAGENES_SEMILLA[semilla]), contentType: 'image/webp' } : noEncontrado('la imagen del premio')
+    }),
+
+    /** Evidencia del checklist o constancia de entrega (multipart `uso` + `archivo`): PDF, JPEG, PNG o WebP, hasta 5 MB. */
+    'POST /api/v1/lealtad/sorteos/:id/archivos': conPermiso('sorteos.marcar_requisito', async (solicitud) => {
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        if (cuerpo.uso !== 'evidencia' && cuerpo.uso !== 'constancia') {
+            return invalido([{ field: 'uso', message: 'evidencia o constancia', rule: 'enum' }])
+        }
+        const archivo = cuerpo.archivo
+        const bytes = archivo instanceof Blob ? new Uint8Array(await archivo.arrayBuffer()) : new Uint8Array()
+        const error = errorArchivoSorteo(bytes)
+        if (error) {
+            return invalido([{ field: 'archivo', message: error, rule: bytes.length === 0 ? 'required' : error.startsWith('El archivo pesa') ? 'tamano' : 'tipo' }])
+        }
+        const nombre = archivo instanceof File ? archivo.name : ''
+        const registrado = await registrarArchivoSorteo(s, cuerpo.uso, nombre, bytes)
+        registrarAccion(solicitud, 'sorteos.subir_archivo', { tipo: 'sorteo', id: s.id }, { uso: cuerpo.uso, nombre: registrado.nombre, sha256: registrado.sha256 })
+        return { status: 201, cuerpo: registrado }
+    }),
+
+    'GET /api/v1/lealtad/sorteos/:id/archivos/:archivoId': conPermiso('sorteos.ver', (solicitud) => {
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        const archivo = (s.archivos ?? []).find(a => a.id === idDe(solicitud, 'archivoId'))
+        const bytes = archivo ? bd.archivosSorteos[archivo.id] : undefined
+        return archivo && bytes ? { status: 200, cuerpo: bytes, contentType: archivo.tipo } : noEncontrado('el archivo')
+    }),
+
+    /** `ejecutado → acta_cerrada` con la constancia; exige `publicacion_resultados`. Sin pendientes, premios_entregados. */
+    'POST /api/v1/lealtad/sorteos/:id/cerrar-acta': conPermiso('sorteos.ejecutar', conIdempotencia(async (solicitud) => {
+        await prepararSorteos()
+        const constancia = texto(cuerpoObjeto(solicitud).constancia)
+        if (!constancia || constancia.length < 3) {
+            return invalido([{ field: 'constancia', message: 'Registra la firma o constancia del notario o del delegado', rule: 'required' }])
+        }
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        if (s.estado !== 'ejecutado') {
+            return estadoInvalido(s, 'cerrar el acta')
+        }
+        const pendiente = requisitoPendiente(s, ['publicacion_resultados'], 'cerrar el acta')
+        if (pendiente) {
+            return pendiente
+        }
+        const acta = await registrarArchivoSorteo(s, 'acta', `acta-sorteo-${s.id}.pdf`, pdfActa(s, constancia))
+        const momento = ahora()
+        Object.assign(s, { estado: 'acta_cerrada', acta_archivo_id: acta.id, acta_hash: acta.sha256, acta_constancia: constancia, acta_cerrada_en: momento })
+        avanzar(s, cerrarSiTodoResuelto(s))
+        registrarAccion(solicitud, 'sorteos.cerrar_acta', { tipo: 'sorteo', id: s.id }, { constancia })
+        return { status: 200, cuerpo: s }
+    })),
+
+    'GET /api/v1/lealtad/sorteos/:id/acta': conPermiso('sorteos.ver', (solicitud) => {
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        const bytes = s.acta_archivo_id ? bd.archivosSorteos[s.acta_archivo_id] : undefined
+        return bytes ? { status: 200, cuerpo: bytes, contentType: 'application/pdf', headers: { ETag: `"${s.acta_hash ?? ''}"` } } : noEncontrado('el acta del sorteo')
+    }),
+
+    /** Notifica a los ganadores con premio que siguen por notificar, con su plazo de reclamo. Idempotente. */
+    'POST /api/v1/lealtad/sorteos/:id/notificar-ganadores': conPermiso('sorteos.entregar', conIdempotencia(async (solicitud) => {
+        await prepararSorteos()
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        if (s.estado !== 'ejecutado' && s.estado !== 'acta_cerrada') {
+            return estadoInvalido(s, 'notificar a los ganadores')
+        }
+        const momento = ahora()
+        const avisados = s.ganadores.filter(g => premioDe(g) !== null && g.estado === 'por_notificar')
+        avisados.forEach(g => notificarGanador(s, g, momento))
+        if (avisados.length) {
+            avanzar(s, {})
+        }
+        registrarAccion(solicitud, 'sorteos.notificar_ganadores', { tipo: 'sorteo', id: s.id }, { ganadores: avisados.map(g => g.id) })
+        return { status: 200, cuerpo: s }
+    })),
+
+    /** Vencido el plazo, el premio pasa al siguiente suplente en espera (que se notifica); sin suplentes, no reclamado. */
+    'POST /api/v1/lealtad/sorteos/:id/ganadores/:ganadorId/no-reclamado': conPermiso('sorteos.entregar', conIdempotencia(async (solicitud) => {
+        await prepararSorteos()
+        const motivo = texto(cuerpoObjeto(solicitud).motivo)
+        if (!motivo || motivo.length < 3) {
+            return invalido([{ field: 'motivo', message: 'El motivo es obligatorio (mínimo 3 caracteres)', rule: 'motivo' }])
+        }
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        if (s.estado !== 'ejecutado' && s.estado !== 'acta_cerrada') {
+            return estadoInvalido(s, 'dar un premio por no reclamado')
+        }
+        const ganador = s.ganadores.find(g => g.id === idDe(solicitud, 'ganadorId'))
+        if (!ganador) {
+            return noEncontrado('el ganador')
+        }
+        const premio = premioDe(ganador)
+        if (premio === null || ganador.estado !== 'notificado' || !ganador.reclamar_antes) {
+            return regla('ganador_no_notificado', `El ganador ${ganador.id} está ${ganador.estado}: solo un ganador notificado con premio puede quedar sin reclamar`)
+        }
+        if (new Date(ganador.reclamar_antes).getTime() > Date.now()) {
+            return regla('plazo_reclamo_vigente', `El plazo para reclamar vence ${new Date(ganador.reclamar_antes).toISOString()}`)
+        }
+        const momento = ahora()
+        const suplente = s.ganadores
+            .filter(g => g.tipo === 'suplente' && premioDe(g) === null && g.estado === 'por_notificar')
+            .sort((a, b) => a.posicion - b.posicion)[0]
+        Object.assign(ganador, { estado: suplente ? 'sustituido' : 'no_reclamado', no_reclamado_en: momento, version: ganador.version + 1 })
+        if (suplente) {
+            Object.assign(suplente, { sustituye_a: ganador.id, premio_sustitucion: premio, premio })
+            notificarGanador(s, suplente, momento)
+        }
+        avanzar(s, cerrarSiTodoResuelto(s))
+        registrarAccion(solicitud, 'sorteos.marcar_no_reclamado', { tipo: 'sorteo', id: s.id }, { ganador_id: ganador.id, suplente_id: suplente?.id ?? null, motivo })
+        return { status: 200, cuerpo: s }
+    })),
+
+    /** Participantes desde el corte, en orden canónico, con `lista_hash` al pie; `formato=csv|xlsx` da el archivo. */
+    'GET /api/v1/lealtad/sorteos/:id/participantes': conPermiso('sorteos.exportar', async (solicitud) => {
+        await prepararSorteos()
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        if (!s.lista_hash) {
+            return estadoInvalido(s, 'exportar participantes')
+        }
+        const filas = privadoDe(s.id).participantes.map((p, i) => ({
+            orden: i + 1,
+            codigo_publico: p.codigo,
+            boletos: p.boletos,
+            cliente_id: p.cliente_id,
+            cliente: bd.clientes.find(c => c.id === p.cliente_id)?.nombre ?? `Cliente ${p.cliente_id}`,
+            servicio_id: p.servicio_id,
+        }))
+        const totales = { orden: null, codigo_publico: `lista_hash ${s.lista_hash}`, boletos: filas.reduce((suma, f) => suma + f.boletos, 0), cliente_id: null, cliente: null, servicio_id: null }
+        const formato = solicitud.query.get('formato')
+        if (formato === 'csv') {
+            const linea = (v: (string | number | null)[]) => v.map(x => (x === null ? '' : /[",\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : String(x))).join(',')
+            const texto = [linea(COLUMNAS_PARTICIPANTES.map(c => c.titulo)), ...filas.map(f => linea([f.orden, f.codigo_publico, f.boletos, f.cliente_id, f.cliente, f.servicio_id])), linea([null, totales.codigo_publico, totales.boletos, null, null, null])].join('\n')
+            return { status: 200, cuerpo: new TextEncoder().encode(`\uFEFF${texto}\n`), contentType: 'text/csv; charset=utf-8' }
+        }
+        if (formato === 'xlsx') {
+            return { status: 200, cuerpo: new Uint8Array([0x50, 0x4B, 0x03, 0x04]), contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+        }
+        // Como la API: el pie lleva `lista_hash …` en la columna del código. El OpenAPI tipa los totales
+        // como número (pedido a A3 en `a4.md`), así que el reporte se arma con su forma real.
+        const reporte: Omit<Schema<'ReporteParticipantesSorteo'>, 'totales'> & { totales: Record<string, string | number | null> } = {
+            reporte: `participantes-sorteo-${s.id}`,
+            titulo: `Participantes del sorteo ${s.nombre}`,
+            filtros: { sorteo_id: s.id },
+            columnas: COLUMNAS_PARTICIPANTES,
+            filas,
+            totales,
+            generado_en: ahora(),
+        }
+        return { status: 200, cuerpo: reporte }
     }),
 
     /** H22 (`sorteos.anular_entrega`, permiso `sorteos.entregar`): deshace la entrega toda junta. */

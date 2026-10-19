@@ -179,6 +179,8 @@ interface BaseFixtures {
     sorteosPrivados: SorteoPrivado[]
     /** Imágenes de premios subidas en la sesión (`imagen_archivo_id` → bytes); las sembradas, en `sorteos/imagenes.ts`. */
     imagenesSorteos: Record<number, { bytes: Uint8Array, tipo: string }>
+    /** Archivos de sorteo subidos (evidencias, constancias y actas): `ArchivoSorteo.id` → bytes. */
+    archivosSorteos: Record<number, Uint8Array>
     /* Fase 5 (A3): compras; el panel las lee para entregar el bien de un premio de sorteo. */
     compras: Schema<'Compra'>[]
     /** Saldo de 2.1.10 por empresa cuando no es el de los lotes (para probar el aviso de `cuadra: false`). */
@@ -267,6 +269,7 @@ function inicial(): BaseFixtures {
         sorteos,
         sorteosPrivados,
         imagenesSorteos: {},
+        archivosSorteos: {},
         compras,
     })
     sembrarNotasCredito(datos)
