@@ -59,10 +59,7 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    // fase 5: baja de un activo con fecha anterior a cuotas ya registradas
-    '15.cuota_posterior_a_la_baja': 'H20',
-}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
 
 type Fila = Record<string, unknown>
 
@@ -1827,7 +1824,7 @@ async function verificarLibroCon(
           WHERE coalesce(l.saldo, 0) <> coalesce(d.saldo, 0)`,
     )
     await revisar(
-        '15.compra_con_saldo_fuera_de_rango (0 ≤ saldo ≤ neto; Σ aplicaciones = monto del pago; solo a compras al crédito vigentes)',
+        '15.compra_con_saldo_fuera_de_rango (0 ≤ saldo ≤ neto; Σ aplicaciones = monto del pago; solo a compras al crédito vigentes y nunca antes de su fecha)',
         `SELECT 'compra' AS que, c.id, (${SALDO_COMPRA})::text AS saldo, (c.total - c.retencion_iva - c.retencion_isr)::text AS neto
            FROM ledger.compras c WHERE ${E('c.empresa_id')}
             AND ((${SALDO_COMPRA}) < 0 OR (${SALDO_COMPRA}) > c.total - c.retencion_iva - c.retencion_isr)
@@ -1841,6 +1838,8 @@ async function verificarLibroCon(
            JOIN ledger.pagos_proveedores pp ON pp.id = ap.pago_id
           WHERE ${E('c.empresa_id')}
             AND (c.condicion <> 'credito' OR c.tipo_documento = 'NCRE' OR c.proveedor_id <> pp.proveedor_id
+                 -- observación del auditor (A3 la cerró con 422 pago_anterior_a_compra): no se paga antes de la compra
+                 OR pp.fecha < c.fecha
                  OR c.empresa_id <> pp.empresa_id OR (${compraAnulada('c')} AND ${pagoProveedorVivo('pp.id')}))`,
     )
     await revisar(
@@ -2060,9 +2059,10 @@ async function verificarLibroCon(
           WHERE c.codigo = '${IVA_CREDITO}' AND a.origen_tipo <> 'compra' AND ${E('a.empresa_id')}`,
     )
     await revisar(
-        '15.activo_depreciado_de_mas (inicial + Σ cuotas ≤ costo − residual; una cuota por activo y mes)',
+        '15.activo_depreciado_de_mas (inicial + Σ cuotas vigentes ≤ costo − residual; una cuota por activo y mes)',
         `SELECT ac.id, ac.costo::text, ac.valor_residual::text, coalesce(sum(q.monto), 0)::text AS depreciado
            FROM ledger.activos ac LEFT JOIN ledger.activos_cuotas q ON q.activo_id = ac.id
+                AND NOT EXISTS (SELECT 1 FROM ledger.asientos qr WHERE qr.reversa_de = q.asiento_id)
           WHERE ${E('ac.empresa_id')}
           GROUP BY ac.id, ac.costo, ac.valor_residual, ac.depreciacion_inicial
          HAVING ac.depreciacion_inicial + coalesce(sum(q.monto), 0) > ac.costo - ac.valor_residual
@@ -2088,11 +2088,21 @@ async function verificarLibroCon(
              OR x.mes >= date_trunc('month', x.created_at AT TIME ZONE 'America/Guatemala')::date`,
     )
     await revisar(
-        '15.cuota_posterior_a_la_baja (H20: el mes de la baja y los siguientes no se deprecian; la baja cancela solo la depreciación hasta el mes anterior)',
-        `SELECT q.id, q.activo_id, to_char(q.mes, 'YYYY-MM') AS mes, q.monto::text, to_char(b.fecha, 'YYYY-MM-DD') AS baja
+        '15.cuota_posterior_a_la_baja (H20: el mes de la baja y los siguientes no quedan depreciados: la baja retroactiva revierte esas cuotas, cada reverso en la fecha de su cuota; solo se revierte una cuota así)',
+        `SELECT 'vigente' AS que, q.id, q.activo_id, to_char(q.mes, 'YYYY-MM') AS mes, q.monto::text, to_char(b.fecha, 'YYYY-MM-DD') AS baja
            FROM ledger.activos_cuotas q JOIN ledger.activos_bajas b ON b.activo_id = q.activo_id AND b.tipo <> 'anulacion'
            JOIN ledger.activos ac ON ac.id = q.activo_id
-          WHERE ${E('ac.empresa_id')} AND q.mes >= date_trunc('month', b.fecha)::date`,
+          WHERE ${E('ac.empresa_id')} AND q.mes >= date_trunc('month', b.fecha)::date
+            AND NOT EXISTS (SELECT 1 FROM ledger.asientos qr WHERE qr.reversa_de = q.asiento_id)
+         UNION ALL
+         SELECT 'revertida', q.id, q.activo_id, to_char(q.mes, 'YYYY-MM'), q.monto::text, to_char(b.fecha, 'YYYY-MM-DD')
+           FROM ledger.activos_cuotas q JOIN ledger.activos ac ON ac.id = q.activo_id
+           JOIN ledger.asientos a ON a.id = q.asiento_id
+           JOIN ledger.asientos r ON r.reversa_de = q.asiento_id
+           LEFT JOIN ledger.activos_bajas b ON b.activo_id = q.activo_id AND b.tipo <> 'anulacion'
+          WHERE ${E('ac.empresa_id')}
+            AND (b.id IS NULL OR q.mes < date_trunc('month', b.fecha)::date OR r.fecha <> a.fecha
+                 OR (SELECT count(*) FROM ledger.asientos r2 WHERE r2.reversa_de = q.asiento_id) <> 1)`,
     )
     await revisar(
         '15.depreciacion_acumulada_distinta (1.2.02.NN = inicial + Σ cuotas de los activos vivos de su clase)',
@@ -2207,7 +2217,8 @@ async function verificarLibroCon(
               GROUP BY b.id
          ), x AS (
              SELECT b.*, ac.costo AS costo_activo, ac.compra_id,
-                    ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id), 0) AS acumulada_real,
+                    ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id
+                                                          AND NOT EXISTS (SELECT 1 FROM ledger.asientos qr WHERE qr.reversa_de = q.asiento_id)), 0) AS acumulada_real,
                     mov.asientos, mov.fecha AS fecha_asiento, mov.acumulada AS acumulada_libro, mov.costo AS costo_libro,
                     mov.cobro, mov.ganancia, mov.perdida, mov.ajenos
                FROM ledger.activos_bajas b JOIN ledger.activos ac ON ac.id = b.activo_id

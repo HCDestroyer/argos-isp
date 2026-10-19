@@ -144,15 +144,9 @@ test.group('Fase 5 · hallazgos H19 y H20', (group) => {
         // repetir el cron no vuelve a depreciar el activo dado de baja
         const repetida = await new DepreciarActivos().execute({ empresa_id: e.B }, e.ctx)
         assert.equal(repetida.cuotas, 0)
-        // Pendiente del auditor: `15.cuota_posterior_a_la_baja` y `15.baja_de_activo_mal_contabilizada`
-        // cuentan también las cuotas revertidas (la fila de la cuota es insert-only y queda con su
-        // reverso). Todo lo demás del libro cuadra.
-        const violaciones = await verificarLibro(e.B, { incluirHallazgosAbiertos: true })
-        assert.deepEqual(
-            violaciones.map((v) => v.invariante.split(' ')[0]).sort(),
-            ['15.baja_de_activo_mal_contabilizada', '15.cuota_posterior_a_la_baja'],
-            JSON.stringify(violaciones, null, 2),
-        )
+        // auditor: `15.cuota_posterior_a_la_baja` y `15.baja_de_activo_mal_contabilizada` cuentan solo las
+        // cuotas vigentes; una revertida exige su baja, un solo reverso y la fecha de su cuota
+        assert.deepEqual(await verificarLibro(e.B), [])
     })
 
     test('H20 · si una cuota a revertir está en un periodo cerrado: 422 periodo_cerrado con el mes; nada cambia', async ({
