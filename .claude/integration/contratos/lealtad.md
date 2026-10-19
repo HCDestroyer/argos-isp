@@ -417,7 +417,7 @@ A1 (dueño de `permisos.ts`) agrega además `servicios.programar_plan_temporal` 
 - **Reversos**: devuelven solo lo que le queda vivo al lote (lo vencido ya salió). Se aplican aunque el programa esté desactivado.
 - **Referidos**: `servicio.creado` del cliente con `referido_por_id` en la empresa del código registra el referido `pendiente` (aunque la empresa aún no tenga programa); califica con las facturas pagadas mínimas dentro de `dias_maximos` (si no, `rechazado`); un pago anulado que lo deja sin el mínimo revierte lo otorgado y lo vuelve a `pendiente`; un retiro que lo deja sin servicio en la empresa lo rechaza.
 - **Endpoints**: los de §11 de programa, reglas, puntos, ajustes, referidos y `/reportes/lealtad`, más `GET /lealtad/programas` (lista consolidable). `GET /lealtad/programa` responde `{ empresa_id, programa }` (`programa: null` sin programa). Errores además de §15: 409 `programa_ya_activo`, 409 `programa_inactivo_ya`, 409 `referido_rechazado`, 422 `cuentas_lealtad_faltantes`, 422 `recompensa_no_disponible`.
-- **Crons** (en `billing:worker`, con lock): `lealtad:antiguedad` (03:05) y `lealtad:vencer` (03:20, Guatemala), todo lo pendiente hasta hoy por lotes de 500.
+- **Crons** (en `billing:worker`, con lock): `lealtad:antiguedad` (03:05) y `lealtad:vencer` (03:20, Guatemala), todo lo pendiente hasta hoy por lotes de 500. Se procesan por empresa: si una falla (p. ej. su asiento cae en un mes cerrado, 422 `periodo_cerrado`) queda en `fallidas` de la corrida (`audit.acciones`, acción con el nombre del cron) y se sigue con las demás; se reintenta en el siguiente disparo. Un trigger bloquea el lote (advisory lock por lote) para que dos salidas concurrentes no lo sobreconsuman (H15).
 
 ## 16. Qué hace cada agente
 
