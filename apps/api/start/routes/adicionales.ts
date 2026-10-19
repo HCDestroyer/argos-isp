@@ -19,6 +19,7 @@ import {
     adicionalesDelPlan,
     listarAdicionales,
     listarAsignaciones,
+    listarBloqueos,
     listarMotivosCortesia,
     verAdicional,
 } from '#core/adicionales'
@@ -37,6 +38,7 @@ import {
     Adicional,
     AdicionalPlan,
     AdicionalServicio,
+    BloqueoAdicional,
     CredencialAdicional,
     MotivoCortesia,
 } from '#core/esquemas'
@@ -278,6 +280,25 @@ const deServicio: Ruta[] = [
         },
     }),
 ]
+
+deServicio.push(
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/adicionales/:asignacionId/bloqueos',
+        operacion: 'serviciosBloqueosAdicional',
+        resumen: 'Historial de bloqueos y desbloqueos de un adicional (por la suspensión del servicio)',
+        descripcion: 'Del más reciente al más viejo. El bloqueo lo pone y lo quita el estado del servicio.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.ver',
+        query: v.listarPaginadoValidator,
+        respuesta: { status: 200, descripcion: 'Página de bloqueos', esquema: pagina(BloqueoAdicional) },
+        handler: async (ctx, { params, query }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return listarBloqueos(id, Number(params.asignacionId), query)
+        },
+    }),
+)
 
 const dePlan: Ruta[] = [
     definirRuta({

@@ -118,8 +118,29 @@ export const CAMPOS_ADICIONAL_CAMBIADO = [
     'credencial',
     'precio',
     'motivo',
+    'primer_periodo',
 ] as const
 export type CampoAdicionalCambiado = (typeof CAMPOS_ADICIONAL_CAMBIADO)[number]
+
+/** Primer periodo de un adicional `cobrado` agregado a mitad de periodo (lo factura A3). */
+export const PRIMEROS_PERIODOS_ADICIONAL = ['prorrateado', 'sin_costo'] as const
+export type PrimerPeriodoAdicional = (typeof PRIMEROS_PERIODOS_ADICIONAL)[number]
+
+/** Bloqueo o desbloqueo de un adicional por el estado del servicio (`contratos/adicionales.md`). */
+interface PayloadBloqueoAdicional {
+    servicio_id: number
+    cliente_id: number
+    empresa_id: number
+    asignacion_id: number
+    adicional_id: number
+    /** usuario de IPTV, correo de la cuenta… (nunca la credencial) */
+    identificador: string | null
+    modalidad: ModalidadAdicional
+    /** estado del servicio que lo causó (`suspendido` al bloquear; `activo` o `limitado` al desbloquear) */
+    estado_servicio: EstadoServicio
+    /** motivo del cambio de estado del servicio */
+    motivo: string | null
+}
 
 /** Asignación de un adicional a un servicio (`core.servicios_adicionales`). */
 interface PayloadAdicional {
@@ -199,12 +220,23 @@ export interface CatalogoEventos {
     'servicio.adicional_agregado': PayloadAdicional & {
         /** `manual`: lo agregó alguien; `plan`: lo trajo el plan al crear el servicio o cambiar de plan */
         origen: 'manual' | 'plan'
+        /** solo con `cobrado`: cómo se cobra el periodo en curso (A3) */
+        primer_periodo: PrimerPeriodoAdicional | null
+        /** nace bloqueado si el servicio está suspendido (se emite además `adicional.bloqueado`) */
+        bloqueo: 'vigente' | 'bloqueado'
     }
     'servicio.adicional_cambiado': PayloadAdicional & {
         /** campos que cambiaron; `credencial` solo dice que cambió (nunca el valor) */
         campos: CampoAdicionalCambiado[]
         modalidad_anterior: ModalidadAdicional
     }
+    /**
+     * El servicio pasó a `suspendido` (o se le agregó un adicional estando suspendido): la cuenta
+     * externa (streaming, IPTV) debe bloquearse. Lo consume quien integre esos proveedores; hoy nadie.
+     */
+    'adicional.bloqueado': PayloadBloqueoAdicional
+    /** El servicio salió de `suspendido` (`activo` o `limitado`): la cuenta externa se reactiva. */
+    'adicional.desbloqueado': PayloadBloqueoAdicional
     'servicio.adicional_quitado': PayloadAdicional & {
         /** `manual` (quitado a mano), `cambio_plan`, `retiro` o `cambio_empresa` */
         origen: 'manual' | 'cambio_plan' | 'retiro' | 'cambio_empresa'
@@ -601,6 +633,8 @@ export const EVENTOS = [
     'servicio.adicional_agregado',
     'servicio.adicional_cambiado',
     'servicio.adicional_quitado',
+    'adicional.bloqueado',
+    'adicional.desbloqueado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
     'cliente.actualizado',

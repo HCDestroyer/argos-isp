@@ -5,7 +5,12 @@ import type { Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { exigirAccesoEmpresa, filtrarPorEmpresa } from '#shared/empresa_activa'
-import type { ModalidadAdicional, PayloadEvento } from '#shared/eventos'
+import type {
+    EstadoServicio,
+    ModalidadAdicional,
+    PayloadEvento,
+    PrimerPeriodoAdicional,
+} from '#shared/eventos'
 
 /**
  * Servicios adicionales (decisión del PM, 19 oct; `contratos/adicionales.md`): catálogo por empresa
@@ -17,6 +22,7 @@ import type { ModalidadAdicional, PayloadEvento } from '#shared/eventos'
  */
 
 export type EstadoAsignacionAdicional = 'activo' | 'baja'
+export type BloqueoAdicional = 'vigente' | 'bloqueado'
 
 export interface AdicionalVista {
     id: number
@@ -60,6 +66,13 @@ export interface AsignacionAdicionalVista {
     motivo_detalle: string | null
     plan_id: number | null
     estado: EstadoAsignacionAdicional
+    /** `bloqueado` mientras el servicio está suspendido */
+    bloqueo: BloqueoAdicional
+    bloqueado_en: string | null
+    /** solo con `cobrado`: cómo se cobra el periodo en curso */
+    primer_periodo: PrimerPeriodoAdicional | null
+    /** solo con `cobrado`: desde cuándo se cobra (alta o paso a `cobrado`) */
+    cobrado_desde: string | null
     alta_en: string
     baja_en: string | null
     motivo_baja: string | null
@@ -203,6 +216,10 @@ function consultaAsignaciones(cliente: QueryClientContract) {
             'sa.motivo_detalle',
             'sa.plan_id',
             'sa.estado',
+            'sa.bloqueo',
+            'sa.bloqueado_en',
+            'sa.primer_periodo',
+            'sa.cobrado_desde',
             'sa.alta_en',
             'sa.baja_en',
             'sa.motivo_baja',
@@ -342,6 +359,14 @@ export interface ServicioDeAdicional {
     cliente_id: number
 }
 
+/** Estado del servicio dentro de la transacción (para saber si un adicional nuevo nace bloqueado). */
+async function estadoDelServicio(t: Transaccion, servicioId: number): Promise<EstadoServicio> {
+    const fila = (await t.trx.from('core.servicios').where('id', servicioId).select('estado').first()) as {
+        estado: EstadoServicio
+    }
+    return fila.estado
+}
+
 type Origen<E extends 'servicio.adicional_agregado' | 'servicio.adicional_quitado'> =
     PayloadEvento<E>['origen']
 
@@ -373,9 +398,14 @@ export async function insertarAsignacion(
         motivo_id?: number | null
         motivo_detalle?: string | null
         plan_id?: number | null
+        /** solo con `cobrado`; por defecto `prorrateado` */
+        primer_periodo?: PrimerPeriodoAdicional | null
     },
     origen: Origen<'servicio.adicional_agregado'>,
 ): Promise<FilaAsignacion> {
+    const cobrado = datos.modalidad === 'cobrado'
+    const estadoServicio = await estadoDelServicio(t, servicio.id)
+    const bloqueado = estadoServicio === 'suspendido'
     const [nueva] = (await t.trx
         .insertQuery()
         .table('core.servicios_adicionales')
@@ -390,11 +420,30 @@ export async function insertarAsignacion(
             motivo_id: datos.motivo_id ?? null,
             motivo_detalle: datos.motivo_detalle ?? null,
             plan_id: datos.plan_id ?? null,
+            primer_periodo: cobrado ? (datos.primer_periodo ?? 'prorrateado') : null,
+            cobrado_desde: cobrado ? t.trx.knexRawQuery('now()') : null,
+            bloqueo: bloqueado ? 'bloqueado' : 'vigente',
+            bloqueado_en: bloqueado ? t.trx.knexRawQuery('now()') : null,
         })
         .returning('id')) as Array<{ id: number }>
     const fila = await filaAsignacion(t, Number(nueva!.id))
     await t.registrarCambios({ tipo: 'servicio_adicional', id: fila.id }, null, fila)
-    await t.emit('servicio.adicional_agregado', { ...payload(fila, servicio), origen })
+    await t.emit('servicio.adicional_agregado', {
+        ...payload(fila, servicio),
+        origen,
+        primer_periodo: (fila.primer_periodo as PrimerPeriodoAdicional | null) ?? null,
+        bloqueo: bloqueado ? 'bloqueado' : 'vigente',
+    })
+    if (bloqueado) {
+        await registrarBloqueo(
+            t,
+            servicio,
+            fila,
+            'bloqueado',
+            estadoServicio,
+            'servicio suspendido al agregarlo',
+        )
+    }
     return fila
 }
 
@@ -491,6 +540,119 @@ export async function reconciliarIncluidos(
                 'plan',
             )
         }
+    }
+}
+
+/** Historial (`core.servicios_adicionales_bloqueos`) y evento de un bloqueo o desbloqueo. */
+async function registrarBloqueo(
+    t: Transaccion,
+    servicio: ServicioDeAdicional,
+    fila: FilaAsignacion,
+    accion: 'bloqueado' | 'desbloqueado',
+    estadoServicio: EstadoServicio,
+    motivo: string | null,
+) {
+    await t.trx
+        .insertQuery()
+        .table('core.servicios_adicionales_bloqueos')
+        .insert({
+            asignacion_id: fila.id,
+            servicio_id: servicio.id,
+            empresa_id: Number(fila.empresa_id),
+            accion,
+            estado_servicio: estadoServicio,
+            motivo,
+            request_id: t.ctx.requestId,
+        })
+    await t.emit(accion === 'bloqueado' ? 'adicional.bloqueado' : 'adicional.desbloqueado', {
+        servicio_id: servicio.id,
+        cliente_id: servicio.cliente_id,
+        empresa_id: Number(fila.empresa_id),
+        asignacion_id: fila.id,
+        adicional_id: Number(fila.adicional_id),
+        identificador: (fila.identificador as string | null) ?? null,
+        modalidad: fila.modalidad,
+        estado_servicio: estadoServicio,
+        motivo,
+    })
+}
+
+/**
+ * Bloqueo por el estado del servicio (`contratos/adicionales.md`, "Servicio suspendido"). Lo llama
+ * `CambiarEstadoServicio` dentro de su transacción, así que el cambio de estado y el bloqueo se
+ * confirman juntos o ninguno; es idempotente porque solo toca los que todavía no están así.
+ *
+ * - `a = suspendido`: los adicionales activos y vigentes pasan a `bloqueado`.
+ * - `de = suspendido` y `a` distinto: los bloqueados pasan a `vigente`.
+ * - Entre `activo` y `limitado` no hace nada.
+ *
+ * Cada fila deja su diff en `audit.cambios`, su historial y `adicional.bloqueado` o
+ * `adicional.desbloqueado`. No toca la `version` de la asignación: el bloqueo no es una edición de
+ * nadie, y así no hace fallar con 409 una edición del panel que llegue en el mismo momento.
+ */
+export async function aplicarBloqueoPorEstado(
+    t: Transaccion,
+    servicio: ServicioDeAdicional,
+    de: EstadoServicio,
+    a: EstadoServicio,
+    motivo: string | null,
+): Promise<number> {
+    let accion: 'bloqueado' | 'desbloqueado'
+    if (a === 'suspendido' && de !== 'suspendido') accion = 'bloqueado'
+    else if (de === 'suspendido' && a !== 'suspendido' && a !== 'retirado') accion = 'desbloqueado'
+    else return 0
+    const filas = (await t.trx
+        .from('core.servicios_adicionales')
+        .where('servicio_id', servicio.id)
+        .where('estado', 'activo')
+        .where('bloqueo', accion === 'bloqueado' ? 'vigente' : 'bloqueado')
+        .orderBy('id', 'asc')
+        .forUpdate()) as FilaAsignacion[]
+    for (const antes of filas) {
+        const id = Number(antes.id)
+        await t.trx
+            .from('core.servicios_adicionales')
+            .where('id', id)
+            .update({
+                bloqueo: accion === 'bloqueado' ? 'bloqueado' : 'vigente',
+                bloqueado_en: accion === 'bloqueado' ? t.trx.knexRawQuery('now()') : null,
+                updated_at: t.trx.knexRawQuery('now()'),
+            } as Record<string, unknown>)
+        const despues = await filaAsignacion(t, id)
+        await t.registrarCambios({ tipo: 'servicio_adicional', id }, antes, despues)
+        await registrarBloqueo(t, servicio, despues, accion, a, motivo)
+    }
+    return filas.length
+}
+
+export interface BloqueoVista {
+    id: number
+    asignacion_id: number
+    accion: 'bloqueado' | 'desbloqueado'
+    estado_servicio: EstadoServicio
+    motivo: string | null
+    created_at: string
+}
+
+/** Historial de bloqueos de una asignación, del más reciente al más viejo. */
+export async function listarBloqueos(
+    servicioId: number,
+    asignacionId: number,
+    filtros: OpcionesPaginacion,
+): Promise<Pagina<BloqueoVista>> {
+    await verAsignacion(servicioId, asignacionId)
+    const consulta = db
+        .from('core.servicios_adicionales_bloqueos')
+        .where('asignacion_id', asignacionId)
+        .select('id', 'asignacion_id', 'accion', 'estado_servicio', 'motivo', 'created_at')
+    const pagina = await paginar(consulta, filtros)
+    return {
+        ...pagina,
+        data: pagina.data.map((f: any) => ({
+            ...f,
+            id: Number(f.id),
+            asignacion_id: Number(f.asignacion_id),
+        })),
     }
 }
 

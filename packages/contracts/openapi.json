@@ -40904,6 +40904,21 @@
                       "null"
                     ],
                     "maxLength": 500
+                  },
+                  "primer_periodo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "prorrateado",
+                          "sin_costo"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con cobrado: prorrateado (por defecto) cobra la parte proporcional del periodo en curso; sin_costo no lo cobra"
                   }
                 },
                 "required": [
@@ -41090,6 +41105,21 @@
                       "null"
                     ],
                     "maxLength": 500
+                  },
+                  "primer_periodo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "prorrateado",
+                          "sin_costo"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo con cobrado: prorrateado (por defecto) cobra la parte proporcional del periodo en curso; sin_costo no lo cobra"
                   }
                 },
                 "required": [
@@ -41163,6 +41193,137 @@
           }
         },
         "x-permiso": "servicios.editar_adicional",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/adicionales/{asignacionId}/bloqueos": {
+      "get": {
+        "operationId": "serviciosBloqueosAdicional",
+        "summary": "Historial de bloqueos y desbloqueos de un adicional (por la suspensión del servicio)",
+        "description": "Del más reciente al más viejo. El bloqueo lo pone y lo quita el estado del servicio.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "asignacionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de bloqueos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BloqueoAdicional"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.ver",
         "x-implementado": true
       }
     },
@@ -45835,6 +45996,40 @@
               "baja"
             ]
           },
+          "bloqueo": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "bloqueado"
+            ],
+            "description": "bloqueado mientras el servicio está suspendido (lo pone el estado del servicio)"
+          },
+          "bloqueado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "primer_periodo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "prorrateado",
+              "sin_costo"
+            ],
+            "description": "Solo con cobrado: cómo se cobra el periodo en curso (lo factura A3)"
+          },
+          "cobrado_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Solo con cobrado: desde cuándo se cobra"
+          },
           "alta_en": {
             "type": "string",
             "format": "date-time"
@@ -46642,6 +46837,53 @@
           },
           "cuenta_nombre": {
             "type": "string"
+          }
+        }
+      },
+      "BloqueoAdicional": {
+        "type": "object",
+        "required": [
+          "id",
+          "asignacion_id",
+          "accion",
+          "estado_servicio",
+          "motivo",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "asignacion_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "accion": {
+            "type": "string",
+            "enum": [
+              "bloqueado",
+              "desbloqueado"
+            ]
+          },
+          "estado_servicio": {
+            "type": "string",
+            "enum": [
+              "activo",
+              "limitado",
+              "suspendido",
+              "retirado"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
