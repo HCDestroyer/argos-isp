@@ -29,6 +29,8 @@ export const programasLealtad: Schema<'ProgramaLealtad'>[] = [
         minimo_canje: 100,
         terminos: 'Los puntos vencen a los 12 meses de ganados.',
         terminos_hash: '1b4ddb095e0e830703bc4bb3fe872b1edb9f614e318f83ad2ade95e288cf98cc',
+        visible_portal: false,
+        canje_portal: false,
         vigente_desde: '2026-10-01',
         vigente_hasta: null,
         version: 2,

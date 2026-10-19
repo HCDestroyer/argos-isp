@@ -127,6 +127,8 @@ function crearPrograma(solicitud: SolicitudFixture): RespuestaFixture {
         minimo_canje: 0,
         terminos: '',
         terminos_hash: '0'.repeat(64),
+        visible_portal: false,
+        canje_portal: false,
         vigente_desde: hoy(),
         vigente_hasta: null,
         version: 1,

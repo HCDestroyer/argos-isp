@@ -94,6 +94,8 @@ export const CATEGORIAS_FLUJO = ['efectivo', 'operacion', 'inversion', 'financia
 export type CategoriaFlujo = (typeof CATEGORIAS_FLUJO)[number]
 
 export const CATEGORIAS_FISCALES = [
+    // decisión del PM (19 oct): deducible explícito (5.1.03 Premios y promociones)
+    'deducible',
     'no_deducible',
     'limite_parientes',
     'limite_exterior',

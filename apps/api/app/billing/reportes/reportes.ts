@@ -855,3 +855,68 @@ export async function egresosPorCategoria(
         filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })
 }
+
+/*
+|--------------------------------------------------------------------------
+| Bonificaciones por motivo (lo que antes era una factura en Q0)
+|--------------------------------------------------------------------------
+*/
+
+export const COLUMNAS_BONIFICACIONES = definirColumnas([
+    { clave: 'periodo', titulo: 'Periodo', tipo: 'texto' },
+    { clave: 'motivo_id', titulo: 'Motivo (id)', tipo: 'entero' },
+    { clave: 'motivo', titulo: 'Motivo', tipo: 'texto' },
+    { clave: 'origen', titulo: 'Origen', tipo: 'texto' },
+    { clave: 'bonificaciones', titulo: 'Bonificaciones', tipo: 'entero' },
+    { clave: 'valor_bruto', titulo: 'Valor bruto', tipo: 'dinero' },
+    { clave: 'base', titulo: 'Base sin IVA', tipo: 'dinero' },
+])
+
+/**
+ * Bonificaciones (decisión del PM, 19 oct: una factura de valor 0 nunca se genera) por mes del periodo,
+ * motivo y origen (mes gratis, descuento del 100 %, cargo sin costo, canje). `valor_bruto` = lo que se
+ * entregó sin cobrar (IVA incluido); `base` = el monto del asiento `5.1.01 / ingreso`.
+ */
+export async function bonificacionesPorMotivo(
+    filtros: { desde?: string; hasta?: string; motivo_id?: number; cliente_id?: number; origen?: string },
+    alcance?: Alcance,
+    op: EmpresasReporte = UNA_EMPRESA,
+): Promise<Reporte> {
+    const { desde, hasta } = rangoPorDefecto(filtros)
+    const periodo = `to_char(f.periodo, 'YYYY-MM')`
+    const consulta = db
+        .from('billing.bonificaciones as f')
+        .join('billing.motivos_sin_costo as ms', 'ms.id', 'f.motivo_id')
+        .join('core.clientes as c', 'c.id', 'f.cliente_id')
+        .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
+        .whereRaw(`f.periodo between date_trunc('month', ?::date) and ?::date`, [desde, hasta])
+        .if(filtros.motivo_id, (q) => q.where('f.motivo_id', filtros.motivo_id!))
+        .if(filtros.cliente_id, (q) => q.where('f.cliente_id', filtros.cliente_id!))
+        .if(filtros.origen, (q) => q.where('f.origen', filtros.origen!))
+        .groupByRaw(`${periodo}, ms.id, ms.nombre, f.origen`)
+        .orderByRaw(`${periodo} asc, ms.nombre asc, f.origen asc`)
+        .select(
+            db.raw(`${periodo} as periodo`),
+            'ms.id as motivo_id',
+            'ms.nombre as motivo',
+            'f.origen',
+            db.raw('count(*)::int as bonificaciones'),
+            db.raw('coalesce(sum(f.bruto), 0)::text as valor_bruto'),
+            db.raw('coalesce(sum(f.base), 0)::text as base'),
+        )
+    filtrarPorAlcance(consulta, alcance, dimensionesClienteServicio)
+    porEmpresa(consulta, 'f.empresa_id', op)
+    const filas = ((await consulta) as Fila[]).map((f) => ({
+        ...f,
+        motivo_id: Number(f.motivo_id),
+        valor_bruto: dinero(f.valor_bruto),
+        base: dinero(f.base),
+    }))
+    return armarReporte({
+        reporte: 'bonificaciones',
+        titulo: 'Bonificaciones por motivo',
+        columnas: columnasCon(op, COLUMNAS_BONIFICACIONES),
+        filas,
+        filtros: filtrosCon(op, { ...filtros, desde, hasta }),
+    })
+}

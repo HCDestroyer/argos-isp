@@ -20,17 +20,25 @@ Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6
   código de otro (A1: `core.codigos_referido`, `referidoDeCliente` de `#core/referidos`) y califican
   con las facturas pagadas mínimas.
 
+- **Canjes** (fase 2, `lealtad.premios` y `lealtad.canjes`): `canjear` saca los puntos con un
+  movimiento `canje` (lotes que vencen antes primero; con diferimiento `2.1.10 / 4.1.06`). Mejora de
+  plan por `ProgramarPlanTemporal` de A1 (falla entera si no se puede), descuento sobre factura
+  emitida por nota de crédito por línea, descuento sin factura `reservado` para la próxima factura.
+  Revertir (solo reservado) devuelve los puntos en lotes nuevos con su vencimiento original.
+
 ## Acciones
 
 `lealtad.crear_programa`, `lealtad.editar_programa`, `lealtad.activar_programa`,
 `lealtad.desactivar_programa`, `lealtad.crear_regla`, `lealtad.editar_regla`, `lealtad.ajustar`,
-`lealtad.rechazar_referido`, `lealtad.evaluar_evento` (consumidor), `lealtad.otorgar_antiguedad` y
+`lealtad.rechazar_referido`, `lealtad.crear_premio`, `lealtad.editar_premio`, `lealtad.canjear`,
+`lealtad.revertir_canje`, `lealtad.evaluar_evento` (consumidor), `lealtad.otorgar_antiguedad` y
 `lealtad.vencer` (crons).
 
 ## Eventos
 
 - Emite: `lealtad.programa_cambiado`, `lealtad.puntos_acumulados`, `lealtad.puntos_revertidos`,
-  `lealtad.puntos_por_vencer`, `lealtad.puntos_vencidos`, `lealtad.referido_calificado`.
+  `lealtad.puntos_por_vencer`, `lealtad.puntos_vencidos`, `lealtad.referido_calificado`,
+  `lealtad.canje_reservado`, `lealtad.canje_aplicado`, `lealtad.canje_revertido`.
 - Consume (grupo `lealtad` en `node ace billing:worker`, `consumidor.ts`): `pago.registrado`,
   `pago.anulado`, `factura.emitida`, `factura.anulada`, `nota_credito.emitida`,
   `nota_credito.anulada`, `servicio.creado`, `servicio.estado_cambiado`. Idempotente por
