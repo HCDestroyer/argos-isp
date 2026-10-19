@@ -410,6 +410,12 @@ async function actualizar() {
                 @revisar="vigilarEstado"
             />
 
+            <!-- Promociones del panel: siempre debajo de pagar y de pedir promesa, nunca encima ni en modal. -->
+            <PromoPromociones
+                v-if="identificado && !retirado"
+                lugar="pagina_corte"
+            />
+
             <UButton
                 v-if="contacto.to !== '/contacto'"
                 label="Más formas de contacto y horario"

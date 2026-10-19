@@ -40,6 +40,17 @@ export default defineNuxtConfig({
 
     compatibilityDate: '2026-10-01',
 
+    // Dependencias que Vite descubría tarde en `nuxt dev`: al pedir la primera página las
+    // optimizaba y recargaba la pestaña a mitad de la carga (con el servidor en frío, la primera
+    // prueba de Playwright podía perder el login; la otra causa, la compilación en frío, la cubre
+    // `tests/e2e/calentar.ts`). Declaradas aquí, se empaquetan al arrancar.
+    // `openapi-fetch` llega por `@argosisp/contracts` (paquete del workspace, que Vite no recorre).
+    vite: {
+        optimizeDeps: {
+            include: ['decimal.js', 'zod', '@argosisp/contracts > openapi-fetch'],
+        },
+    },
+
     typescript: {
         strict: true,
         typeCheck: false,

@@ -153,6 +153,9 @@ const AGREGADAS: readonly DefinicionCuentaPaquete[] = [
     hoja(C.DIFERENCIAL_CAMBIARIO, 'Diferencial cambiario', 'ingreso', '4.2'),
     hoja(C.GANANCIA_VENTA_ACTIVOS, 'Ganancia en venta de activos', 'ingreso', '4.2'),
 
+    // decisión del PM (19 oct): premios y regalos son gasto deducible (`categoria_fiscal = deducible`).
+    // Lo pone la migración create_billing_bonificaciones: el paquete se instala en una migración anterior
+    // a la que agrega ese valor al CHECK de ledger.cuentas
     hoja(C.PREMIOS_PROMOCIONES, 'Premios y promociones', 'gasto', '5.1'),
     grupo('5.3', 'Depreciaciones, reservas e impuestos', 'gasto', '5'),
     hoja(C.DEPRECIACIONES, 'Depreciaciones', 'gasto', '5.3', { categoria_fiscal: 'depreciacion' }),

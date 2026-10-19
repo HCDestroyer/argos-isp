@@ -1,9 +1,10 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaComprobante from '~/pages/comprobantes/[id].vue'
 import PaginaComprobantes from '~/pages/comprobantes/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('semana 2 · cola de comprobantes', () => {
     beforeEach(() => {
@@ -91,7 +92,7 @@ describe('semana 2 · cola de comprobantes', () => {
         await api.actualizarContador()
         expect(textoContador(api.contador.value)).toBe('3')
         await api.rechazar(4, 'Duplicado', nuevaClaveIdempotencia())
-        await vi.waitFor(() => expect(textoContador(api.contador.value)).toBe('2'))
+        await esperar(() => expect(textoContador(api.contador.value)).toBe('2'))
         simularFalla('GET /api/v1/comprobantes', 500)
         await api.actualizarContador()
         expect(api.contador.value).toBeNull()
@@ -112,31 +113,31 @@ describe('semana 2 · cola de comprobantes', () => {
 
     it('la cola muestra pestañas y filas; con error muestra "Reintentar" y no la tabla', async () => {
         const vista = await mountSuspended(PaginaComprobantes, { route: '/comprobantes' })
-        await vi.waitFor(() => expect(vista.text()).toContain('Comprobante #4'))
+        await esperar(() => expect(vista.text()).toContain('Comprobante #4'))
         expect(vista.text()).toContain('Pendientes')
         expect(vista.text()).toContain('Rechazados')
         expect(vista.text()).not.toContain('Comprobante #1')
 
         simularFalla('GET /api/v1/comprobantes', 501)
         const conError = await mountSuspended(PaginaComprobantes, { route: '/comprobantes?estado=rechazado' })
-        await vi.waitFor(() => expect(conError.text()).toContain('Reintentar'))
+        await esperar(() => expect(conError.text()).toContain('Reintentar'))
         expect(conError.find('table').exists()).toBe(false)
     })
 
     it('el detalle muestra la foto junto a los datos y los botones de revisión', async () => {
         const vista = await mountSuspended(PaginaComprobante, { route: '/comprobantes/2' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="comprobante-imagen"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="comprobante-imagen"]').exists()).toBe(true))
         expect(vista.text()).toContain('40022931')
         expect(vista.text()).toContain('Banrural · Recaudación')
         expect(vista.text()).toContain('Aprobar')
         expect(vista.text()).toContain('Rechazar')
 
         const pdf = await mountSuspended(PaginaComprobante, { route: '/comprobantes/3' })
-        await vi.waitFor(() => expect(pdf.find('[data-prueba="comprobante-pdf"]').exists()).toBe(true))
+        await esperar(() => expect(pdf.find('[data-prueba="comprobante-pdf"]').exists()).toBe(true))
         expect(pdf.text()).toContain('Banco Industrial')
 
         const revisado = await mountSuspended(PaginaComprobante, { route: '/comprobantes/1' })
-        await vi.waitFor(() => expect(revisado.find('[data-prueba="comprobante-rechazado"]').exists()).toBe(true))
+        await esperar(() => expect(revisado.find('[data-prueba="comprobante-rechazado"]').exists()).toBe(true))
         expect(revisado.text()).not.toContain('Aprobar')
     })
 })

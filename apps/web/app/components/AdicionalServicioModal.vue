@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
+import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 
 /**
  * Agregar (`POST /servicios/:id/adicionales`, `servicios.agregar_adicional`) o editar
@@ -44,6 +44,11 @@ const itemsAdicional = computed<SelectItem[]>(() => catalogo.value.map(a => ({
     label: `${a.nombre} · ${a.codigo}${a.precio_sugerido ? ` · sugerido ${formatearQuetzales(a.precio_sugerido)}` : ''}`,
     value: a.id,
 })))
+
+const itemsPrimerPeriodo: RadioGroupItem[] = (Object.keys(PRIMEROS_PERIODOS_ADICIONAL) as PrimerPeriodoAdicional[])
+    .map(valor => ({ label: PRIMEROS_PERIODOS_ADICIONAL[valor].etiqueta, description: PRIMEROS_PERIODOS_ADICIONAL[valor].ayuda, value: valor }))
+/** Al editar un cobrado, el periodo ya empezó a cobrarse: cambiarlo afecta la próxima factura. */
+const yaCobrado = computed(() => props.asignacion?.modalidad === 'cobrado')
 
 const itemsMotivo = computed<SelectItem[]>(() => motivos.value.map(m => ({ label: m.nombre, value: m.id })))
 
@@ -183,6 +188,20 @@ async function enviar(evento: FormSubmitEvent<SalidaAsignacion>) {
                             <span class="text-sm text-muted">Q</span>
                         </template>
                     </UInput>
+                </UFormField>
+
+                <UFormField
+                    v-if="estado.modalidad === 'cobrado'"
+                    label="Este mes"
+                    name="primer_periodo"
+                    :help="yaCobrado && asignacion?.cobrado_desde ? `Se cobra desde el ${formatearFecha(asignacion.cobrado_desde)}; el cambio aplica en la siguiente factura.` : undefined"
+                    required
+                >
+                    <URadioGroup
+                        v-model="estado.primer_periodo"
+                        :items="itemsPrimerPeriodo"
+                        data-prueba="asignacion-primer-periodo"
+                    />
                 </UFormField>
 
                 <template v-if="estado.modalidad === 'cortesia'">

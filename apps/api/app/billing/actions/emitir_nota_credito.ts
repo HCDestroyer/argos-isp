@@ -7,7 +7,13 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { aplicarAnticipos, bloquearCliente, sumarAPagado, type FacturaPendiente } from '#billing/cobros'
-import { ESTADOS_PENDIENTES, pendienteDe, verFactura, type EstadoFactura } from '#billing/facturas'
+import {
+    ESTADOS_PENDIENTES,
+    cuentaIngresoDeLinea,
+    pendienteDe,
+    verFactura,
+    type EstadoFactura,
+} from '#billing/facturas'
 import { repartirProporcional, verNotaCredito, type NotaCreditoFila } from '#billing/notas_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { IVA_POR_CERTIFICAR } from '#billing/fel_facturas'
@@ -409,6 +415,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             .select(
                 'l.id',
                 'l.tipo',
+                'l.cuenta_codigo',
                 'l.gravable',
                 'l.total',
                 'l.iva',
@@ -425,6 +432,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             )) as Array<{
             id: number
             tipo: string
+            cuenta_codigo: string | null
             gravable: boolean
             total: string
             iva: string
@@ -476,13 +484,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                   ? ivaRestante
                   : Decimal.min(redondear(monto.minus(monto.div('1.12'))), ivaRestante)
             resultado.push({ linea_id: Number(linea.id), monto, iva })
-            const ingreso =
-                linea.tipo === 'servicio'
-                    ? CUENTAS.INGRESOS_INTERNET
-                    : linea.tipo === 'mora'
-                      ? CUENTAS.RECARGOS_MORA
-                      : CUENTAS.OTROS_INGRESOS
-            sumar(ingreso, monto.minus(iva))
+            sumar(cuentaIngresoDeLinea(linea), monto.minus(iva))
             if (iva.gt(0)) sumar(cuentaIva, iva)
         })
         if (errores.length > 0) throw new ValidacionFallida(errores)
@@ -534,21 +536,21 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
             debe: string
         }>
         const yaDebitado = new Map(previas.map((p) => [Number(p.cuenta_id), dec(p.debe)]))
-        // descuentos de la factura (5.1.01 al debe): lo acreditable del servicio es el neto
+        // descuentos de la factura (5.1.01 al debe): lo acreditable de cada cuenta de ingreso es el
+        // neto de sus líneas (el descuento sin IVA rebaja la cuenta de la línea que descuenta)
         const descuentos = (await t.trx
-            .from('ledger.asientos as a')
-            .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
-            .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
-            .where('a.origen_tipo', factura.tipo === 'mora' ? 'mora' : 'factura')
-            .where('a.origen_id', factura.id)
-            .whereNull('a.reversa_de')
-            .whereNotExists((q) => q.from('ledger.asientos as r').whereRaw('r.reversa_de = a.id'))
-            .where('c.codigo', CUENTAS.DESCUENTOS)
-            .select(t.trx.raw('coalesce(sum(m.debe), 0)::text as debe'))
-            .first()) as { debe: string }
-        const servicio = lineas.find((l) => l.cuenta_codigo === CUENTAS.INGRESOS_INTERNET)
-        if (servicio && dec(descuentos.debe).gt(0)) {
-            servicio.haber = aTexto(dec(servicio.haber).minus(descuentos.debe))
+            .from('billing.facturas_lineas as d')
+            .join('billing.facturas_lineas as l', 'l.id', 'd.linea_id')
+            .where('d.factura_id', factura.id)
+            .where('d.tipo', 'descuento')
+            .select('l.tipo', 'l.cuenta_codigo', t.trx.raw('(d.iva - d.total)::text as monto'))) as Array<{
+            tipo: string
+            cuenta_codigo: string | null
+            monto: string
+        }>
+        for (const d of descuentos) {
+            const cuenta = lineas.find((l) => l.cuenta_codigo === cuentaIngresoDeLinea(d))
+            if (cuenta) cuenta.haber = aTexto(dec(cuenta.haber).minus(d.monto))
         }
         if (certificada) {
             // aviso certificado: su IVA ya se reclasificó a 2.1.02; lo que las notas internas

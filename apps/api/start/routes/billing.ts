@@ -23,6 +23,7 @@ import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
+import { dimensionesDeBonificacion, listarBonificaciones, verBonificacion } from '#billing/bonificaciones'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
 import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
@@ -42,6 +43,17 @@ import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
 import { simularPromesa } from '#billing/simulador_promesas'
 import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
 import EditarCuentaBancaria from '#billing/actions/editar_cuenta_bancaria'
+import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
+import CrearConceptoCargo from '#billing/actions/crear_concepto_cargo'
+import EditarConceptoCargo from '#billing/actions/editar_concepto_cargo'
+import CrearMotivoSinCosto from '#billing/actions/crear_motivo_sin_costo'
+import EditarMotivoSinCosto from '#billing/actions/editar_motivo_sin_costo'
+import {
+    listarConceptosCargo,
+    listarMotivosSinCosto,
+    verConceptoCargo,
+    verMotivoSinCosto,
+} from '#billing/cargos_unicos'
 import { listarBancos, listarCuentasBancarias, verCuentaBancaria } from '#billing/cuentas_bancarias'
 import AprobarPromesa from '#billing/actions/aprobar_promesa'
 import RechazarPromesa from '#billing/actions/rechazar_promesa'
@@ -79,6 +91,7 @@ import {
     ingresos,
     ivaDelPeriodo,
     promesas as reportePromesas,
+    bonificacionesPorMotivo,
 } from '#billing/reportes/reportes'
 import {
     ReporteAltasBajas,
@@ -87,6 +100,7 @@ import {
     ReporteCobranzaDiaria,
     ReporteEgresos,
     ReporteFacturadoCobrado,
+    ReporteBonificaciones,
     ReporteIngresos,
     ReporteIva,
     ReportePromesas,
@@ -103,8 +117,12 @@ import {
     EstadoCuenta,
     Banco,
     CuentaBancaria,
+    ConceptoCargo,
+    MotivoSinCosto,
     Factura,
     FacturaDetalle,
+    Bonificacion,
+    CargoUnicoEmitido,
     NotaCredito,
     NotaCreditoEmitida,
     SustitucionFactura,
@@ -204,6 +222,83 @@ const facturas: Ruta[] = [
             const id = Number(params.id)
             exigirAcceso(ctx, await dimensionesDeFactura(id))
             return verFactura(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/facturas/cargo-unico',
+        operacion: 'facturasCargoUnico',
+        resumen: 'Emitir un cargo único manual (instalación, equipo, visita técnica…)',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.emitir_cargo_unico',
+        cuerpo: v.cargoUnicoValidator,
+        idempotente: true,
+        descripcion:
+            'Factura manual con clave_unica cargo-<uuid> (no ocupa ningún periodo). Cada línea sale de un concepto del catálogo de la empresa (GET /conceptos-cargo: cuenta de ingreso e IVA) con su precio bruto y descuentos opcionales (IVA del neto, 5.1.01). Con servicio_id es del servicio (y vencida cuenta para el corte); sin él, del cliente_id en la empresa activa. Sin mora. Total > 0: asiento CxC / ingresos + IVA, factura.emitida y certificación según el modo FEL. Total Q0: exige motivo_sin_costo_id + motivo_sin_costo_texto y el permiso facturas.cargo_sin_costo (403); no hay factura (decisión del PM: nunca una factura de Q0): responde documento = bonificacion con la bonificación (asiento interno 5.1.01 / ingreso, sin CxC, IVA ni DTE). 422 concepto inactivo o de otra empresa, descuentos mayores que el bruto, motivo con total > 0, concepto_exento_con_fel.',
+        respuesta: {
+            status: 201,
+            descripcion: 'Factura emitida o, en Q0, bonificación registrada',
+            esquema: CargoUnicoEmitido,
+        },
+        handler: async (ctx, { cuerpo }) => {
+            if (cuerpo.servicio_id) await exigirServicio(ctx, cuerpo.servicio_id)
+            else if (cuerpo.cliente_id) {
+                const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {
+                    throw new ValidacionFallida([
+                        {
+                            field: 'cliente_id',
+                            message: `El cliente ${cuerpo.cliente_id} no existe`,
+                            rule: 'exists',
+                        },
+                    ])
+                })
+                exigirAlcance(ctx.alcance, dimensiones)
+            }
+            if (cuerpo.motivo_sin_costo_id && ctx.auth.user) {
+                const alcance = await alcanceDePermiso(
+                    ctx.auth.user.id,
+                    'facturas.cargo_sin_costo',
+                    alcancesDelToken(ctx),
+                )
+                if (!alcance) {
+                    throw new Prohibido('Un cargo en Q0 requiere además el permiso facturas.cargo_sin_costo')
+                }
+            }
+            const { documento, ...resultado } = await new EmitirCargoUnico().execute(
+                cuerpo,
+                ctx.contextoAccion(),
+            )
+            return documento === 'factura'
+                ? { documento, factura: resultado, bonificacion: null }
+                : { documento, factura: null, bonificacion: resultado }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bonificaciones',
+        operacion: 'bonificacionesListar',
+        resumen: 'Listar bonificaciones (lo que antes era una factura de Q0)',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        query: v.listarBonificacionesValidator,
+        descripcion:
+            'Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero quedan como bonificación: registro interno con su motivo y su asiento 5.1.01 / ingreso, sin CxC, IVA, DTE ni documento para el cliente. Una bonificación de periodo (clave servicio_id-periodo) ocupa el periodo.',
+        respuesta: { status: 200, descripcion: 'Página de bonificaciones', esquema: pagina(Bonificacion) },
+        handler: (ctx, { query }) =>
+            listarBonificaciones(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bonificaciones/:id',
+        operacion: 'bonificacionesVer',
+        resumen: 'Ver una bonificación',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        respuesta: { status: 200, descripcion: 'Bonificación', esquema: Bonificacion },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDeBonificacion(id))
+            return verBonificacion(id)
         },
     }),
     definirRuta({
@@ -898,6 +993,25 @@ const reportes: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
+        ruta: '/reportes/bonificaciones',
+        operacion: 'reportesBonificaciones',
+        resumen: 'Bonificaciones por motivo, origen y mes (lo que antes era una factura en Q0)',
+        etiqueta: 'reportes',
+        permiso: 'reportes.ver',
+        query: v.reporteBonificacionesValidator,
+        descripcion:
+            'Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero son bonificaciones (asiento interno 5.1.01 / ingreso por la base). Por mes del periodo, motivo y origen, con el valor bruto entregado sin cobrar y la base del asiento.' +
+            DESCRIPCION_EXPORTACION,
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteBonificaciones },
+        handler: async (ctx, { query }) =>
+            responderReporte(
+                ctx,
+                await bonificacionesPorMotivo(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                query.formato,
+            ),
+    }),
+    definirRuta({
+        metodo: 'get',
         ruta: '/dashboard/resumen',
         operacion: 'dashboardResumen',
         resumen: 'KPIs del dashboard y series de 12 meses (vistas refrescadas por evento)',
@@ -1187,6 +1301,112 @@ const bancos: Ruta[] = [
     }),
 ]
 
+const catalogosCargo: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/conceptos-cargo',
+        operacion: 'conceptosCargoListar',
+        resumen: 'Catálogo de conceptos de cargo único (cuenta de ingreso e IVA) por empresa',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        query: v.listarCatalogoCargoValidator,
+        respuesta: { status: 200, descripcion: 'Conceptos', esquema: lista(ConceptoCargo) },
+        handler: (ctx, { query }) =>
+            listarConceptosCargo(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/conceptos-cargo/:id',
+        operacion: 'conceptosCargoVer',
+        resumen: 'Ver concepto de cargo único',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        respuesta: { status: 200, descripcion: 'Concepto', esquema: ConceptoCargo },
+        handler: async (ctx, { params }) => {
+            const concepto = await verConceptoCargo(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, concepto.empresa_id)
+            return concepto
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/conceptos-cargo',
+        operacion: 'conceptosCargoCrear',
+        resumen: 'Crear concepto de cargo único',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.configurar_conceptos',
+        cuerpo: v.crearConceptoCargoValidator,
+        descripcion:
+            '422 cuenta_codigo si la cuenta no existe, no es de ingreso, no es imputable o es de otra empresa; 409 concepto_cargo_duplicado.',
+        respuesta: { status: 201, descripcion: 'Concepto creado', esquema: ConceptoCargo },
+        handler: (ctx, { cuerpo }) => new CrearConceptoCargo().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/conceptos-cargo/:id',
+        operacion: 'conceptosCargoEditar',
+        resumen: 'Editar o desactivar concepto de cargo único',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.configurar_conceptos',
+        cuerpo: v.editarConceptoCargoValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Concepto actualizado', esquema: ConceptoCargo },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarConceptoCargo().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/motivos-sin-costo',
+        operacion: 'motivosSinCostoListar',
+        resumen: 'Catálogo de motivos de facturas en Q0 por empresa',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        query: v.listarCatalogoCargoValidator,
+        respuesta: { status: 200, descripcion: 'Motivos', esquema: lista(MotivoSinCosto) },
+        handler: (ctx, { query }) =>
+            listarMotivosSinCosto(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/motivos-sin-costo/:id',
+        operacion: 'motivosSinCostoVer',
+        resumen: 'Ver motivo de factura en Q0',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        respuesta: { status: 200, descripcion: 'Motivo', esquema: MotivoSinCosto },
+        handler: async (ctx, { params }) => {
+            const motivo = await verMotivoSinCosto(Number(params.id))
+            exigirEmpresaPeticion(ctx.empresa, motivo.empresa_id)
+            return motivo
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/motivos-sin-costo',
+        operacion: 'motivosSinCostoCrear',
+        resumen: 'Crear motivo de factura en Q0',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.configurar_motivos',
+        cuerpo: v.crearMotivoSinCostoValidator,
+        descripcion: '409 motivo_sin_costo_duplicado.',
+        respuesta: { status: 201, descripcion: 'Motivo creado', esquema: MotivoSinCosto },
+        handler: (ctx, { cuerpo }) => new CrearMotivoSinCosto().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/motivos-sin-costo/:id',
+        operacion: 'motivosSinCostoEditar',
+        resumen: 'Renombrar o desactivar motivo de factura en Q0',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.configurar_motivos',
+        cuerpo: v.editarMotivoSinCostoValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Motivo actualizado', esquema: MotivoSinCosto },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarMotivoSinCosto().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+]
+
 const estadoCuenta: Ruta[] = [
     definirRuta({
         metodo: 'get',
@@ -1217,5 +1437,6 @@ export default [
     ...promesas,
     ...comprobantes,
     ...bancos,
+    ...catalogosCargo,
     ...estadoCuenta,
 ]

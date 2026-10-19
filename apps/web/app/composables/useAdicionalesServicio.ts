@@ -2,6 +2,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type AdicionalServicio = Schema<'AdicionalServicio'>
 export type CredencialAdicional = Schema<'CredencialAdicional'>
+export type BloqueoAdicional = Schema<'BloqueoAdicional'>
 export type EstadoAdicionalServicio = AdicionalServicio['estado']
 export type DatosAdicionalServicio = paths['/api/v1/servicios/{id}/adicionales']['post']['requestBody']['content']['application/json']
 export type CambiosAdicionalServicio = paths['/api/v1/servicios/{id}/adicionales/{asignacionId}']['put']['requestBody']['content']['application/json']
@@ -22,6 +23,18 @@ export function useAdicionalesServicio() {
             query.cursor = cursor
         }
         return resolver(api.GET('/api/v1/servicios/{id}/adicionales', { params: { path: { id: servicioId }, query } }))
+    }
+
+    /**
+     * `GET /servicios/:id/adicionales/:asignacionId/bloqueos` (`servicios.ver`): bloqueos y
+     * desbloqueos por la suspensión del servicio, del más reciente al más viejo.
+     */
+    function bloqueos(servicioId: number, asignacionId: number, cursor?: string): Promise<Resultado<Pagina<BloqueoAdicional>>> {
+        const query: { limit: number, cursor?: string } = { limit: 25 }
+        if (cursor) {
+            query.cursor = cursor
+        }
+        return resolver(api.GET('/api/v1/servicios/{id}/adicionales/{asignacionId}/bloqueos', { params: { path: { id: servicioId, asignacionId }, query } }))
     }
 
     /**
@@ -57,5 +70,5 @@ export function useAdicionalesServicio() {
         return resolver(api.GET('/api/v1/servicios/{id}/adicionales/{asignacionId}/credencial', { params: { path: { id: servicioId, asignacionId } } }))
     }
 
-    return { listar, agregar, editar, quitar, credencial }
+    return { listar, bloqueos, agregar, editar, quitar, credencial }
 }

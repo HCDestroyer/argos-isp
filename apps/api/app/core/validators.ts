@@ -20,7 +20,7 @@ import { TIPOS_EXCEPCION } from '#core/esquemas'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
-import { MODALIDADES_ADICIONAL } from '#shared/eventos'
+import { MODALIDADES_ADICIONAL, PRIMEROS_PERIODOS_ADICIONAL } from '#shared/eventos'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
@@ -906,6 +906,10 @@ export const agregarAdicionalServicioValidator = vine.compile(
             .optional()
             .meta({ description: 'Motivo de cortesía (GET /adicionales/motivos); obligatorio con cortesia' }),
         motivo_detalle: vine.string().trim().maxLength(500).nullable().optional(),
+        primer_periodo: vine.enum(PRIMEROS_PERIODOS_ADICIONAL).nullable().optional().meta({
+            description:
+                'Solo con cobrado: prorrateado (por defecto) cobra la parte proporcional del periodo en curso; sin_costo no lo cobra',
+        }),
     }),
 )
 
@@ -918,6 +922,10 @@ export const editarAdicionalServicioValidator = vine.compile(
         precio: dinero().nullable().optional(),
         motivo_id: idEntidad().nullable().optional(),
         motivo_detalle: vine.string().trim().maxLength(500).nullable().optional(),
+        primer_periodo: vine.enum(PRIMEROS_PERIODOS_ADICIONAL).nullable().optional().meta({
+            description:
+                'Solo con cobrado: prorrateado (por defecto) cobra la parte proporcional del periodo en curso; sin_costo no lo cobra',
+        }),
     }),
 )
 
