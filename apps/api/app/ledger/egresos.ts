@@ -4,7 +4,11 @@ import { filtrarPorAlcance, type Alcance } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
-import { CLAVES_CATEGORIA_EGRESO, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import {
+    CLAVES_CATEGORIA_EGRESO,
+    CLAVES_CATEGORIA_EGRESO_CONSULTA,
+    type ClaveCategoriaEgreso,
+} from '#ledger/plan_cuentas'
 
 /**
  * Egresos: lectura (lista, detalle, categorías). Las acciones (`registrarEgreso`, `anularEgreso`)
@@ -113,7 +117,7 @@ export async function verEgreso(id: number, cliente: QueryClientContract = db.co
 export interface FiltrosEgresos extends OpcionesPaginacion {
     desde?: string
     hasta?: string
-    categoria?: ClaveCategoriaEgreso
+    categoria?: (typeof CLAVES_CATEGORIA_EGRESO_CONSULTA)[number]
     metodo?: MetodoEgreso
     estado?: EstadoEgreso
     caja_id?: number

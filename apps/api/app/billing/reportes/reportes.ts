@@ -3,7 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
 import { aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
-import { CUENTAS, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import { CUENTAS, type CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import type { MetodoPago } from '#shared/eventos'
 import {
     COLUMNAS_EMPRESA,
@@ -818,7 +818,12 @@ export const COLUMNAS_EGRESOS = definirColumnas([
 
 /** Egresos vigentes (sin anulación) por mes contable y categoría. */
 export async function egresosPorCategoria(
-    filtros: { desde?: string; hasta?: string; categoria?: ClaveCategoriaEgreso; metodo?: string },
+    filtros: {
+        desde?: string
+        hasta?: string
+        categoria?: (typeof CLAVES_CATEGORIA_EGRESO_CONSULTA)[number]
+        metodo?: string
+    },
     alcance?: Alcance,
     op: EmpresasReporte = UNA_EMPRESA,
 ): Promise<Reporte> {

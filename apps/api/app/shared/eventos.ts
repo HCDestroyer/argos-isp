@@ -486,6 +486,14 @@ export interface CatalogoEventos {
         posicion: number
     }
     'sorteo.cancelado': { sorteo_id: number; empresa_id: number; motivo: string }
+    /** H22: se deshizo la entrega de un premio (egreso, asiento o canje, e ISR) con `sorteos.anular_entrega` */
+    'sorteo.entrega_anulada': {
+        sorteo_id: number
+        empresa_id: number
+        cliente_id: number
+        posicion: number
+        motivo: string
+    }
     'lealtad.referido_calificado': {
         /** `lealtad.referidos.id` */
         referido_id: number
@@ -633,6 +641,7 @@ export const EVENTOS = [
     'sorteo.ejecutado',
     'sorteo.premio_entregado',
     'sorteo.cancelado',
+    'sorteo.entrega_anulada',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',

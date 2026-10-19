@@ -2917,6 +2917,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/anular-entrega": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular la entrega del premio de un ganador (todo junto)
+         * @description H22: deshace la entrega en una transacción: anula el egreso (efectivo), revierte el asiento sorteo (bien) o el canje sin puntos (servicio; 409 canje_no_revertible si ya se aplicó a una factura) y el asiento del ISR. El ganador vuelve a por_notificar y un sorteo premios_entregados vuelve a ejecutado. Por separado, anular el egreso, revertir el canje o revertir el asiento responden 422. Evento sorteo.entrega_anulada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadAnularEntregaSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/entregar": {
         parameters: {
             query?: never;
@@ -6815,8 +6835,11 @@ export interface components {
             id: number;
             /** Format: date */
             fecha: string;
-            /** @enum {string} */
-            categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+            /**
+             * @description Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos
+             * @enum {string}
+             */
+            categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
             categoria_nombre: string;
             /** @description Cuenta de gasto del plan */
             cuenta_codigo: string;
@@ -10196,6 +10219,8 @@ export interface components {
             /** @description Revelada al ejecutar */
             semilla: string | null;
             valor_publico: string | null;
+            /** @description Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico */
+            valor_publico_evidencia?: string | null;
             lista_hash: string | null;
             resultado: {
                 [key: string]: unknown;
@@ -10286,6 +10311,8 @@ export interface components {
             /** @description Revelada al ejecutar */
             semilla: string | null;
             valor_publico: string | null;
+            /** @description Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico */
+            valor_publico_evidencia?: string | null;
             lista_hash: string | null;
             resultado: {
                 [key: string]: unknown;
@@ -10485,6 +10512,9 @@ export interface components {
             compromiso: string;
             semilla: string;
             valor_publico: string;
+            /** @description Fuente pública del valor declarada en las bases (congelada con bases_hash) */
+            fuente_valor_publico: string | null;
+            valor_publico_evidencia: string | null;
             lista_hash: string;
             lista: {
                 codigo: string;
@@ -15515,7 +15545,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
                 estado?: "registrado" | "anulado";
                 caja_id?: number;
@@ -21629,6 +21659,8 @@ export interface operations {
                         no_reclamados?: string;
                         publicacion_resultados?: string;
                         resolucion_gobernacion?: string | null;
+                        /** @description Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash */
+                        fuente_valor_publico?: string;
                     };
                     criterios?: {
                         /** @description Boletos por servicio activo sin facturas vencidas al corte (por defecto 1) */
@@ -21789,6 +21821,8 @@ export interface operations {
                         no_reclamados?: string;
                         publicacion_resultados?: string;
                         resolucion_gobernacion?: string | null;
+                        /** @description Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash */
+                        fuente_valor_publico?: string;
                     };
                     criterios?: {
                         /** @description Boletos por servicio activo sin facturas vencidas al corte (por defecto 1) */
@@ -22146,8 +22180,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description Dato que nadie controla y se conoce en el acto (lo lee el notario o el delegado) */
+                    /** @description El valor de la fuente declarada en las bases (bases.fuente_valor_publico), conocido en el acto */
                     valor_publico: string;
+                    /** @description Cómo se obtuvo el valor (acta del notario, enlace o número de la publicación oficial) */
+                    valor_publico_evidencia: string;
                     asistentes?: {
                         nombre: string;
                         rol?: string | null;
@@ -22175,6 +22211,83 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso sorteos.ejecutar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadAnularEntregaSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                ganadorId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -28471,7 +28584,7 @@ export interface operations {
                 desde?: string;
                 /** @description Por defecto: hoy (Guatemala) */
                 hasta?: string;
-                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
             };
             header?: never;

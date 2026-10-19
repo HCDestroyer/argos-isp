@@ -338,6 +338,11 @@ const camposSorteo = {
     },
     semilla: { ...nulable(texto), description: 'Revelada al ejecutar' },
     valor_publico: nulable(texto),
+    valor_publico_evidencia: {
+        ...nulable(texto),
+        description:
+            'Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico',
+    },
     lista_hash: nulable(texto),
     resultado: nulable(jsonLibre),
     motivo_cancelacion: nulable(texto),
@@ -349,7 +354,10 @@ const camposSorteo = {
     ...auditable,
 }
 
-export const SorteoLealtad = definirEsquema('SorteoLealtad', objeto(camposSorteo))
+export const SorteoLealtad = definirEsquema(
+    'SorteoLealtad',
+    objeto(camposSorteo, ['valor_publico_evidencia']),
+)
 export const PaginaSorteosLealtad = definirEsquema('PaginaSorteosLealtad', pagina(SorteoLealtad))
 
 export const RequisitoSorteo = definirEsquema(
@@ -384,13 +392,16 @@ const GanadorSorteo = objeto({
 
 export const SorteoDetalle = definirEsquema(
     'SorteoDetalle',
-    objeto({
-        ...camposSorteo,
-        requisitos: lista(RequisitoSorteo),
-        participantes: entero,
-        boletos: entero,
-        ganadores: lista(GanadorSorteo),
-    }),
+    objeto(
+        {
+            ...camposSorteo,
+            requisitos: lista(RequisitoSorteo),
+            participantes: entero,
+            boletos: entero,
+            ganadores: lista(GanadorSorteo),
+        },
+        ['valor_publico_evidencia'],
+    ),
 )
 
 const ElegidoPublico = objeto({
@@ -410,6 +421,11 @@ export const VerificacionSorteo = definirEsquema(
         compromiso: texto,
         semilla: texto,
         valor_publico: texto,
+        fuente_valor_publico: {
+            ...nulable(texto),
+            description: 'Fuente pública del valor declarada en las bases (congelada con bases_hash)',
+        },
+        valor_publico_evidencia: nulable(texto),
         lista_hash: texto,
         lista: lista(objeto({ codigo: texto, boletos: entero })),
         titulares: entero,

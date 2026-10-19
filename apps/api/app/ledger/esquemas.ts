@@ -1,4 +1,4 @@
-import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
+import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import {
     Dinero,
     auditable,
@@ -310,7 +310,11 @@ export const Egreso = definirEsquema(
             },
             id,
             fecha,
-            categoria: enumerado(CLAVES_CATEGORIA_EGRESO),
+            categoria: {
+                ...enumerado(CLAVES_CATEGORIA_EGRESO_CONSULTA),
+                description:
+                    'Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos',
+            },
             categoria_nombre: texto,
             cuenta_codigo: { ...texto, description: 'Cuenta de gasto del plan' },
             proveedor: nulable(texto),

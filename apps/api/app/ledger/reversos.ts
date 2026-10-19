@@ -47,6 +47,11 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
     },
     provision: { accion: 'cartera.provisionar', documento: 'la estimación con un asiento de ajuste' },
     castigo: { accion: 'cartera.castigar', documento: 'el castigo con un asiento de ajuste' },
+    // H23: la entrega de un premio de sorteo (en especie e ISR) se deshace junto con el ganador
+    sorteo: {
+        accion: 'sorteos.anular_entrega',
+        documento: 'la entrega del premio (POST /lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega)',
+    },
 }
 
 /** null si el asiento se puede revertir directo; si no, qué acción usar. */

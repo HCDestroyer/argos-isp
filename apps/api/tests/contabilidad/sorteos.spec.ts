@@ -420,7 +420,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 .catch(() => {})
         })
         assert.deepEqual(violaciones, [])
-    }).fails('H22: AnularEgreso no conoce el egreso de un premio de sorteo (ni el ISR ni el ganador)')
+    })
 
     test('H22: revertir el canje del premio de servicio deja al ganador entregado (y suma existencias)', async ({
         assert,
@@ -435,7 +435,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 .catch(() => {})
         })
         assert.deepEqual(violaciones, [])
-    }).fails('H22: RevertirCanje revierte el canje de un premio de sorteo')
+    })
 
     test('H23: el asiento sorteo no se revierte directo por el libro', async ({ assert }) => {
         const e = await prepararEmpresasGt()
@@ -448,7 +448,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 .catch(() => {})
         })
         assert.deepEqual(violaciones, [])
-    }).fails('H23: sorteo no está en POR_DOCUMENTO de ledger/reversos.ts')
+    })
 
     test('H24: los ganadores de un sorteo ejecutado no se reescriben en la base', async ({ assert }) => {
         const e = await prepararEmpresasGt()
@@ -481,9 +481,7 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
                 assert.isFalse(await intentar(trx, sql, valores), sql)
             }
         })
-    }).fails(
-        'H24: sorteos_ganadores no tiene trigger que congele sorteo_id, posicion, tipo, participante_id y premio_posicion',
-    )
+    })
 
     test('H25: el bien se entrega solo contra 2.1.03 o un activo que no sea cuenta control (caja, banco, tránsito, estimación)', async ({
         assert,
@@ -517,7 +515,5 @@ test.group('Contabilidad · sorteos (auditor)', (group) => {
             Object.entries(resultados).filter(([, v]) => v.length > 0),
             [],
         )
-    }).fails(
-        'H25: EntregarPremioSorteo acepta como contrapartida del bien una caja, un banco, 1.1.11 o 1.1.12 (cuentas control con su propio documento)',
-    )
+    })
 })

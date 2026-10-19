@@ -69,6 +69,7 @@ El catálogo ejecutable es `apps/api/app/shared/eventos.ts` (`CatalogoEventos` +
 | `sorteo.ejecutado` | A3 (`sorteos.ejecutar`) | `sorteo_id`, `empresa_id`, `ganadores[]` (`cliente_id`, `tipo` titular/suplente, `posicion`) | A6 (aviso a los titulares; resultados publicados) |
 | `sorteo.premio_entregado` | A3 (`sorteos.entregar`) | `sorteo_id`, `empresa_id`, `cliente_id`, `posicion` | A6 (opcional) |
 | `sorteo.cancelado` | A3 (`sorteos.cancelar`) | `sorteo_id`, `empresa_id`, `motivo` | A6 (opcional) |
+| `sorteo.entrega_anulada` | A3 (`sorteos.anular_entrega`, H22) | `sorteo_id`, `empresa_id`, `cliente_id`, `posicion`, `motivo` | A6 (opcional) |
 | `nota_credito.anulada` | A3 (`AnularNotaCredito`, `POST /notas-credito/:id/anular`; contrato de localización fiscal §17) | `nota_credito_id`, `empresa_id`, `factura_id`, `cliente_id`, `monto`, `motivo`. Solo cuando la SAT rechazó en definitivo la NCRE de la nota: su asiento se revierte y el monto vuelve al saldo de la factura | A6 (`notify`): aviso al equipo y a contabilidad (Telegram y correo), una vez por nota; A4 (estado de la nota) |
 | `comprobante.recibido` | A3 (`RegistrarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id: null`, `motivo: null` | A6 (`notify`): "Recibimos tu comprobante de pago" |
 | `comprobante.aprobado` | A3 (`AprobarComprobante`) | `comprobante_id`, `cliente_id`, `pago_id` (el pago creado), `motivo: null` | A6 (`notify`): "Comprobante de pago aprobado" (el único aviso de pago del pagador) |

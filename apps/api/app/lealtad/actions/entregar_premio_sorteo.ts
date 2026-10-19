@@ -48,6 +48,49 @@ export interface EntradaEntregarPremio {
 
 const CATEGORIA_PREMIOS = 'premios'
 
+interface CuentaContrapartida {
+    codigo: string
+    tipo: string
+    imputable: boolean
+    empresa_id: number | null
+    contracuenta: boolean
+    auxiliar_cliente: boolean
+}
+
+/**
+ * H25: cuentas control del plan que nunca son la contrapartida de un bien entregado (tienen su propio
+ * documento): cajas y bancos, CxC, impuestos (1.1.04–1.1.09), cobros por liquidar, fondos en tránsito,
+ * estimación de incobrables, gastos anticipados y el activo no corriente (un activo fijo sale con su
+ * baja, `activos.dar_de_baja`).
+ */
+const CONTROL_NO_PERMITIDAS = [
+    '1.1.01',
+    '1.1.02',
+    '1.1.03',
+    '1.1.04',
+    '1.1.05',
+    '1.1.06',
+    '1.1.07',
+    '1.1.08',
+    '1.1.09',
+    '1.1.10',
+    '1.1.11',
+    '1.1.12',
+    '1.1.13',
+    '1.2',
+]
+
+/**
+ * Lista blanca de la contrapartida `cuenta` de un premio en bienes: un activo imputable, propio de la
+ * empresa o global, que no sea contracuenta ni auxiliar de clientes y que no esté bajo las cuentas
+ * control (p. ej. un «Inventario de premios» que crea la empresa).
+ */
+export function cuentaParaBienDePremio(c: CuentaContrapartida, empresaId: number): boolean {
+    if (c.tipo !== 'activo' || !c.imputable || c.contracuenta || c.auxiliar_cliente) return false
+    if (c.empresa_id !== null && Number(c.empresa_id) !== empresaId) return false
+    return !CONTROL_NO_PERMITIDAS.some((p) => c.codigo === p || c.codigo.startsWith(`${p}.`))
+}
+
 /** Categoría de egreso `premios` (→ 5.1.03); se crea la primera vez (la cuenta llega con el paquete GT). */
 async function asegurarCategoriaPremios(t: Transaccion): Promise<void> {
     const existe = await t.trx.from('ledger.egresos_categorias').where('clave', CATEGORIA_PREMIOS).first()
@@ -164,19 +207,21 @@ export default class EntregarPremioSorteo extends DomainAction<
                     ? ((await t.trx
                           .from('ledger.cuentas')
                           .where('codigo', input.cuenta_codigo)
-                          .select('tipo', 'imputable', 'empresa_id')
-                          .first()) as { tipo: string; imputable: boolean; empresa_id: number | null } | null)
+                          .select(
+                              'codigo',
+                              'tipo',
+                              'imputable',
+                              'empresa_id',
+                              'contracuenta',
+                              'auxiliar_cliente',
+                          )
+                          .first()) as CuentaContrapartida | null)
                     : null
-                if (
-                    !fila ||
-                    fila.tipo !== 'activo' ||
-                    !fila.imputable ||
-                    (fila.empresa_id !== null && Number(fila.empresa_id) !== sorteo.empresa_id)
-                ) {
+                if (!fila || !cuentaParaBienDePremio(fila, sorteo.empresa_id)) {
                     errores.push({
                         field: 'cuenta_codigo',
                         message:
-                            'La cuenta debe ser de activo, imputable y de la empresa (p. ej. inventario)',
+                            'La cuenta debe ser un activo imputable de la empresa fuera de las cuentas control (caja, bancos, CxC, impuestos, cobros por liquidar, fondos en tránsito, estimación, gastos anticipados y propiedad, planta y equipo con su depreciación): p. ej. un inventario de premios',
                         rule: 'cuenta',
                     })
                 }

@@ -1,5 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { ReglaNegocio } from '#shared/errores'
 import { hoyGuatemala } from '#ledger/fechas'
 import { CanjeNoRevertible } from '#lealtad/errores'
 import { camposAuditables, verCanje, type CanjeVista } from '#lealtad/canjes'
@@ -15,10 +16,17 @@ import { bloquearClienteLealtad, devolverCanje, movimientoPorClave } from '#leal
  * premio lleva existencias, se devuelve la unidad. Un canje aplicado (nota de crédito emitida o plan
  * temporal programado) responde 409 `canje_no_revertible`. Evento `lealtad.canje_revertido`.
  */
-export default class RevertirCanje extends DomainAction<{ id: number; motivo: string }, CanjeVista> {
+export interface EntradaRevertirCanje {
+    id: number
+    motivo: string
+    /** interno: solo desde `sorteos.anular_entrega` (el canje sin puntos del premio de un sorteo) */
+    por_entrega_anulada?: boolean
+}
+
+export default class RevertirCanje extends DomainAction<EntradaRevertirCanje, CanjeVista> {
     readonly nombre = 'lealtad.revertir_canje'
 
-    protected async handle(input: { id: number; motivo: string }, t: Transaccion): Promise<CanjeVista> {
+    protected async handle(input: EntradaRevertirCanje, t: Transaccion): Promise<CanjeVista> {
         t.fijarEntidad('canje_lealtad', input.id)
         const previo = await verCanje(input.id, t.trx)
         exigirAccesoEmpresa(t.ctx, previo.empresa_id)
@@ -35,6 +43,19 @@ export default class RevertirCanje extends DomainAction<{ id: number; motivo: st
                 .first()) as { estado: string } | null
             facturaAnulada = factura?.estado === 'anulada'
         }
+        // H22: el canje de un premio de sorteo se deshace solo con `sorteos.anular_entrega`
+        const sorteoGanador = (await t.trx
+            .from('lealtad.canjes')
+            .where('id', actual.id)
+            .select('sorteo_ganador_id')
+            .first()) as { sorteo_ganador_id: number | null } | null
+        const dePremio = (sorteoGanador?.sorteo_ganador_id ?? null) !== null
+        if (dePremio && !input.por_entrega_anulada) {
+            throw new ReglaNegocio(
+                `El canje ${actual.id} es el premio del ganador ${sorteoGanador!.sorteo_ganador_id} de un sorteo: se deshace anulando su entrega (POST /lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega)`,
+                'canje_de_premio_sorteo',
+            )
+        }
         if (actual.estado !== 'reservado' && !facturaAnulada) {
             throw new CanjeNoRevertible(
                 `El canje ${actual.id} está ${actual.estado}: solo se revierte uno reservado o aplicado a una factura anulada`,
@@ -49,7 +70,8 @@ export default class RevertirCanje extends DomainAction<{ id: number; motivo: st
             .forUpdate()
             .select('existencias')
             .first()) as { existencias: number | null }
-        if (premio.existencias !== null) {
+        // el premio de un sorteo no tomó existencias (canje sin puntos): no se devuelven
+        if (premio.existencias !== null && !dePremio) {
             await t.trx
                 .from('lealtad.premios')
                 .where('id', actual.premio_id)

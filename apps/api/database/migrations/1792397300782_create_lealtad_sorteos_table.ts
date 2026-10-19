@@ -220,7 +220,7 @@ export default class extends BaseSchema {
                 'factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
                 'compra', 'pago_proveedor', 'retencion', 'liquidacion_impuesto', 'pago_impuesto', 'cierre_anual',
                 'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco', 'provision', 'castigo',
-                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad', 'sorteo'));
+                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad', 'alta_activo', 'sorteo'));
 
             DO $do$
             BEGIN
@@ -246,7 +246,7 @@ export default class extends BaseSchema {
                 'factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
                 'compra', 'pago_proveedor', 'retencion', 'liquidacion_impuesto', 'pago_impuesto', 'cierre_anual',
                 'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco', 'provision', 'castigo',
-                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad')) NOT VALID;
+                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad', 'alta_activo')) NOT VALID;
             ALTER TABLE lealtad.canjes DROP CONSTRAINT IF EXISTS canjes_puntos;
             ALTER TABLE lealtad.canjes DROP COLUMN IF EXISTS sorteo_ganador_id;
             ALTER TABLE lealtad.canjes ADD CONSTRAINT canjes_puntos_check CHECK (puntos > 0) NOT VALID;

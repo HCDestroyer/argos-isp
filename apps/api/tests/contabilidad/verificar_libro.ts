@@ -59,12 +59,7 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    '15.premio_entregado_deshecho':
-        'H22: anular el egreso de un premio en efectivo (o revertir el canje de un premio de servicio) deja al ganador entregado y el ISR en 2.1.05',
-    '15.asiento_de_sorteo_revertido':
-        'H23: el asiento sorteo se revierte directo por el libro (no está en POR_DOCUMENTO) y el ganador sigue entregado',
-}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
 
 type Fila = Record<string, unknown>
 

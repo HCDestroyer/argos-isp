@@ -17,11 +17,12 @@ import {
  * `sorteos.ejecutar` (`POST /lealtad/sorteos/:id/ejecutar`, permiso `sorteos.ejecutar`):
  * `corte_cerrado → ejecutado` (§7.3, punto 4).
  *
- * - Exige el checklist legal de ejecución (§8: `bases_diaco`, `autorizacion_gobernacion`, `fianza`,
- *   `isr_premios`, `timbre_fiscal`, `delegado_o_notario`) cumplido o que no aplica; si falta uno, 422
- *   `requisito_pendiente` con la clave.
- * - `valor_publico`: un dato que nadie controla y se conoce en el acto (el número que lee el notario o
- *   el delegado, o un resultado público posterior al corte). `asistentes[]` opcional (nombre y rol).
+ * - Exige el checklist legal de ejecución (§8: `bases_diaco`, `isr_premios`, `timbre_fiscal`,
+ *   `delegado_o_notario`; decisión del PM: la Gobernación y la fianza ya no) cumplido o que no aplica; si
+ *   falta uno, 422 `requisito_pendiente` con la clave.
+ * - `valor_publico`: el valor de la fuente pública que declararon las bases (`fuente_valor_publico`,
+ *   congelada con `bases_hash`), con su evidencia (`valor_publico_evidencia`, obligatoria). Así quien
+ *   conoce la semilla no elige el valor. `asistentes[]` opcional (nombre y rol).
  * - Revela la semilla, verifica `SHA-256(s) = compromiso` y vuelve a calcular `lista_hash` de los
  *   participantes; elige con `argos-sorteo-v1` (HMAC-SHA256, sin sesgo de módulo) los titulares (Σ
  *   cantidad de los premios, en orden de premio) y luego los suplentes.
@@ -31,7 +32,10 @@ import {
 
 export interface EntradaEjecutarSorteo {
     id: number
+    /** el valor de la fuente que declararon las bases (`bases.fuente_valor_publico`) */
     valor_publico: string
+    /** cómo se obtuvo en el acto (acta, enlace o número de la publicación oficial); obligatoria (422) */
+    valor_publico_evidencia: string
     asistentes?: Array<{ nombre: string; rol?: string | null }>
 }
 
@@ -49,6 +53,16 @@ export default class EjecutarSorteo extends DomainAction<
                 {
                     field: 'valor_publico',
                     message: 'El valor público del acto es obligatorio',
+                    rule: 'required',
+                },
+            ])
+        }
+        const evidencia = input.valor_publico_evidencia?.trim() ?? ''
+        if (evidencia.length < 3) {
+            throw new ValidacionFallida([
+                {
+                    field: 'valor_publico_evidencia',
+                    message: 'Registra cómo se obtuvo el valor público (acta, enlace o publicación oficial)',
                     rule: 'required',
                 },
             ])
@@ -112,6 +126,8 @@ export default class EjecutarSorteo extends DomainAction<
             semilla: semilla.toString('hex'),
             semilla_final: semillaFinal(semilla, listaHash, sorteo.bases_hash!, valorPublico).toString('hex'),
             valor_publico: valorPublico,
+            fuente_valor_publico: sorteo.bases.fuente_valor_publico ?? null,
+            valor_publico_evidencia: evidencia,
             lista_hash: listaHash,
             bases_hash: sorteo.bases_hash,
             titulares,
@@ -125,6 +141,7 @@ export default class EjecutarSorteo extends DomainAction<
                 estado: 'ejecutado',
                 semilla: semilla.toString('hex'),
                 valor_publico: valorPublico,
+                valor_publico_evidencia: evidencia,
                 resultado: JSON.stringify(resultado),
                 asistentes: JSON.stringify(input.asistentes ?? []),
                 ejecutado_en: t.trx.knexRawQuery('now()'),

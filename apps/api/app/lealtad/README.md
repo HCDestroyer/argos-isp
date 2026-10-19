@@ -32,7 +32,10 @@ Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6
   `lista_hash`, checklist legal que bloquea abrir y ejecutar, ejecución con `argos-sorteo-v1` y
   `valor_publico` (reproducible con `scripts/verificar-sorteo.mjs` y `GET /lealtad/sorteos/:id/verificacion`),
   entrega como gasto `5.1.03` (efectivo por egreso; bien contra `2.1.03` o una cuenta de activo; servicio
-  como canje sin puntos) con el ISR a `2.1.05`. Portal: `GET /portal/sorteos`.
+  como canje sin puntos) con el ISR a `2.1.05`. Portal: `GET /portal/sorteos`. Correcciones del auditor
+  (contrato §15.3): anular una entrega todo junto (H22), `sorteo` sin reverso directo (H23), ganadores
+  congelados (H24), lista blanca de la cuenta del bien (H25), fuente y evidencia del valor público y estado
+  que no retrocede.
 
 ## Acciones
 
@@ -41,7 +44,7 @@ Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6
 `lealtad.rechazar_referido`, `lealtad.crear_premio`, `lealtad.editar_premio`, `lealtad.canjear`,
 `lealtad.revertir_canje`, `sorteos.crear`, `sorteos.editar`, `sorteos.publicar_bases`,
 `sorteos.abrir`, `sorteos.cerrar_corte`, `sorteos.cancelar`, `sorteos.marcar_requisito`,
-`sorteos.ejecutar`, `sorteos.entregar`, `lealtad.evaluar_evento` (consumidor), `lealtad.otorgar_antiguedad` y
+`sorteos.ejecutar`, `sorteos.entregar`, `sorteos.anular_entrega`, `lealtad.evaluar_evento` (consumidor), `lealtad.otorgar_antiguedad` y
 `lealtad.vencer` (crons).
 
 ## Eventos
@@ -50,7 +53,7 @@ Contrato: `.claude/integration/contratos/lealtad.md` (fase 1: §2, §3, §4, §6
   `lealtad.puntos_por_vencer`, `lealtad.puntos_vencidos`, `lealtad.referido_calificado`,
   `lealtad.canje_reservado`, `lealtad.canje_aplicado`, `lealtad.canje_revertido`,
   `sorteo.bases_publicadas`, `sorteo.corte_cerrado`, `sorteo.ejecutado`, `sorteo.premio_entregado`,
-  `sorteo.cancelado`.
+  `sorteo.cancelado`, `sorteo.entrega_anulada`.
 - Consume (grupo `lealtad` en `node ace billing:worker`, `consumidor.ts`): `pago.registrado`,
   `pago.anulado`, `factura.emitida`, `factura.anulada`, `nota_credito.emitida`,
   `nota_credito.anulada`, `servicio.creado`, `servicio.estado_cambiado`. Idempotente por

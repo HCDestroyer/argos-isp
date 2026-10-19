@@ -360,6 +360,10 @@ const basesSorteo = vine
         no_reclamados: vine.string().trim().maxLength(2000).optional(),
         publicacion_resultados: vine.string().trim().maxLength(2000).optional(),
         resolucion_gobernacion: vine.string().trim().maxLength(200).nullable().optional(),
+        fuente_valor_publico: vine.string().trim().maxLength(1000).optional().meta({
+            description:
+                'Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash',
+        }),
     })
     .optional()
     .meta({ description: 'Bases (§7.2); todas obligatorias para publicar salvo la resolución' })
@@ -456,7 +460,12 @@ export const marcarRequisitoValidator = vine.compile(
 export const ejecutarSorteoValidator = vine.compile(
     vine.object({
         valor_publico: vine.string().trim().minLength(1).maxLength(500).meta({
-            description: 'Dato que nadie controla y se conoce en el acto (lo lee el notario o el delegado)',
+            description:
+                'El valor de la fuente declarada en las bases (bases.fuente_valor_publico), conocido en el acto',
+        }),
+        valor_publico_evidencia: vine.string().trim().minLength(3).maxLength(2000).meta({
+            description:
+                'Cómo se obtuvo el valor (acta del notario, enlace o número de la publicación oficial)',
         }),
         asistentes: vine
             .array(

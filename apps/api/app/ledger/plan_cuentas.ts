@@ -201,6 +201,12 @@ export const CATEGORIAS_EGRESO = [
 export type ClaveCategoriaEgreso = (typeof CATEGORIAS_EGRESO)[number]['clave']
 export const CLAVES_CATEGORIA_EGRESO = CATEGORIAS_EGRESO.map((c) => c.clave)
 
+/**
+ * Categorías que se leen y filtran: las de `POST /egresos` más las internas (`premios`, la crea la entrega
+ * de un premio de sorteo en efectivo, `5.1.03`).
+ */
+export const CLAVES_CATEGORIA_EGRESO_CONSULTA = [...CLAVES_CATEGORIA_EGRESO, 'premios'] as const
+
 /** Caja y banco iniciales (cada uno con su cuenta del plan). */
 export const CAJA_INICIAL = { nombre: 'Caja principal', cuenta: CUENTAS.CAJA_PRINCIPAL } as const
 export const BANCO_INICIAL = { nombre: 'Banco principal', cuenta: CUENTAS.BANCO_PRINCIPAL } as const

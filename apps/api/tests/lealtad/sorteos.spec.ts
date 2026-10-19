@@ -30,6 +30,10 @@ import MarcarRequisitoSorteo from '#lealtad/actions/marcar_requisito_sorteo'
 import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
 import EntregarPremioSorteo from '#lealtad/actions/entregar_premio_sorteo'
 import CancelarSorteo from '#lealtad/actions/cancelar_sorteo'
+import AnularEntregaSorteo from '#lealtad/actions/anular_entrega_sorteo'
+import RevertirCanje from '#lealtad/actions/revertir_canje'
+import AnularEgreso from '#ledger/actions/anular_egreso'
+import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { REQUISITOS_PARA_EJECUTAR, verificacionSorteo } from '#lealtad/sorteos'
 
 /**
@@ -61,6 +65,7 @@ function bases(): EntradaSorteo['bases'] {
         plazo_reclamo_dias: 30,
         no_reclamados: 'Pasan al suplente en orden',
         publicacion_resultados: 'Portal y redes sociales del ISP el mismo día',
+        fuente_valor_publico: 'Números del primer premio de la Lotería Santa Lucía del día del sorteo',
         resolucion_gobernacion: 'GD-2026-001',
     }
 }
@@ -215,12 +220,20 @@ test.group('Lealtad · sorteos', (group) => {
 
         // ejecutar: checklist completo y valor público
         const pendiente = await errorDe(
-            new EjecutarSorteo().execute({ id: sorteo.id, valor_publico: '4821' }, e.ctx),
+            new EjecutarSorteo().execute(
+                { id: sorteo.id, valor_publico: '4821', valor_publico_evidencia: 'acta notarial 12' },
+                e.ctx,
+            ),
         )
         assert.equal(pendiente.codigo, 'requisito_pendiente')
         await marcarTodo(e, sorteo.id)
         const ejecutado = await new EjecutarSorteo().execute(
-            { id: sorteo.id, valor_publico: '4821', asistentes: [{ nombre: 'Lic. Pérez', rol: 'notario' }] },
+            {
+                id: sorteo.id,
+                valor_publico: '4821',
+                valor_publico_evidencia: 'acta notarial 12',
+                asistentes: [{ nombre: 'Lic. Pérez', rol: 'notario' }],
+            },
             e.ctx,
         )
         assert.equal(ejecutado.estado, 'ejecutado')
@@ -357,7 +370,10 @@ test.group('Lealtad · sorteos', (group) => {
         for (let i = 0; i < 3; i++) await servicioEn(e.B, { instalacion: '2026-10-01' })
         await new CerrarCorteSorteo().execute({ id: sorteo.id }, e.ctx)
         await marcarTodo(e, sorteo.id)
-        const ejecutado = await new EjecutarSorteo().execute({ id: sorteo.id, valor_publico: '7' }, e.ctx)
+        const ejecutado = await new EjecutarSorteo().execute(
+            { id: sorteo.id, valor_publico: '7', valor_publico_evidencia: 'acta notarial 13' },
+            e.ctx,
+        )
         const bien = ejecutado.ganadores.find((g) => g.premio_posicion === 2)!
         await new EntregarPremioSorteo().execute(
             { sorteo_id: sorteo.id, ganador_id: bien.id, contrapartida: 'proveedor' },
@@ -365,4 +381,216 @@ test.group('Lealtad · sorteos', (group) => {
         )
         await afirmarLibro(assert, [e.B, e.C])
     })
+
+    /** Sorteo ejecutado con sus tres titulares (efectivo, bien, servicio). */
+    async function ejecutadoCon(e: EmpresasGt) {
+        const { sorteo } = await escenario(e)
+        await new EditarSorteo().execute({ id: sorteo.id, version: sorteo.version, bases: bases() }, e.ctx)
+        await new PublicarBasesSorteo().execute({ id: sorteo.id }, e.ctx)
+        await new MarcarRequisitoSorteo().execute(
+            { sorteo_id: sorteo.id, clave: 'bases_diaco', estado: 'cumplido', evidencia: 'Prensa' },
+            e.ctx,
+        )
+        await new AbrirSorteo().execute({ id: sorteo.id }, e.ctx)
+        for (let i = 0; i < 3; i++) await servicioEn(e.B, { instalacion: '2026-10-01' })
+        await new CerrarCorteSorteo().execute({ id: sorteo.id }, e.ctx)
+        await marcarTodo(e, sorteo.id)
+        return new EjecutarSorteo().execute(
+            { id: sorteo.id, valor_publico: '31', valor_publico_evidencia: 'acta notarial 14' },
+            e.ctx,
+        )
+    }
+
+    test('decisión del PM: la Gobernación y la fianza no bloquean la ejecución; la fuente del valor público va en las bases', async ({
+        assert,
+    }) => {
+        assert.notInclude(REQUISITOS_PARA_EJECUTAR, 'autorizacion_gobernacion')
+        assert.notInclude(REQUISITOS_PARA_EJECUTAR, 'fianza')
+        assert.includeMembers(
+            [...REQUISITOS_PARA_EJECUTAR],
+            ['bases_diaco', 'isr_premios', 'timbre_fiscal', 'delegado_o_notario'],
+        )
+        const e = await prepararEmpresasGt()
+        const { sorteo } = await escenario(e)
+        const sinFuente = { ...bases()!, fuente_valor_publico: undefined }
+        const editado = await new EditarSorteo().execute(
+            { id: sorteo.id, version: sorteo.version, bases: sinFuente },
+            e.ctx,
+        )
+        const falta = await errorDe(new PublicarBasesSorteo().execute({ id: sorteo.id }, e.ctx))
+        assert.equal(falta.codigo, 'bases_incompletas')
+        assert.include(falta.detalle, 'fuente pública del valor')
+        await new EditarSorteo().execute({ id: sorteo.id, version: editado.version, bases: bases() }, e.ctx)
+        const ejecutado = await (async () => {
+            await new PublicarBasesSorteo().execute({ id: sorteo.id }, e.ctx)
+            await new MarcarRequisitoSorteo().execute(
+                { sorteo_id: sorteo.id, clave: 'bases_diaco', estado: 'cumplido', evidencia: 'Prensa' },
+                e.ctx,
+            )
+            await new AbrirSorteo().execute({ id: sorteo.id }, e.ctx)
+            for (let i = 0; i < 3; i++) await servicioEn(e.B, { instalacion: '2026-10-01' })
+            await new CerrarCorteSorteo().execute({ id: sorteo.id }, e.ctx)
+            await marcarTodo(e, sorteo.id)
+            const sinEvidencia = await errorDe(
+                new EjecutarSorteo().execute(
+                    { id: sorteo.id, valor_publico: '31', valor_publico_evidencia: ' ' },
+                    e.ctx,
+                ),
+            )
+            assert.equal(sinEvidencia.status, 422)
+            return new EjecutarSorteo().execute(
+                { id: sorteo.id, valor_publico: '31', valor_publico_evidencia: 'acta notarial 14' },
+                e.ctx,
+            )
+        })()
+        assert.equal(ejecutado.estado, 'ejecutado')
+        const verificacion = await verificacionSorteo(sorteo.id)
+        assert.include(verificacion, {
+            fuente_valor_publico: bases()!.fuente_valor_publico,
+            valor_publico: '31',
+            valor_publico_evidencia: 'acta notarial 14',
+        })
+        // la evidencia y el estado ya no cambian (el estado no retrocede)
+        await assert.rejects(() =>
+            db.from('lealtad.sorteos').where('id', sorteo.id).update({ valor_publico_evidencia: 'otra' }),
+        )
+        await assert.rejects(() =>
+            db.from('lealtad.sorteos').where('id', sorteo.id).update({ estado: 'corte_cerrado' }),
+        )
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('H22: anular la entrega deshace egreso, asiento, canje e ISR juntos; por separado, 422', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const ejecutado = await ejecutadoCon(e)
+        const sorteoId = ejecutado.id
+        for (const g of ejecutado.ganadores.filter((x) => x.tipo === 'titular')) {
+            const datos =
+                g.premio_posicion === 1
+                    ? { metodo: 'caja' as const, caja_id: e.cajas.get(e.B)! }
+                    : g.premio_posicion === 2
+                      ? { contrapartida: 'proveedor' as const }
+                      : {}
+            await new EntregarPremioSorteo().execute(
+                { sorteo_id: sorteoId, ganador_id: g.id, ...datos },
+                e.ctx,
+            )
+        }
+        const entregados = await db
+            .from('lealtad.sorteos_ganadores')
+            .where('sorteo_id', sorteoId)
+            .orderBy('posicion')
+        const [efectivo, bien, servicio] = entregados
+        const sorteo = await db.from('lealtad.sorteos').where('id', sorteoId).firstOrFail()
+        assert.equal(sorteo.estado, 'premios_entregados')
+        const premios = await saldoCuenta(e.B, '5.1.03')
+
+        // por separado: cada documento remite a la anulación de la entrega
+        const egreso = await errorDe(
+            new AnularEgreso().execute({ egreso_id: Number(efectivo.egreso_id), motivo: 'no' }, e.ctx),
+        )
+        assert.equal(egreso.codigo, 'egreso_de_premio_sorteo')
+        const canje = await errorDe(
+            new RevertirCanje().execute({ id: Number(servicio.canje_id), motivo: 'no' }, e.ctx),
+        )
+        assert.equal(canje.codigo, 'canje_de_premio_sorteo')
+        const asiento = await errorDe(
+            new RevertirAsiento().execute(
+                { asiento_id: Number(bien.asiento_id), motivo: 'error de captura' },
+                e.ctx,
+            ),
+        )
+        assert.equal(asiento.codigo, 'reverso_por_documento')
+
+        const canjeServicio = await db.from('lealtad.canjes').where('id', servicio.canje_id).firstOrFail()
+        const existencias = await db
+            .from('lealtad.premios')
+            .where('id', Number(canjeServicio.premio_id))
+            .firstOrFail()
+        for (const g of [efectivo, bien, servicio]) {
+            await new AnularEntregaSorteo().execute(
+                { sorteo_id: sorteoId, ganador_id: Number(g.id), motivo: 'premio mal registrado' },
+                e.ctx,
+            )
+        }
+        const despues = await db
+            .from('lealtad.sorteos_ganadores')
+            .where('sorteo_id', sorteoId)
+            .orderBy('posicion')
+        assert.deepEqual(
+            despues
+                .slice(0, 3)
+                .map((g) => [g.estado, g.asiento_id, g.egreso_id, g.canje_id, g.retencion_isr]),
+            [
+                ['por_notificar', null, null, null, null],
+                ['por_notificar', null, null, null, null],
+                ['por_notificar', null, null, null, null],
+            ],
+        )
+        const reabierto = await db.from('lealtad.sorteos').where('id', sorteoId).firstOrFail()
+        assert.equal(reabierto.estado, 'ejecutado')
+        assert.equal(await saldoCuenta(e.B, '5.1.03'), '0.00')
+        assert.notEqual(premios, '0.00')
+        assert.equal(await saldoCuenta(e.B, '2.1.05'), '0.00')
+        const anulado = await db
+            .from('ledger.egresos_anulaciones')
+            .where('egreso_id', efectivo.egreso_id)
+            .first()
+        assert.exists(anulado)
+        const revertido = await db.from('lealtad.canjes').where('id', servicio.canje_id).firstOrFail()
+        assert.equal(revertido.estado, 'revertido')
+        const mismas = await db.from('lealtad.premios').where('id', existencias.id).firstOrFail()
+        assert.equal(mismas.existencias, existencias.existencias)
+        const eventos = await db
+            .from('audit.outbox')
+            .where('evento', 'sorteo.entrega_anulada')
+            .whereRaw(`(payload->>'sorteo_id')::bigint = ?`, [sorteoId])
+        assert.lengthOf(eventos, 3)
+        // no reentrega dos veces lo anulado: se puede entregar de nuevo
+        await new EntregarPremioSorteo().execute(
+            { sorteo_id: sorteoId, ganador_id: Number(bien.id), contrapartida: 'proveedor' },
+            e.ctx,
+        )
+        const otraVez = await errorDe(
+            new AnularEntregaSorteo().execute(
+                { sorteo_id: sorteoId, ganador_id: Number(efectivo.id), motivo: 'de nuevo' },
+                e.ctx,
+            ),
+        )
+        assert.equal(otraVez.codigo, 'premio_no_entregado')
+        // el inv. 15 del auditor aún no admite el reverso de una entrega anulada (H-anular-entrega, abajo)
+        const violaciones = await verificarLibro([e.B, e.C])
+        assert.deepEqual(
+            violaciones.filter(
+                (v) =>
+                    ![
+                        '15.premio_de_sorteo_mal_contabilizado',
+                        '15.asiento_de_sorteo_sin_ganador',
+                        '15.asiento_de_sorteo_revertido',
+                    ].some((p) => v.invariante.startsWith(p)),
+            ),
+            [],
+        )
+    })
+
+    test('H-anular-entrega: anular y volver a entregar un premio deja el libro limpio para el auditor', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const ejecutado = await ejecutadoCon(e)
+        const bien = ejecutado.ganadores.find((g) => g.premio_posicion === 2)!
+        await new EntregarPremioSorteo().execute(
+            { sorteo_id: ejecutado.id, ganador_id: bien.id, contrapartida: 'proveedor' },
+            e.ctx,
+        )
+        await new AnularEntregaSorteo().execute(
+            { sorteo_id: ejecutado.id, ganador_id: bien.id, motivo: 'mal registrado' },
+            e.ctx,
+        )
+        await afirmarLibro(assert, [e.B, e.C])
+    }).fails(
+        'H-anular-entrega: el inv. 15 del auditor no admite el reverso de los asientos sorteo de una entrega anulada (sorteos.anular_entrega)',
+    )
 })

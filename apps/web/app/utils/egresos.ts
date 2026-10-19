@@ -23,6 +23,7 @@ export const CATEGORIAS_EGRESO: Record<CategoriaEgreso, string> = {
     vehiculos: 'Vehículos',
     alquileres: 'Alquileres',
     otros: 'Otros',
+    premios: 'Premios y promociones',
 }
 
 export const ESTADOS_EGRESO: Record<EstadoEgreso, { etiqueta: string, color: NonNullable<BadgeProps['color']>, icono: string }> = {

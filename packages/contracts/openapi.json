@@ -9090,7 +9090,8 @@
                 "nomina",
                 "vehiculos",
                 "alquileres",
-                "otros"
+                "otros",
+                "premios"
               ]
             }
           },
@@ -20176,6 +20177,11 @@
                           "null"
                         ],
                         "maxLength": 200
+                      },
+                      "fuente_valor_publico": {
+                        "type": "string",
+                        "maxLength": 1000,
+                        "description": "Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash"
                       }
                     },
                     "required": [],
@@ -20512,6 +20518,11 @@
                           "null"
                         ],
                         "maxLength": 200
+                      },
+                      "fuente_valor_publico": {
+                        "type": "string",
+                        "maxLength": 1000,
+                        "description": "Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash"
                       }
                     },
                     "required": [],
@@ -21132,7 +21143,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500,
-                    "description": "Dato que nadie controla y se conoce en el acto (lo lee el notario o el delegado)"
+                    "description": "El valor de la fuente declarada en las bases (bases.fuente_valor_publico), conocido en el acto"
+                  },
+                  "valor_publico_evidencia": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 2000,
+                    "description": "Cómo se obtuvo el valor (acta del notario, enlace o número de la publicación oficial)"
                   },
                   "asistentes": {
                     "type": "array",
@@ -21161,7 +21178,8 @@
                   }
                 },
                 "required": [
-                  "valor_publico"
+                  "valor_publico",
+                  "valor_publico_evidencia"
                 ],
                 "additionalProperties": false
               }
@@ -21231,6 +21249,140 @@
           }
         },
         "x-permiso": "sorteos.ejecutar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/anular-entrega": {
+      "post": {
+        "operationId": "lealtadAnularEntregaSorteo",
+        "summary": "Anular la entrega del premio de un ganador (todo junto)",
+        "description": "H22: deshace la entrega en una transacción: anula el egreso (efectivo), revierte el asiento sorteo (bien) o el canje sin puntos (servicio; 409 canje_no_revertible si ya se aplicó a una factura) y el asiento del ISR. El ganador vuelve a por_notificar y un sorteo premios_entregados vuelve a ejecutado. Por separado, anular el egreso, revertir el canje o revertir el asiento responden 422. Evento sorteo.entrega_anulada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "ganadorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.entregar",
         "x-implementado": true
       }
     },
@@ -32777,7 +32929,8 @@
                 "nomina",
                 "vehiculos",
                 "alquileres",
-                "otros"
+                "otros",
+                "premios"
               ]
             }
           },
@@ -45086,8 +45239,10 @@
               "nomina",
               "vehiculos",
               "alquileres",
-              "otros"
-            ]
+              "otros",
+              "premios"
+            ],
+            "description": "Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos"
           },
           "categoria_nombre": {
             "type": "string"
@@ -58515,6 +58670,13 @@
               "null"
             ]
           },
+          "valor_publico_evidencia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico"
+          },
           "lista_hash": {
             "type": [
               "string",
@@ -58916,6 +59078,13 @@
               "string",
               "null"
             ]
+          },
+          "valor_publico_evidencia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico"
           },
           "lista_hash": {
             "type": [
@@ -59619,6 +59788,8 @@
           "compromiso",
           "semilla",
           "valor_publico",
+          "fuente_valor_publico",
+          "valor_publico_evidencia",
           "lista_hash",
           "lista",
           "titulares",
@@ -59648,6 +59819,19 @@
           },
           "valor_publico": {
             "type": "string"
+          },
+          "fuente_valor_publico": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Fuente pública del valor declarada en las bases (congelada con bases_hash)"
+          },
+          "valor_publico_evidencia": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "lista_hash": {
             "type": "string"

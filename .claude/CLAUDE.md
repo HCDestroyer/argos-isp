@@ -189,6 +189,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sorteo.ejecutado` | lealtad (sorteos) | sorteo_id, empresa_id, ganadores[] (cliente_id, tipo, posicion) |
 | `sorteo.premio_entregado` | lealtad (sorteos) | sorteo_id, empresa_id, cliente_id, posicion |
 | `sorteo.cancelado` | lealtad (sorteos) | sorteo_id, empresa_id, motivo |
+| `sorteo.entrega_anulada` | lealtad (sorteos) | sorteo_id, empresa_id, cliente_id, posicion, motivo |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

@@ -10,7 +10,8 @@
 //   1. SHA-256(semilla) = compromiso publicado con las bases;
 //   2. SHA-256 de las líneas `codigo|boletos\n` = lista_hash publicado en el corte;
 //   3. SHA-256 del JSON canónico de las bases = bases_hash;
-//   4. el cálculo da los mismos titulares y suplentes, en el mismo orden.
+//   4. el cálculo da los mismos titulares y suplentes, en el mismo orden;
+//   5. cada titular tiene el premio de su puesto (premio 1 × cantidad, premio 2…) y los suplentes ninguno.
 // Sale con código 0 si todo coincide y 1 si algo no.
 import { createHash, createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -68,6 +69,23 @@ export function verificar(datos) {
     const publicados = [...datos.ganadores].sort((a, b) => a.posicion - b.posicion).map((g) => g.codigo)
     if (JSON.stringify(elegidos) !== JSON.stringify(publicados)) {
         fallas.push(`el cálculo da ${elegidos.join(', ')} y se publicó ${publicados.join(', ')}`)
+    }
+    // 5. cada titular recibe el premio que le toca por su puesto: premio 1 (× cantidad), premio 2…; los
+    //    suplentes, ninguno (los premios salen de las bases, ya verificadas contra bases_hash)
+    if (datos.bases && Array.isArray(datos.bases.premios)) {
+        const porPuesto = [...datos.bases.premios]
+            .sort((a, b) => a.posicion - b.posicion)
+            .flatMap((p) => Array.from({ length: p.cantidad }, () => p.posicion))
+        const ordenados = [...datos.ganadores].sort((a, b) => a.posicion - b.posicion)
+        for (const [i, g] of ordenados.entries()) {
+            const esperado = i < datos.titulares ? porPuesto[i] ?? null : null
+            const tipo = i < datos.titulares ? 'titular' : 'suplente'
+            if ((g.premio_posicion ?? null) !== esperado || (g.tipo && g.tipo !== tipo)) {
+                fallas.push(
+                    `el puesto ${g.posicion} (${g.codigo}) debía ser ${tipo} con premio ${esperado ?? 'ninguno'} y se publicó ${g.tipo ?? '?'} con premio ${g.premio_posicion ?? 'ninguno'}`,
+                )
+            }
+        }
     }
     return { ok: fallas.length === 0, elegidos, fallas }
 }
