@@ -93,4 +93,84 @@ test.group('VineJS · .meta() conserva el required', () => {
         const vacio = await estado(client.post('/api/v1/zonas').bearerToken(token).json({ nombre: '' }), 422)
         assert.equal(vacio.body().errors[0].field, 'nombre')
     })
+
+    test('HTTP: los campos que se borran con null (.nullable().meta()) se siguen borrando', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        // zona: empresa sugerida (`empresaSugerida()`: nullable con meta)
+        const zona = await estado(
+            client
+                .post('/api/v1/zonas')
+                .bearerToken(token)
+                .json({ nombre: `Zona vine ${Date.now()}`, empresa_sugerida_id: 1 }),
+            201,
+        )
+        assert.equal(zona.body().empresa_sugerida_id, 1)
+        const sinEmpresa = await estado(
+            client.put(`/api/v1/zonas/${zona.body().id}`).bearerToken(token).json({
+                nombre: zona.body().nombre,
+                empresa_sugerida_id: null,
+                version: zona.body().version,
+            }),
+            200,
+        )
+        assert.isNull(sinEmpresa.body().empresa_sugerida_id)
+
+        // servicio: costo_override (`dinero().nullable()`), dirección y coordenadas
+        const { routerId } = await crearEscenarioRouter()
+        const servicio = await estado(
+            client
+                .post('/api/v1/servicios')
+                .bearerToken(token)
+                .json({
+                    cliente_id: await crearClienteFila(),
+                    router_id: routerId,
+                    plan_id: await crearPlanFila(),
+                    plantilla_facturacion_id: null,
+                    costo_override: '99.00',
+                    direccion: 'Zona 1',
+                    coordenadas: '14.6349,-90.5069',
+                }),
+            201,
+        )
+        assert.include(servicio.body(), { costo_override: '99.00', direccion: 'Zona 1' })
+        const limpio = await estado(
+            client.put(`/api/v1/servicios/${servicio.body().id}`).bearerToken(token).json({
+                version: servicio.body().version,
+                costo_override: null,
+                direccion: null,
+                coordenadas: null,
+            }),
+            200,
+        )
+        assert.include(limpio.body(), { costo_override: null, direccion: null, coordenadas: null })
+
+        // plan: garantizado_pct (nullable con meta) vuelve al cálculo por reuso
+        const plan = await estado(
+            client
+                .post('/api/v1/planes')
+                .bearerToken(token)
+                .json({
+                    nombre: `Plan vine ${Date.now()}`,
+                    precio: '100.00',
+                    bajada_kbps: 10000,
+                    subida_kbps: 10000,
+                    bajada_limitada_kbps: 512,
+                    subida_limitada_kbps: 512,
+                    garantizado_pct: 50,
+                }),
+            201,
+        )
+        assert.equal(plan.body().garantizado_pct, 50)
+        const sinGarantizado = await estado(
+            client
+                .put(`/api/v1/planes/${plan.body().id}`)
+                .bearerToken(token)
+                .json({ version: plan.body().version, garantizado_pct: null }),
+            200,
+        )
+        assert.isNull(sinGarantizado.body().garantizado_pct)
+    })
 })
