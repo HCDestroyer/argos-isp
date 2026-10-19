@@ -125,7 +125,7 @@ onMounted(() => {
                 variant="subtle"
                 :data-proveedor="resumen.proveedor_cobro_id"
             >
-                <div class="flex flex-col gap-4">
+                <div class="flex min-w-0 flex-col gap-4">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="flex min-w-0 flex-col">
                             <h2 class="flex items-center gap-2 text-lg font-semibold text-highlighted">
@@ -185,7 +185,7 @@ onMounted(() => {
                         :aria-label="`Pagos sin liquidar de ${resumen.nombre}`"
                     >
                         <template #pago_id-cell="{ row }">
-                            <div class="flex flex-col">
+                            <div class="flex min-w-0 flex-col whitespace-normal">
                                 <ULink
                                     :to="enlace(`/pagos/${row.original.pago_id}`)"
                                     class="text-sm font-medium text-highlighted hover:text-primary"
