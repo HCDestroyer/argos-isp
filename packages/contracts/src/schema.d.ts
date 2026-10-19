@@ -5484,6 +5484,7 @@ export interface components {
                 pago: boolean;
                 promesa: boolean;
                 comprobante: boolean;
+                lealtad: boolean;
             };
             /** @description Control optimista: envíala al guardar (0 = sin guardar) */
             version: number;
@@ -18376,6 +18377,7 @@ export interface operations {
                         pago?: boolean;
                         promesa?: boolean;
                         comprobante?: boolean;
+                        lealtad?: boolean;
                     };
                 };
             };
@@ -18577,6 +18579,7 @@ export interface operations {
                         pago?: boolean;
                         promesa?: boolean;
                         comprobante?: boolean;
+                        lealtad?: boolean;
                     };
                 };
             };

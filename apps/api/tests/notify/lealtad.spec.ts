@@ -4,7 +4,7 @@ import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { contextoSistema } from '#shared/contexto'
 import type { EventoEntrante } from '#shared/eventos_bus'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { contextoPrueba, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { crearClienteFila } from '#tests/core/fabricas'
 import { generar } from '#tests/billing/ayudas_billing'
 import { facturasDelServicio, prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
@@ -23,6 +23,8 @@ import { fijarChatEquipo } from '#notify/alertas'
 import { ejecutarVigilancia } from '#notify/vigilancia'
 import { textoPuntos } from '#notify/lealtad'
 import { TOLERANCIA_POR_DEFECTO_MIN } from '#notify/actions/vigilar_crons'
+import ConfigurarNotificaciones from '#notify/actions/configurar_notificaciones'
+import { avisoApagado, configPara, recargarConfiguracion } from '#notify/configuracion'
 
 /**
  * notify · avisos de lealtad (fase 1): puntos ganados, por vencer y referido calificado, con la
@@ -265,6 +267,96 @@ test.group('notify · avisos de lealtad', (group) => {
             deLealtad.map((x) => [x.evento, x.asunto]),
             [['lealtad.puntos_acumulados', 'Ganaste 50 puntos']],
         )
+    })
+})
+
+test.group('notify · interruptor del tipo de aviso lealtad', (group) => {
+    let cola: ColaFalsa
+    let consumidor: ConsumidorNotify
+    let empresas: number[] = []
+
+    group.each.setup(() => {
+        registrarCanal('correo', new CanalFalso('correo'))
+        cola = new ColaFalsa()
+        consumidor = new ConsumidorNotify(cola)
+        empresas = []
+        return async () => {
+            if (empresas.length > 0) {
+                await db.from('notify.configuracion_canales').whereIn('empresa_id', empresas).delete()
+            }
+            await recargarConfiguracion()
+            reiniciarCanales()
+            await soloEmpresaPrincipal()
+        }
+    })
+
+    async function configurarEmpresa(empresaId: number, lealtad: boolean) {
+        const actual = (await db
+            .from('notify.configuracion_canales')
+            .where('empresa_id', empresaId)
+            .select('version')
+            .first()) as { version: number } | null
+        await new ConfigurarNotificaciones().execute(
+            { version: actual?.version ?? 0, empresa_id: empresaId, hereda: false, avisos: { lealtad } },
+            contextoPrueba(),
+        )
+    }
+
+    test('apagado en la empresa: los tres avisos de lealtad quedan omitidos; encendido, salen', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        empresas.push(e.B)
+        await programaConReglas(e.B, e.ctx, { vencimiento_meses: 12, aviso_vencimiento_dias: 30 })
+        const s = await servicioEn(e.B)
+        await conCorreo(s.clienteId)
+        const ganar = async () => {
+            const ajuste = await new AjustarPuntos().execute(
+                { empresa_id: e.B, cliente_id: s.clienteId, puntos: 10, motivo: 'interruptor' },
+                e.ctx,
+            )
+            const eventos = await eventosOutbox(
+                'lealtad.puntos_acumulados',
+                'movimiento_id',
+                ajuste.movimiento.id,
+            )
+            await entregarANotify(consumidor, eventos)
+            const envios = await enviosDe(s.clienteId, 'lealtad.puntos_acumulados')
+            return envios.filter((x) => eventos.some((ev) => x.origen === `outbox:${ev.id}`))
+        }
+
+        // Sin configurar: encendido, como los demás tipos
+        const porDefecto = await ganar()
+        assert.deepEqual(
+            porDefecto.map((x) => x.estado),
+            ['encolado'],
+        )
+
+        await configurarEmpresa(e.B, false)
+        const colaAntes = cola.ids.length
+        const apagado = await ganar()
+        assert.deepEqual(
+            apagado.map((x) => x.estado),
+            ['omitido'],
+        )
+        assert.lengthOf(cola.ids, colaAntes, 'nada a la cola')
+        // por vencer y referido calificado también se apagan con el mismo tipo
+        const config = await configPara(e.B)
+        for (const evento of [
+            'lealtad.puntos_acumulados',
+            'lealtad.puntos_por_vencer',
+            'lealtad.referido_calificado',
+        ]) {
+            assert.include(avisoApagado(config, evento) ?? '', 'Aviso de tipo lealtad apagado', evento)
+        }
+
+        await configurarEmpresa(e.B, true)
+        const encendido = await ganar()
+        assert.deepEqual(
+            encendido.map((x) => x.estado),
+            ['encolado'],
+        )
+        assert.includeMembers(cola.ids, [encendido[0]!.id])
     })
 })
 

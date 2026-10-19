@@ -179,6 +179,7 @@ const avisosConfig = () =>
             pago: vine.boolean().optional(),
             promesa: vine.boolean().optional(),
             comprobante: vine.boolean().optional(),
+            lealtad: vine.boolean().optional(),
         })
         .optional()
 
