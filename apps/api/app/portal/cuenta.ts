@@ -8,6 +8,7 @@ import type { MetodoPago } from '#shared/eventos'
 import { EMPRESA_PRINCIPAL } from '#core/empresas'
 import { estadoCuenta } from '#billing/estado_cuenta'
 import { DateTime } from 'luxon'
+import type { TipoPlan } from '#network/tipos_plan'
 import {
     SQL_EMPRESA_FACTURA,
     empresaPrincipalDelCliente,
@@ -49,10 +50,21 @@ export interface ContactoPortal {
     version: number
 }
 
+/** Espejo del schema `PortalAdicional`: sin credencial, ni siquiera `tiene_credencial`. */
+export interface AdicionalPortal {
+    id: number
+    nombre: string
+    identificador: string | null
+    modalidad: 'incluido' | 'cortesia' | 'cobrado'
+    precio: string | null
+}
+
 export interface ServicioPortal {
     id: number
     estado: EstadoServicio
     plan: string | null
+    plan_tipo: TipoPlan | null
+    adicionales: AdicionalPortal[]
     direccion: string | null
     promesa_activa: boolean
     monto_adeudado: string
@@ -185,12 +197,15 @@ export async function cuentaPortal(clienteId: number): Promise<CuentaPortal> {
         .leftJoin('network.planes as p', 'p.id', 's.plan_id')
         .where('s.cliente_id', clienteId)
         .orderBy('s.id', 'asc')
-        .select('s.id', 's.estado', 's.direccion', 's.empresa_id', 'p.nombre as plan')
+        .select('s.id', 's.estado', 's.direccion', 's.empresa_id', 'p.nombre as plan', 'p.tipo as plan_tipo')
         .select(
             db.raw(
                 `EXISTS (SELECT 1 FROM billing.promesas pr WHERE pr.servicio_id = s.id AND pr.estado = 'activa') AS promesa_activa`,
             ),
-        )) as Array<Omit<ServicioPortal, 'monto_adeudado' | 'empresa'> & { empresa_id: number }>
+        )) as Array<
+        Omit<ServicioPortal, 'monto_adeudado' | 'empresa' | 'adicionales'> & { empresa_id: number }
+    >
+    const adicionales = await adicionalesDeServicios(filas.map((f) => Number(f.id)))
 
     const principal = await empresaPrincipalDelCliente(clienteId)
     const marcas = await marcasDeEmpresas([principal, ...filas.map((f) => Number(f.empresa_id))])
@@ -202,6 +217,8 @@ export async function cuentaPortal(clienteId: number): Promise<CuentaPortal> {
         servicios.push({
             ...fila,
             id: Number(fila.id),
+            plan_tipo: fila.plan_tipo ?? null,
+            adicionales: adicionales.get(Number(fila.id)) ?? [],
             monto_adeudado: adeudado.toFixed(2),
             empresa: marcas.get(Number(empresaId)) ?? (await marcaDeEmpresa(Number(empresaId))),
         })
@@ -213,6 +230,44 @@ export async function cuentaPortal(clienteId: number): Promise<CuentaPortal> {
         empresa_principal: marcas.get(principal) ?? (await marcaDeEmpresa(principal)),
         empresas: await cuentaPorEmpresa(clienteId, principal),
     }
+}
+
+/**
+ * Adicionales activos de los servicios (de `core.servicios_adicionales`, contrato
+ * `adicionales.md`; solo lectura), por servicio y en el orden en que se dieron de alta. Nunca lee la
+ * columna `credencial`. Los servicios ya son los del cliente de la sesión.
+ */
+async function adicionalesDeServicios(servicioIds: number[]): Promise<Map<number, AdicionalPortal[]>> {
+    const porServicio = new Map<number, AdicionalPortal[]>()
+    if (servicioIds.length === 0) return porServicio
+    const filas = (await db
+        .from('core.servicios_adicionales as sa')
+        .join('core.adicionales as a', 'a.id', 'sa.adicional_id')
+        .whereIn('sa.servicio_id', servicioIds)
+        .where('sa.estado', 'activo')
+        .orderBy([
+            { column: 'sa.servicio_id', order: 'asc' },
+            { column: 'sa.alta_en', order: 'asc' },
+            { column: 'sa.id', order: 'asc' },
+        ])
+        .select(
+            'sa.id',
+            'sa.servicio_id',
+            'a.nombre',
+            'sa.identificador',
+            'sa.modalidad',
+            'sa.precio',
+        )) as Array<AdicionalPortal & { servicio_id: number }>
+    for (const { servicio_id: servicioId, ...fila } of filas) {
+        const lista = porServicio.get(Number(servicioId)) ?? []
+        lista.push({
+            ...fila,
+            id: Number(fila.id),
+            precio: fila.modalidad === 'cobrado' && fila.precio !== null ? aTexto(dec(fila.precio)) : null,
+        })
+        porServicio.set(Number(servicioId), lista)
+    }
+    return porServicio
 }
 
 /**

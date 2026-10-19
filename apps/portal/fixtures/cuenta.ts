@@ -52,6 +52,13 @@ function pendiente(datos: Partial<Schema<'PortalFacturaPendiente'>> & { id: numb
     }
 }
 
+/** Adicionales activos del servicio 41: incluido con su usuario, de cortesía y cobrado aparte. */
+export const ADICIONALES_FIXTURE: Schema<'PortalAdicional'>[] = [
+    { id: 301, nombre: 'Streaming Plus', identificador: 'maria@example.com', modalidad: 'incluido', precio: null },
+    { id: 302, nombre: 'IPTV básico', identificador: null, modalidad: 'cortesia', precio: null },
+    { id: 303, nombre: 'IPTV deportes', identificador: 'mgarcia-tv', modalidad: 'cobrado', precio: '35.00' },
+]
+
 export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
     cliente: CONTACTO_FIXTURE,
     servicios: [
@@ -59,6 +66,9 @@ export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
             id: 41,
             estado: 'suspendido',
             plan: 'Hogar 20 Mbps',
+            plan_tipo: 'residencial',
+            // Uno de cada modalidad, como los devuelve `GET /portal/cuenta` (sin credencial).
+            adicionales: ADICIONALES_FIXTURE,
             direccion: '5a avenida 10-20 zona 1',
             promesa_activa: false,
             monto_adeudado: '550.00',
@@ -95,6 +105,8 @@ export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
             id: 57,
             estado: 'suspendido',
             plan: 'Fibra 50 Mbps',
+            plan_tipo: 'empresarial',
+            adicionales: [],
             direccion: 'Lotificación El Rosario, casa 14',
             promesa_activa: false,
             monto_adeudado: '398.00',

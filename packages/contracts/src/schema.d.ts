@@ -9170,6 +9170,19 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        PortalAdicional: {
+            id: number;
+            nombre: string;
+            /** @description Usuario de IPTV, correo de la cuenta… */
+            identificador: string | null;
+            /**
+             * @description `incluido` en el plan, de `cortesia` (sin cobro) o `cobrado` aparte (`precio`)
+             * @enum {string}
+             */
+            modalidad: "incluido" | "cortesia" | "cobrado";
+            /** @description Precio mensual; solo con `cobrado` */
+            precio: components["schemas"]["Dinero"] | null;
+        };
         PortalAnuncio: {
             id: number;
             empresa_id: number;
@@ -9492,6 +9505,13 @@ export interface components {
             id: number;
             estado: components["schemas"]["EstadoServicio"];
             plan: string | null;
+            /**
+             * @description Tipo del plan: residencial, empresarial o dedicado (null sin plan)
+             * @enum {string|null}
+             */
+            plan_tipo: "residencial" | "empresarial" | "dedicado" | null;
+            /** @description Servicios adicionales activos (streaming, IPTV…), sin la credencial */
+            adicionales: components["schemas"]["PortalAdicional"][];
             direccion: string | null;
             promesa_activa: boolean;
             monto_adeudado: components["schemas"]["Dinero"];
