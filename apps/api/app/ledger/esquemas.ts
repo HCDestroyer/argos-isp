@@ -120,6 +120,7 @@ export const Asiento = definirEsquema(
                 'banco',
                 'provision',
                 'castigo',
+                'diferencia_cobro',
                 'lealtad',
             ]),
             origen_id: nulable(id),

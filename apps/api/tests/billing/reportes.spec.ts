@@ -53,8 +53,13 @@ async function netoLibro(
     return aTexto(dec(fila.debe).minus(fila.haber))
 }
 
-async function saldoCxcGlobal(): Promise<string> {
-    return netoLibro(['1.1.03'], () => {})
+/**
+ * Saldo del auxiliar CxC de los clientes dados. La cartera general se compara contra los clientes que
+ * lista, no contra toda la CxC de la base: las pruebas de `tests/ledger/` registran asientos crudos de
+ * CxC sin factura (clientes sin documentos) y el orden de los archivos varía.
+ */
+async function saldoCxcDe(clientes: number[]): Promise<string> {
+    return netoLibro(['1.1.03'], (q) => q.whereIn('m.cliente_id', clientes))
 }
 
 test.group('billing · reportes', () => {
@@ -125,9 +130,11 @@ test.group('billing · reportes', () => {
         )
         assert.equal(porRouter.body().filas[0].dias_31_60, '150.00')
 
-        // el total general de la cartera es el saldo del auxiliar CxC de todo el libro
+        // el total general de la cartera es el saldo del auxiliar CxC de los clientes que lista
         const general = await carteraVencida({ corte: CORTE })
-        assert.equal(general.totales.total, await saldoCxcGlobal())
+        const clientes = (general.filas as Array<{ grupo_id: number }>).map((f) => f.grupo_id)
+        assert.include(clientes, datos.clienteId)
+        assert.equal(general.totales.total, await saldoCxcDe(clientes))
         await afirmarLibroCuadrado(assert)
     })
 

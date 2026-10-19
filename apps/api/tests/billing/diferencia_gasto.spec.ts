@@ -25,12 +25,12 @@ import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
  * `diferencia_cobro` `5.3.05 / CxC`, sin tocar IVA ni DTE; `pagado` es solo dinero cobrado y la factura
  * queda `pagada` porque `pagado + Σ diferencias vigentes = total`. Anular el pago revierte en espejo.
  *
- * Mientras el auditor no amplíe los invariantes 5 (cobertura con diferencias vigentes) y 9 (origen
- * `diferencia_cobro`), las pruebas verifican que el libro no tiene **otras** violaciones y una prueba
- * `.fails` deja `afirmarLibro` puro (hallazgo `H-diferencia-gasto`).
+ * El auditor amplió los invariantes 5 (cobertura con diferencias vigentes), 9 (origen
+ * `diferencia_cobro`) y 13 (diferencia vigente): todas las pruebas terminan con el libro limpio.
  */
 
-const PENDIENTES_DEL_AUDITOR = ['5.factura_estado_inconsistente', '9.origen_de_asiento_desconocido']
+/** el auditor ya amplió los invariantes 5 y 9 (decisión B): no queda ninguno pendiente */
+const PENDIENTES_DEL_AUDITOR: string[] = []
 
 /** Las violaciones que quedan, salvo las de los invariantes que el auditor aún no amplía. */
 async function otrasViolaciones(empresas: number[]): Promise<Violacion[]> {
@@ -209,7 +209,5 @@ test.group('Facturas · diferencia de cobro como gasto', (group) => {
         const pago = await pagoCorto(e, s.clienteId, '149.50')
         await new CerrarDiferenciaPago().execute({ pago_id: pago.id }, e.ctx)
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'H-diferencia-gasto: el inv. 5 aún exige pagado = total en una factura pagada (cobertura con diferencias vigentes) y el inv. 9 no conoce el origen diferencia_cobro',
-    )
+    })
 })

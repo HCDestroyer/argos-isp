@@ -20343,6 +20343,7 @@
                 "banco",
                 "provision",
                 "castigo",
+                "diferencia_cobro",
                 "lealtad"
               ]
             }
@@ -40160,6 +40161,7 @@
               "banco",
               "provision",
               "castigo",
+              "diferencia_cobro",
               "lealtad"
             ]
           },
