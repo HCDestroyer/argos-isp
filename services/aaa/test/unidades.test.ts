@@ -21,7 +21,11 @@ describe('cifrado v1', () => {
         const c = cifrar('x', CLAVE)
         assert.throws(() => descifrar(c, Buffer.alloc(32)), ErrorCifrado)
         const partes = c.split('.')
-        partes[3] = Buffer.from('y').toString('base64url')
+        // Se invierte un bit del dato cifrado: escribir un byte fijo no lo altera cuando ya
+        // vale eso (1 de cada 256 corridas, el IV es aleatorio).
+        const datos = Buffer.from(partes[3] ?? '', 'base64url')
+        datos.writeUInt8((datos.readUInt8(0) ^ 0x01) & 0xff, 0)
+        partes[3] = datos.toString('base64url')
         assert.throws(() => descifrar(partes.join('.'), CLAVE), ErrorCifrado)
         assert.throws(() => descifrar('texto-en-claro', CLAVE), ErrorCifrado)
     })
