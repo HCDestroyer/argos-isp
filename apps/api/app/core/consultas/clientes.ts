@@ -105,6 +105,9 @@ function escaparLike(texto: string): string {
     return texto.replace(/[\\%_]/g, (c) => `\\${c}`)
 }
 
+/** Búsqueda con forma de teléfono: `5512-3344`, `+502 7777 6655`, `(502) 2233.4455`. */
+const PARECE_TELEFONO = /^\+?[\d\s().-]+$/
+
 function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string) {
     const texto = q.trim()
     if (texto === '') return
@@ -151,7 +154,10 @@ function aplicarBusqueda(consulta: DatabaseQueryBuilderContract<any>, q: string)
                     .whereRaw('s_q.cliente_id = c.id')
                     .whereILike('s_q.user_ppp', patron),
             )
-        if (digitos.length >= 4) {
+        // Teléfono solo si la búsqueda tiene forma de teléfono (dígitos, espacios, guiones, `+`,
+        // paréntesis o puntos). Con texto mezclado («Pagina1234abcd», un código, un correo) sus
+        // dígitos sueltos encontraban clientes ajenos por su teléfono.
+        if (digitos.length >= 4 && PARECE_TELEFONO.test(texto)) {
             // teléfonos guardados con espacios o guiones: se comparan solo los dígitos
             const tel = `%${digitos}%`
             w.orWhereRaw(`regexp_replace(coalesce(c.telefono, ''), '\\D', '', 'g') LIKE ?`, [tel]).orWhereRaw(

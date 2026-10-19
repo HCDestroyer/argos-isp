@@ -1,5 +1,6 @@
 # Imágenes de producción de ArgosIsp (A6, distribución): construye y publica en GHCR las siete
-# imágenes multi-arquitectura (linux/amd64 y linux/arm64) de una versión, mueve `estable` cuando
+# imágenes multi-arquitectura (linux/amd64 y linux/arm64) de una versión, cada arquitectura en su
+# runner nativo y unidas en una lista por `docker buildx imagetools create`, mueve `estable` cuando
 # están TODAS y sube a la GitHub Release el paquete de instalación (infra/produccion/empaquetar.sh).
 #
 # Se dispara:
@@ -67,15 +68,22 @@ jobs:
             echo "fecha=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } >> "$GITHUB_OUTPUT"
 
+  # Cada imagen se compila en su arquitectura, en un runner nativo (sin QEMU): amd64 en
+  # ubuntu-24.04 y arm64 en ubuntu-24.04-arm (el mismo de `distribucion` en ci.yml). Cada build sube
+  # su imagen solo por digest (sin etiqueta); `manifiesto` une los dos digests en la lista
+  # multiarquitectura <registro>/argosisp-<imagen>:<versión> con `docker buildx imagetools create`.
+  # Con QEMU, api, web y portal (Node) y FreeRADIUS (compila) tardaban más de 70 min en arm64.
   construir:
-    name: ${{ matrix.imagen }} (amd64 + arm64)
+    name: ${{ matrix.imagen }} (${{ matrix.arch }})
     needs: preparar
-    runs-on: ubuntu-24.04
-    # FreeRADIUS se compila (arm64 con QEMU): sin caché tarda mucho más que las de Node
-    timeout-minutes: ${{ matrix.imagen == 'freeradius' && 240 || 90 }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # FreeRADIUS se compila: sin caché tarda más que las de Node
+    timeout-minutes: ${{ matrix.imagen == 'freeradius' && 120 || 60 }}
     strategy:
       fail-fast: true
       matrix:
+        arch: [amd64, arm64]
+        imagen: [api, web, portal, aaa, coa, backup, freeradius]
         include:
           - { imagen: api, dockerfile: apps/api/Dockerfile, contexto: . }
           - { imagen: web, dockerfile: apps/web/Dockerfile, contexto: . }
@@ -90,7 +98,14 @@ jobs:
         with:
           ref: v${{ needs.preparar.outputs.version }}
 
-      - uses: docker/setup-qemu-action@v3
+      - name: Arquitectura del runner
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          servidor="$(docker version --format '{{.Server.Arch}}')"
+          echo "uname -m: $(uname -m) · docker: $servidor"
+          [ "$servidor" = "$ARCH" ] || { echo "::error::el runner es $servidor y se esperaba $ARCH"; exit 1; }
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -103,31 +118,88 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ needs.preparar.outputs.registro }}/argosisp-${{ matrix.imagen }}
-          # Solo la versión: `estable` se mueve en el job `estable`, cuando están las siete.
-          tags: type=raw,value=${{ needs.preparar.outputs.version }}
           labels: |
             org.opencontainers.image.title=argosisp-${{ matrix.imagen }}
             org.opencontainers.image.version=${{ needs.preparar.outputs.version }}
             org.opencontainers.image.revision=${{ needs.preparar.outputs.commit }}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.contexto }}
           file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Solo por digest: la etiqueta de la versión la pone `manifiesto` cuando están las dos
+          outputs: type=image,name=${{ needs.preparar.outputs.registro }}/argosisp-${{ matrix.imagen }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
             ARGOSISP_VERSION=${{ needs.preparar.outputs.version }}
             ARGOSISP_COMMIT=${{ needs.preparar.outputs.commit }}
             ARGOSISP_COMPILADA=${{ needs.preparar.outputs.fecha }}
-          cache-from: type=gha,scope=imagen-${{ matrix.imagen }}
-          cache-to: type=gha,mode=max,scope=imagen-${{ matrix.imagen }}
+          cache-from: type=gha,scope=imagen-${{ matrix.imagen }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=imagen-${{ matrix.imagen }}-${{ matrix.arch }}
+
+      - name: Guardar el digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::digest inválido: '$DIGEST'"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/digests"
+          echo "$DIGEST" > "$RUNNER_TEMP/digests/${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.imagen }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  manifiesto:
+    name: ${{ matrix.imagen }} (manifiesto amd64 + arm64)
+    needs: [preparar, construir]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: true
+      matrix:
+        imagen: [api, web, portal, aaa, coa, backup, freeradius]
+    env:
+      IMAGEN: ${{ needs.preparar.outputs.registro }}/argosisp-${{ matrix.imagen }}
+      VERSION: ${{ needs.preparar.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ matrix.imagen }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lista multiarquitectura ${{ needs.preparar.outputs.version }}
+        run: |
+          amd64="$(cat "$RUNNER_TEMP/digests/amd64")"
+          arm64="$(cat "$RUNNER_TEMP/digests/arm64")"
+          docker buildx imagetools create -t "$IMAGEN:$VERSION" \
+            --annotation "index:org.opencontainers.image.version=$VERSION" \
+            --annotation "index:org.opencontainers.image.revision=${{ needs.preparar.outputs.commit }}" \
+            "$IMAGEN@$amd64" "$IMAGEN@$arm64"
+
+      - name: Comprobar las dos arquitecturas
+        run: |
+          plataformas="$(docker buildx imagetools inspect --raw "$IMAGEN:$VERSION" |
+            jq -r '[.manifests[] | select(.platform.os == "linux") | .platform.architecture] | sort | unique | join(" ")')"
+          echo "$IMAGEN:$VERSION → $plataformas"
+          [ "$plataformas" = "amd64 arm64" ] || { echo "::error::$IMAGEN:$VERSION tiene '$plataformas' (se esperaba amd64 arm64)"; exit 1; }
 
   estable:
     name: Canal estable y paquete de instalación
-    needs: [preparar, construir]
+    needs: [preparar, manifiesto]
     runs-on: ubuntu-24.04
     env:
       VERSION: ${{ needs.preparar.outputs.version }}
