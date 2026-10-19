@@ -38,6 +38,30 @@ export default class AnularEgreso extends DomainAction<EntradaAnularEgreso, Egre
             throw new Conflicto(`El egreso ${egreso.id} ya está anulado`, 'egreso_anulado', 'Egreso anulado')
         }
 
+        // fase 5 (§3.4): el egreso de una compra al contado se anula con la compra; y un egreso que
+        // ya es una compra (desde egreso) se anula después de anular esa compra
+        const compra = await t.trx.from('ledger.egresos').where('id', egreso.id).select('compra_id').first()
+        if (compra?.compra_id) {
+            throw new Conflicto(
+                `El egreso ${egreso.id} paga la compra ${compra.compra_id}: anula la compra (POST /compras/${compra.compra_id}/anular)`,
+                'egreso_de_compra',
+                'Egreso de una compra',
+            )
+        }
+        const comoCompra = await t.trx
+            .from('ledger.compras as c')
+            .where('c.egreso_id', egreso.id)
+            .whereNotExists((q) => q.from('ledger.compras_anulaciones as x').whereRaw('x.compra_id = c.id'))
+            .select('c.id')
+            .first()
+        if (comoCompra) {
+            throw new Conflicto(
+                `El egreso ${egreso.id} está registrado como la compra ${comoCompra.id}: anula primero la compra`,
+                'egreso_con_compra',
+                'Egreso con compra',
+            )
+        }
+
         const asiento = await t.trx
             .from('ledger.asientos')
             .where('origen_tipo', 'egreso')

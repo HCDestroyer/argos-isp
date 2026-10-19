@@ -152,6 +152,7 @@ export async function movimientosDeAsientos(cliente: QueryClientContract, asient
         .from('ledger.movimientos as m')
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
         .leftJoin('core.clientes as cl', 'cl.id', 'm.cliente_id')
+        .leftJoin('ledger.proveedores as pv', 'pv.id', 'm.proveedor_id')
         .whereIn('m.asiento_id', asientos)
         .orderBy('m.id', 'asc')
         .select(
@@ -164,6 +165,8 @@ export async function movimientosDeAsientos(cliente: QueryClientContract, asient
             'm.haber',
             'm.cliente_id',
             'cl.nombre as cliente_nombre',
+            'm.proveedor_id',
+            'pv.nombre as proveedor_nombre',
             'm.impuesto_codigo',
             'm.cuadricula',
         )) as Array<{ asiento_id: number } & Record<string, unknown>>
