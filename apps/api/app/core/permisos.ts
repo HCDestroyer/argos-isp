@@ -190,6 +190,8 @@ export const PERMISOS = {
     'tokens.ver': 'Ver tokens de API',
     'tokens.crear': 'Crear tokens de API',
     'tokens.revocar': 'Revocar tokens de API',
+    'nodos_portal.administrar':
+        'Crear, ver y revocar los tokens de los nodos portal remotos (portal del cliente en otro servidor); solo admin',
     'horus.generar_token':
         'Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)',
     'horus.revocar_token': 'Revocar el token de una integración',
