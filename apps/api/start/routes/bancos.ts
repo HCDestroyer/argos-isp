@@ -487,7 +487,7 @@ const cartera: Ruta[] = [
         cuerpo: v.cerrarDiferenciaValidator,
         idempotente: true,
         descripcion:
-            'Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.',
+            'El saldo de cada factura del pago se cierra como gasto: asiento diferencia_cobro 5.3.05 Diferencias de cobro / CxC, sin tocar IVA ni DTE (el DTE va por el total). pagado no cambia (solo dinero cobrado); la factura queda pagada porque pagado + diferencias vigentes = total. Emite pago.diferencia_cerrada y re-evalúa los servicios. Anular el pago revierte la diferencia. 422 diferencia_sobre_tope; 409 sin_diferencia, pago_anulado o anulacion_en_proceso.',
         respuesta: { status: 201, descripcion: 'Diferencia cerrada', esquema: DiferenciaCerrada },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)

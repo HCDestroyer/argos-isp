@@ -18,7 +18,7 @@ import { ESTADOS_PENDIENTES, columnasFactura, type FacturaFila } from '#billing/
  *   Los reversos aparecen con el tipo de su origen (p. ej. un pago anulado como cargo `pago`).
  */
 
-type TipoMovimiento = 'factura' | 'pago' | 'mora' | 'nota_credito' | 'ajuste'
+type TipoMovimiento = 'factura' | 'pago' | 'mora' | 'nota_credito' | 'diferencia_cobro' | 'ajuste'
 
 export interface MovimientoEstadoCuenta {
     /** empresa (libro) del asiento */
@@ -62,6 +62,8 @@ const TIPOS: Record<string, TipoMovimiento> = {
     pago: 'pago',
     mora: 'mora',
     nota_credito: 'nota_credito',
+    // B: el saldo pequeño de un pago cerrado como gasto (5.3.05 / CxC)
+    diferencia_cobro: 'diferencia_cobro',
 }
 
 /**

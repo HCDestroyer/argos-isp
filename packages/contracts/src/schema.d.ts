@@ -3263,7 +3263,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)
-         * @description Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.
+         * @description El saldo de cada factura del pago se cierra como gasto: asiento diferencia_cobro 5.3.05 Diferencias de cobro / CxC, sin tocar IVA ni DTE (el DTE va por el total). pagado no cambia (solo dinero cobrado); la factura queda pagada porque pagado + diferencias vigentes = total. Emite pago.diferencia_cerrada y re-evalúa los servicios. Anular el pago revierte la diferencia. 422 diferencia_sobre_tope; 409 sin_diferencia, pago_anulado o anulacion_en_proceso.
          */
         post: operations["pagosCerrarDiferencia"];
         delete?: never;
@@ -6249,12 +6249,13 @@ export interface components {
             monto: components["schemas"]["Dinero"];
             /** @description diferencia_cobro_tope de la empresa */
             tope: components["schemas"]["Dinero"];
-            notas: {
+            /** @description Una por factura: el saldo cerrado como gasto, sin tocar IVA ni DTE */
+            diferencias: {
                 factura_id: number;
-                nota_credito_id: number;
+                diferencia_id: number;
                 monto: components["schemas"]["Dinero"];
-                /** @description true = NCRE (la factura tenía DTE); false = nota interna */
-                ncre: boolean;
+                /** @description Asiento diferencia_cobro (5.3.05 / CxC) */
+                asiento_id: number;
             }[];
         };
         /**
@@ -6778,11 +6779,11 @@ export interface components {
             /** @description FACT, FPEQ… (null sin FEL) */
             tipo_dte?: string | null;
             /**
-             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)
+             * @description servicio = factura del periodo; mora = recargo por vencimiento de otra factura
              * @enum {string}
              */
-            tipo?: "servicio" | "mora" | "cargo";
-            /** @description Factura que originó la mora o el cargo */
+            tipo?: "servicio" | "mora";
+            /** @description Factura que originó la mora */
             factura_origen_id?: number | null;
             /**
              * Format: date-time
@@ -7335,8 +7336,11 @@ export interface components {
             empresa_id?: number;
             /** Format: date */
             fecha: string;
-            /** @enum {string} */
-            tipo: "factura" | "pago" | "mora" | "nota_credito" | "ajuste";
+            /**
+             * @description diferencia_cobro = saldo pequeño de un pago cerrado como gasto (abono sin cobro)
+             * @enum {string}
+             */
+            tipo: "factura" | "pago" | "mora" | "nota_credito" | "diferencia_cobro" | "ajuste";
             referencia_id: number;
             descripcion: string;
             cargo: components["schemas"]["Dinero"];
@@ -15739,7 +15743,7 @@ export interface operations {
                 estado?: "por_certificar" | "emitida" | "parcial" | "pagada" | "vencida" | "anulada" | "castigada" | "acreditada";
                 periodo?: string;
                 /** @description servicio = factura del periodo; mora = recargo por vencimiento */
-                tipo?: "servicio" | "mora" | "cargo";
+                tipo?: "servicio" | "mora";
             };
             header?: never;
             path?: never;

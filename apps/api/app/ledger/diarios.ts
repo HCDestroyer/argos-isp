@@ -132,6 +132,8 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     banco: 'VAR',
     provision: 'VAR',
     castigo: 'VAR',
+    // B: diferencia de cobro como gasto (5.3.05 / CxC)
+    diferencia_cobro: 'VAR',
 }
 
 export interface DiarioAsiento {

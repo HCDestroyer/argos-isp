@@ -41,6 +41,8 @@ export const ORIGENES_ASIENTO = [
     'banco',
     'provision',
     'castigo',
+    // B (decisión del líder): diferencia de cobro como gasto; origen_id = `billing.diferencias_cobro.id`
+    'diferencia_cobro',
     // pasivo del programa de lealtad (`contratos/lealtad.md` §6); origen_id = `lealtad.movimientos.id`
     'lealtad',
 ] as const
