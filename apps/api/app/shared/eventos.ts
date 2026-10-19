@@ -317,6 +317,21 @@ export interface CatalogoEventos {
         facturas: number[]
         monto: Dinero
     }
+    /**
+     * Decisión del PM (19 oct): lo que sería una factura de Q0 (mes gratis, descuento del 100 %, cargo
+     * sin costo, canje) es una bonificación interna; sin CxC ni documento para el cliente
+     */
+    'bonificacion.registrada': {
+        bonificacion_id: number
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number | null
+        /** YYYY-MM-DD */
+        periodo: string
+        origen: 'mes_gratis' | 'descuento_100' | 'cargo_sin_costo' | 'canje'
+        /** valor con IVA de lo bonificado */
+        bruto: Dinero
+    }
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
     /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
@@ -562,6 +577,10 @@ export interface CatalogoEventos {
         cliente_id: number
         puntos: number
     }
+    /** canje de puntos (fase 2): reservado para la próxima factura, aplicado (nota o plan temporal) o revertido */
+    'lealtad.canje_reservado': PayloadCanjeLealtad
+    'lealtad.canje_aplicado': PayloadCanjeLealtad
+    'lealtad.canje_revertido': PayloadCanjeLealtad
     'lealtad.referido_calificado': {
         /** `lealtad.referidos.id` */
         referido_id: number
@@ -633,6 +652,22 @@ type PayloadHallazgoHorus = PayloadClienteHorus & {
     }
 }
 
+/** Canje de lealtad (`contratos/lealtad.md` §13). */
+interface PayloadCanjeLealtad {
+    canje_id: number
+    empresa_id: number
+    cliente_id: number
+    servicio_id: number
+    premio_id: number
+    /** tipo de premio: descuento_factura, mes_gratis, mejora_plan… */
+    tipo: string
+    puntos: number
+    /** factura con el descuento (nota de crédito o próxima factura); null si no aplica */
+    factura_id: number | null
+    /** aditivo (decisión del PM, 19 oct): la bonificación a la que se aplicó en lugar de una factura de Q0 */
+    bonificacion_id?: number | null
+}
+
 export type NombreEvento = keyof CatalogoEventos
 export type PayloadEvento<E extends NombreEvento> = CatalogoEventos[E]
 
@@ -663,6 +698,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'pago.diferencia_cerrada',
+    'bonificacion.registrada',
     'nota_credito.emitida',
     'nota_credito.anulada',
     'promesa.creada',
@@ -696,6 +732,9 @@ export const EVENTOS = [
     'lealtad.puntos_revertidos',
     'lealtad.puntos_por_vencer',
     'lealtad.puntos_vencidos',
+    'lealtad.canje_reservado',
+    'lealtad.canje_aplicado',
+    'lealtad.canje_revertido',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',

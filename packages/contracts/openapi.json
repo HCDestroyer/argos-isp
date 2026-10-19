@@ -5697,6 +5697,247 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bonificaciones": {
+      "get": {
+        "operationId": "bonificacionesListar",
+        "summary": "Listar bonificaciones (lo que antes era una factura de Q0)",
+        "description": "Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero quedan como bonificación: registro interno con su motivo y su asiento 5.1.01 / ingreso, sin CxC, IVA, DTE ni documento para el cliente. Una bonificación de periodo (clave servicio_id-periodo) ocupa el periodo.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "mes_gratis",
+                "descuento_100",
+                "cargo_sin_costo",
+                "canje"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Periodo desde (YYYY-MM-DD)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Periodo hasta (YYYY-MM-DD)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de bonificaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Bonificacion"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bonificaciones/{id}": {
+      "get": {
+        "operationId": "bonificacionesVer",
+        "summary": "Ver una bonificación",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bonificación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bonificacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cajas": {
       "get": {
         "operationId": "cajasListar",
@@ -11463,6 +11704,408 @@
         "x-implementado": true
       }
     },
+    "/api/v1/conceptos-cargo": {
+      "get": {
+        "operationId": "conceptosCargoListar",
+        "summary": "Catálogo de conceptos de cargo único (cuenta de ingreso e IVA) por empresa",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "description": "Solo activos (true) o inactivos",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conceptos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConceptoCargo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "conceptosCargoCrear",
+        "summary": "Crear concepto de cargo único",
+        "description": "422 cuenta_codigo si la cuenta no existe, no es de ingreso, no es imputable o es de otra empresa; 409 concepto_cargo_duplicado.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa del catálogo; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "producto",
+                      "otro"
+                    ],
+                    "description": "producto = bien, otro = servicio (DTE); por defecto otro"
+                  },
+                  "cuenta_codigo": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "description": "Cuenta de ingreso imputable del plan (p. ej. 4.1.03)"
+                  },
+                  "gravable": {
+                    "description": "Lleva IVA (por defecto sí)",
+                    "type": "boolean"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "cuenta_codigo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Concepto creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptoCargo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.configurar_conceptos; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.configurar_conceptos",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/conceptos-cargo/{id}": {
+      "get": {
+        "operationId": "conceptosCargoVer",
+        "summary": "Ver concepto de cargo único",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Concepto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptoCargo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "conceptosCargoEditar",
+        "summary": "Editar o desactivar concepto de cargo único",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "producto",
+                      "otro"
+                    ]
+                  },
+                  "cuenta_codigo": {
+                    "type": "string",
+                    "maxLength": 20
+                  },
+                  "gravable": {
+                    "type": "boolean"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Concepto actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptoCargo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.configurar_conceptos; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.configurar_conceptos",
+        "x-implementado": true
+      }
+    },
     "/api/v1/constancias": {
       "get": {
         "operationId": "constanciasListar",
@@ -16398,6 +17041,224 @@
           }
         },
         "x-permiso": "facturas.sustituir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/facturas/cargo-unico": {
+      "post": {
+        "operationId": "facturasCargoUnico",
+        "summary": "Emitir un cargo único manual (instalación, equipo, visita técnica…)",
+        "description": "Factura manual con clave_unica cargo-<uuid> (no ocupa ningún periodo). Cada línea sale de un concepto del catálogo de la empresa (GET /conceptos-cargo: cuenta de ingreso e IVA) con su precio bruto y descuentos opcionales (IVA del neto, 5.1.01). Con servicio_id es del servicio (y vencida cuenta para el corte); sin él, del cliente_id en la empresa activa. Sin mora. Total > 0: asiento CxC / ingresos + IVA, factura.emitida y certificación según el modo FEL. Total Q0: exige motivo_sin_costo_id + motivo_sin_costo_texto y el permiso facturas.cargo_sin_costo (403); no hay factura (decisión del PM: nunca una factura de Q0): responde documento = bonificacion con la bonificación (asiento interno 5.1.01 / ingreso, sin CxC, IVA ni DTE). 422 concepto inactivo o de otra empresa, descuentos mayores que el bruto, motivo con total > 0, concepto_exento_con_fel.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Servicio del cargo (su empresa, cliente, días de gracia y modo FEL); vencido cuenta para el corte"
+                  },
+                  "cliente_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cliente del cargo: obligatorio sin servicio; con servicio, si viene, debe ser su dueño"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa del cargo sin servicio; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "vence_en": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Hoy o después; por defecto hoy + días de gracia del servicio (sin servicio: hoy)"
+                  },
+                  "lineas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "concepto_id": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Concepto del catálogo (GET /conceptos-cargo)"
+                        },
+                        "descripcion": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 200
+                        },
+                        "cantidad": {
+                          "type": "string",
+                          "pattern": "^\\d{1,6}(\\.\\d{1,4})?$",
+                          "description": "Por defecto 1"
+                        },
+                        "precio_unitario": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Precio bruto con IVA incluido (> 0), hasta 2 decimales; lo regalado va como descuento",
+                          "examples": [
+                            "150.00"
+                          ]
+                        },
+                        "descuentos": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "concepto": {
+                                "type": "string",
+                                "minLength": 2,
+                                "maxLength": 200
+                              },
+                              "monto": {
+                                "type": "string",
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "concepto",
+                              "monto"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 10,
+                          "description": "Descuentos de la línea (IVA incluido; juntos, hasta su bruto)"
+                        }
+                      },
+                      "required": [
+                        "concepto_id",
+                        "precio_unitario"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 50
+                  },
+                  "motivo_sin_costo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo con total Q0 (obligatorio entonces) y el permiso facturas.cargo_sin_costo (GET /motivos-sin-costo)"
+                  },
+                  "motivo_sin_costo_texto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Explicación del Q0 (obligatoria con motivo_sin_costo_id)"
+                  }
+                },
+                "required": [
+                  "lineas"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Factura emitida o, en Q0, bonificación registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CargoUnicoEmitido"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.emitir_cargo_unico; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.emitir_cargo_unico",
         "x-implementado": true
       }
     },
@@ -21711,6 +22572,1056 @@
         "x-implementado": true
       }
     },
+    "/api/v1/lealtad/canjes": {
+      "get": {
+        "operationId": "lealtadCanjes",
+        "summary": "Canjes de puntos y su estado",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "reservado",
+                "aplicado",
+                "revertido",
+                "rechazado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canjes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCanjesLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "lealtadCanjear",
+        "summary": "Canjear puntos por un premio",
+        "description": "Los puntos salen al crear el canje (lotes que vencen antes primero; con diferimiento, asiento 2.1.10 / 4.1.06). mejora_plan programa el plan temporal (falla todo si no se puede); un descuento con factura_id emite la nota de crédito sobre la línea del plan (422 `nota_fuera_de_plazo`); sin factura queda reservado para la próxima factura. 422 `programa_inactivo`, `premio_inactivo`, `servicio_no_valido`, `saldo_insuficiente`, `parametro_sin_confirmar` (bien); 409 `sin_existencias`, `canje_pendiente`.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cliente_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "premio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "factura_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Solo descuentos: aplicarlo a una factura ya emitida con nota de crédito (NCRE con FEL)"
+                  }
+                },
+                "required": [
+                  "cliente_id",
+                  "servicio_id",
+                  "premio_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Canje",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.canjear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.canjear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/canjes/{id}": {
+      "get": {
+        "operationId": "lealtadVerCanje",
+        "summary": "Ver un canje",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canje",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/canjes/{id}/revertir": {
+      "post": {
+        "operationId": "lealtadRevertirCanje",
+        "summary": "Revertir un canje reservado (devuelve los puntos)",
+        "description": "Solo reservado: los puntos vuelven con su vencimiento original (un lote nuevo por cada lote que pagó el canje, asiento 4.1.05 / 2.1.10). 409 `canje_no_revertible`.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Canje revertido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.revertir_canje; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.revertir_canje",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/premios": {
+      "get": {
+        "operationId": "lealtadPremios",
+        "summary": "Catálogo de premios",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "programa_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "descuento_factura",
+                "mes_gratis",
+                "mejora_plan",
+                "bien",
+                "boletos"
+              ]
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "en_portal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Premios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaPremiosLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "lealtadCrearPremio",
+        "summary": "Agregar un premio al catálogo",
+        "description": "Campos por tipo (§5): descuento_factura con descuento_tipo y descuento_valor (tope opcional en porcentaje); mes_gratis; mejora_plan con plan_destino_id y dias; bien (el canje espera la decisión premio_bien_iva). 422 `recompensa_no_disponible` con boletos (fase 3).",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "programa_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "descuento_factura",
+                      "mes_gratis",
+                      "mejora_plan",
+                      "bien",
+                      "boletos"
+                    ],
+                    "description": "descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien; boletos llega en la fase 3"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "costo_puntos": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000
+                  },
+                  "descuento_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "monto",
+                          "porcentaje"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "descuento_valor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "tope": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "plan_destino_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "dias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 366
+                  },
+                  "costo_unitario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "existencias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "en_portal": {
+                    "type": "boolean"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "programa_id",
+                  "tipo",
+                  "nombre",
+                  "costo_puntos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Premio creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremioLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/premios/{id}": {
+      "get": {
+        "operationId": "lealtadVerPremio",
+        "summary": "Ver un premio",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Premio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremioLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "lealtadEditarPremio",
+        "summary": "Editar o desactivar un premio",
+        "description": "El tipo no cambia; activo = false lo saca del catálogo (no se borra).",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "costo_puntos": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000000
+                  },
+                  "descuento_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "monto",
+                          "porcentaje"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "descuento_valor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "tope": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "plan_destino_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "dias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 366
+                  },
+                  "costo_unitario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "existencias": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "en_portal": {
+                    "type": "boolean"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Premio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PremioLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.configurar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/lealtad/programa": {
       "get": {
         "operationId": "lealtadPrograma",
@@ -22095,6 +24006,14 @@
                     "type": "string",
                     "maxLength": 20000,
                     "description": "Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24)"
+                  },
+                  "visible_portal": {
+                    "description": "El cliente ve sus puntos en el portal",
+                    "type": "boolean"
+                  },
+                  "canje_portal": {
+                    "description": "El cliente canjea desde el portal (necesita visible_portal)",
+                    "type": "boolean"
                   },
                   "vigente_desde": {
                     "type": "string",
@@ -24085,7 +26004,8 @@
                 "baja_activo",
                 "diferido",
                 "alta_activo",
-                "lealtad"
+                "lealtad",
+                "bonificacion"
               ]
             }
           },
@@ -25403,6 +27323,376 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/motivos-sin-costo": {
+      "get": {
+        "operationId": "motivosSinCostoListar",
+        "summary": "Catálogo de motivos de facturas en Q0 por empresa",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "description": "Solo activos (true) o inactivos",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Motivos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MotivoSinCosto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "motivosSinCostoCrear",
+        "summary": "Crear motivo de factura en Q0",
+        "description": "409 motivo_sin_costo_duplicado.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa del catálogo; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Motivo creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotivoSinCosto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.configurar_motivos; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.configurar_motivos",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/motivos-sin-costo/{id}": {
+      "get": {
+        "operationId": "motivosSinCostoVer",
+        "summary": "Ver motivo de factura en Q0",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Motivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotivoSinCosto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "motivosSinCostoEditar",
+        "summary": "Renombrar o desactivar motivo de factura en Q0",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Motivo actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotivoSinCosto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.configurar_motivos; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.configurar_motivos",
         "x-implementado": true
       }
     },
@@ -35952,6 +38242,152 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/bonificaciones": {
+      "get": {
+        "operationId": "reportesBonificaciones",
+        "summary": "Bonificaciones por motivo, origen y mes (lo que antes era una factura en Q0)",
+        "description": "Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero son bonificaciones (asiento interno 5.1.01 / ingreso por la base). Por mes del periodo, motivo y origen, con el valor bruto entregado sin cobrar y la base del asiento. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga con Content-Disposition)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: el día 1 del mes de hace 11 meses",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto: hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "motivo_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo un motivo (GET /motivos-sin-costo)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "description": "mes_gratis, descuento_100, cargo_sin_costo o canje",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "mes_gratis",
+                "descuento_100",
+                "cargo_sin_costo",
+                "canje"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteBonificaciones"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/cartera-vencida": {
       "get": {
         "operationId": "reportesCarteraVencida",
@@ -37597,6 +40033,10 @@
                         "empresas.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
+                        "facturas.cargo_sin_costo",
+                        "facturas.configurar_conceptos",
+                        "facturas.configurar_motivos",
+                        "facturas.emitir_cargo_unico",
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.sustituir",
@@ -37884,6 +40324,10 @@
                         "empresas.ver",
                         "facturas.anular",
                         "facturas.anular_nota_credito",
+                        "facturas.cargo_sin_costo",
+                        "facturas.configurar_conceptos",
+                        "facturas.configurar_motivos",
+                        "facturas.emitir_cargo_unico",
                         "facturas.generar",
                         "facturas.nota_credito",
                         "facturas.sustituir",
@@ -43944,6 +46388,10 @@
                             "empresas.ver",
                             "facturas.anular",
                             "facturas.anular_nota_credito",
+                            "facturas.cargo_sin_costo",
+                            "facturas.configurar_conceptos",
+                            "facturas.configurar_motivos",
+                            "facturas.emitir_cargo_unico",
                             "facturas.generar",
                             "facturas.nota_credito",
                             "facturas.sustituir",
@@ -46375,7 +48823,8 @@
               "baja_activo",
               "diferido",
               "alta_activo",
-              "lealtad"
+              "lealtad",
+              "bonificacion"
             ]
           },
           "origen_id": {
@@ -46878,6 +49327,143 @@
           }
         }
       },
+      "Bonificacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cliente_id",
+          "servicio_id",
+          "periodo",
+          "clave_unica",
+          "concepto",
+          "origen",
+          "bruto",
+          "base",
+          "lineas",
+          "motivo_id",
+          "motivo_nombre",
+          "motivo_texto",
+          "canje_id",
+          "asiento_id",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date"
+          },
+          "clave_unica": {
+            "type": "string",
+            "description": "servicio_id-periodo (ocupa el periodo: el cron no lo vuelve a facturar) o cargo-<uuid>"
+          },
+          "concepto": {
+            "type": "string"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "mes_gratis",
+              "descuento_100",
+              "cargo_sin_costo",
+              "canje"
+            ]
+          },
+          "bruto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor con IVA de lo entregado sin cobrar"
+          },
+          "base": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Sin IVA: monto del asiento 5.1.01 / ingreso"
+          },
+          "lineas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "concepto",
+                "tipo",
+                "cantidad",
+                "precio_unitario",
+                "gravable",
+                "iva",
+                "total"
+              ],
+              "properties": {
+                "concepto": {
+                  "type": "string"
+                },
+                "tipo": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "string"
+                },
+                "precio_unitario": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "gravable": {
+                  "type": "boolean"
+                },
+                "iva": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "total": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "cuenta_codigo": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "motivo_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "motivo_nombre": {
+            "type": "string"
+          },
+          "motivo_texto": {
+            "type": "string"
+          },
+          "canje_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Caja": {
         "type": "object",
         "required": [
@@ -47183,6 +49769,179 @@
           }
         }
       },
+      "CanjeLealtad": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "programa_id",
+          "cliente_id",
+          "servicio_id",
+          "premio_id",
+          "premio_nombre",
+          "tipo",
+          "puntos",
+          "estado",
+          "descuento",
+          "factura_id",
+          "nota_credito_id",
+          "plan_temporal_id",
+          "movimiento_id",
+          "canal",
+          "aplicado_en",
+          "revertido_en",
+          "motivo",
+          "creado_por",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "premio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "premio_nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "descuento_factura",
+              "mes_gratis",
+              "mejora_plan",
+              "bien",
+              "boletos"
+            ]
+          },
+          "puntos": {
+            "type": "integer"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "reservado",
+              "aplicado",
+              "revertido",
+              "rechazado"
+            ]
+          },
+          "descuento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Q descontados; null en un descuento aún reservado"
+          },
+          "factura_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bonificacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Bonificación a la que se aplicó si el descuento dejó el periodo en cero (nunca una factura de Q0)"
+          },
+          "nota_credito_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "plan_temporal_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "movimiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "panel",
+              "portal"
+            ]
+          },
+          "aplicado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revertido_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CanjeSso": {
         "type": "object",
         "required": [
@@ -47266,6 +50025,44 @@
               }
             },
             "description": "Solo con `resultado: vinculacion_requerida`"
+          }
+        }
+      },
+      "CargoUnicoEmitido": {
+        "type": "object",
+        "required": [
+          "documento",
+          "factura",
+          "bonificacion"
+        ],
+        "properties": {
+          "documento": {
+            "type": "string",
+            "enum": [
+              "factura",
+              "bonificacion"
+            ],
+            "description": "bonificacion si el total quedó en Q0 (decisión del PM: nunca una factura de Q0)"
+          },
+          "factura": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FacturaDetalle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bonificacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Bonificacion"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -48464,6 +51261,74 @@
           "pago": {
             "$ref": "#/components/schemas/Pago",
             "description": "Solo al aprobar: el pago registrado (aplicaciones y servicios)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConceptoCargo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "tipo",
+          "cuenta_codigo",
+          "cuenta_nombre",
+          "gravable",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "producto",
+              "otro"
+            ],
+            "description": "producto = bien, otro = servicio (DTE)"
+          },
+          "cuenta_codigo": {
+            "type": "string",
+            "description": "Cuenta de ingreso del plan de cuentas"
+          },
+          "cuenta_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gravable": {
+            "type": "boolean",
+            "description": "Lleva IVA (incluido en el precio)"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Uno inactivo no se usa en cargos nuevos"
           },
           "version": {
             "type": "integer",
@@ -52938,6 +55803,31 @@
               "null"
             ]
           },
+          "cargo_unico": {
+            "type": "boolean",
+            "description": "Cargo único manual (POST /facturas/cargo-unico, clave_unica cargo-<uuid>)"
+          },
+          "motivo_sin_costo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cargo en Q0: motivo del catálogo (GET /motivos-sin-costo)"
+          },
+          "motivo_sin_costo_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo_sin_costo_texto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Explicación del cargo en Q0"
+          },
           "origen": {
             "type": [
               "string",
@@ -53046,7 +55936,8 @@
               "servicio",
               "producto",
               "mora",
-              "otro"
+              "otro",
+              "descuento"
             ]
           },
           "cantidad": {
@@ -53060,10 +55951,31 @@
             "type": "boolean"
           },
           "iva": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "En una línea descuento, negativo: el IVA de la factura es el del neto"
           },
           "total": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "En una línea descuento, negativo"
+          },
+          "linea_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Solo en tipo descuento: la línea que descuenta (de la misma factura)"
+          },
+          "descuento": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Suma de los descuentos de esta línea (0.00 si no tiene)"
+          },
+          "cuenta_codigo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cuenta de ingreso de la línea (concepto de un cargo único); null = la de su tipo"
           }
         }
       },
@@ -54978,6 +57890,48 @@
           }
         }
       },
+      "MotivoSinCosto": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Uno inactivo no se usa en cargos nuevos"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Movimiento": {
         "type": "object",
         "required": [
@@ -55643,6 +58597,27 @@
           }
         ]
       },
+      "PaginaCanjesLealtad": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CanjeLealtad"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "PaginaComprobantes": {
         "type": "object",
         "required": [
@@ -55665,6 +58640,27 @@
           },
           "resumen": {
             "$ref": "#/components/schemas/ResumenComprobantes"
+          }
+        }
+      },
+      "PaginaPremiosLealtad": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PremioLealtad"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -58752,6 +61748,138 @@
           }
         }
       },
+      "PremioLealtad": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "programa_id",
+          "tipo",
+          "nombre",
+          "costo_puntos",
+          "descuento_tipo",
+          "descuento_valor",
+          "tope",
+          "plan_destino_id",
+          "dias",
+          "costo_unitario",
+          "existencias",
+          "en_portal",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "descuento_factura",
+              "mes_gratis",
+              "mejora_plan",
+              "bien",
+              "boletos"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "costo_puntos": {
+            "type": "integer"
+          },
+          "descuento_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "monto",
+              "porcentaje"
+            ]
+          },
+          "descuento_valor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_destino_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "dias": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "costo_unitario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "existencias": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null = sin límite"
+          },
+          "en_portal": {
+            "type": "boolean"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Problem": {
         "type": "object",
         "required": [
@@ -58816,6 +61944,8 @@
           "minimo_canje",
           "terminos",
           "terminos_hash",
+          "visible_portal",
+          "canje_portal",
           "vigente_desde",
           "vigente_hasta",
           "version",
@@ -58877,6 +62007,14 @@
           "terminos_hash": {
             "type": "string",
             "description": "SHA-256 de los términos publicados"
+          },
+          "visible_portal": {
+            "type": "boolean",
+            "description": "El cliente ve sus puntos en el portal"
+          },
+          "canje_portal": {
+            "type": "boolean",
+            "description": "El cliente canjea desde el portal (solo con visible_portal)"
           },
           "vigente_desde": {
             "type": "string",
@@ -60632,6 +63770,162 @@
                 "type": [
                   "number",
                   "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteBonificaciones": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "periodo",
+                "motivo_id",
+                "motivo",
+                "origen",
+                "bonificaciones",
+                "valor_bruto",
+                "base"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "periodo": {
+                  "type": "string"
+                },
+                "motivo_id": {
+                  "type": "integer"
+                },
+                "motivo": {
+                  "type": "string"
+                },
+                "origen": {
+                  "type": "string"
+                },
+                "bonificaciones": {
+                  "type": "integer"
+                },
+                "valor_bruto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "base": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "periodo",
+              "motivo_id",
+              "motivo",
+              "origen",
+              "bonificaciones",
+              "valor_bruto",
+              "base"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "periodo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "motivo_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "motivo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "origen": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bonificaciones": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "valor_bruto": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "base": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               }
             },
@@ -63040,6 +66334,17 @@
             "description": "Ya tenían factura del periodo"
           },
           "facturas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "bonificadas": {
+            "type": "integer",
+            "description": "Periodos en cero registrados como bonificación (nunca una factura de Q0)"
+          },
+          "bonificaciones": {
             "type": "array",
             "items": {
               "type": "integer",

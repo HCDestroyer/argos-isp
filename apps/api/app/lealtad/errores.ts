@@ -53,3 +53,52 @@ export class ReferidoInvalido extends Problema {
         super(422, 'referido_invalido', 'Referido inválido', detalle)
     }
 }
+
+/** 403 `canje_portal_inactivo`: el programa no permite canjear desde el portal. */
+export class CanjePortalInactivo extends Problema {
+    constructor(empresaId: number) {
+        super(
+            403,
+            'canje_portal_inactivo',
+            'Canje en el portal inactivo',
+            `El programa de lealtad de la empresa ${empresaId} no permite canjear desde el portal`,
+        )
+    }
+}
+
+/** 409 `sin_existencias`: premio agotado. */
+export class SinExistencias extends Conflicto {
+    constructor(premioId: number) {
+        super(`El premio ${premioId} no tiene existencias`, 'sin_existencias', 'Premio agotado')
+    }
+}
+
+/** 409 `canje_pendiente`: ya hay un descuento reservado para el servicio. */
+export class CanjePendiente extends Conflicto {
+    constructor(canjeId: number) {
+        super(
+            `El servicio ya tiene el descuento ${canjeId} reservado para su próxima factura`,
+            'canje_pendiente',
+            'Canje pendiente',
+        )
+    }
+}
+
+/** 409 `canje_no_revertible`: canje entregado o aplicado a una factura vigente. */
+export class CanjeNoRevertible extends Conflicto {
+    constructor(detalle: string) {
+        super(detalle, 'canje_no_revertible', 'Canje no revertible')
+    }
+}
+
+/** 422 `parametro_sin_confirmar`: falta una decisión del contador (`premio_bien_iva`, `mejora_facturacion`). */
+export class ParametroSinConfirmar extends Problema {
+    constructor(parametro: string) {
+        super(
+            422,
+            'parametro_sin_confirmar',
+            'Parámetro sin confirmar',
+            `Falta la decisión del contador sobre ${parametro} (contrato de lealtad §17)`,
+        )
+    }
+}
