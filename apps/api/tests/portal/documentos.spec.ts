@@ -90,6 +90,24 @@ test.group('Documentos: HTML a PDF', () => {
         }
     })
 
+    test('el texto se lee aunque el flujo comprimido termine en 0x0D', async ({ assert }) => {
+        // pdfkit escribe `stream\n<datos>\nendstream`; ~1 de cada 256 documentos termina sus datos
+        // en `\r` (byte bajo del Adler-32) y un extractor que busca `\r?\nendstream` lo perdía.
+        let encontrado: { pdf: Buffer; serie: string } | null = null
+        for (let i = 0; i < 5000 && !encontrado; i++) {
+            const serie = `ABCD1234-1449${i}`
+            const pdf = await htmlAPdf(`<h1>Factura</h1><p>Serie ${serie}</p>`)
+            const binario = pdf.toString('latin1')
+            const flujo = /\/Length (\d+)\n\/Filter \/FlateDecode\n>>\nstream\n/.exec(binario)!
+            const inicio = flujo.index + flujo[0].length
+            if (pdf[inicio + Number(flujo[1]) - 1] === 0x0d) encontrado = { pdf, serie }
+        }
+        assert.isNotNull(encontrado, 'ningún documento terminó su flujo en 0x0D')
+        const texto = textoDePdf(encontrado!.pdf)
+        assert.include(texto, 'Factura')
+        assert.include(texto, `Serie ${encontrado!.serie}`)
+    })
+
     test('tabla larga pasa a otra página', async ({ assert }) => {
         const filas = Array.from(
             { length: 120 },
