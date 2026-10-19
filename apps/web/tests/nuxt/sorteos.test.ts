@@ -42,7 +42,9 @@ describe('sorteos · utilidades', () => {
         expect(accionesSorteo('corte_cerrado')).toEqual(['ejecutar', 'cancelar'])
         expect(accionesSorteo('ejecutado')).toEqual([])
         expect(requisitosDelPaso('abrir')).toEqual(['bases_diaco'])
-        expect(requisitosDelPaso('ejecutar')).toEqual(['bases_diaco', 'autorizacion_gobernacion', 'fianza', 'isr_premios', 'timbre_fiscal', 'delegado_o_notario'])
+        // Decisión del PM: Gobernación y fianza se marcan, pero no bloquean la ejecución.
+        expect(requisitosDelPaso('ejecutar')).toEqual(['bases_diaco', 'isr_premios', 'timbre_fiscal', 'delegado_o_notario'])
+        expect(REQUISITOS_SORTEO.autorizacion_gobernacion.noBloquea && REQUISITOS_SORTEO.fianza.noBloquea).toBe(true)
     })
 
     it('422 requisito_pendiente y bases_incompletas, legibles', () => {
@@ -58,11 +60,13 @@ describe('sorteos · utilidades', () => {
         expect(isrPremio(efectivo).toFixed(2)).toBe('100.00')
         expect(netoPremio(efectivo).toFixed(2)).toBe('900.00')
         expect(netoPremio({ ...efectivo, tipo: 'bien' }).toFixed(2)).toBe('1000.00')
-        expect(cuerpoEntregaPremio({ tipo: 'efectivo', metodo: 'caja', caja_id: 2, banco_id: 1, cuenta_bancaria_id: null, contrapartida: null, cuenta_codigo: '', nota: '' }))
+        expect(cuerpoEntregaPremio({ tipo: 'efectivo', metodo: 'caja', caja_id: 2, banco_id: 1, cuenta_bancaria_id: null, contrapartida: null, compra_linea_id: null, cuenta_codigo: '', nota: '' }))
             .toEqual({ metodo: 'caja', caja_id: 2, banco_id: null, cuenta_bancaria_id: null, nota: null })
-        expect(cuerpoEntregaPremio({ tipo: 'bien', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: 'cuenta', cuenta_codigo: '1.1.08', nota: 'Recibió el titular' }))
-            .toEqual({ contrapartida: 'cuenta', cuenta_codigo: '1.1.08', nota: 'Recibió el titular' })
-        expect(cuerpoEntregaPremio({ tipo: 'servicio', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: null, cuenta_codigo: '', nota: '' })).toEqual({ nota: null })
+        expect(cuerpoEntregaPremio({ tipo: 'bien', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: 'cuenta', compra_linea_id: 11, cuenta_codigo: '1.1.14', nota: 'Recibió el titular' }))
+            .toEqual({ contrapartida: 'cuenta', cuenta_codigo: '1.1.14', nota: 'Recibió el titular' })
+        expect(cuerpoEntregaPremio({ tipo: 'bien', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: 'compra', compra_linea_id: 11, cuenta_codigo: '1.1.14', nota: '' }))
+            .toEqual({ contrapartida: 'compra', compra_linea_id: 11, nota: null })
+        expect(cuerpoEntregaPremio({ tipo: 'servicio', metodo: null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: null, compra_linea_id: null, cuenta_codigo: '', nota: '' })).toEqual({ nota: null })
     })
 
     it('cuerpo del sorteo: fechas en hora de Guatemala a UTC, montos con 2 decimales, premio_id solo en servicio', () => {
@@ -160,12 +164,12 @@ describe('sorteos · pasos contra los fixtures', () => {
     })
 
     it('ejecutar: 422 sin el timbre fiscal; marcado, elige titulares y suplentes reproducibles; entregar por tipo', async () => {
-        const sinTimbre = await useSorteos().ejecutar(SORTEO_CORTE_ID, { valor_publico: '48213' }, nuevaClaveIdempotencia())
+        const sinTimbre = await useSorteos().ejecutar(SORTEO_CORTE_ID, { valor_publico: '48213', valor_publico_evidencia: 'Leído en el acto' }, nuevaClaveIdempotencia())
         expect(!sinTimbre.ok && sinTimbre.problema.errors?.[0]?.message).toBe('timbre_fiscal')
         await useSorteos().marcarRequisito(SORTEO_CORTE_ID, 'timbre_fiscal', { estado: 'cumplido', evidencia: 'Recibo 63' }, nuevaClaveIdempotencia())
-        const sinValor = await useSorteos().ejecutar(SORTEO_CORTE_ID, { valor_publico: ' ' }, nuevaClaveIdempotencia())
-        expect(!sinValor.ok && sinValor.problema.errors?.[0]?.field).toBe('valor_publico')
-        const ejecutado = await useSorteos().ejecutar(SORTEO_CORTE_ID, { valor_publico: 'Lotería Santa Lucía: 48213', asistentes: [{ nombre: 'Lic. Marta Sosa', rol: 'Notaria' }] }, nuevaClaveIdempotencia())
+        const sinValor = await useSorteos().ejecutar(SORTEO_CORTE_ID, { valor_publico: ' ', valor_publico_evidencia: ' ' }, nuevaClaveIdempotencia())
+        expect(!sinValor.ok && sinValor.problema.errors?.map(e => e.field)).toEqual(['valor_publico', 'valor_publico_evidencia'])
+        const ejecutado = await useSorteos().ejecutar(SORTEO_CORTE_ID, { valor_publico: 'Lotería Santa Lucía: 48213', valor_publico_evidencia: 'Leído por la notaria en loteria.gob.gt', asistentes: [{ nombre: 'Lic. Marta Sosa', rol: 'Notaria' }] }, nuevaClaveIdempotencia())
         if (!ejecutado.ok) {
             throw new Error(ejecutado.problema.title)
         }

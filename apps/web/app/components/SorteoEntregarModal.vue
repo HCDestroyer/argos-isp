@@ -5,8 +5,10 @@ import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 /**
  * Entrega el premio de un titular (`POST /lealtad/sorteos/:id/ganadores/:g/entregar`,
  * `sorteos.entregar`). La contrapartida depende del tipo del premio (§15.3): efectivo sale de una
- * caja, un banco o una cuenta bancaria por el valor menos el ISR; un bien va contra Proveedores
- * (2.1.03) o una cuenta de activo; un servicio queda como canje para la próxima factura.
+ * caja, un banco o una cuenta bancaria por el valor menos el ISR; un bien se entrega con la línea de
+ * la compra registrada con que se compró (`compra`, decisión del PM: un bien a crédito también se
+ * registra primero como compra; `proveedor` responde 422) o contra una cuenta de activo de la lista
+ * blanca (H25, p. ej. un inventario de premios); un servicio queda como canje para la próxima factura.
  */
 const props = defineProps<{
     sorteoId: number
@@ -14,6 +16,10 @@ const props = defineProps<{
     premio: PremioSorteo | null
     /** Nombre del ganador para el encabezado. */
     nombre: string
+    /** Empresa del sorteo: las compras y cuentas se filtran por ella. */
+    empresaId: number
+    /** Líneas de compra ya entregadas en este sorteo (la API respondería 422 `compra_ya_entregada`). */
+    lineasUsadas: number[]
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
@@ -43,9 +49,39 @@ const itemsMetodo: RadioGroupItem[] = [
     { label: 'Cuenta bancaria', value: 'cuenta_bancaria' },
 ]
 const itemsContrapartida: RadioGroupItem[] = [
-    { label: 'Proveedores (2.1.03)', value: 'proveedor', description: 'Comprado a crédito' },
+    { label: 'Compra registrada', value: 'compra', description: 'El bien se compró con factura (al contado o a crédito)' },
     { label: 'Cuenta de activo', value: 'cuenta', description: 'P. ej. inventario de premios' },
 ]
+
+const compras = shallowRef<Compra[]>([])
+const cuentasLibro = shallowRef<Cuenta[]>([])
+const problemaBien = ref<Problem | null>(null)
+const cargandoBien = ref(false)
+const itemsLinea = computed<SelectItem[]>(() => lineasDeBien(compras.value, props.empresaId)
+    .filter(({ linea }) => !props.lineasUsadas.includes(linea.id))
+    .map(({ compra, linea }) => ({
+        label: linea.descripcion,
+        value: linea.id,
+        // Lo que distingue la línea primero (base y documento), para que en 390 px no se corte el monto.
+        description: `${formatearQuetzales(linea.base)} sin IVA · ${compra.serie}-${compra.numero} · ${compra.proveedor_nombre}`,
+    })))
+const itemsCuentaActivo = computed<SelectItem[]>(() => cuentasLibro.value
+    .filter(c => cuentaParaBienDePremio(c, props.empresaId))
+    .map(c => ({ label: `${c.codigo} · ${c.nombre}`, value: c.codigo })))
+
+/** Compras vigentes (con `compras.ver`) y cuentas del plan (con `libro.ver`) para el bien. */
+async function cargarBien() {
+    cargandoBien.value = true
+    problemaBien.value = null
+    const [rCompras, rCuentas] = await Promise.all([
+        puede('compras.ver') ? useCompras().listar({ estado: 'vigente', limit: 200 }) : null,
+        puede('libro.ver') ? useLibro().cuentas() : null,
+    ])
+    cargandoBien.value = false
+    compras.value = rCompras?.ok ? rCompras.data.data : []
+    cuentasLibro.value = rCuentas?.ok ? rCuentas.data : []
+    problemaBien.value = (rCompras && !rCompras.ok ? rCompras.problema : null) ?? (rCuentas && !rCuentas.ok ? rCuentas.problema : null)
+}
 const itemsCaja = computed<SelectItem[]>(() => cajas.value.filter(c => c.activa).map(c => ({ label: c.nombre, value: c.id })))
 const itemsBanco = computed<SelectItem[]>(() => bancosLibro.value.map(b => ({ label: b.nombre, value: b.id, description: `${b.cuenta_codigo} · ${b.cuenta_nombre}` })))
 const itemsCuenta = computed<SelectItem[]>(() => cuentas.value.filter(c => c.activa && c.moneda === 'GTQ').map(c => ({ label: `${c.banco_nombre} · ${c.alias}`, value: c.id, description: c.numero })))
@@ -78,6 +114,9 @@ watch(abierto, (valor) => {
         clave = nuevaClaveIdempotencia()
         if (props.premio.tipo === 'efectivo') {
             void cargarCatalogos()
+        }
+        if (props.premio.tipo === 'bien') {
+            void cargarBien()
         }
     }
 })
@@ -215,7 +254,7 @@ async function enviar(evento: FormSubmitEvent<EntradaEntregaPremio>) {
                         label="Contrapartida"
                         name="contrapartida"
                         required
-                        help="Gasto 5.1.03 Premios y promociones contra esta cuenta."
+                        help="Gasto 5.1.03 Premios y promociones por la base sin IVA."
                     >
                         <URadioGroup
                             v-model="estado.contrapartida"
@@ -224,18 +263,65 @@ async function enviar(evento: FormSubmitEvent<EntradaEntregaPremio>) {
                         />
                     </UFormField>
                     <UFormField
+                        v-if="estado.contrapartida === 'compra'"
+                        label="Línea de la compra"
+                        name="compra_linea_id"
+                        required
+                        :help="puede('compras.ver') ? 'Un bien de una compra vigente de la empresa. Si se compró a crédito, registre antes la compra.' : undefined"
+                    >
+                        <USelect
+                            v-if="puede('compras.ver')"
+                            v-model="estado.compra_linea_id"
+                            :items="itemsLinea"
+                            :loading="cargandoBien"
+                            placeholder="Elija el bien comprado"
+                            class="w-full"
+                            data-prueba="entrega-compra-linea"
+                        />
+                        <p
+                            v-else
+                            class="text-sm text-muted"
+                        >
+                            Sin el permiso compras.ver no se pueden listar las compras: use una cuenta de activo o pida la entrega a quien lo tenga.
+                        </p>
+                    </UFormField>
+                    <p
+                        v-if="estado.contrapartida === 'compra' && puede('compras.ver') && !cargandoBien && !problemaBien && !itemsLinea.length"
+                        class="text-sm text-muted"
+                        data-prueba="entrega-sin-compras"
+                    >
+                        No hay bienes en compras vigentes de la empresa. Registre la compra del premio (al contado o a crédito) y vuelva a abrir esta ventana.
+                    </p>
+                    <UFormField
                         v-if="estado.contrapartida === 'cuenta'"
-                        label="Código de la cuenta de activo"
+                        label="Cuenta de activo"
                         name="cuenta_codigo"
                         required
-                        help="Imputable y de la empresa. Ojo: 1.1.07 es ISR de pagos trimestrales, no inventario."
+                        help="Solo activos imputables fuera de las cuentas control (caja, bancos, CxC, impuestos, tránsito, activo fijo…)."
                     >
-                        <UInput
+                        <USelect
+                            v-if="puede('libro.ver')"
                             v-model="estado.cuenta_codigo"
-                            placeholder="1.1.08"
+                            :items="itemsCuentaActivo"
+                            :loading="cargandoBien"
+                            placeholder="Elija la cuenta"
+                            class="w-full"
+                            data-prueba="entrega-cuenta"
+                        />
+                        <UInput
+                            v-else
+                            v-model="estado.cuenta_codigo"
+                            placeholder="Código, p. ej. 1.1.14"
                             class="w-full font-mono"
+                            data-prueba="entrega-cuenta"
                         />
                     </UFormField>
+                    <ProblemaAlerta
+                        v-if="problemaBien"
+                        :problema="problemaBien"
+                        :reintentar="cargarBien"
+                        :reintentando="cargandoBien"
+                    />
                 </template>
 
                 <UAlert

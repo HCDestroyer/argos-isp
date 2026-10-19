@@ -15,7 +15,9 @@ test('ejecutar un sorteo: el requisito pendiente se explica, se marca y el resul
     // Sin el timbre: la API responde 422 `requisito_pendiente` y el modal dice cuál falta.
     await page.locator('[data-prueba="ejecutar-sorteo"]').click()
     const ejecutar = page.getByRole('dialog', { name: 'Ejecutar el sorteo' })
+    await expect(ejecutar.locator('[data-prueba="ejecutar-fuente"]')).toContainText('Lotería Santa Lucía')
     await ejecutar.getByLabel('Valor público del acto').fill('Lotería Santa Lucía 2026-10-20: 48213')
+    await ejecutar.getByLabel('Cómo se obtuvo el valor').fill('Leído por la notaria en el sitio de la Lotería, en pantalla')
     await ejecutar.getByRole('button', { name: 'Ejecutar sorteo' }).click()
     await expect(ejecutar.locator('[data-prueba="ejecutar-problema"]')).toContainText('Falta el requisito «Timbre fiscal»')
     await ejecutar.getByRole('button', { name: 'Cancelar' }).click()
@@ -30,6 +32,7 @@ test('ejecutar un sorteo: el requisito pendiente se explica, se marca y el resul
 
     await page.locator('[data-prueba="ejecutar-sorteo"]').click()
     await ejecutar.getByLabel('Valor público del acto').fill('Lotería Santa Lucía 2026-10-20: 48213')
+    await ejecutar.getByLabel('Cómo se obtuvo el valor').fill('Leído por la notaria en el sitio de la Lotería, en pantalla')
     await ejecutar.getByRole('button', { name: 'Ejecutar sorteo' }).click()
     await expect(page.locator('[data-prueba="sorteo-estado"]')).toHaveText('Ejecutado')
     const resultado = page.locator('[data-prueba="sorteo-resultado"]')
@@ -52,6 +55,15 @@ test('ejecutar un sorteo: el requisito pendiente se explica, se marca y el resul
     await expect(resultado.locator('[data-ganador="1"] [data-prueba="ganador-estado"]')).toHaveText('Entregado')
     await expect(resultado.locator('[data-ganador="1"] [data-prueba="ganador-entrega"]')).toContainText('Egreso de caja · ISR Q 75.00')
 
+    // H22: la entrega se anula toda junta, con motivo; el premio se puede volver a entregar.
+    await resultado.locator('[data-ganador="1"] [data-prueba="anular-entrega"]').click()
+    const anular = page.getByRole('dialog', { name: 'Anular la entrega' })
+    await expect(anular.locator('[data-prueba="anular-entrega-deshace"]')).toContainText('anula el egreso')
+    await anular.getByLabel('Motivo').fill('Se registró en la caja equivocada')
+    await anular.getByRole('button', { name: 'Anular entrega' }).click()
+    await expect(resultado.locator('[data-ganador="1"] [data-prueba="ganador-estado"]')).toHaveText('Por notificar')
+    await expect(resultado.locator('[data-ganador="1"] [data-prueba="entregar-premio"]')).toBeVisible()
+
     await resultado.locator('[data-prueba="comprobar-sorteo"]').click()
     await expect(resultado.locator('[data-prueba="resultado-comprobacion"]')).toContainText('El resultado se reproduce')
 })
@@ -66,6 +78,7 @@ test('crear un sorteo en borrador con premios por tipo e imagen, y publicar sus 
     await formulario.getByLabel('Regla de participación').fill('Un boleto por servicio activo y al día.')
     await formulario.getByLabel('Premios no reclamados').fill('Pasa al primer suplente.')
     await formulario.getByLabel('Publicación de resultados').fill('En el portal, el mismo día.')
+    await formulario.getByLabel('Fuente del valor público').fill('Primer premio de la Lotería Santa Lucía del día del sorteo')
     await formulario.getByLabel('Participan desde').fill('2026-11-01')
     await formulario.getByLabel('Corte').fill('2026-12-28T23:59')
     await formulario.getByLabel('Sorteo', { exact: true }).fill('2026-12-30T16:00')
@@ -89,4 +102,27 @@ test('crear un sorteo en borrador con premios por tipo e imagen, y publicar sus 
     await expect(page.locator('[data-prueba="sorteo-estado"]')).toHaveText('Bases publicadas')
     await expect(page.locator('[data-prueba="sorteo-compromiso"]')).toContainText(/[0-9a-f]{64}/)
     await expect(page.locator('[data-prueba="sorteo-faltantes"]')).toContainText('Bases publicadas (DIACO)')
+    await expect(page.locator('[data-prueba="sorteo-fuente-valor"]')).toContainText('Lotería Santa Lucía')
+})
+
+/**
+ * Decisión del PM: un bien comprado (al contado o a crédito) se entrega con la línea de su compra;
+ * la contrapartida «Proveedores» ya no existe. «Día del cliente» está ejecutado y su 2.º premio es una
+ * bicicleta comprada a Ciclo Sport (compra #1 de los fixtures).
+ */
+test('entregar un bien con la línea de su compra', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await ir(page, 'Sorteos', /\/lealtad\/sorteos/)
+    await page.getByRole('link', { name: 'Día del cliente' }).click()
+    const resultado = page.locator('[data-prueba="sorteo-resultado"]')
+    await resultado.locator('[data-ganador="2"] [data-prueba="entregar-premio"]').click()
+    const entrega = page.getByRole('dialog', { name: 'Entregar premio' })
+    await expect(entrega.getByRole('radio', { name: /Proveedores/ })).toHaveCount(0)
+    await entrega.getByRole('radio', { name: /Compra registrada/ }).check()
+    await entrega.locator('[data-prueba="entrega-compra-linea"]').click()
+    await expect(page.getByRole('option', { name: /Instalación del soporte/ })).toHaveCount(0)
+    await page.getByRole('option', { name: /Bicicleta de montaña aro 29/ }).click()
+    await entrega.getByRole('button', { name: 'Registrar entrega' }).click()
+    await expect(resultado.locator('[data-ganador="2"] [data-prueba="ganador-estado"]')).toHaveText('Entregado')
+    await expect(resultado.locator('[data-ganador="2"] [data-prueba="ganador-entrega"]')).toContainText('Compra #1')
 })

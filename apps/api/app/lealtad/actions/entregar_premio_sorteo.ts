@@ -21,8 +21,11 @@ import { detalleSorteo, exigirEstado, ganadoresDe, verSorteo } from '#lealtad/so
  *
  * - `efectivo`: sale de Caja o Bancos como un **egreso** (categoría `premios` → 5.1.03; método `caja`,
  *   `banco` o `cuenta_bancaria`, como `POST /egresos`) por lo que se paga.
- * - `bien`: asiento `sorteo` `5.1.03 / contrapartida`: `proveedor` (`2.1.03 Proveedores`, comprado a
- *   crédito) o `cuenta` (`cuenta_codigo`: la cuenta de activo de donde sale, p. ej. inventario).
+ * - `bien`: asiento `sorteo` `5.1.03 / contrapartida`: `compra` (decisión del PM, 19 oct: el bien se
+ *   compró con factura, una compra registrada; su IVA ya es crédito fiscal y el premio es gasto deducible
+ *   `5.1.03` por la base sin IVA de la línea, contra la cuenta de esa línea; si la línea ya fue a
+ *   `5.1.03`, solo se liga); `proveedor` ya no (422 `contrapartida_proveedor`: 2.1.03 solo con una compra)
+ *   y `cuenta` (`cuenta_codigo`: un activo fuera de las cuentas control, H25, p. ej. un inventario).
  * - `servicio`: el crédito de la empresa reúsa el flujo del canje: un canje sin puntos
  *   (`sorteo_ganador_id`) del premio del catálogo (`descuento_factura` o `mes_gratis`) queda reservado
  *   para la próxima factura del servicio del ganador, que lleva la línea `descuento` (`5.1.01`).
@@ -41,12 +44,57 @@ export interface EntradaEntregarPremio {
     caja_id?: number | null
     banco_id?: number | null
     cuenta_bancaria_id?: number | null
-    contrapartida?: 'proveedor' | 'cuenta' | null
+    contrapartida?: 'proveedor' | 'cuenta' | 'compra' | null
     cuenta_codigo?: string | null
+    /** con `compra`: la línea de la compra registrada con la que se compró el bien (decisión del PM) */
+    compra_linea_id?: number | null
     nota?: string | null
 }
 
 const CATEGORIA_PREMIOS = 'premios'
+
+interface CuentaContrapartida {
+    codigo: string
+    tipo: string
+    imputable: boolean
+    empresa_id: number | null
+    contracuenta: boolean
+    auxiliar_cliente: boolean
+}
+
+/**
+ * H25: cuentas control del plan que nunca son la contrapartida de un bien entregado (tienen su propio
+ * documento): cajas y bancos, CxC, impuestos (1.1.04–1.1.09), cobros por liquidar, fondos en tránsito,
+ * estimación de incobrables, gastos anticipados y el activo no corriente (un activo fijo sale con su
+ * baja, `activos.dar_de_baja`).
+ */
+const CONTROL_NO_PERMITIDAS = [
+    '1.1.01',
+    '1.1.02',
+    '1.1.03',
+    '1.1.04',
+    '1.1.05',
+    '1.1.06',
+    '1.1.07',
+    '1.1.08',
+    '1.1.09',
+    '1.1.10',
+    '1.1.11',
+    '1.1.12',
+    '1.1.13',
+    '1.2',
+]
+
+/**
+ * Lista blanca de la contrapartida `cuenta` de un premio en bienes: un activo imputable, propio de la
+ * empresa o global, que no sea contracuenta ni auxiliar de clientes y que no esté bajo las cuentas
+ * control (p. ej. un «Inventario de premios» que crea la empresa).
+ */
+export function cuentaParaBienDePremio(c: CuentaContrapartida, empresaId: number): boolean {
+    if (c.tipo !== 'activo' || !c.imputable || c.contracuenta || c.auxiliar_cliente) return false
+    if (c.empresa_id !== null && Number(c.empresa_id) !== empresaId) return false
+    return !CONTROL_NO_PERMITIDAS.some((p) => c.codigo === p || c.codigo.startsWith(`${p}.`))
+}
 
 /** Categoría de egreso `premios` (→ 5.1.03); se crea la primera vez (la cuenta llega con el paquete GT). */
 async function asegurarCategoriaPremios(t: Transaccion): Promise<void> {
@@ -150,47 +198,10 @@ export default class EntregarPremioSorteo extends DomainAction<
                 )
             }
         } else if (premio.tipo === 'bien') {
-            const errores: ErrorCampo[] = []
-            if (!input.contrapartida) {
-                errores.push({
-                    field: 'contrapartida',
-                    message: 'proveedor (2.1.03) o cuenta (cuenta_codigo)',
-                    rule: 'required',
-                })
-            }
-            let contra: string = CUENTAS_GT.PROVEEDORES
-            if (input.contrapartida === 'cuenta') {
-                const fila = input.cuenta_codigo
-                    ? ((await t.trx
-                          .from('ledger.cuentas')
-                          .where('codigo', input.cuenta_codigo)
-                          .select('tipo', 'imputable', 'empresa_id')
-                          .first()) as { tipo: string; imputable: boolean; empresa_id: number | null } | null)
-                    : null
-                if (
-                    !fila ||
-                    fila.tipo !== 'activo' ||
-                    !fila.imputable ||
-                    (fila.empresa_id !== null && Number(fila.empresa_id) !== sorteo.empresa_id)
-                ) {
-                    errores.push({
-                        field: 'cuenta_codigo',
-                        message:
-                            'La cuenta debe ser de activo, imputable y de la empresa (p. ej. inventario)',
-                        rule: 'cuenta',
-                    })
-                }
-                contra = input.cuenta_codigo ?? ''
-            }
-            if (errores.length > 0) throw new ValidacionFallida(errores)
-            movimientos.push(
-                { cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(valor.plus(isr)) },
-                { cuenta: contra, haber: aTexto(valor) },
+            Object.assign(
+                cambios,
+                await contabilizarBien(t, input, sorteo.empresa_id, valor, isr, movimientos),
             )
-            if (isr.gt(0)) {
-                movimientos.push({ cuenta: CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR, haber: aTexto(isr) })
-            }
-            cambios.contrapartida = input.contrapartida === 'cuenta' ? `cuenta ${contra}` : 'proveedor'
         } else {
             // servicio: canje sin puntos del premio del catálogo, reservado para la próxima factura
             const catalogo = await verPremio(premio.premio_id!, t.trx)
@@ -307,4 +318,123 @@ export default class EntregarPremioSorteo extends DomainAction<
         })
         return detalleSorteo(sorteo.id, t.trx)
     }
+}
+
+/**
+ * Contrapartida de un premio en bienes (decisión del líder y del PM): agrega sus movimientos al asiento
+ * `sorteo` y devuelve lo que se guarda en el ganador.
+ */
+async function contabilizarBien(
+    t: Transaccion,
+    input: EntradaEntregarPremio,
+    empresaId: number,
+    valor: Dec,
+    isr: Dec,
+    movimientos: LineaAsiento[],
+): Promise<Record<string, unknown>> {
+    const errores: ErrorCampo[] = []
+    if (!input.contrapartida) {
+        errores.push({
+            field: 'contrapartida',
+            message: 'compra (compra_linea_id) o cuenta (cuenta_codigo)',
+            rule: 'required',
+        })
+        throw new ValidacionFallida(errores)
+    }
+    const isrMovimiento = () => {
+        if (isr.gt(0)) movimientos.push({ cuenta: CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR, haber: aTexto(isr) })
+    }
+    if (input.contrapartida === 'compra') {
+        const linea = input.compra_linea_id
+            ? ((await t.trx
+                  .from('ledger.compras_lineas as l')
+                  .join('ledger.compras as c', 'c.id', 'l.compra_id')
+                  .join('ledger.cuentas as cu', 'cu.id', 'l.cuenta_id')
+                  .where('l.id', input.compra_linea_id)
+                  .whereNotExists((q) =>
+                      q.from('ledger.compras_anulaciones as x').whereRaw('x.compra_id = c.id'),
+                  )
+                  .select(
+                      'l.id',
+                      'l.base',
+                      'l.tipo',
+                      'c.id as compra_id',
+                      'c.empresa_id',
+                      'c.tipo_documento',
+                      'cu.codigo',
+                  )
+                  .first()) as {
+                  id: number
+                  base: string
+                  tipo: string
+                  compra_id: number
+                  empresa_id: number
+                  tipo_documento: string
+                  codigo: string
+              } | null)
+            : null
+        if (
+            !linea ||
+            Number(linea.empresa_id) !== empresaId ||
+            linea.tipo !== 'bien' ||
+            linea.tipo_documento === 'NCRE'
+        ) {
+            throw new ValidacionFallida([
+                {
+                    field: 'compra_linea_id',
+                    message:
+                        'La línea debe ser un bien de una compra registrada (no anulada, no nota de crédito) de la empresa',
+                    rule: 'compra',
+                },
+            ])
+        }
+        const usada = await t.trx.from('lealtad.sorteos_ganadores').where('compra_linea_id', linea.id).first()
+        if (usada) {
+            throw new ReglaNegocio(
+                `La línea ${linea.id} de la compra ${linea.compra_id} ya es el premio del ganador ${usada.id}`,
+                'compra_ya_entregada',
+            )
+        }
+        const base = dec(linea.base)
+        // la línea ya fue gasto de premios en la compra: solo el ISR; si no, 5.1.03 / su cuenta por la base
+        if (linea.codigo !== CUENTAS_GT.PREMIOS_PROMOCIONES) {
+            movimientos.push(
+                { cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(base) },
+                { cuenta: linea.codigo, haber: aTexto(base) },
+            )
+        }
+        if (isr.gt(0)) movimientos.push({ cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(isr) })
+        isrMovimiento()
+        return { contrapartida: `compra ${linea.compra_id}`, compra_linea_id: Number(linea.id) }
+    }
+    if (input.contrapartida === 'proveedor') {
+        // decisión del líder (19 oct): 2.1.03 solo se mueve con una compra (fase 5, CxP = compras)
+        throw new ReglaNegocio(
+            'Un bien comprado a crédito se registra primero como compra (POST /compras) y se entrega con contrapartida compra (compra_linea_id)',
+            'contrapartida_proveedor',
+        )
+    }
+    const fila = input.cuenta_codigo
+        ? ((await t.trx
+              .from('ledger.cuentas')
+              .where('codigo', input.cuenta_codigo)
+              .select('codigo', 'tipo', 'imputable', 'empresa_id', 'contracuenta', 'auxiliar_cliente')
+              .first()) as CuentaContrapartida | null)
+        : null
+    if (!fila || !cuentaParaBienDePremio(fila, empresaId)) {
+        throw new ValidacionFallida([
+            {
+                field: 'cuenta_codigo',
+                message:
+                    'La cuenta debe ser un activo imputable de la empresa fuera de las cuentas control (caja, bancos, CxC, impuestos, cobros por liquidar, fondos en tránsito, estimación, gastos anticipados y propiedad, planta y equipo con su depreciación): p. ej. un inventario de premios',
+                rule: 'cuenta',
+            },
+        ])
+    }
+    movimientos.push(
+        { cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(valor.plus(isr)) },
+        { cuenta: fila.codigo, haber: aTexto(valor) },
+    )
+    isrMovimiento()
+    return { contrapartida: `cuenta ${fila.codigo}` }
 }

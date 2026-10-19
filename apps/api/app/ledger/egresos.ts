@@ -2,9 +2,16 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import type { ContextoAccion } from '#shared/contexto'
+import { resolverEmpresaActiva } from '#core/empresas'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
-import { CLAVES_CATEGORIA_EGRESO, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import {
+    CLAVES_CATEGORIA_EGRESO,
+    CLAVES_CATEGORIA_EGRESO_CONSULTA,
+    CUENTAS,
+    type ClaveCategoriaEgreso,
+} from '#ledger/plan_cuentas'
 
 /**
  * Egresos: lectura (lista, detalle, categorías). Las acciones (`registrarEgreso`, `anularEgreso`)
@@ -37,6 +44,8 @@ export interface EgresoVista {
     cuenta_bancaria_id: number | null
     cuenta_bancaria_nombre: string | null
     asiento_id: number | null
+    /** compra al contado que paga este egreso (su asiento es el de la compra; se anula con la compra) */
+    compra_id: number | null
     estado: EstadoEgreso
     registrado_por: number | null
     registrado_por_nombre: string | null
@@ -60,12 +69,12 @@ function consultaEgresos(cliente: QueryClientContract) {
             .leftJoin('billing.cuentas_bancarias as cb', 'cb.id', 'e.cuenta_bancaria_id')
             .leftJoin('billing.bancos as bd', 'bd.id', 'cb.banco_id')
             .leftJoin('ledger.egresos_anulaciones as an', 'an.egreso_id', 'e.id')
-            // el egreso es inmutable: su asiento se encuentra por origen (no por `egresos.asiento_id`)
-            .leftJoin('ledger.asientos as ae', (j) =>
-                j
-                    .on('ae.origen_id', 'e.id')
-                    .andOnVal('ae.origen_tipo', '=', 'egreso')
-                    .andOnNull('ae.reversa_de'),
+            // el egreso es inmutable: su asiento se encuentra por origen (no por `egresos.asiento_id`);
+            // el de una compra al contado es el de la compra (fase 5, §3.4)
+            .joinRaw(
+                `LEFT JOIN ledger.asientos ae ON ae.reversa_de IS NULL
+                   AND ((ae.origen_tipo = 'egreso' AND ae.origen_id = e.id)
+                     OR (ae.origen_tipo = 'compra' AND ae.origen_id = e.compra_id))`,
             )
             .leftJoin('core.usuarios as ur', 'ur.id', 'e.registrado_por')
             .select(
@@ -90,6 +99,7 @@ function consultaEgresos(cliente: QueryClientContract) {
                     "case when cb.id is null then null else bd.nombre || ' · ' || cb.alias end as cuenta_bancaria_nombre",
                 ),
                 'ae.id as asiento_id',
+                'e.compra_id',
                 cliente.raw(`case when an.id is null then 'registrado' else 'anulado' end as estado`),
                 'e.registrado_por',
                 'ur.nombre as registrado_por_nombre',
@@ -113,10 +123,11 @@ export async function verEgreso(id: number, cliente: QueryClientContract = db.co
 export interface FiltrosEgresos extends OpcionesPaginacion {
     desde?: string
     hasta?: string
-    categoria?: ClaveCategoriaEgreso
+    categoria?: (typeof CLAVES_CATEGORIA_EGRESO_CONSULTA)[number]
     metodo?: MetodoEgreso
     estado?: EstadoEgreso
     caja_id?: number
+    turno_id?: number
     cuenta_bancaria_id?: number
 }
 
@@ -132,6 +143,7 @@ export async function listarEgresos(
         .if(filtros.categoria, (q) => q.where('ec.clave', filtros.categoria!))
         .if(filtros.metodo, (q) => q.where('e.metodo', filtros.metodo!))
         .if(filtros.caja_id, (q) => q.where('e.caja_id', filtros.caja_id!))
+        .if(filtros.turno_id, (q) => q.where('e.turno_id', filtros.turno_id!))
         .if(filtros.cuenta_bancaria_id, (q) => q.where('e.cuenta_bancaria_id', filtros.cuenta_bancaria_id!))
         .if(filtros.estado === 'anulado', (q) => q.whereNotNull('an.id'))
         .if(filtros.estado === 'registrado', (q) => q.whereNull('an.id'))
@@ -174,4 +186,150 @@ export async function egresosDelTurno(cliente: QueryClientContract, turnoId: num
         .select(cliente.raw('coalesce(sum(e.monto), 0)::text as total'))
         .first()) as { total: string }
     return fila.total
+}
+
+/** De dónde sale el dinero de un egreso (o de una compra al contado, fase 5). */
+export interface PedidoOrigenEgreso {
+    metodo: MetodoEgreso
+    caja_id?: number | null
+    banco_id?: number | null
+    cuenta_bancaria_id?: number | null
+}
+
+export interface OrigenEgreso {
+    empresa_id: number
+    caja_id: number | null
+    turno_id: number | null
+    banco_id: number | null
+    cuenta_bancaria_id: number | null
+    /** cuenta del libro de la que sale el dinero */
+    cuenta_id: number
+    nombre: string
+}
+
+/**
+ * Caja (con su turno abierto, si hay), banco del libro (por defecto el principal de la empresa
+ * activa) o cuenta bancaria propia activa en GTQ. Lo usan `egresos.registrar` y las compras al
+ * contado.
+ */
+export async function resolverOrigenEgreso(
+    trx: QueryClientContract,
+    ctx: ContextoAccion,
+    input: PedidoOrigenEgreso,
+): Promise<OrigenEgreso> {
+    const vacio = { caja_id: null, turno_id: null, banco_id: null, cuenta_bancaria_id: null }
+    if (input.metodo === 'caja') {
+        const caja = (await trx
+            .from('ledger.cajas')
+            .where('id', input.caja_id!)
+            .select('id', 'empresa_id', 'nombre', 'cuenta_id', 'activa')
+            .first()) as {
+            id: number
+            empresa_id: number
+            nombre: string
+            cuenta_id: number
+            activa: boolean
+        } | null
+        if (!caja || !caja.activa) {
+            throw new ValidacionFallida([
+                {
+                    field: 'caja_id',
+                    message: `La caja ${input.caja_id} no existe o está inactiva`,
+                    rule: 'caja',
+                },
+            ])
+        }
+        // FOR SHARE como los cobros: si el turno se está cerrando, este egreso espera.
+        const turno = await trx
+            .from('ledger.cajas_turnos')
+            .where('caja_id', caja.id)
+            .whereNull('cerrado_en')
+            .forShare()
+            .select('id')
+            .first()
+        return {
+            ...vacio,
+            empresa_id: Number(caja.empresa_id),
+            caja_id: caja.id,
+            turno_id: (turno?.id as number | undefined) ?? null,
+            cuenta_id: caja.cuenta_id,
+            nombre: caja.nombre,
+        }
+    }
+    if (input.metodo === 'banco') {
+        // sin banco_id: el banco principal de la empresa activa
+        const empresaActiva = input.banco_id ? null : await resolverEmpresaActiva(ctx, trx)
+        const banco = (await trx
+            .from('ledger.bancos as b')
+            .join('ledger.cuentas as cu', 'cu.id', 'b.cuenta_id')
+            .if(
+                input.banco_id,
+                (q) => q.where('b.id', input.banco_id!),
+                (q) => q.where('cu.codigo', CUENTAS.BANCO_PRINCIPAL).where('b.empresa_id', empresaActiva!),
+            )
+            .select('b.id', 'b.empresa_id', 'b.nombre', 'b.cuenta_id')
+            .first()) as { id: number; empresa_id: number; nombre: string; cuenta_id: number } | null
+        if (!banco) {
+            throw new ValidacionFallida([
+                {
+                    field: 'banco_id',
+                    message: input.banco_id
+                        ? `El banco ${input.banco_id} no existe`
+                        : `La empresa ${empresaActiva} no tiene banco principal en el libro: indica banco_id o usa una cuenta bancaria`,
+                    rule: 'exists',
+                },
+            ])
+        }
+        return {
+            ...vacio,
+            empresa_id: Number(banco.empresa_id),
+            banco_id: banco.id,
+            cuenta_id: banco.cuenta_id,
+            nombre: banco.nombre,
+        }
+    }
+    const cuenta = (await trx
+        .from('billing.cuentas_bancarias as cb')
+        .join('billing.bancos as b', 'b.id', 'cb.banco_id')
+        .where('cb.id', input.cuenta_bancaria_id!)
+        .select(
+            'cb.id',
+            'cb.empresa_id',
+            'cb.alias',
+            'cb.cuenta_id',
+            'cb.activa',
+            'cb.moneda',
+            'b.nombre as banco',
+        )
+        .first()) as {
+        id: number
+        empresa_id: number
+        alias: string
+        cuenta_id: number
+        activa: boolean
+        moneda: string
+        banco: string
+    } | null
+    if (!cuenta) {
+        throw new ValidacionFallida([
+            {
+                field: 'cuenta_bancaria_id',
+                message: `La cuenta bancaria ${input.cuenta_bancaria_id} no existe`,
+                rule: 'exists',
+            },
+        ])
+    }
+    if (!cuenta.activa || cuenta.moneda !== 'GTQ') {
+        throw new ReglaNegocio(
+            `La cuenta bancaria ${cuenta.id} está inactiva o no es en quetzales`,
+            'cuenta_bancaria_no_disponible',
+        )
+    }
+    return {
+        ...vacio,
+        empresa_id: Number(cuenta.empresa_id),
+        cuenta_bancaria_id: cuenta.id,
+        cuenta_id: cuenta.cuenta_id,
+        nombre: `${cuenta.banco} · ${cuenta.alias}`,
+    }
 }

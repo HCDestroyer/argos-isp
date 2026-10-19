@@ -210,6 +210,19 @@ async function enviar(evento: FormSubmitEvent<SalidaSorteo>) {
                         />
                     </UFormField>
                     <UFormField
+                        label="Fuente del valor público"
+                        name="fuente_valor_publico"
+                        help="De dónde saldrá en el acto el dato que nadie controla (p. ej. el primer premio de la Lotería Santa Lucía de ese día). Obligatoria para publicar."
+                    >
+                        <UTextarea
+                            v-model="estado.fuente_valor_publico"
+                            :rows="2"
+                            autoresize
+                            class="w-full"
+                            data-prueba="sorteo-fuente-valor"
+                        />
+                    </UFormField>
+                    <UFormField
                         label="Publicación de resultados"
                         name="publicacion_resultados"
                         help="Forma y medio, inmediatamente después del sorteo."

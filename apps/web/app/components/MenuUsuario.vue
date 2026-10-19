@@ -9,6 +9,40 @@ withDefaults(defineProps<{
 
 const { usuario, logout } = useAuth()
 const colorMode = useColorMode()
+const toast = useToast()
+
+/*
+ * Versión instalada (`GET /version`): se ve en el menú y abre "Qué cambió". La primera vez que el
+ * usuario entra a una versión publicada distinta de la última que vio, un aviso discreto lo ofrece
+ * (la última vista se recuerda por usuario en `localStorage`; sin almacenamiento, no pasa nada).
+ */
+const { version, cargar: cargarVersion } = useVersion()
+const queCambioAbierto = ref(false)
+
+async function revisarVersion() {
+    const resultado = await cargarVersion()
+    const id = usuario.value?.id
+    if (!resultado.ok || !id || !versionPublicada(resultado.data.version)) {
+        return
+    }
+    const vista = leerVersionVista(id)
+    guardarVersionVista(id, resultado.data.version)
+    if (debeAvisarVersion(resultado.data.version, vista)) {
+        toast.add({
+            id: `version-${resultado.data.version}`,
+            title: `ArgosIsp se actualizó a la versión ${resultado.data.version}`,
+            icon: 'i-lucide-sparkles',
+            color: 'neutral',
+            actions: [{ label: 'Qué cambió', icon: 'i-lucide-scroll-text', color: 'neutral', variant: 'outline', onClick: () => { queCambioAbierto.value = true } }],
+        })
+    }
+}
+
+watch(() => usuario.value?.id, (id) => {
+    if (id) {
+        void revisarVersion()
+    }
+}, { immediate: true })
 
 const iniciales = computed(() => (usuario.value?.nombre ?? '?')
     .split(/\s+/)
@@ -64,6 +98,14 @@ const items = computed<DropdownMenuItem[][]>(() => [
         ],
     }],
     [{
+        label: 'Qué cambió',
+        icon: 'i-lucide-scroll-text',
+        description: version.value ? `Versión ${version.value.version}` : undefined,
+        onSelect() {
+            queCambioAbierto.value = true
+        },
+    }],
+    [{
         label: 'Cerrar sesión',
         icon: 'i-lucide-log-out',
         color: 'error',
@@ -95,4 +137,5 @@ const items = computed<DropdownMenuItem[][]>(() => [
             aria-label="Menú de usuario"
         />
     </UDropdownMenu>
+    <QueCambioModal v-model:open="queCambioAbierto" />
 </template>

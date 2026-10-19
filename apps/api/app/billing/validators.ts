@@ -11,7 +11,7 @@ import {
 } from '#shared/validadores'
 import { reglasPromesaSchema } from '#billing/reglas_promesa'
 import { METODOS_PAGO } from '#shared/eventos'
-import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
+import { CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 
 /*
 |--------------------------------------------------------------------------
@@ -109,7 +109,7 @@ export const listarFacturasValidator = vine.compile(
             .optional(),
         periodo: fechaIso().optional(),
         tipo: vine
-            .enum(['servicio', 'mora', 'cargo'] as const)
+            .enum(['servicio', 'mora'] as const)
             .optional()
             .meta({ description: 'servicio = factura del periodo; mora = recargo por vencimiento' }),
     }),
@@ -249,6 +249,25 @@ export const registrarPagoValidator = vine.compile(
             description:
                 'Empresa del pago: aplica solo a sus facturas, sin dividir. Sin ella, la de la cuenta bancaria o la de las facturas; un cobro en caja de varias empresas se divide en un pago por empresa (cobro_id)',
         }),
+        retenciones: vine
+            .array(
+                vine.object({
+                    codigo: vine.string().trim().minLength(3).maxLength(40).meta({
+                        description:
+                            'Retención recibida (RET_IVA_ESP, RET_IVA_PUB, RET_IVA_EXP, RET_IVA_TAR, RET_IVA_TAR_COMB, RET_IVA_PEQ, RET_ISR_OPC)',
+                    }),
+                    numero: vine.string().trim().minLength(1).maxLength(60),
+                    fecha: fechaIso().nullable().optional(),
+                    monto: dinero(),
+                }),
+            )
+            .maxLength(10)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'Constancias de retención que entrega el cliente: el pago aplica monto + Σ constancias; a caja o banco entra monto (1.1.05/1.1.06 por cada constancia)',
+            }),
     }),
 )
 
@@ -491,7 +510,7 @@ export const reporteEgresosValidator = vine.compile(
         empresas: empresasConsulta(),
         formato,
         ...rango,
-        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO).optional(),
+        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO_CONSULTA).optional(),
         metodo: vine.enum(['caja', 'banco', 'cuenta_bancaria'] as const).optional(),
     }),
 )

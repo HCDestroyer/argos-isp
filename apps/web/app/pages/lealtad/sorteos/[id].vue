@@ -47,6 +47,15 @@ const entregando = computed({
         }
     },
 })
+const ganadorAAnular = shallowRef<GanadorSorteo | null>(null)
+const anulandoEntrega = computed({
+    get: () => ganadorAAnular.value !== null,
+    set: (valor: boolean) => {
+        if (!valor) {
+            ganadorAAnular.value = null
+        }
+    },
+})
 const nombres = useNombresClientes()
 let claveAccion = nuevaClaveIdempotencia()
 
@@ -60,6 +69,7 @@ const puedeEjecutar = computed(() => puede('sorteos.ejecutar') && acciones.value
 const puedeCancelar = computed(() => puede('sorteos.publicar') && acciones.value.includes('cancelar'))
 const puedeMarcar = computed(() => puede('sorteos.marcar_requisito') && estado.value !== 'cancelado')
 const puedeEntregar = computed(() => puede('sorteos.entregar') && estado.value === 'ejecutado')
+const puedeAnularEntrega = computed(() => puede('sorteos.entregar') && (estado.value === 'ejecutado' || estado.value === 'premios_entregados'))
 const ejecutado = computed(() => estado.value === 'ejecutado' || estado.value === 'premios_entregados')
 
 /** Lo que falta del checklist para el siguiente paso (abrir o ejecutar). */
@@ -76,6 +86,9 @@ const faltantes = computed<RequisitoSorteo['clave'][]>(() => {
     return []
 })
 const corteFuturo = computed(() => estado.value === 'participacion_abierta' && !!sorteo.value?.corte_en && new Date(sorteo.value.corte_en).getTime() > Date.now())
+/** Líneas de compra ya entregadas en este sorteo (no se ofrecen otra vez). */
+const lineasEntregadas = computed(() => (sorteo.value?.ganadores ?? []).flatMap(g => (g.compra_linea_id ? [g.compra_linea_id] : [])))
+const premioAAnular = computed(() => (sorteo.value && ganadorAAnular.value ? premioDeGanador(sorteo.value, ganadorAAnular.value) : null))
 const premioAEntregar = computed(() => (sorteo.value && ganadorAEntregar.value ? premioDeGanador(sorteo.value, ganadorAEntregar.value) : null))
 
 function nombreCatalogo(premio: PremioSorteo): string | null {
@@ -146,6 +159,10 @@ function alMarcar(requisitos: RequisitoSorteo[]) {
 
 function alEntregar(nuevo: SorteoDetalle) {
     alAvanzar(nuevo, nuevo.estado === 'premios_entregados' ? 'Todos los premios entregados' : 'Premio entregado')
+}
+
+function alAnularEntrega(nuevo: SorteoDetalle) {
+    alAvanzar(nuevo, 'Entrega anulada: el premio se puede volver a entregar')
 }
 
 watch(sorteoId, () => {
@@ -314,7 +331,9 @@ onMounted(() => {
                 <SorteoResultado
                     :sorteo="sorteo"
                     :puede-entregar="puedeEntregar"
+                    :puede-anular-entrega="puedeAnularEntrega"
                     @entregar="ganadorAEntregar = $event"
+                    @anular-entrega="ganadorAAnular = $event"
                 />
             </UPageCard>
 
@@ -379,6 +398,11 @@ onMounted(() => {
                         <DatoFicha
                             etiqueta="Publicación de resultados"
                             :valor="typeof sorteo.bases.publicacion_resultados === 'string' ? sorteo.bases.publicacion_resultados : null"
+                        />
+                        <DatoFicha
+                            etiqueta="Fuente del valor público"
+                            :valor="typeof sorteo.bases.fuente_valor_publico === 'string' ? sorteo.bases.fuente_valor_publico : null"
+                            data-prueba="sorteo-fuente-valor"
                         />
                         <DatoFicha
                             etiqueta="Resolución de la Gobernación"
@@ -525,7 +549,18 @@ onMounted(() => {
                 :ganador="ganadorAEntregar"
                 :premio="premioAEntregar"
                 :nombre="ganadorAEntregar ? nombres.nombre(ganadorAEntregar.cliente_id) : ''"
+                :empresa-id="sorteo.empresa_id"
+                :lineas-usadas="lineasEntregadas"
                 @hecho="alEntregar"
+            />
+            <SorteoAnularEntregaModal
+                v-if="puedeAnularEntrega"
+                v-model:open="anulandoEntrega"
+                :sorteo-id="sorteo.id"
+                :ganador="ganadorAAnular"
+                :premio="premioAAnular"
+                :nombre="ganadorAAnular ? nombres.nombre(ganadorAAnular.cliente_id) : ''"
+                @hecho="alAnularEntrega"
             />
         </div>
     </PanelPagina>

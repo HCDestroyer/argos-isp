@@ -101,6 +101,14 @@ export function useSorteos() {
         }))
     }
 
+    /** `sorteos.anular_entrega` (permiso `sorteos.entregar`, H22): deshace la entrega toda junta. */
+    function anularEntrega(id: number, ganadorId: number, motivo: string, claveIdempotencia: string): Promise<Resultado<SorteoDetalle>> {
+        return resolver(api.POST('/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/anular-entrega', {
+            params: { path: { id, ganadorId }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { motivo },
+        }))
+    }
+
     /** Datos públicos para recalcular el resultado (404 antes de ejecutar). */
     function verificacion(id: number): Promise<Resultado<VerificacionSorteo>> {
         return resolver(api.GET('/api/v1/lealtad/sorteos/{id}/verificacion', { params: { path: { id } } }))
@@ -111,5 +119,5 @@ export function useSorteos() {
         return `${String(config.public.apiBase).replace(/\/$/, '')}/api/v1/lealtad/sorteos/${id}/${recurso}`
     }
 
-    return { listar, ver, crear, editar, publicarBases, abrir, cerrarCorte, cancelar, marcarRequisito, ejecutar, entregar, verificacion, urlPublica }
+    return { listar, ver, crear, editar, publicarBases, abrir, cerrarCorte, cancelar, marcarRequisito, ejecutar, entregar, anularEntrega, verificacion, urlPublica }
 }

@@ -255,8 +255,13 @@ onMounted(() => {
                                 v-if="row.original.estado === 'anulado' && row.original.motivo_anulacion"
                                 class="text-xs text-muted"
                             >Anulado: {{ row.original.motivo_anulacion }}</span>
+                            <span
+                                v-if="motivoNoAnulable(row.original)"
+                                class="text-xs text-muted"
+                                data-prueba="egreso-no-anulable"
+                            >{{ motivoNoAnulable(row.original) }}</span>
                             <UButton
-                                v-if="puede('egresos.anular') && row.original.estado === 'registrado'"
+                                v-if="puede('egresos.anular') && egresoAnulable(row.original)"
                                 label="Anular"
                                 icon="i-lucide-ban"
                                 color="error"
@@ -287,7 +292,7 @@ onMounted(() => {
                     </template>
                     <template #acciones-cell="{ row }">
                         <UButton
-                            v-if="puede('egresos.anular') && row.original.estado === 'registrado'"
+                            v-if="puede('egresos.anular') && egresoAnulable(row.original)"
                             icon="i-lucide-ban"
                             color="error"
                             variant="ghost"

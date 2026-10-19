@@ -12,6 +12,8 @@ import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
 import SellarAsientos from '#ledger/actions/sellar_asientos'
 import VerificarIntegridad from '#ledger/actions/verificar_integridad'
 import { pendientesDeSellar } from '#ledger/sellos'
+import DepreciarActivos from '#ledger/actions/depreciar_activos'
+import AmortizarDiferidos from '#ledger/actions/amortizar_diferidos'
 import { cronAntiguedad, cronVencer } from '#lealtad/jobs'
 
 /**
@@ -28,6 +30,8 @@ import { cronAntiguedad, cronVencer } from '#lealtad/jobs'
  * | `conciliar` | 06:30 Guatemala | `ConciliarPasarela` (cobros en línea de ayer contra el proveedor) |
  * | `sellar` | 1 min | `SellarAsientos` (`ledger:sellar`: cadena de hash del libro, §10.10); sin asientos pendientes no llama la acción |
  * | `integridad` | 02:15 Guatemala | `VerificarIntegridad` (recalcula la cadena; `libro.integridad_rota` si no verifica) |
+ * | `depreciar` | 02:30 Guatemala | `DepreciarActivos` (cuotas de activos fijos hasta el mes anterior; único activo + mes, §10.10) |
+ * | `diferir` | 02:40 Guatemala | `AmortizarDiferidos` (cuotas de diferidos hasta el mes anterior; único diferimiento + mes) |
  * | `lealtad:antiguedad` | 03:05 Guatemala | `OtorgarAntiguedad` (aniversarios pendientes hasta hoy, por empresa y lotes de 500) |
  * | `lealtad:vencer` | 03:20 Guatemala | `VencerPuntos` (lotes vencidos hasta hoy y avisos de puntos por vencer) |
  *
@@ -50,6 +54,8 @@ export const CRONS = {
 export const CRONS_DIARIOS = {
     conciliar: { pattern: '30 6 * * *', tz: 'America/Guatemala' },
     integridad: { pattern: '15 2 * * *', tz: 'America/Guatemala' },
+    depreciar: { pattern: '30 2 * * *', tz: 'America/Guatemala' },
+    diferir: { pattern: '40 2 * * *', tz: 'America/Guatemala' },
     'lealtad:antiguedad': { pattern: '5 3 * * *', tz: 'America/Guatemala' },
     'lealtad:vencer': { pattern: '20 3 * * *', tz: 'America/Guatemala' },
 } as const
@@ -153,6 +159,11 @@ export async function ejecutarCron(nombre: string, ahora: Date = new Date()) {
             })
         case 'integridad':
             return conLock(nombre, () => new VerificarIntegridad().execute({}, ctx))
+        case 'depreciar':
+            // todo lo pendiente hasta el mes anterior (fase 5, §10.10); repetirlo no duplica
+            return conLock(nombre, () => new DepreciarActivos().execute({}, ctx))
+        case 'diferir':
+            return conLock(nombre, () => new AmortizarDiferidos().execute({}, ctx))
         case 'lealtad:antiguedad':
             return conLock(nombre, () => cronAntiguedad(ctx, ahora))
         case 'lealtad:vencer':

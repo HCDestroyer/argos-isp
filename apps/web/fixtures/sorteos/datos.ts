@@ -28,7 +28,7 @@ export interface SorteoPrivado {
     participantes: ParticipanteSorteo[]
     asistentes: { nombre: string, rol: string | null }[]
     /** Solo semilla de los fixtures: el sorteo ya ejecutado se ejecuta al prepararse con este valor. */
-    ejecutarCon: { valor_publico: string, ejecutado_en: string } | null
+    ejecutarCon: { valor_publico: string, valor_publico_evidencia: string, ejecutado_en: string } | null
 }
 
 const CLAVES: Requisito['clave'][] = ['bases_diaco', 'autorizacion_gobernacion', 'fianza', 'isr_premios', 'timbre_fiscal', 'delegado_o_notario', 'publicacion_resultados', 'lista_a_gobernacion']
@@ -62,6 +62,7 @@ const BASES_COMPLETAS = {
     plazo_reclamo_dias: 30,
     no_reclamados: 'Pasado el plazo, el premio pasa al primer suplente.',
     publicacion_resultados: 'En el portal de clientes y en la página de Facebook de ArgosNet, el mismo día.',
+    fuente_valor_publico: 'Primer premio de la Lotería Santa Lucía del día del sorteo, como lo publica la Lotería Nacional',
     resolucion_gobernacion: null,
 }
 
@@ -221,7 +222,7 @@ export const sorteosPrivados: SorteoPrivado[] = [
         semilla: null,
         participantes: participantes(500, [[1, 1, 'SA7C2E9F014', 1], [4, 5, 'S2B8D61E3F0', 1], [6, 7, 'SE04F7A9B21', 1], [8, 9, 'S71C3D8E5A6', 1], [11, 12, 'S4E9B0A2C7D', 1], [15, 16, 'SD3A6F1B8E2', 1], [18, 19, 'S0F5E2C9A4B', 1], [19, 20, 'S86B1D4F7E3', 1]]),
         asistentes: [{ nombre: 'Lic. Marta Sosa', rol: 'Notaria' }],
-        ejecutarCon: { valor_publico: 'Lotería Santa Lucía, sorteo 2387 del 5/9/2026: 48213', ejecutado_en: '2026-09-05T16:20:00.000Z' },
+        ejecutarCon: { valor_publico: 'Lotería Santa Lucía, sorteo 2387 del 5/9/2026: 48213', valor_publico_evidencia: 'Leído por la notaria en loteria.gob.gt a las 16:15 y mostrado en pantalla', ejecutado_en: '2026-09-05T16:20:00.000Z' },
     },
     { sorteo_id: SORTEO_CANCELADO_ID, semilla: null, participantes: [], asistentes: [], ejecutarCon: null },
 ]

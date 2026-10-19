@@ -51,12 +51,16 @@ export const cuentas: Cuenta[] = [
     cuenta(13, '4.1.02', 'Recargos por mora', 'ingreso', 11, true),
     cuenta(14, '5', 'Gastos', 'gasto', null, false),
     cuenta(15, '5.1.02', 'Comisiones de pasarelas', 'gasto', 14, true),
+    // Decisión B (A3): el saldo pequeño de un pago se cierra como gasto.
+    cuenta(20, '5.3.05', 'Diferencias de cobro', 'gasto', 14, true),
     // Subcuentas de las cuentas bancarias propias (`bancos/datos.ts`), como las crea A3.
     cuenta(16, '1.1.02.02', 'Banco Industrial · Monetaria (****3456)', 'activo', 1, true),
     cuenta(17, '1.1.02.03', 'Banco Industrial · Dólares (****7651)', 'activo', 1, true),
     cuenta(18, '1.1.02.04', 'Banco G&T Continental · Cuenta anterior (****5678)', 'activo', 1, true),
     // Caja de Fibra del Sur (empresa 2).
     cuenta(19, '1.1.01.04', 'Caja Sur', 'activo', 2, true),
+    // Inventario de premios de sorteo: la contrapartida `cuenta` de un bien (lista blanca, H25).
+    cuenta(22, '1.1.14', 'Inventario de premios', 'activo', 1, true),
 ]
 
 export const CUENTA_CXC = 7

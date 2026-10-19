@@ -13,6 +13,23 @@ async function elegirEmpresa(page: Page, nombre: RegExp) {
     await expect(selector).toContainText(nombre)
 }
 
+/**
+ * Abre la factura de un DTE rechazado desde la cola. La lista sin filtro ya trae un NCRE rechazado
+ * y su primera factura está certificada: la fila se elige por su propio estado, no la primera de
+ * la tabla (antes de que llegara la lista filtrada, `toContainText('Rechazado')` pasaba y el clic
+ * abría la factura certificada).
+ */
+async function abrirFacturaRechazada(page: Page): Promise<void> {
+    const atajo = page.locator('[data-prueba="atajo-rechazado"]')
+    await atajo.click()
+    await expect(atajo).toHaveAttribute('aria-pressed', 'true')
+    await expect(page).toHaveURL(/estado=rechazado/)
+    const factura = page.getByRole('link', { name: /^Factura #\d+$/ })
+    const fila = page.locator('[data-prueba="tabla-dte"] tbody tr').filter({ hasText: 'Rechazado' }).filter({ has: factura }).first()
+    await fila.getByRole('link', { name: /^Factura #\d+$/ }).click()
+    await expect(page).toHaveURL(/\/facturas\/\d+$/)
+}
+
 test('Configuración → FEL: credenciales sin secretos, desactivar con avisos vivos muestra la cuenta y el aviso global', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'FEL', /\/configuracion\/fel/)
@@ -39,11 +56,7 @@ test('Configuración → FEL: credenciales sin secretos, desactivar con avisos v
 test('cola de DTE: un rechazado se reintenta y se certifica; la factura muestra autorización, serie y número', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Cola de DTE', /\/dte/)
-    await page.locator('[data-prueba="atajo-rechazado"]').click()
-    const tabla = page.locator('[data-prueba="tabla-dte"]')
-    await expect(tabla).toContainText('Rechazado')
-    await tabla.getByRole('link', { name: /^Factura #\d+$/ }).first().click()
-    await expect(page).toHaveURL(/\/facturas\/\d+$/)
+    await abrirFacturaRechazada(page)
 
     const fel = page.locator('[data-prueba="factura-fel"]')
     await expect(fel.locator('[data-prueba="dte-estado"]')).toHaveText('Rechazado')
@@ -60,15 +73,10 @@ test('cola de DTE: un rechazado se reintenta y se certifica; la factura muestra 
 test('anular una factura certificada en dos pasos: anulación pendiente y luego anulada', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Cola de DTE', /\/dte/)
-    await page.locator('[data-prueba="atajo-rechazado"]').click()
-    await page.locator('[data-prueba="tabla-dte"]').getByRole('link', { name: /^Factura #\d+$/ }).first().click()
+    await abrirFacturaRechazada(page)
     const fel = page.locator('[data-prueba="factura-fel"]')
-    await expect(fel.locator('[data-prueba="dte-estado"]')).toBeVisible()
-    // El servidor de desarrollo puede conservar los datos de la prueba anterior: ya certificado.
-    const reintentar = fel.locator('[data-prueba="dte-reintentar"]')
-    if (await reintentar.isVisible()) {
-        await reintentar.click()
-    }
+    await expect(fel.locator('[data-prueba="dte-estado"]')).toHaveText('Rechazado')
+    await fel.locator('[data-prueba="dte-reintentar"]').click()
     await expect(fel.locator('[data-prueba="dte-estado"]')).toHaveText('Certificado', { timeout: 15_000 })
 
     await page.locator('[data-prueba="abrir-anular"]').click()

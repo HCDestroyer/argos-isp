@@ -5,11 +5,13 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 /**
  * Ejecuta el sorteo en el acto (`POST /lealtad/sorteos/:id/ejecutar`, `sorteos.ejecutar`) con el
  * `valor_publico`: un dato que nadie controla y se conoce en ese momento (lo lee el notario o el
- * delegado). La API revela la semilla, verifica el compromiso y elige; el panel no elige nada.
+ * delegado), tomado de la fuente que declaran las bases (`bases.fuente_valor_publico`), y la
+ * `valor_publico_evidencia`: cómo se obtuvo ese valor en el acto (ambos obligatorios). La API revela la
+ * semilla, verifica el compromiso y elige; el panel no elige nada.
  * Si falta un requisito del checklist, el 422 `requisito_pendiente` dice cuál.
  */
 const props = defineProps<{
-    sorteo: Pick<SorteoDetalle, 'id' | 'nombre' | 'participantes' | 'boletos' | 'lista_hash' | 'compromiso' | 'requisitos'>
+    sorteo: Pick<SorteoDetalle, 'id' | 'nombre' | 'participantes' | 'boletos' | 'lista_hash' | 'compromiso' | 'requisitos' | 'bases'>
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
@@ -19,16 +21,17 @@ const emit = defineEmits<{
 }>()
 
 const formulario = useTemplateRef('formulario')
-const estado = reactive<EntradaEjecutarSorteo>({ valor_publico: '', asistentes: [] })
+const estado = reactive<EntradaEjecutarSorteo>({ valor_publico: '', valor_publico_evidencia: '', asistentes: [] })
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 let clave = nuevaClaveIdempotencia()
 
 const faltantes = computed(() => requisitosFaltantes(props.sorteo.requisitos, 'ejecutar'))
+const fuente = computed(() => (typeof props.sorteo.bases.fuente_valor_publico === 'string' ? props.sorteo.bases.fuente_valor_publico : null))
 
 watch(abierto, (valor) => {
     if (valor) {
-        Object.assign(estado, { valor_publico: '', asistentes: [] })
+        Object.assign(estado, { valor_publico: '', valor_publico_evidencia: '', asistentes: [] })
         problema.value = null
         clave = nuevaClaveIdempotencia()
     }
@@ -47,6 +50,7 @@ async function enviar(evento: FormSubmitEvent<EntradaEjecutarSorteo>) {
     problema.value = null
     const resultado = await useSorteos().ejecutar(props.sorteo.id, {
         valor_publico: evento.data.valor_publico,
+        valor_publico_evidencia: evento.data.valor_publico_evidencia,
         asistentes: evento.data.asistentes.map(a => ({ nombre: a.nombre, rol: a.rol || null })),
     }, clave)
     enviando.value = false
@@ -55,7 +59,7 @@ async function enviar(evento: FormSubmitEvent<EntradaEjecutarSorteo>) {
         emit('hecho', resultado.data)
         return
     }
-    const errores = erroresDeFormulario(resultado.problema).filter(e => e.name === 'valor_publico')
+    const errores = erroresDeFormulario(resultado.problema).filter(e => e.name === 'valor_publico' || e.name === 'valor_publico_evidencia')
     if (errores.length) {
         formulario.value?.setErrors(errores)
         return
@@ -96,17 +100,42 @@ async function enviar(evento: FormSubmitEvent<EntradaEjecutarSorteo>) {
                     :description="`Falta marcar: ${faltantes.map(c => REQUISITOS_SORTEO[c].etiqueta).join(', ')}. La API no ejecuta sin ellos.`"
                     data-prueba="ejecutar-faltantes"
                 />
+                <div
+                    class="rounded-lg border border-default p-3 text-sm"
+                    data-prueba="ejecutar-fuente"
+                >
+                    <p class="text-muted">
+                        Fuente del valor público (bases)
+                    </p>
+                    <p class="text-highlighted">
+                        {{ fuente ?? 'Las bases no declaran la fuente' }}
+                    </p>
+                </div>
                 <UFormField
                     label="Valor público del acto"
                     name="valor_publico"
                     required
-                    help="Lo lee el notario o el delegado en el acto (p. ej. el número ganador de la lotería de ese día). Se publica tal cual."
+                    help="Lo lee el notario o el delegado en el acto, de la fuente de las bases. Se publica tal cual."
                 >
                     <UInput
                         v-model="estado.valor_publico"
                         class="w-full"
                         autocomplete="off"
                         data-prueba="valor-publico"
+                    />
+                </UFormField>
+                <UFormField
+                    label="Cómo se obtuvo el valor"
+                    name="valor_publico_evidencia"
+                    required
+                    help="Quién lo leyó, dónde y a qué hora (p. ej. en el sitio de la Lotería, mostrado en pantalla)."
+                >
+                    <UTextarea
+                        v-model="estado.valor_publico_evidencia"
+                        :rows="2"
+                        autoresize
+                        class="w-full"
+                        data-prueba="valor-publico-evidencia"
                     />
                 </UFormField>
                 <fieldset class="flex flex-col gap-2">

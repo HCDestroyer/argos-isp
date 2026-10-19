@@ -10,10 +10,13 @@ import type { Problem } from '@argosisp/contracts'
 const props = defineProps<{
     sorteo: SorteoDetalle
     puedeEntregar: boolean
+    /** `sorteos.entregar` con el sorteo ejecutado o con todos los premios entregados (H22). */
+    puedeAnularEntrega: boolean
 }>()
 
 const emit = defineEmits<{
     entregar: [ganador: GanadorSorteo]
+    anularEntrega: [ganador: GanadorSorteo]
 }>()
 
 const { enlace } = usePermisos()
@@ -125,6 +128,17 @@ watch(() => props.sorteo.ganadores, (ganadores) => {
                             :aria-label="`Entregar el premio a ${nombres.nombre(ganador.cliente_id)}`"
                             data-prueba="entregar-premio"
                             @click="emit('entregar', ganador)"
+                        />
+                        <UButton
+                            v-if="puedeAnularEntrega && ganador.estado === 'entregado'"
+                            label="Anular entrega"
+                            icon="i-lucide-undo-2"
+                            size="sm"
+                            color="neutral"
+                            variant="outline"
+                            :aria-label="`Anular la entrega del premio a ${nombres.nombre(ganador.cliente_id)}`"
+                            data-prueba="anular-entrega"
+                            @click="emit('anularEntrega', ganador)"
                         />
                     </div>
                 </li>

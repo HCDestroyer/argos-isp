@@ -126,7 +126,7 @@ Prohibido marcar como terminado algo que "funciona en mi máquina" sin pruebas.
 Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias como las anteriores.
 
 - **Rama correcta antes de tocar nada.** Empieza siempre con `git fetch origin && git checkout -B agente/<tu-agente> origin/agente/<tu-agente>` y comprueba que existen `.claude/CLAUDE.md` y `apps/api`. Un worktree puede nacer en un commit viejo.
-- **Base de datos y puerto propios.** Las pruebas de `apps/api` corren con `DB_DATABASE=argosisp_test_<a1…a6>` y `PORT=34<n>` como variables de entorno (sin commitearlas). Nunca uses `argosisp_test` mientras otros agentes prueban: se borran las tablas entre sí.
+- **Base de datos y puerto propios.** Las pruebas de `apps/api` corren con `DB_DATABASE=argosisp_test_<a1…a6>` y `PORT=34<n>` como variables de entorno (sin commitearlas). Nunca uses `argosisp_test` mientras otros agentes prueban: se borran las tablas entre sí. Lo mismo con Redis: `COLAS_PREFIJO=<agente>` y `AAA_REDIS_PREFIJO=<agente>:aaa:user:`; con el prefijo por defecto, `limpiarClavesAaa()` y `aaa:repoblar` de una suite borran las claves AAA de otra (así falló `tests/core/aaa_lotes.spec.ts` el día 5).
 - **Archivos generados nunca a mano.** `packages/contracts/*` y `pnpm-lock.yaml` se regeneran (`pnpm install`, `pnpm contracts:build`). Para traer `main` a una rama usa `scripts/integrar.sh <rama>`: mezcla, regenera, corre lint, typecheck y pruebas, y solo sube con `--push`.
 - **Una PR se mergea solo con CI en verde contra el `main` actual.** Si `main` cambió, se vuelve a integrar antes de mergear. Las PRs se mergean de una en una.
 - **Fixtures fieles a la API.** Se tipan con `Schema<'X'>` de `packages/contracts` y llevan los mismos valores por defecto que devuelve la API. Nunca `{}` para un objeto tipado.
@@ -151,9 +151,11 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `servicio.estado_cambiado` | núcleo | servicio_id, empresa_id, de, a, motivo |
 | `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa), empresa_anterior_id (solo con `empresa`); motivo y plan_temporal_id (opcionales, solo con un plan temporal) |
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
+| `servicio.adicional_agregado` / `servicio.adicional_cambiado` / `servicio.adicional_quitado` | núcleo | servicio_id, cliente_id, empresa_id, adicional_id, asignacion_id, modalidad; agregado: origen; cambiado: campos[], modalidad_anterior; quitado: origen, motivo. Nunca la credencial (`contratos/adicionales.md`) |
 | `sesion.iniciada` / `sesion.terminada` | aaa | servicio_id, nas_ip, acct_session_id, ipv4, prefijos_v6; `sesion.terminada` además motivo (causa de fin) |
 | `factura.emitida` / `factura.vencida` / `factura.anulada` | billing | factura_id, empresa_id, servicio_id, cliente_id, total, vence |
 | `pago.registrado` / `pago.anulado` | billing | pago_id, empresa_id, cobro_id (o null), cliente_id (pagador), monto, metodo, facturas[], clientes[] (pagador y dueños de las facturas) |
+| `pago.diferencia_cerrada` | billing | pago_id, empresa_id, cliente_id (pagador), facturas[], monto (saldo pequeño cerrado como gasto 5.3.05) |
 | `nota_credito.emitida` | billing | nota_credito_id, empresa_id, factura_id, servicio_id (o null), cliente_id, monto, motivo |
 | `nota_credito.anulada` | billing | nota_credito_id, empresa_id, factura_id, cliente_id, monto, motivo |
 | `promesa.creada` / `promesa.cumplida` / `promesa.incumplida` | billing | promesa_id, empresa_id, servicio_id, vence, monto |
@@ -178,6 +180,8 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `caja.depositada` | ledger | deposito_id, empresa_id, caja_id, cuenta_bancaria_id, cuenta_id, monto |
 | `banco.extracto_importado` / `banco.conciliado` | ledger | extracto_id o conciliacion_id, empresa_id, cuenta_bancaria_id, cuenta_id, lineas, monto; conciliado: linea_id |
 | `cartera.castigada` | ledger | castigo_id, empresa_id, cliente_id, facturas[], monto |
+| `compra.registrada` / `compra.anulada` | ledger | compra_id, empresa_id, proveedor_id, total, iva, periodo_iva |
+| `activo.dado_de_baja` | ledger | activo_id, empresa_id, motivo, valor_libros |
 | `lealtad.programa_cambiado` | lealtad | programa_id, empresa_id, campos[] |
 | `lealtad.puntos_acumulados` | lealtad | movimiento_id, empresa_id, cliente_id, servicio_id, regla_id, puntos, vence_en |
 | `lealtad.puntos_revertidos` | lealtad | movimiento_id, empresa_id, cliente_id, puntos, origen_tipo, origen_id |
@@ -189,6 +193,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sorteo.ejecutado` | lealtad (sorteos) | sorteo_id, empresa_id, ganadores[] (cliente_id, tipo, posicion) |
 | `sorteo.premio_entregado` | lealtad (sorteos) | sorteo_id, empresa_id, cliente_id, posicion |
 | `sorteo.cancelado` | lealtad (sorteos) | sorteo_id, empresa_id, motivo |
+| `sorteo.entrega_anulada` | lealtad (sorteos) | sorteo_id, empresa_id, cliente_id, posicion, motivo |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

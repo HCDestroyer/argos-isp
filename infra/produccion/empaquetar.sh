@@ -7,11 +7,12 @@
 # Produce en la carpeta de salida:
 #   argosisp-<versión>.tar.gz         carpeta argosisp-<versión>/ con:
 #       docker-compose.yml            infra/produccion/docker-compose.produccion.yml
+#       docker-compose.nodo-portal.yml  nodo portal remoto (instalar.sh --rol portal)
 #       argosisp                      CLI (infra/produccion/argosisp)
 #       instalar.sh                   instalador (el mismo que se publica suelto)
 #       VERSION
 #       config/postgres/              10-init.sql (sin base de pruebas) y 20-usuarios.sh
-#       config/proxy/Caddyfile        proxy de producción
+#       config/proxy/Caddyfile        proxy de producción (y Caddyfile.nodo-portal, el del nodo)
 #       config/freeradius/            mods-enabled, sites-enabled (services/aaa) y clients.conf
 #       systemd/                      argosisp-actualizar.service y .timer (parches automáticos)
 #   argosisp-<versión>.tar.gz.sha256
@@ -20,7 +21,7 @@
 # El tar es reproducible (orden, fechas y dueños fijos): el mismo commit da la misma suma.
 set -euo pipefail
 
-[ $# -eq 2 ] || { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[ $# -eq 2 ] || { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 VERSION="$1"
 SALIDA="$2"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "versión inválida (MAYOR.MENOR.PARCHE): $VERSION" >&2; exit 2; }
@@ -36,6 +37,8 @@ D="$TMP/argosisp-$VERSION"
 mkdir -p "$D/config/postgres" "$D/config/proxy" "$D/config/freeradius" "$D/systemd"
 
 install -m 0644 "$AQUI/docker-compose.produccion.yml" "$D/docker-compose.yml"
+install -m 0644 "$AQUI/docker-compose.nodo-portal.yml" "$D/docker-compose.nodo-portal.yml"
+install -m 0644 "$AQUI/config/Caddyfile.nodo-portal" "$D/config/proxy/Caddyfile.nodo-portal"
 install -m 0755 "$AQUI/argosisp" "$D/argosisp"
 install -m 0755 "$AQUI/instalar.sh" "$D/instalar.sh"
 printf '%s\n' "$VERSION" > "$D/VERSION"

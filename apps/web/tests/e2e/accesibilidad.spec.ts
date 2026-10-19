@@ -46,6 +46,10 @@ const PANTALLAS = [
     ['sorteos', '/lealtad/sorteos'],
     ['sorteo ejecutado', '/lealtad/sorteos/5'],
     ['sorteo con corte cerrado', '/lealtad/sorteos/4'],
+    // Servicios adicionales y tipo de plan.
+    ['adicionales', '/adicionales'],
+    ['motivos de cortesía', '/adicionales/motivos'],
+    ['ficha de plan', '/planes/3'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']

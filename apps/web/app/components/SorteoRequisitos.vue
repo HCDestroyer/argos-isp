@@ -61,6 +61,14 @@ const grupos = computed(() => (Object.keys(PASOS_REQUISITO) as PasoRequisito[])
                                 data-prueba="requisito-estado"
                             />
                             <UBadge
+                                v-if="REQUISITOS_SORTEO[requisito.clave].noBloquea"
+                                label="No bloquea la ejecución"
+                                color="neutral"
+                                variant="outline"
+                                size="sm"
+                                data-prueba="requisito-no-bloquea"
+                            />
+                            <UBadge
                                 v-if="faltantes.includes(requisito.clave)"
                                 label="Falta para el siguiente paso"
                                 color="warning"

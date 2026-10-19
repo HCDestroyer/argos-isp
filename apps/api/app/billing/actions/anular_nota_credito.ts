@@ -19,8 +19,8 @@ import { DteEnProceso } from '#fiscal/fel/errores'
  * - Reverso espejo del asiento de la nota (`RevertirAsiento`), fila en
  *   `billing.notas_credito_anulaciones` (una sola por nota) y el monto vuelve al saldo de la factura
  *   (`pagado − monto`, estado recalculado). Reevalúa el servicio. Evento `nota_credito.anulada`.
- * - También (H13, contrato §18) la nota interna con la que `pagos.cerrar_diferencia` cerró el saldo de
- *   un pago, cuando ese pago se anula (`pagos.anular` la llama con `pago_id`).
+ * - (B) La diferencia de cobro ya no es una nota (es gasto `5.3.05 / CxC`): `notas_credito_anulaciones.pago_id`
+ *   queda solo como historia del esquema anterior (H13) y esta acción no la escribe.
  * - 409 `nota_anulada` (ya lo estaba), `ncre_certificada` (una NCRE certificada no se anula aquí),
  *   `dte_en_proceso` (aún en cola), `nota_sin_ncre_rechazada` (una nota interna o sin rechazo
  *   definitivo de la SAT no se anula: se corrige con otra nota o un cargo).
@@ -29,11 +29,6 @@ import { DteEnProceso } from '#fiscal/fel/errores'
 export interface EntradaAnularNotaCredito {
     nota_id: number
     motivo: string
-    /**
-     * interno (H13, `pagos.anular`): la nota cerró la diferencia de cobro de este pago, que se está
-     * anulando. Solo una nota interna (sin DTE); la anulación guarda el pago como causa.
-     */
-    pago_id?: number | null
 }
 
 export default class AnularNotaCredito extends DomainAction<
@@ -106,17 +101,7 @@ export default class AnularNotaCredito extends DomainAction<
         }
         if (vigente) throw new DteEnProceso(vigente.id, vigente.estado)
         const ultimo = await ultimoDte(t.trx, 'nota_credito', nota.id)
-        const porPago =
-            input.pago_id !== undefined &&
-            input.pago_id !== null &&
-            !ultimo &&
-            Boolean(
-                await t.trx
-                    .from('billing.diferencias_cobro')
-                    .where({ pago_id: input.pago_id, nota_credito_id: nota.id })
-                    .first(),
-            )
-        if (!porPago && (!ultimo || ultimo.estado !== 'rechazado' || !ultimo.definitivo)) {
+        if (!ultimo || ultimo.estado !== 'rechazado' || !ultimo.definitivo) {
             throw new Conflicto(
                 `La nota ${nota.id} no tiene una NCRE rechazada en definitivo por la SAT: corrígela con otra nota o un cargo`,
                 'nota_sin_ncre_rechazada',
@@ -148,8 +133,7 @@ export default class AnularNotaCredito extends DomainAction<
                 empresa_id: empresaId,
                 nota_id: nota.id,
                 asiento_id: reverso.id,
-                dte_id: porPago ? null : ultimo!.id,
-                pago_id: porPago ? input.pago_id : null,
+                dte_id: ultimo.id,
                 motivo,
                 anulado_por: usuarioDelActor(t.ctx.actor),
             })

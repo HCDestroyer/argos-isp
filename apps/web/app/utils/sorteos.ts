@@ -84,9 +84,14 @@ export interface RequisitoVisual {
     para: PasoRequisito
     /** Qué se anota en `valor` (número de resolución, monto…). */
     valor: string | null
+    /** Se puede marcar pero no bloquea su paso (decisión del PM: Gobernación y fianza). */
+    noBloquea?: true
 }
 
-/** Checklist legal (§8). La API exige hoy los de abrir y ejecutar; los otros llegan con el acta. */
+/**
+ * Checklist legal (§8). La API exige hoy los de abrir y ejecutar (menos Gobernación y fianza, que se
+ * marcan sin bloquear: decisión del PM, 19 oct); los otros llegan con el acta.
+ */
 export const REQUISITOS_SORTEO: Record<ClaveRequisito, RequisitoVisual> = {
     bases_diaco: {
         etiqueta: 'Bases publicadas (DIACO)',
@@ -101,6 +106,7 @@ export const REQUISITOS_SORTEO: Record<ClaveRequisito, RequisitoVisual> = {
         fuente: 'inv. F.5; NO VERIFICADO 15',
         para: 'ejecutar',
         valor: 'Número y fecha de la resolución',
+        noBloquea: true,
     },
     fianza: {
         etiqueta: 'Fianza',
@@ -108,6 +114,7 @@ export const REQUISITOS_SORTEO: Record<ClaveRequisito, RequisitoVisual> = {
         fuente: 'inv. F.5',
         para: 'ejecutar',
         valor: 'Número y monto de la fianza',
+        noBloquea: true,
     },
     isr_premios: {
         etiqueta: 'ISR de los premios',
@@ -161,9 +168,12 @@ export const ESTADOS_REQUISITO: Record<Requisito['estado'], { etiqueta: string, 
     pendiente: { etiqueta: 'Pendiente', color: 'warning', icono: 'i-lucide-circle-dashed' },
 }
 
-/** Claves que el paso exige (las mismas que `REQUISITOS_PARA_ABRIR` y `_EJECUTAR` de la API). */
+/**
+ * Claves que el paso exige (las mismas que `REQUISITOS_PARA_ABRIR` y `_EJECUTAR` de la API). Gobernación
+ * y fianza quedan en el checklist pero no bloquean la ejecución (decisión del PM, 19 oct).
+ */
 export function requisitosDelPaso(paso: 'abrir' | 'ejecutar'): ClaveRequisito[] {
-    const claves = Object.keys(REQUISITOS_SORTEO) as ClaveRequisito[]
+    const claves = (Object.keys(REQUISITOS_SORTEO) as ClaveRequisito[]).filter(c => !REQUISITOS_SORTEO[c].noBloquea)
     return paso === 'abrir'
         ? claves.filter(c => REQUISITOS_SORTEO[c].para === 'abrir')
         : claves.filter(c => ['abrir', 'ejecutar'].includes(REQUISITOS_SORTEO[c].para))
@@ -266,6 +276,7 @@ export const esquemaSorteo = z.object({
     no_reclamados: textoBases(2000),
     publicacion_resultados: textoBases(2000),
     resolucion_gobernacion: textoBases(200),
+    fuente_valor_publico: textoBases(500),
     boletos_por_servicio: z.number({ message: 'Número de boletos' }).int('Sin decimales').min(0, 'De 0 a 100').max(100, 'De 0 a 100'),
     admite_canje: z.boolean(),
     inscripcion_desde: z.string().trim().refine(v => v === '' || FECHA.test(v), 'Fecha inválida'),
@@ -294,6 +305,7 @@ export function entradaSorteoVacia(): EntradaSorteo {
         no_reclamados: '',
         publicacion_resultados: '',
         resolucion_gobernacion: '',
+        fuente_valor_publico: '',
         boletos_por_servicio: 1,
         admite_canje: false,
         inscripcion_desde: '',
@@ -320,6 +332,7 @@ export function entradaDeSorteo(sorteo: Sorteo): EntradaSorteo {
         no_reclamados: textoDe(sorteo.bases.no_reclamados),
         publicacion_resultados: textoDe(sorteo.bases.publicacion_resultados),
         resolucion_gobernacion: textoDe(sorteo.bases.resolucion_gobernacion),
+        fuente_valor_publico: textoDe(sorteo.bases.fuente_valor_publico),
         boletos_por_servicio: sorteo.criterios.boletos_por_servicio,
         admite_canje: sorteo.criterios.admite_canje,
         inscripcion_desde: sorteo.inscripcion_desde ?? '',
@@ -359,6 +372,9 @@ export function cuerpoSorteo(datos: SalidaSorteo): CuerpoSorteo {
     }
     if (datos.publicacion_resultados) {
         bases.publicacion_resultados = datos.publicacion_resultados
+    }
+    if (datos.fuente_valor_publico) {
+        bases.fuente_valor_publico = datos.fuente_valor_publico
     }
     const cuerpo: CuerpoSorteo = {
         nombre: datos.nombre,
@@ -410,6 +426,7 @@ export type EntradaRequisitoSorteo = z.input<typeof esquemaRequisitoSorteo>
 
 export const esquemaEjecutarSorteo = z.object({
     valor_publico: z.string().trim().min(1, 'El valor público del acto es obligatorio').max(500, 'Hasta 500 caracteres'),
+    valor_publico_evidencia: z.string().trim().min(1, 'Diga cómo se obtuvo el valor en el acto').max(2000, 'Hasta 2000 caracteres'),
     asistentes: z.array(z.object({
         nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(200, 'Hasta 200 caracteres'),
         rol: textoBases(200),
@@ -424,7 +441,8 @@ export const esquemaEntregaPremio = z.object({
     caja_id: z.number().int().positive().nullable(),
     banco_id: z.number().int().positive().nullable(),
     cuenta_bancaria_id: z.number().int().positive().nullable(),
-    contrapartida: z.enum(['proveedor', 'cuenta']).nullable(),
+    contrapartida: z.enum(['compra', 'cuenta']).nullable(),
+    compra_linea_id: z.number().int().positive().nullable(),
     cuenta_codigo: textoBases(30),
     nota: textoBases(2000),
 }).superRefine((d, ctx) => {
@@ -444,18 +462,28 @@ export const esquemaEntregaPremio = z.object({
     }
     if (d.tipo === 'bien') {
         if (!d.contrapartida) {
-            ctx.addIssue({ code: 'custom', path: ['contrapartida'], message: 'Proveedores (2.1.03) o una cuenta de activo' })
+            ctx.addIssue({ code: 'custom', path: ['contrapartida'], message: 'La compra del bien o una cuenta de activo' })
+        }
+        if (d.contrapartida === 'compra' && d.compra_linea_id === null) {
+            ctx.addIssue({ code: 'custom', path: ['compra_linea_id'], message: 'Elija la línea de la compra con la que se compró el bien' })
         }
         if (d.contrapartida === 'cuenta' && !d.cuenta_codigo) {
-            ctx.addIssue({ code: 'custom', path: ['cuenta_codigo'], message: 'Código de la cuenta de activo' })
+            ctx.addIssue({ code: 'custom', path: ['cuenta_codigo'], message: 'Elija la cuenta de activo' })
         }
     }
 })
 
 export type EntradaEntregaPremio = z.input<typeof esquemaEntregaPremio>
 
+/** Anular la entrega (H22): motivo de al menos 3 caracteres, como la API. */
+export const esquemaAnularEntrega = z.object({
+    motivo: z.string().trim().min(3, 'El motivo es obligatorio (mínimo 3 caracteres)').max(2000, 'Hasta 2000 caracteres'),
+})
+
+export type EntradaAnularEntrega = z.input<typeof esquemaAnularEntrega>
+
 export function entradaEntregaVacia(tipo: Premio['tipo']): EntradaEntregaPremio {
-    return { tipo, metodo: tipo === 'efectivo' ? 'caja' : null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: tipo === 'bien' ? 'proveedor' : null, cuenta_codigo: '', nota: '' }
+    return { tipo, metodo: tipo === 'efectivo' ? 'caja' : null, caja_id: null, banco_id: null, cuenta_bancaria_id: null, contrapartida: tipo === 'bien' ? 'compra' : null, compra_linea_id: null, cuenta_codigo: '', nota: '' }
 }
 
 /** Cuerpo de la entrega: solo la contrapartida del tipo del premio (servicio no lleva ninguna). */
@@ -471,12 +499,17 @@ export function cuerpoEntregaPremio(datos: z.output<typeof esquemaEntregaPremio>
         }
     }
     if (datos.tipo === 'bien') {
-        return { contrapartida: datos.contrapartida, cuenta_codigo: datos.contrapartida === 'cuenta' ? datos.cuenta_codigo : null, nota }
+        return datos.contrapartida === 'compra'
+            ? { contrapartida: 'compra', compra_linea_id: datos.compra_linea_id, nota }
+            : { contrapartida: datos.contrapartida, cuenta_codigo: datos.cuenta_codigo || null, nota }
     }
     return { nota }
 }
 
-/** Contrapartida guardada en el ganador (`caja`, `proveedor`, `cuenta 1.1.08`, `canje`) en palabras. */
+/**
+ * Contrapartida guardada en el ganador (`caja`, `compra 12`, `cuenta 1.1.14`, `canje`; `proveedor` en
+ * entregas anteriores a la decisión del PM) en palabras.
+ */
 export function contrapartidaLegible(contrapartida: string | null): string {
     if (!contrapartida) {
         return '—'
@@ -491,5 +524,34 @@ export function contrapartidaLegible(contrapartida: string | null): string {
     if (Object.hasOwn(conocidas, contrapartida)) {
         return conocidas[contrapartida] ?? contrapartida
     }
+    if (contrapartida.startsWith('compra ')) {
+        return `Compra #${contrapartida.slice(7)}`
+    }
     return contrapartida.startsWith('cuenta ') ? `Cuenta ${contrapartida.slice(7)}` : contrapartida
+}
+
+/**
+ * Lista blanca de la contrapartida `cuenta` de un bien (H25, igual que `cuentaParaBienDePremio` de la
+ * API): activo imputable de la empresa o global, sin contracuentas ni auxiliar de clientes y fuera de las
+ * cuentas control (caja y bancos, CxC, impuestos, cobros por liquidar, fondos en tránsito, estimación,
+ * gastos anticipados y el activo no corriente).
+ */
+const CUENTAS_CONTROL_BIEN = ['1.1.01', '1.1.02', '1.1.03', '1.1.04', '1.1.05', '1.1.06', '1.1.07', '1.1.08', '1.1.09', '1.1.10', '1.1.11', '1.1.12', '1.1.13', '1.2']
+
+export function cuentaParaBienDePremio(c: Pick<Schema<'Cuenta'>, 'codigo' | 'tipo' | 'imputable' | 'contracuenta' | 'auxiliar_cliente' | 'empresa_id' | 'activa'>, empresaId: number | null): boolean {
+    if (c.tipo !== 'activo' || !c.imputable || c.contracuenta || c.auxiliar_cliente || !c.activa) {
+        return false
+    }
+    const empresaCuenta = c.empresa_id ?? null
+    if (empresaCuenta !== null && empresaId !== null && empresaCuenta !== empresaId) {
+        return false
+    }
+    return !CUENTAS_CONTROL_BIEN.some(p => c.codigo === p || c.codigo.startsWith(`${p}.`))
+}
+
+/** Línea de una compra que puede ser el bien entregado: un bien de una compra vigente que no sea NCRE. */
+export function lineasDeBien(compras: readonly Schema<'Compra'>[], empresaId: number | null): { compra: Schema<'Compra'>, linea: Schema<'LineaCompra'> }[] {
+    return compras
+        .filter(c => c.estado === 'vigente' && c.tipo_documento !== 'NCRE' && (empresaId === null || c.empresa_id === empresaId))
+        .flatMap(compra => compra.lineas.filter(l => l.tipo === 'bien').map(linea => ({ compra, linea })))
 }

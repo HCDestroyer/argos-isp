@@ -22,7 +22,8 @@ type Errores = NonNullable<Problem['errors']>
 const ESTADOS: readonly Sorteo['estado'][] = ['borrador', 'bases_publicadas', 'participacion_abierta', 'corte_cerrado', 'ejecutado', 'premios_entregados', 'cancelado']
 const CLAVES: readonly Requisito['clave'][] = ['bases_diaco', 'autorizacion_gobernacion', 'fianza', 'isr_premios', 'timbre_fiscal', 'delegado_o_notario', 'publicacion_resultados', 'lista_a_gobernacion']
 const PARA_ABRIR: readonly Requisito['clave'][] = ['bases_diaco']
-const PARA_EJECUTAR: readonly Requisito['clave'][] = ['bases_diaco', 'autorizacion_gobernacion', 'fianza', 'isr_premios', 'timbre_fiscal', 'delegado_o_notario']
+// Decisión del PM (19 oct): Gobernación y fianza se marcan, pero no bloquean la ejecución.
+const PARA_EJECUTAR: readonly Requisito['clave'][] = ['bases_diaco', 'isr_premios', 'timbre_fiscal', 'delegado_o_notario']
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const PORCENTAJE = /^\d{1,3}(\.\d{1,2})?$/
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
@@ -84,7 +85,7 @@ async function sellarLista(s: Sorteo, participantes: ParticipanteSorteo[]): Prom
 }
 
 /** Como `EjecutarSorteo`: titulares (Σ cantidad, en orden de premio) y luego suplentes. */
-async function sortearFixture(s: Sorteo, valorPublico: string, momento: string): Promise<void> {
+async function sortearFixture(s: Sorteo, valorPublico: string, evidencia: string, momento: string): Promise<void> {
     const privado = privadoDe(s.id)
     const semilla = bytesDeHex(privado.semilla ?? '')
     const lista = privado.participantes
@@ -116,6 +117,7 @@ async function sortearFixture(s: Sorteo, valorPublico: string, momento: string):
     })
     s.semilla = privado.semilla
     s.valor_publico = valorPublico
+    s.valor_publico_evidencia = evidencia
     s.resultado = {
         algoritmo: s.algoritmo,
         semilla: privado.semilla,
@@ -151,7 +153,7 @@ function prepararSorteos(): Promise<void> {
                 await sellarLista(s, privado.participantes)
             }
             if (privado?.ejecutarCon && !s.resultado) {
-                await sortearFixture(s, privado.ejecutarCon.valor_publico, privado.ejecutarCon.ejecutado_en)
+                await sortearFixture(s, privado.ejecutarCon.valor_publico, privado.ejecutarCon.valor_publico_evidencia, privado.ejecutarCon.ejecutado_en)
             }
         }
     })()
@@ -346,7 +348,58 @@ function basesIncompletas(s: Sorteo): RespuestaFixture | null {
     if (!lleno(b.publicacion_resultados)) {
         return falta('bases.publicacion_resultados', 'Falta la forma y el medio de publicar los resultados')
     }
+    if (!lleno(b.fuente_valor_publico)) {
+        return falta('bases.fuente_valor_publico', 'Falta la fuente pública del valor que se usará en el acto (p. ej. un resultado de la Lotería Santa Lucía)')
+    }
     return null
+}
+
+/**
+ * H25 (`cuentaParaBienDePremio` de la API): la contrapartida `cuenta` de un bien es un activo imputable
+ * de la empresa o global, sin contracuenta ni auxiliar de clientes y fuera de las cuentas control.
+ */
+const CONTROL_NO_PERMITIDAS = ['1.1.01', '1.1.02', '1.1.03', '1.1.04', '1.1.05', '1.1.06', '1.1.07', '1.1.08', '1.1.09', '1.1.10', '1.1.11', '1.1.12', '1.1.13', '1.2']
+
+function cuentaPermitida(codigo: unknown, empresaId: number): boolean {
+    const c = bd.cuentas.find(x => x.codigo === codigo)
+    if (!c || c.tipo !== 'activo' || !c.imputable || c.contracuenta || c.auxiliar_cliente) {
+        return false
+    }
+    if ((c.empresa_id ?? null) !== null && c.empresa_id !== empresaId) {
+        return false
+    }
+    return !CONTROL_NO_PERMITIDAS.some(p => c.codigo === p || c.codigo.startsWith(`${p}.`))
+}
+
+/**
+ * Como `contabilizarBien` de `EntregarPremioSorteo`: `compra` (una línea de bien de una compra vigente,
+ * no NCRE, de la empresa y no entregada antes) o `cuenta` (lista blanca); `proveedor` ya no (422
+ * `contrapartida_proveedor`: un bien a crédito se registra primero como compra).
+ */
+function contabilizarBien(s: Sorteo, ganador: Ganador, cuerpo: Record<string, unknown>): Partial<Ganador> | RespuestaFixture {
+    const contrapartida = cuerpo.contrapartida
+    if (contrapartida === 'proveedor') {
+        return regla('contrapartida_proveedor', 'Un bien comprado a crédito se registra primero como compra (POST /compras) y se entrega con contrapartida compra (compra_linea_id)')
+    }
+    if (contrapartida === 'compra') {
+        const compra = bd.compras.find(c => c.lineas.some(l => l.id === cuerpo.compra_linea_id))
+        const linea = compra?.lineas.find(l => l.id === cuerpo.compra_linea_id)
+        if (!compra || !linea || compra.estado !== 'vigente' || compra.empresa_id !== s.empresa_id || linea.tipo !== 'bien' || compra.tipo_documento === 'NCRE') {
+            return invalido([{ field: 'compra_linea_id', message: 'La línea debe ser un bien de una compra registrada (no anulada, no nota de crédito) de la empresa', rule: 'compra' }])
+        }
+        const usada = bd.sorteos.flatMap(x => x.ganadores).find(g => g.compra_linea_id === linea.id && g.id !== ganador.id)
+        if (usada) {
+            return regla('compra_ya_entregada', `La línea ${linea.id} de la compra ${compra.id} ya es el premio del ganador ${usada.id}`)
+        }
+        return { contrapartida: `compra ${compra.id}`, compra_linea_id: linea.id }
+    }
+    if (contrapartida === 'cuenta') {
+        if (!cuentaPermitida(cuerpo.cuenta_codigo, s.empresa_id)) {
+            return invalido([{ field: 'cuenta_codigo', message: 'La cuenta debe ser un activo imputable de la empresa fuera de las cuentas control (caja, bancos, CxC, impuestos, cobros por liquidar, fondos en tránsito, estimación, gastos anticipados y propiedad, planta y equipo con su depreciación): p. ej. un inventario de premios', rule: 'cuenta' }])
+        }
+        return { contrapartida: `cuenta ${String(cuerpo.cuenta_codigo)}` }
+    }
+    return invalido([{ field: 'contrapartida', message: 'compra (compra_linea_id) o cuenta (cuenta_codigo)', rule: 'required' }])
 }
 
 /** Como `exigirRequisitos`: 422 `requisito_pendiente` con la primera clave que falta. */
@@ -601,8 +654,13 @@ export const rutasSorteos: RutasFixture = {
         await prepararSorteos()
         const cuerpo = cuerpoObjeto(solicitud)
         const valorPublico = texto(cuerpo.valor_publico)
-        if (!valorPublico) {
-            return invalido([{ field: 'valor_publico', message: 'El valor público del acto es obligatorio', rule: 'required' }])
+        const evidencia = texto(cuerpo.valor_publico_evidencia)
+        const faltan = [
+            ...(valorPublico ? [] : [{ field: 'valor_publico', message: 'El valor público del acto es obligatorio', rule: 'required' }]),
+            ...(evidencia ? [] : [{ field: 'valor_publico_evidencia', message: 'Cómo se obtuvo en el acto el valor de la fuente de las bases', rule: 'required' }]),
+        ]
+        if (!valorPublico || !evidencia) {
+            return invalido(faltan)
         }
         const s = sorteoDe(solicitud)
         if (!esSorteo(s)) {
@@ -620,7 +678,7 @@ export const rutasSorteos: RutasFixture = {
             return regla('sin_participantes', 'El sorteo no tiene participantes')
         }
         privado.asistentes = asistentesDe(cuerpo.asistentes)
-        await sortearFixture(s, valorPublico, ahora())
+        await sortearFixture(s, valorPublico, evidencia, ahora())
         avanzar(s, {})
         registrarAccion(solicitud, 'sorteos.ejecutar', { tipo: 'sorteo', id: s.id }, cuerpo)
         return { status: 200, cuerpo: s }
@@ -673,17 +731,11 @@ export const rutasSorteos: RutasFixture = {
             Object.assign(cambios, { egreso_id: EGRESOS_PREMIO + ganador.id, contrapartida: metodo })
         }
         else if (premio.tipo === 'bien') {
-            const contrapartida = cuerpo.contrapartida
-            if (contrapartida !== 'proveedor' && contrapartida !== 'cuenta') {
-                return invalido([{ field: 'contrapartida', message: 'proveedor (2.1.03) o cuenta (cuenta_codigo)', rule: 'required' }])
+            const resultado = contabilizarBien(s, ganador, cuerpo)
+            if ('status' in resultado) {
+                return resultado
             }
-            if (contrapartida === 'cuenta') {
-                const cuenta = bd.cuentas.find(c => c.codigo === cuerpo.cuenta_codigo)
-                if (!cuenta || cuenta.tipo !== 'activo' || !cuenta.imputable || (cuenta.empresa_id !== null && cuenta.empresa_id !== s.empresa_id)) {
-                    return invalido([{ field: 'cuenta_codigo', message: 'La cuenta debe ser de activo, imputable y de la empresa (p. ej. inventario)', rule: 'cuenta' }])
-                }
-            }
-            cambios.contrapartida = contrapartida === 'cuenta' ? `cuenta ${String(cuerpo.cuenta_codigo)}` : 'proveedor'
+            Object.assign(cambios, resultado)
         }
         else {
             const participante = privadoDe(s.id).participantes.find(p => p.id === ganador.participante_id)
@@ -697,6 +749,33 @@ export const rutasSorteos: RutasFixture = {
         const pendientes = s.ganadores.filter(g => g.tipo === 'titular' && g.estado !== 'entregado')
         avanzar(s, pendientes.length === 0 ? { estado: 'premios_entregados' } : {})
         registrarAccion(solicitud, 'sorteos.entregar', { tipo: 'sorteo', id: s.id }, { ganador_id: ganador.id, ...cuerpo })
+        return { status: 200, cuerpo: s }
+    })),
+
+    /** H22 (`sorteos.anular_entrega`, permiso `sorteos.entregar`): deshace la entrega toda junta. */
+    'POST /api/v1/lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega': conPermiso('sorteos.entregar', conIdempotencia(async (solicitud) => {
+        await prepararSorteos()
+        const motivo = texto(cuerpoObjeto(solicitud).motivo)
+        if (!motivo || motivo.length < 3) {
+            return invalido([{ field: 'motivo', message: 'El motivo es obligatorio (mínimo 3 caracteres)', rule: 'motivo' }])
+        }
+        const s = sorteoDe(solicitud)
+        if (!esSorteo(s)) {
+            return s
+        }
+        if (s.estado !== 'ejecutado' && s.estado !== 'premios_entregados') {
+            return estadoInvalido(s, 'anular la entrega de un premio')
+        }
+        const ganador = s.ganadores.find(g => g.id === idDe(solicitud, 'ganadorId'))
+        if (!ganador) {
+            return noEncontrado('el ganador')
+        }
+        if (ganador.estado !== 'entregado') {
+            return regla('premio_no_entregado', `El premio del ganador ${ganador.id} no está entregado`)
+        }
+        Object.assign(ganador, { estado: 'por_notificar', retencion_isr: null, contrapartida: null, asiento_id: null, egreso_id: null, canje_id: null, compra_linea_id: null, entregado_en: null, version: ganador.version + 1 })
+        avanzar(s, s.estado === 'premios_entregados' ? { estado: 'ejecutado' } : {})
+        registrarAccion(solicitud, 'sorteos.anular_entrega', { tipo: 'sorteo', id: s.id }, { ganador_id: ganador.id, motivo })
         return { status: 200, cuerpo: s }
     })),
 
@@ -715,6 +794,8 @@ export const rutasSorteos: RutasFixture = {
             compromiso: s.compromiso ?? '',
             semilla: s.semilla ?? '',
             valor_publico: s.valor_publico ?? '',
+            fuente_valor_publico: typeof s.bases.fuente_valor_publico === 'string' ? s.bases.fuente_valor_publico : null,
+            valor_publico_evidencia: s.valor_publico_evidencia ?? null,
             lista_hash: s.lista_hash ?? '',
             lista: privadoDe(s.id).participantes.map(p => ({ codigo: p.codigo, boletos: p.boletos })),
             titulares: s.premios.reduce((suma, p) => suma + p.cantidad, 0),

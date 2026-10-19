@@ -215,12 +215,20 @@ export default class extends BaseSchema {
                 DROP CONSTRAINT canjes_puntos_check,
                 ADD CONSTRAINT canjes_puntos CHECK (puntos > 0 OR (puntos = 0 AND sorteo_ganador_id IS NOT NULL));
 
-            ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
-            ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo IN (
-                'factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
-                'compra', 'pago_proveedor', 'retencion', 'liquidacion_impuesto', 'pago_impuesto', 'cierre_anual',
-                'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco', 'provision', 'castigo',
-                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad', 'sorteo'));
+            -- agrega \`sorteo\` a los orígenes que ya admite la base (no se pierde ninguno de otra migración)
+            DO $$
+            DECLARE
+                valores text[];
+            BEGIN
+                SELECT array_agg(DISTINCT m[1]) INTO valores
+                  FROM pg_constraint c, regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m
+                 WHERE c.conname = 'asientos_origen_tipo_check' AND c.conrelid = 'ledger.asientos'::regclass;
+                IF NOT 'sorteo' = ANY (valores) THEN
+                    valores := valores || 'sorteo'::text;
+                END IF;
+                ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
+                EXECUTE format('ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo = ANY (%L::text[]))', valores);
+            END $$;
 
             DO $do$
             BEGIN
@@ -241,12 +249,18 @@ export default class extends BaseSchema {
 
     async down() {
         this.schema.raw(`
-            ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
-            ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo IN (
-                'factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste',
-                'compra', 'pago_proveedor', 'retencion', 'liquidacion_impuesto', 'pago_impuesto', 'cierre_anual',
-                'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco', 'provision', 'castigo',
-                'diferencia_cobro', 'depreciacion', 'baja_activo', 'diferido', 'lealtad')) NOT VALID;
+            -- quita \`sorteo\` y conserva los demás orígenes que tenga la base
+            DO $$
+            DECLARE
+                valores text[];
+            BEGIN
+                SELECT array_agg(DISTINCT m[1]) INTO valores
+                  FROM pg_constraint c, regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m
+                 WHERE c.conname = 'asientos_origen_tipo_check' AND c.conrelid = 'ledger.asientos'::regclass;
+                valores := array_remove(valores, 'sorteo');
+                ALTER TABLE ledger.asientos DROP CONSTRAINT asientos_origen_tipo_check;
+                EXECUTE format('ALTER TABLE ledger.asientos ADD CONSTRAINT asientos_origen_tipo_check CHECK (origen_tipo = ANY (%L::text[])) NOT VALID', valores);
+            END $$;
             ALTER TABLE lealtad.canjes DROP CONSTRAINT IF EXISTS canjes_puntos;
             ALTER TABLE lealtad.canjes DROP COLUMN IF EXISTS sorteo_ganador_id;
             ALTER TABLE lealtad.canjes ADD CONSTRAINT canjes_puntos_check CHECK (puntos > 0) NOT VALID;
