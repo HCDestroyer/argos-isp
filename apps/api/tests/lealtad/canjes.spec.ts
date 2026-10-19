@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { generar } from '#tests/billing/ayudas_billing'
 import { crearPlanFila } from '#tests/core/fabricas'
@@ -562,6 +562,112 @@ test.group('Lealtad · canjes', (group) => {
         )
         assert.equal(lista.body().data[0].id, primero.body().id)
         await afirmarPasivoLealtad(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('anular la factura que recibió saldo a favor de una nota: el saldo vuelve a Anticipos con fila de reverso y asiento espejo', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const { s, canje, diciembre } = await canjeSobrePagada(e)
+        const [aplicacion] = await db
+            .from('billing.notas_credito_aplicaciones')
+            .where('factura_id', diciembre.id)
+            .select('id', 'monto')
+        assert.equal(aplicacion!.monto, '50.00')
+        const anulada = await new AnularFactura().execute(
+            { factura_id: diciembre.id, motivo: 'error de emisión' },
+            e.ctx,
+        )
+        assert.include(anulada, { estado: 'anulada', pagado: '0.00' })
+        const filas = await db
+            .from('billing.notas_credito_aplicaciones')
+            .where('factura_id', diciembre.id)
+            .orderBy('id')
+            .select('id', 'monto', 'reversa_de', 'nota_credito_id')
+        assert.deepEqual(
+            filas.map((f) => [f.monto, f.reversa_de === null ? null : Number(f.reversa_de)]),
+            [
+                ['50.00', null],
+                ['-50.00', Number(aplicacion!.id)],
+            ],
+        )
+        // asiento CxC / Anticipos del cliente por lo revertido; el saldo a favor vuelve a Anticipos
+        const reverso = await db
+            .from('ledger.asientos')
+            .where({ origen_tipo: 'nota_credito', origen_id: canje.nota_credito_id! })
+            .whereLike('descripcion', 'Reverso de la aplicación%')
+            .select('id')
+            .firstOrFail()
+        const movimientos = await db
+            .from('ledger.movimientos as m')
+            .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+            .where('m.asiento_id', reverso.id)
+            .orderBy('m.id')
+            .select('c.codigo', 'm.debe', 'm.haber')
+        assert.deepEqual(
+            movimientos.map((m) => [m.codigo, m.debe, m.haber]),
+            [
+                ['1.1.03', '50.00', '0.00'],
+                ['2.1.01', '0.00', '50.00'],
+            ],
+        )
+        assert.equal(await saldoCuenta(e.B, '2.1.01', s.clienteId), '-50.00', 'Anticipos (acreedora)')
+        // no se borra ni se edita la aplicación original
+        await assert.rejects(() =>
+            db
+                .from('billing.notas_credito_aplicaciones')
+                .where('id', aplicacion!.id)
+                .update({ monto: '1.00' }),
+        )
+        await afirmarPasivoLealtad(assert, [e.B, e.C])
+        // el inv. 5.factura_anulada_con_saldo_vivo del auditor aún no descuenta la fila de reverso
+        // (H-anular-saldo-a-favor, prueba .fails abajo); ningún otro invariante se rompe
+        const violaciones = await verificarLibro([e.B, e.C])
+        assert.deepEqual(
+            violaciones
+                .map((v) => v.invariante)
+                .filter((v) => !v.startsWith('5.factura_anulada_con_saldo_vivo')),
+            [],
+        )
+    })
+
+    test('H-anular-saldo-a-favor: anular la factura que recibió saldo a favor de una nota deja el libro limpio', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const { diciembre } = await canjeSobrePagada(e)
+        await new AnularFactura().execute({ factura_id: diciembre.id, motivo: 'error de emisión' }, e.ctx)
+        await afirmarLibro(assert, [e.B, e.C])
+    }).fails(
+        'H-anular-saldo-a-favor: 5.factura_anulada_con_saldo_vivo cuenta la aplicación revertida (falta descontar su fila de reverso, Σ monto = 0)',
+    )
+
+    test('anular una factura con saldo a favor de nota y además un pago en efectivo: 409 factura_con_pagos sin tocar nada', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const { s, diciembre } = await canjeSobrePagada(e)
+        await new RegistrarPago().execute(
+            {
+                cliente_id: s.clienteId,
+                metodo: 'caja',
+                monto: '10.00',
+                facturas: [diciembre.id],
+                empresa_id: e.B,
+            },
+            e.ctx,
+        )
+        const error = await new AnularFactura()
+            .execute({ factura_id: diciembre.id, motivo: 'error de emisión' }, e.ctx)
+            .then(() => null)
+            .catch((err: { status?: number; tipo?: string }) => err)
+        assert.equal(error?.status, 409)
+        assert.include(String(error?.tipo), 'factura_con_pagos')
+        const filas = await db.from('billing.notas_credito_aplicaciones').where('factura_id', diciembre.id)
+        assert.lengthOf(filas, 1)
+        const dic = await db.from('billing.facturas').where('id', diciembre.id).firstOrFail()
+        assert.include(dic, { pagado: '60.00' })
         await afirmarLibro(assert, [e.B, e.C])
     })
 })

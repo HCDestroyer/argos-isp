@@ -4,7 +4,7 @@ import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
-import { bloquearCliente } from '#billing/cobros'
+import { aplicarAnticipos, bloquearCliente, revertirAplicacionesDeNotas } from '#billing/cobros'
 import { columnasFactura, type FacturaFila } from '#billing/facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { hoyGuatemala } from '#ledger/fechas'
@@ -23,6 +23,9 @@ async function bloquearDte(t: Transaccion, dteId: number): Promise<void> {
 /**
  * `facturas.anular` (`POST /facturas/:id/anular`, permiso `facturas.anular`, con motivo).
  *
+ * - Saldo a favor de notas de crédito aplicado a la factura (lealtad §15.2): se revierte primero (fila de
+ *   reverso en `notas_credito_aplicaciones` y asiento `CxC / Anticipos`), vuelve a Anticipos y, al
+ *   final, se aplica a la otra deuda del cliente.
  * - 409 `factura_con_pagos` si la factura (o una de sus moras) tiene pagos aplicados: hay que
  *   anular el pago primero. 409 `factura_con_notas_credito` si tiene notas de crédito (se
  *   acredita el resto con otra nota). 409 `factura_anulada` si ya estaba anulada.
@@ -78,6 +81,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 'estado',
                 'total',
                 'pagado',
+                'vencida_en',
                 t.trx.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`),
             )) as Array<{
             id: number
@@ -88,6 +92,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
             estado: string
             total: string
             pagado: string
+            vencida_en: Date | null
             vence_en: string
         }>
         const factura = facturas.find((f) => f.id === input.factura_id)!
@@ -129,6 +134,13 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 'Factura con notas de crédito',
             )
         }
+        // decisión del líder: el saldo a favor de notas que recibió vuelve a Anticipos (fila de reverso y
+        // asiento CxC / Anticipos); si además tiene pagos, sigue la regla de pagos (409)
+        const revertidas = await revertirAplicacionesDeNotas(
+            t,
+            facturas.filter((f) => f.estado !== 'anulada'),
+            `anulación de la factura ${factura.id}: ${input.motivo.trim()}`,
+        )
         const conPagos = facturas.filter((f) => f.estado !== 'anulada' && dec(f.pagado).gt(0))
         if (conPagos.length > 0) {
             throw new Conflicto(
@@ -194,6 +206,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 { estado: 'anulacion_pendiente' },
             )
             t.fijarEntidad('factura', factura.id)
+            if (revertidas.size > 0) await aplicarAnticipos(t, factura.cliente_id, Number(factura.empresa_id))
             return (await t.trx
                 .from('billing.facturas as f')
                 .where('f.id', factura.id)
@@ -296,6 +309,8 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
         }
         t.fijarEntidad('factura', factura.id)
 
+        // el saldo a favor que volvió a Anticipos se aplica a la otra deuda del cliente
+        if (revertidas.size > 0) await aplicarAnticipos(t, factura.cliente_id, Number(factura.empresa_id))
         if (factura.servicio_id) {
             await new EvaluarEstadoServicio().execute({ servicio_id: factura.servicio_id }, t.ctx, {
                 trx: t.trx,

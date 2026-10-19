@@ -446,3 +446,81 @@ export function serviciosDe(aplicaciones: Array<{ servicio_id: number | null }>)
 export function clientesDelPago(pagadorId: number, aplicaciones: Array<{ cliente_id: number }>): number[] {
     return [...new Set([pagadorId, ...aplicaciones.map((a) => a.cliente_id)])]
 }
+
+/**
+ * Anular una factura que recibió saldo a favor de notas de crédito (decisión del líder): cada
+ * aplicación vigente a estas facturas se revierte con una fila espejo (monto negativo, `reversa_de`)
+ * en `billing.notas_credito_aplicaciones` y un asiento `CxC / Anticipos` del cliente (origen la nota):
+ * el saldo vuelve a Anticipos y `pagado` baja. Nunca UPDATE. Devuelve lo revertido por factura.
+ */
+export async function revertirAplicacionesDeNotas(
+    t: Transaccion,
+    facturas: FacturaPendiente[],
+    motivo: string,
+): Promise<Map<number, Dec>> {
+    const revertido = new Map<number, Dec>()
+    if (facturas.length === 0) return revertido
+    const vigentes = (await t.trx
+        .from('billing.notas_credito_aplicaciones as a')
+        .join('billing.notas_credito as n', 'n.id', 'a.nota_credito_id')
+        .whereIn(
+            'a.factura_id',
+            facturas.map((f) => f.id),
+        )
+        .whereNull('a.reversa_de')
+        .whereNotExists((q) =>
+            q.from('billing.notas_credito_aplicaciones as r').whereRaw('r.reversa_de = a.id'),
+        )
+        .orderBy('a.id', 'asc')
+        .select(
+            'a.id',
+            'a.nota_credito_id',
+            'a.factura_id',
+            'a.monto',
+            'n.empresa_id',
+            'n.cliente_id',
+        )) as Array<{
+        id: number
+        nota_credito_id: number
+        factura_id: number
+        monto: string
+        empresa_id: number
+        cliente_id: number
+    }>
+    for (const a of vigentes) {
+        await t.trx
+            .insertQuery()
+            .table('billing.notas_credito_aplicaciones')
+            .insert({
+                nota_credito_id: a.nota_credito_id,
+                factura_id: a.factura_id,
+                monto: aTexto(dec(a.monto).negated()),
+                reversa_de: a.id,
+            })
+        await new RegistrarAsiento().execute(
+            {
+                empresa_id: Number(a.empresa_id),
+                descripcion: `Reverso de la aplicación del saldo a favor de la nota de crédito ${a.nota_credito_id} a la factura ${a.factura_id} · ${motivo}`,
+                origen_tipo: 'nota_credito',
+                origen_id: Number(a.nota_credito_id),
+                movimientos: [
+                    { cuenta: CUENTAS.CXC_CLIENTES, debe: aTexto(a.monto), cliente_id: Number(a.cliente_id) },
+                    {
+                        cuenta: CUENTAS.ANTICIPOS_CLIENTES,
+                        haber: aTexto(a.monto),
+                        cliente_id: Number(a.cliente_id),
+                    },
+                ],
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        const id = Number(a.factura_id)
+        revertido.set(id, (revertido.get(id) ?? dec('0')).plus(a.monto))
+    }
+    for (const f of facturas) {
+        const monto = revertido.get(f.id)
+        if (monto) await sumarAPagado(t.trx, f, monto.negated())
+    }
+    return revertido
+}
