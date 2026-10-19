@@ -14,6 +14,8 @@ export interface PlantillaBase {
 
 const pie = '\n\n{{empresa.nombre}}{{#empresa.telefono}} · {{empresa.telefono}}{{/empresa.telefono}}'
 const portal = '{{#empresa.portal_url}}\nConsulta y paga en {{empresa.portal_url}}{{/empresa.portal_url}}'
+const puntosEnPortal =
+    '{{#empresa.portal_url}}\nConsulta tus puntos en {{empresa.portal_url}}{{/empresa.portal_url}}'
 
 function ambos(evento: string, asunto: string, cuerpo: string): PlantillaBase[] {
     return [
@@ -288,5 +290,29 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
         'comprobante.rechazado',
         'Comprobante de pago rechazado',
         'No pudimos validar tu comprobante de pago{{#comprobante.motivo}}: {{comprobante.motivo}}{{/comprobante.motivo}}. Comunícate con nosotros.',
+    ),
+    // Lealtad (contratos/lealtad.md §16, fase 1; app/notify/lealtad.ts). Los demás lealtad.* no
+    // avisan al cliente: ver "Avisos de lealtad" en el README.
+    ...ambos(
+        'lealtad.puntos_acumulados',
+        'Ganaste {{lealtad.puntos_texto}}',
+        'Sumaste {{lealtad.puntos_texto}}{{#lealtad.programa}} en {{lealtad.programa}}{{/lealtad.programa}}. Tu saldo es de {{lealtad.saldo_texto}}.' +
+            '{{#lealtad.vence}} Estos puntos vencen el {{lealtad.vence}}.{{/lealtad.vence}}' +
+            puntosEnPortal,
+    ),
+    ...ambos(
+        'lealtad.puntos_por_vencer',
+        'Tienes {{lealtad.puntos_texto}} por vencer',
+        'Tu lote de {{lealtad.puntos_texto}}{{#lealtad.programa}} de {{lealtad.programa}}{{/lealtad.programa}} vence el {{lealtad.vence}}. Úsalo antes de esa fecha para no perderlo. Tu saldo es de {{lealtad.saldo_texto}}.' +
+            puntosEnPortal,
+    ),
+    // Al referidor (no al referido): incluye los puntos que ganó, así que su puntos_acumulados no se avisa
+    ...ambos(
+        'lealtad.referido_calificado',
+        '¡Tu referido ya es parte de {{empresa.nombre}}!',
+        '{{#referido.nombre}}{{referido.nombre}}, a quien recomendaste,{{/referido.nombre}}{{^referido.nombre}}La persona que recomendaste{{/referido.nombre}} cumplió los requisitos del programa de referidos.' +
+            '{{#referido.puntos}} Ganaste {{referido.puntos_texto}}; tu saldo es de {{lealtad.saldo_texto}}.{{/referido.puntos}}' +
+            ' ¡Gracias por recomendarnos!' +
+            puntosEnPortal,
     ),
 ]

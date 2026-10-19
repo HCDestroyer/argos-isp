@@ -6,6 +6,7 @@ import { CAMPOS_EMPRESA, verEmpresa } from '#portal/empresa'
 import { EMPRESA_PRINCIPAL, urlLogoEmpresa } from '#core/empresas'
 import type { CanalNotificacion } from '#shared/eventos'
 import { empresaDelEvento } from '#notify/configuracion'
+import { variablesLealtad } from '#notify/lealtad'
 import {
     diasEntre,
     fechaCalendario,
@@ -515,6 +516,11 @@ export async function construirVariables(
             const pago = await variablesPago(cliente, pagoId)
             if (pago) variables.pago = pago
         }
+    }
+
+    // lealtad.* (`lealtad.ts`): puntos, vencimiento, saldo y, del referido calificado, quién fue
+    if (evento.startsWith('lealtad.')) {
+        Object.assign(variables, await variablesLealtad(cliente, evento, payload, destinatario.clienteId))
     }
 
     return variables

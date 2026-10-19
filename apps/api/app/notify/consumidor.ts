@@ -3,6 +3,7 @@ import { contextoSistema } from '#shared/contexto'
 import ProgramarNotificacion from '#notify/actions/programar_notificacion'
 import type { ColaEnvios } from '#notify/cola'
 import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
+import { EVENTOS_LEALTAD_CLIENTE } from '#notify/lealtad'
 
 // La interfaz del bus vive en `app/shared/eventos_bus.ts` (A1, tarea 10); se reexporta aquí
 // para no romper los imports existentes.
@@ -17,6 +18,8 @@ export const EVENTOS_NOTIFICABLES = [
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',
+    // lealtad (`lealtad.ts`): los demás `lealtad.*` no avisan al cliente (README, "Avisos de lealtad")
+    ...EVENTOS_LEALTAD_CLIENTE,
 ] as const
 
 /** Prefijos aceptados además de la lista (familias de eventos de A3). */
