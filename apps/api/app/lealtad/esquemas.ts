@@ -15,6 +15,8 @@ import {
     texto,
 } from '#shared/openapi/esquemas'
 import { ESTADOS_REFERIDO } from '#lealtad/referidos'
+import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
+import { CANALES_CANJE, ESTADOS_CANJE } from '#lealtad/canjes'
 import { ORIGENES_MOVIMIENTO, TIPOS_MOVIMIENTO } from '#lealtad/puntos'
 import { PERIODOS_TOPE, RECOMPENSAS, TIPOS_REGLA } from '#lealtad/reglas'
 
@@ -53,6 +55,11 @@ export const ProgramaLealtad = definirEsquema(
         minimo_canje: entero,
         terminos: texto,
         terminos_hash: { ...texto, description: 'SHA-256 de los términos publicados' },
+        visible_portal: { ...booleano, description: 'El cliente ve sus puntos en el portal' },
+        canje_portal: {
+            ...booleano,
+            description: 'El cliente canjea desde el portal (solo con visible_portal)',
+        },
         vigente_desde: fecha,
         vigente_hasta: nulable(fecha),
         ...auditable,
@@ -231,3 +238,56 @@ export const ReporteLealtad = definirEsquema(
         ),
     }),
 )
+
+export const PremioLealtad = definirEsquema(
+    'PremioLealtad',
+    objeto({
+        id,
+        empresa_id: id,
+        programa_id: id,
+        tipo: enumerado(TIPOS_PREMIO),
+        nombre: texto,
+        costo_puntos: entero,
+        descuento_tipo: nulable(enumerado(TIPOS_DESCUENTO)),
+        descuento_valor: nulable(Dinero),
+        tope: nulable(Dinero),
+        plan_destino_id: nulable(id),
+        dias: nulable(entero),
+        costo_unitario: nulable(Dinero),
+        existencias: { ...nulable(entero), description: 'null = sin límite' },
+        en_portal: booleano,
+        activo: booleano,
+        ...auditable,
+    }),
+)
+
+export const PaginaPremiosLealtad = definirEsquema('PaginaPremiosLealtad', pagina(PremioLealtad))
+
+export const CanjeLealtad = definirEsquema(
+    'CanjeLealtad',
+    objeto({
+        id,
+        empresa_id: id,
+        programa_id: id,
+        cliente_id: id,
+        servicio_id: id,
+        premio_id: id,
+        premio_nombre: texto,
+        tipo: enumerado(TIPOS_PREMIO),
+        puntos: entero,
+        estado: enumerado(ESTADOS_CANJE),
+        descuento: { ...nulable(Dinero), description: 'Q descontados; null en un descuento aún reservado' },
+        factura_id: nulable(id),
+        nota_credito_id: nulable(id),
+        plan_temporal_id: nulable(id),
+        movimiento_id: nulable(id),
+        canal: enumerado(CANALES_CANJE),
+        aplicado_en: nulable(instante),
+        revertido_en: nulable(instante),
+        motivo: nulable(texto),
+        creado_por: nulable(id),
+        ...auditable,
+    }),
+)
+
+export const PaginaCanjesLealtad = definirEsquema('PaginaCanjesLealtad', pagina(CanjeLealtad))

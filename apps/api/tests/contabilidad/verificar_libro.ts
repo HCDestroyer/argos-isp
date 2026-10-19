@@ -276,7 +276,7 @@ async function verificarLibroCon(
           WHERE coalesce(cxc.saldo, 0) <> coalesce(fac.pendiente, 0)`,
     )
     await revisar(
-        '3.anticipos_distintos_de_excedentes (Σ pago − aplicado − recuperado de castigos + saldos a favor sin aplicar)',
+        '3.anticipos_distintos_de_excedentes (Σ pago − aplicado − recuperado de castigos + saldos a favor sin aplicar + saldo a favor de notas de crédito sin aplicar)',
         `WITH ant AS (
              SELECT a.empresa_id, m.cliente_id, sum(m.haber - m.debe) AS saldo
                FROM ledger.movimientos m
@@ -303,9 +303,18 @@ async function verificarLibroCon(
                FROM billing.saldos_iniciales s LEFT JOIN apls ON apls.saldo_inicial_id = s.id
               WHERE s.monto < 0 AND s.anulado_en IS NULL AND ${E('s.empresa_id')} AND ${C('s.cliente_id')}
               GROUP BY 1, 2
+         ), apln AS (
+             SELECT nota_credito_id, sum(monto) AS monto FROM billing.notas_credito_aplicaciones GROUP BY 1
+         ), nfav AS (
+             -- decisión del líder (lealtad §15.2): la nota que pasa el saldo de la factura deja el excedente
+             -- (a_favor) en Anticipos; lo aplicado a otras facturas sale de ahí
+             SELECT n.empresa_id, n.cliente_id, sum(n.a_favor - coalesce(apln.monto, 0)) AS restante
+               FROM billing.notas_credito n LEFT JOIN apln ON apln.nota_credito_id = n.id
+              WHERE n.a_favor > 0 AND NOT ${anulada('n')} AND ${E('n.empresa_id')} AND ${C('n.cliente_id')}
+              GROUP BY 1, 2
          ), docs AS (
              SELECT empresa_id, cliente_id, sum(restante) AS restante
-               FROM (SELECT * FROM pag UNION ALL SELECT * FROM sal) x GROUP BY 1, 2
+               FROM (SELECT * FROM pag UNION ALL SELECT * FROM sal UNION ALL SELECT * FROM nfav) x GROUP BY 1, 2
          )
          SELECT coalesce(ant.empresa_id, docs.empresa_id) AS empresa_id,
                 coalesce(ant.cliente_id, docs.cliente_id) AS cliente_id,
@@ -350,13 +359,17 @@ async function verificarLibroCon(
     | 5 · Pagos y facturas
     */
     await revisar(
-        '5.factura_pagado_inconsistente (pagado ≠ Σ aplicaciones vigentes + notas + saldos a favor, o fuera de [0, total]; el castigo no es pago, decisión (g))',
+        '5.factura_pagado_inconsistente (pagado ≠ Σ aplicaciones vigentes + notas (sin su saldo a favor) + saldos a favor + saldo a favor de notas aplicado, o fuera de [0, total]; el castigo no es pago, decisión (g))',
         `WITH apl AS (
              SELECT a.factura_id, sum(a.monto) AS monto
                FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
               WHERE p.estado = 'registrado' GROUP BY 1
          ), nc AS (
-             SELECT n.factura_id, sum(n.monto) AS monto FROM billing.notas_credito n WHERE NOT ${anulada('n')} GROUP BY 1
+             SELECT n.factura_id, sum(n.monto - n.a_favor) AS monto FROM billing.notas_credito n WHERE NOT ${anulada('n')} GROUP BY 1
+         ), ncap AS (
+             SELECT a.factura_id, sum(a.monto) AS monto
+               FROM billing.notas_credito_aplicaciones a JOIN billing.notas_credito n ON n.id = a.nota_credito_id
+              WHERE NOT ${anulada('n')} GROUP BY 1
          ), si AS (
              SELECT a.factura_id, sum(a.monto) AS monto
                FROM billing.saldos_iniciales_aplicaciones a
@@ -367,11 +380,12 @@ async function verificarLibroCon(
               WHERE origen_tipo IN ('factura', 'mora') AND reversa_de IS NULL
          ), x AS (
              SELECT f.id, f.estado, f.total, f.pagado,
-                    coalesce(apl.monto, 0) + coalesce(nc.monto, 0) + coalesce(si.monto, 0) AS cubierto,
+                    coalesce(apl.monto, 0) + coalesce(nc.monto, 0) + coalesce(si.monto, 0) + coalesce(ncap.monto, 0) AS cubierto,
                     f.id IN (SELECT origen_id FROM con_asiento) AS tiene_asiento
                FROM billing.facturas f
                LEFT JOIN apl ON apl.factura_id = f.id
                LEFT JOIN nc ON nc.factura_id = f.id
+               LEFT JOIN ncap ON ncap.factura_id = f.id
                LEFT JOIN si ON si.factura_id = f.id
               WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado <> 'anulada'
          )
@@ -447,7 +461,7 @@ async function verificarLibroCon(
                  OR NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura' AND d.documento_id = f.id))`,
     )
     await revisar(
-        '5.factura_anulada_con_saldo_vivo (aplicaciones vigentes, notas o asiento sin reverso)',
+        '5.factura_anulada_con_saldo_vivo (aplicaciones vigentes de pagos o del saldo a favor de notas, notas o asiento sin reverso)',
         `SELECT f.id,
                 (SELECT coalesce(sum(a.monto), 0) FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
                   WHERE a.factura_id = f.id AND p.estado = 'registrado')::text AS aplicado_vigente,
@@ -459,6 +473,8 @@ async function verificarLibroCon(
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')} AND f.estado = 'anulada'
             AND (EXISTS (SELECT 1 FROM billing.pagos_aplicaciones a JOIN billing.pagos p ON p.id = a.pago_id
                           WHERE a.factura_id = f.id AND p.estado = 'registrado')
+                 OR EXISTS (SELECT 1 FROM billing.notas_credito_aplicaciones a JOIN billing.notas_credito n ON n.id = a.nota_credito_id
+                             WHERE a.factura_id = f.id AND NOT ${anulada('n')})
                  OR EXISTS (SELECT 1 FROM billing.notas_credito n WHERE n.factura_id = f.id AND NOT ${anulada('n')})
                  OR EXISTS (SELECT 1 FROM ledger.asientos a
                              WHERE a.origen_tipo IN ('factura', 'mora') AND a.origen_id = f.id AND a.reversa_de IS NULL
@@ -647,10 +663,11 @@ async function verificarLibroCon(
             AND (f.iva <> round(f.total * 12 / 112, 2) OR f.subtotal + f.iva <> f.total)`,
     )
     await revisar(
-        '9.asiento_de_nota_credito_no_cuadra (CxC haber = monto, IVA debe = iva, subtotal + iva = monto)',
+        '9.asiento_de_nota_credito_no_cuadra (CxC haber = monto − a_favor, Anticipos haber = a_favor, IVA debe = iva, subtotal + iva = monto)',
         `WITH mov AS (
              SELECT a.origen_id AS nota_id, min(a.id) AS asiento_id,
                     sum(CASE WHEN c.codigo = '${CXC}' THEN m.haber - m.debe ELSE 0 END) AS cxc,
+                    sum(CASE WHEN c.codigo = '${ANTICIPOS}' THEN m.haber - m.debe ELSE 0 END) AS anticipos,
                     sum(CASE WHEN c.codigo = '${IVA}' THEN m.debe - m.haber ELSE 0 END) AS iva,
                     sum(CASE WHEN c.codigo = '${IVA_TRANSICION}' THEN m.debe - m.haber ELSE 0 END) AS iva_transicion,
                     count(*) FILTER (WHERE a.reversa_de IS NULL) AS n
@@ -658,11 +675,15 @@ async function verificarLibroCon(
                JOIN ledger.movimientos m ON m.asiento_id = a.id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
               WHERE a.origen_tipo = 'nota_credito'
+                -- solo el asiento de la nota (y su reverso): las aplicaciones de su saldo a favor tienen su invariante
+                AND coalesce(a.reversa_de, a.id) = (SELECT min(b.id) FROM ledger.asientos b
+                                                     WHERE b.origen_tipo = 'nota_credito' AND b.origen_id = a.origen_id
+                                                       AND b.reversa_de IS NULL)
               GROUP BY 1
          ), x AS (
              -- estricto (auditor, fase 3; §10.1): la nota de un aviso cuyo IVA aún no se reclasificó (sin DTE
              -- certificado al emitirla) debita 2.1.11; cualquier otra, 2.1.02. Nunca las dos.
-             SELECT n.*, mov.nota_id AS con_asiento, mov.cxc, mov.iva AS iva_debito_libro,
+             SELECT n.*, mov.nota_id AS con_asiento, mov.cxc, mov.anticipos, mov.iva AS iva_debito_libro,
                     mov.iva_transicion AS iva_por_certificar_libro,
                     f.aviso_cobro AND NOT EXISTS (
                         SELECT 1 FROM ledger.asientos r JOIN fiscal.dte d ON d.id = r.origen_id
@@ -678,9 +699,38 @@ async function verificarLibroCon(
          SELECT id, factura_id, monto::text, subtotal::text, iva::text, cxc::text, en_transicion,
                 iva_debito_libro::text, iva_por_certificar_libro::text
            FROM x
-          WHERE con_asiento IS NULL OR cxc <> monto OR subtotal + iva <> monto OR monto <= 0
+          WHERE con_asiento IS NULL OR cxc <> monto - a_favor OR anticipos <> a_favor OR subtotal + iva <> monto OR monto <= 0
              OR (en_transicion AND (iva_por_certificar_libro <> iva OR iva_debito_libro <> 0))
              OR (NOT en_transicion AND (iva_debito_libro <> iva OR iva_por_certificar_libro <> 0))`,
+    )
+    await revisar(
+        '9.saldo_a_favor_de_nota_mal_aplicado (Σ aplicaciones ≤ a_favor; asientos de aplicación Anticipos debe = CxC haber = Σ aplicaciones, del cliente y empresa de la nota, y nada más)',
+        `WITH apl AS (
+             SELECT a.nota_credito_id, sum(a.monto) AS monto, bool_and(f.cliente_id = n.cliente_id AND f.empresa_id = n.empresa_id) AS propias
+               FROM billing.notas_credito_aplicaciones a JOIN billing.facturas f ON f.id = a.factura_id
+               JOIN billing.notas_credito n ON n.id = a.nota_credito_id
+              GROUP BY 1
+         ), mov AS (
+             SELECT a.origen_id AS nota_id,
+                    sum(CASE WHEN c.codigo = '${ANTICIPOS}' THEN m.debe - m.haber ELSE 0 END) AS anticipos,
+                    sum(CASE WHEN c.codigo = '${CXC}' THEN m.haber - m.debe ELSE 0 END) AS cxc,
+                    count(*) FILTER (WHERE c.codigo NOT IN ('${ANTICIPOS}', '${CXC}')) AS ajenos,
+                    bool_and(m.cliente_id = n.cliente_id) AS cliente_ok
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+               JOIN billing.notas_credito n ON n.id = a.origen_id
+              WHERE a.origen_tipo = 'nota_credito' AND a.reversa_de IS NULL
+                AND a.id > (SELECT min(b.id) FROM ledger.asientos b
+                             WHERE b.origen_tipo = 'nota_credito' AND b.origen_id = a.origen_id AND b.reversa_de IS NULL)
+              GROUP BY 1
+         )
+         SELECT n.id, n.monto::text, n.a_favor::text, apl.monto::text AS aplicado, mov.anticipos::text, mov.cxc::text,
+                mov.ajenos::int, apl.propias, mov.cliente_ok
+           FROM billing.notas_credito n LEFT JOIN apl ON apl.nota_credito_id = n.id LEFT JOIN mov ON mov.nota_id = n.id
+          WHERE ${E('n.empresa_id')} AND ${C('n.cliente_id')} AND (apl.nota_credito_id IS NOT NULL OR mov.nota_id IS NOT NULL)
+            AND (coalesce(apl.monto, 0) > n.a_favor OR NOT coalesce(apl.propias, true)
+                 OR coalesce(mov.anticipos, 0) <> coalesce(apl.monto, 0) OR coalesce(mov.cxc, 0) <> coalesce(apl.monto, 0)
+                 OR coalesce(mov.ajenos, 0) <> 0 OR NOT coalesce(mov.cliente_ok, true))`,
     )
     await revisar(
         '9.notas_credito_exceden_la_factura (Σ notas > total o Σ IVA de notas > IVA de la factura)',

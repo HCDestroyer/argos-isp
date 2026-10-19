@@ -30,6 +30,8 @@ export const INMUTABLES: Record<string, string> = {
     // localización fiscal, fase 3 (FEL)
     'billing.notas_credito_lineas': 'nota de crédito por línea (§10.9)',
     'billing.sustituciones': 'sustitución de una factura (§10.9)',
+    'billing.notas_credito_aplicaciones':
+        'aplicación del saldo a favor de una nota de crédito a una factura (dinero; lealtad §15.2)',
     'fiscal.dte_intentos': 'bitácora ante el certificador (§3.6)',
     // localización fiscal §10.7 (numeración guardada)
     'ledger.asientos_numeros': 'número de diario asignado al insertar (§10.7)',
@@ -105,6 +107,10 @@ export const MUTABLES: Record<string, string> = {
     'lealtad.reglas':
         'reglas para ganar con version y audit.cambios; se desactivan, no se borran (lealtad §3)',
     'lealtad.referidos': 'estado del referido por acción, con version y audit.cambios (lealtad §3)',
+    'lealtad.premios':
+        'catálogo de premios con version y audit.cambios; existencias por canje (lealtad §3, fase 2)',
+    'lealtad.canjes':
+        'estado del canje por acción, con version y audit.cambios; los puntos van en movimientos (lealtad §3, fase 2)',
     // servicios adicionales (`contratos/adicionales.md`, A1): no son dinero ni libro; la factura de
     // los `cobrado` la hace A3 en billing
     'core.adicionales': 'catálogo por empresa con version y audit.cambios; se desactiva, no se borra',
