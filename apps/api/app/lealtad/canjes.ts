@@ -28,6 +28,8 @@ export interface CanjeVista {
     /** Q del descuento (null hasta aplicarse, en un descuento reservado para la próxima factura) */
     descuento: string | null
     factura_id: number | null
+    /** decisión del PM (19 oct): el descuento dejó el periodo en cero y se aplicó a esta bonificación */
+    bonificacion_id: number | null
     nota_credito_id: number | null
     plan_temporal_id: number | null
     movimiento_id: number | null
@@ -45,6 +47,7 @@ export const CAMPOS_CANJE = [
     'estado',
     'descuento',
     'factura_id',
+    'bonificacion_id',
     'nota_credito_id',
     'plan_temporal_id',
     'movimiento_id',
@@ -72,6 +75,7 @@ function consulta(cliente: QueryClientContract) {
             'c.estado',
             'c.descuento',
             'c.factura_id',
+            'c.bonificacion_id',
             'c.nota_credito_id',
             'c.plan_temporal_id',
             'c.movimiento_id',
@@ -97,6 +101,7 @@ function aVista(f: Record<string, any>): CanjeVista {
         premio_id: Number(f.premio_id),
         puntos: Number(f.puntos),
         factura_id: n(f.factura_id),
+        bonificacion_id: n(f.bonificacion_id),
         nota_credito_id: n(f.nota_credito_id),
         plan_temporal_id: n(f.plan_temporal_id),
         movimiento_id: n(f.movimiento_id),

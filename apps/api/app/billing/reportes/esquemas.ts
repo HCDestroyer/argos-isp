@@ -19,7 +19,7 @@ import {
     COLUMNAS_INGRESOS,
     COLUMNAS_IVA,
     COLUMNAS_PROMESAS,
-    COLUMNAS_SIN_COSTO,
+    COLUMNAS_BONIFICACIONES,
 } from '#billing/reportes/reportes'
 
 /** Schemas de los reportes (filas tipadas por sus columnas) y del dashboard. */
@@ -33,7 +33,7 @@ export const ReporteIva = esquemaReporte('ReporteIva', COLUMNAS_IVA)
 export const ReportePromesas = esquemaReporte('ReportePromesas', COLUMNAS_PROMESAS)
 export const ReporteAltasBajas = esquemaReporte('ReporteAltasBajas', COLUMNAS_ALTAS)
 export const ReporteEgresos = esquemaReporte('ReporteEgresos', COLUMNAS_EGRESOS)
-export const ReporteFacturasSinCosto = esquemaReporte('ReporteFacturasSinCosto', COLUMNAS_SIN_COSTO)
+export const ReporteBonificaciones = esquemaReporte('ReporteBonificaciones', COLUMNAS_BONIFICACIONES)
 
 const porcentaje = { type: 'number', description: 'Porcentaje 0–100 con 2 decimales' }
 

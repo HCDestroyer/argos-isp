@@ -17,6 +17,7 @@ import {
     type LineaCalculada,
 } from '#billing/facturas'
 import { emitirDocumento } from '#billing/emision'
+import { registrarBonificacion, type BonificacionVista } from '#billing/bonificaciones'
 import { configuracionFel, modoEmision, type CertificarAl } from '#fiscal/fel/configuracion'
 import type { TipoConceptoCargo } from '#billing/cargos_unicos'
 
@@ -37,9 +38,12 @@ import type { TipoConceptoCargo } from '#billing/cargos_unicos'
  * - Asiento como toda factura: `CxC + 5.1.01 / ingreso de cada concepto + IVA`; `factura.emitida`;
  *   aplica el anticipo del cliente. Total > 0: se certifica según el modo FEL de la empresa.
  * - **Total Q0** (todo descontado): exige `motivo_sin_costo_id` (catálogo activo de la empresa) y
- *   `motivo_sin_costo_texto`; la ruta exige además `facturas.cargo_sin_costo`. Nace `pagada`, sin CxC
- *   y **sin DTE** cualquiera sea el modo FEL; el asiento deja el bruto en ingresos y el descuento en
- *   `5.1.01` (neto 0). Un motivo con total > 0 → 422.
+ *   `motivo_sin_costo_texto`; la ruta exige además `facturas.cargo_sin_costo`. Decisión del PM (19 oct):
+ *   **no hay factura**; se registra una **bonificación** (`#billing/bonificaciones`, origen
+ *   `cargo_sin_costo`) con su asiento interno `5.1.01 / ingreso` por la base, sin CxC, IVA ni DTE. Un
+ *   motivo con total > 0 → 422.
+ * - Devuelve la factura o la bonificación con `documento` (`factura` | `bonificacion`); la ruta responde
+ *   `{ documento, factura, bonificacion }`.
  * - FEL activa con un concepto exento (`gravable: false`) → 422 `concepto_exento_con_fel`: el DTE aún no
  *   lleva la frase de exención (pendiente del contador).
  */
@@ -78,10 +82,11 @@ interface ConceptoFila {
 
 const MORA_NINGUNA = { mora_tipo: 'ninguna', mora_valor: '0.00', mora_recurrente: false }
 
-export default class EmitirCargoUnico extends DomainAction<
-    EntradaEmitirCargoUnico,
-    Awaited<ReturnType<typeof verFactura>>
-> {
+export type ResultadoCargoUnico =
+    | (Awaited<ReturnType<typeof verFactura>> & { documento: 'factura' })
+    | (BonificacionVista & { documento: 'bonificacion' })
+
+export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUnico, ResultadoCargoUnico> {
     readonly nombre = 'facturas.emitir_cargo_unico'
 
     protected async handle(input: EntradaEmitirCargoUnico, t: Transaccion) {
@@ -310,6 +315,23 @@ export default class EmitirCargoUnico extends DomainAction<
         } else venceEn = sumarDias(hoy, config?.dias_gracia ?? 0)
 
         const clave = `cargo-${randomUUID()}`
+        if (sinCosto) {
+            const { bonificacion } = await registrarBonificacion(t, {
+                empresa_id: empresaId,
+                cliente_id: clienteId,
+                servicio_id: servicio?.id ?? null,
+                periodo: inicioDeMes(hoy),
+                clave_unica: clave,
+                concepto: lineas.map((l) => l.concepto).join(', '),
+                origen: 'cargo_sin_costo',
+                lineas: conDescuentos,
+                motivo_id: sinCosto.motivo_id,
+                motivo_texto: sinCosto.texto,
+                reglas_snapshot: { ...MORA_NINGUNA, cargo_unico: true, sin_costo: true },
+            })
+            t.fijarEntidad('bonificacion', bonificacion.id)
+            return { ...bonificacion, documento: 'bonificacion' as const }
+        }
         const emision = await emitirDocumento(t, {
             empresa_id: empresaId,
             cliente_id: clienteId,
@@ -323,14 +345,12 @@ export default class EmitirCargoUnico extends DomainAction<
                 ...MORA_NINGUNA,
                 certificar_al: certificarAl,
                 cargo_unico: true,
-                ...(sinCosto ? { sin_costo: true } : {}),
             },
             certificar_al: certificarAl,
             descripcion: `cargo único ${servicio ? `servicio ${servicio.id}` : `cliente ${clienteId}`}`,
-            sin_costo: sinCosto,
         })
         const facturaId = emision.factura_id!
         t.fijarEntidad('factura', facturaId)
-        return verFactura(facturaId, t.trx)
+        return { ...(await verFactura(facturaId, t.trx)), documento: 'factura' as const }
     }
 }

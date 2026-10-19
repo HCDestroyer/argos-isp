@@ -35,7 +35,7 @@ import {
  * Con líneas `descuento`: los ingresos van por el bruto, el descuento (sin IVA) al debe de `5.1.01` y el
  * IVA es el del neto (lealtad §5: `CxC 150.00 + 5.1.01 44.64 / 4.1.01 178.57 + 2.1.02 16.07`).
  * Cada línea acredita su cuenta (`cuentaIngresoDeLinea`: la de su concepto de cargo o la de su tipo).
- * Total 0 (descuento del 100 %, cargo sin costo): sin CxC; queda `ingreso / 5.1.01` por el bruto.
+ * Total 0 (solo una bonificación: nunca hay factura de Q0): sin CxC; queda `5.1.01 / ingreso` por la base.
  */
 export function movimientosFactura(
     clienteId: number,
@@ -92,11 +92,6 @@ export interface DatosEmision {
     descripcion: string
     /** receptor corregido (sustitución) */
     receptor?: ReceptorFiscal | null
-    /**
-     * Cargo único sin costo (total 0, `facturas.cargo_sin_costo`): motivo del catálogo y texto. La
-     * factura nace `pagada`, sin CxC y **sin DTE** cualquiera sea el modo FEL (decisión del líder).
-     */
-    sin_costo?: { motivo_id: number; texto: string } | null
 }
 
 export interface ResultadoEmision {
@@ -110,12 +105,14 @@ export interface ResultadoEmision {
 export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Promise<ResultadoEmision> {
     const config = await configuracionFel(datos.empresa_id, t.trx)
     const totales = totalesDe(datos.lineas)
-    // motivo del cargo único en Q0 (solo con total 0)
-    const sinCosto = datos.sin_costo && totales.total.isZero() ? datos.sin_costo : null
-    // H21 (decisión del líder): ninguna factura de Q0 va a DTE, venga de donde venga (mes gratis de
-    // lealtad, descuento del 100 %, cargo sin costo) y sea cual sea el modo FEL: la SAT no certifica
-    // una FACT de Q0.00 (igual que H16). Nace `pagada`, sin CxC, con su asiento bruto / descuento
-    const modo: ModoEmision = totales.total.isZero() ? 'sin_fel' : modoEmision(config, datos.certificar_al)
+    // decisión del PM (19 oct): una factura de valor 0 nunca se genera; quien llama registra una
+    // bonificación (`#billing/bonificaciones`)
+    if (!totales.total.gt(0)) {
+        throw new Error(
+            `Factura ${datos.clave_unica} de total ${totales.total.toFixed(2)}: va como bonificación`,
+        )
+    }
+    const modo: ModoEmision = modoEmision(config, datos.certificar_al)
     const avisoCobro = modo === 'aviso'
     const tipoDte = modo === 'sin_fel' ? null : await tipoFacturaDte(datos.empresa_id, hoyGuatemala(), t.trx)
 
@@ -130,9 +127,7 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
             periodo: datos.periodo,
             clave_unica: datos.clave_unica,
             vence_en: datos.vence_en,
-            // un descuento del 100 % (mes gratis) deja la factura en cero: nace pagada
-            estado:
-                modo === 'por_certificar' ? 'por_certificar' : totales.total.lte(0) ? 'pagada' : 'emitida',
+            estado: modo === 'por_certificar' ? 'por_certificar' : 'emitida',
             subtotal: aTexto(totales.subtotal),
             iva: aTexto(totales.iva),
             total: aTexto(totales.total),
@@ -140,9 +135,6 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
             aviso_cobro: avisoCobro,
             certificar_al: datos.certificar_al,
             tipo_dte: tipoDte,
-            ...(sinCosto
-                ? { motivo_sin_costo_id: sinCosto.motivo_id, motivo_sin_costo_texto: sinCosto.texto }
-                : {}),
         })
         .onConflict('clave_unica')
         .ignore()

@@ -363,6 +363,63 @@ export const FacturaDetalle = definirEsquema('FacturaDetalle', {
     ],
 })
 
+/**
+ * Decisión del PM (19 oct): lo que antes era una factura de Q0 (mes gratis, descuento del 100 %, cargo
+ * único sin costo, canje). Registro interno: sin CxC, IVA, DTE, folio ni documento para el cliente.
+ */
+export const Bonificacion = definirEsquema(
+    'Bonificacion',
+    objeto({
+        id,
+        empresa_id: id,
+        cliente_id: id,
+        servicio_id: nulable(id),
+        periodo: fecha,
+        clave_unica: {
+            ...texto,
+            description:
+                'servicio_id-periodo (ocupa el periodo: el cron no lo vuelve a facturar) o cargo-<uuid>',
+        },
+        concepto: texto,
+        origen: enumerado(['mes_gratis', 'descuento_100', 'cargo_sin_costo', 'canje']),
+        bruto: { ...Dinero, description: 'Valor con IVA de lo entregado sin cobrar' },
+        base: { ...Dinero, description: 'Sin IVA: monto del asiento 5.1.01 / ingreso' },
+        lineas: lista(
+            objeto(
+                {
+                    concepto: texto,
+                    tipo: texto,
+                    cantidad: texto,
+                    precio_unitario: Dinero,
+                    gravable: booleano,
+                    iva: Dinero,
+                    total: Dinero,
+                    cuenta_codigo: texto,
+                },
+                ['cuenta_codigo'],
+            ),
+        ),
+        motivo_id: id,
+        motivo_nombre: texto,
+        motivo_texto: texto,
+        canje_id: nulable(id),
+        asiento_id: id,
+        created_at: instante,
+    }),
+)
+
+export const CargoUnicoEmitido = definirEsquema(
+    'CargoUnicoEmitido',
+    objeto({
+        documento: {
+            ...enumerado(['factura', 'bonificacion']),
+            description: 'bonificacion si el total quedó en Q0 (decisión del PM: nunca una factura de Q0)',
+        },
+        factura: nulable(FacturaDetalle),
+        bonificacion: nulable(Bonificacion),
+    }),
+)
+
 export const ResultadoGeneracion = definirEsquema(
     'ResultadoGeneracion',
     objeto(
@@ -370,9 +427,14 @@ export const ResultadoGeneracion = definirEsquema(
             generadas: entero,
             omitidas: { type: 'integer', description: 'Ya tenían factura del periodo' },
             facturas: lista(id),
+            bonificadas: {
+                type: 'integer',
+                description: 'Periodos en cero registrados como bonificación (nunca una factura de Q0)',
+            },
+            bonificaciones: lista(id),
             errores: { type: 'integer', description: 'Servicios que no se pudieron facturar (ver log)' },
         },
-        ['errores'],
+        ['errores', 'bonificadas', 'bonificaciones'],
     ),
 )
 

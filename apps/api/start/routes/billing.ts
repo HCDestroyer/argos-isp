@@ -23,6 +23,7 @@ import { dimensionesDeCliente } from '#core/consultas/clientes'
 import { ValidacionFallida } from '#shared/errores'
 import type { HttpContext } from '@adonisjs/core/http'
 import { estadoCuenta as leerEstadoCuenta } from '#billing/estado_cuenta'
+import { dimensionesDeBonificacion, listarBonificaciones, verBonificacion } from '#billing/bonificaciones'
 import { dimensionesDeFactura, listarFacturas, verFactura } from '#billing/facturas'
 import { alcanceDePermiso, exigirAlcance } from '#core/acl'
 import { exigirCliente, exigirServicio } from '#core/acceso_empresa'
@@ -90,7 +91,7 @@ import {
     ingresos,
     ivaDelPeriodo,
     promesas as reportePromesas,
-    facturasSinCosto,
+    bonificacionesPorMotivo,
 } from '#billing/reportes/reportes'
 import {
     ReporteAltasBajas,
@@ -99,7 +100,7 @@ import {
     ReporteCobranzaDiaria,
     ReporteEgresos,
     ReporteFacturadoCobrado,
-    ReporteFacturasSinCosto,
+    ReporteBonificaciones,
     ReporteIngresos,
     ReporteIva,
     ReportePromesas,
@@ -120,6 +121,8 @@ import {
     MotivoSinCosto,
     Factura,
     FacturaDetalle,
+    Bonificacion,
+    CargoUnicoEmitido,
     NotaCredito,
     NotaCreditoEmitida,
     SustitucionFactura,
@@ -231,8 +234,12 @@ const facturas: Ruta[] = [
         cuerpo: v.cargoUnicoValidator,
         idempotente: true,
         descripcion:
-            'Factura manual con clave_unica cargo-<uuid> (no ocupa ningún periodo). Cada línea sale de un concepto del catálogo de la empresa (GET /conceptos-cargo: cuenta de ingreso e IVA) con su precio bruto y descuentos opcionales (IVA del neto, 5.1.01). Con servicio_id es del servicio (y vencida cuenta para el corte); sin él, del cliente_id en la empresa activa. Sin mora. Total > 0: asiento CxC / ingresos + IVA, factura.emitida y certificación según el modo FEL. Total Q0: exige motivo_sin_costo_id + motivo_sin_costo_texto y el permiso facturas.cargo_sin_costo (403); nace pagada, sin CxC ni DTE. 422 concepto inactivo o de otra empresa, descuentos mayores que el bruto, motivo con total > 0, concepto_exento_con_fel.',
-        respuesta: { status: 201, descripcion: 'Factura emitida', esquema: FacturaDetalle },
+            'Factura manual con clave_unica cargo-<uuid> (no ocupa ningún periodo). Cada línea sale de un concepto del catálogo de la empresa (GET /conceptos-cargo: cuenta de ingreso e IVA) con su precio bruto y descuentos opcionales (IVA del neto, 5.1.01). Con servicio_id es del servicio (y vencida cuenta para el corte); sin él, del cliente_id en la empresa activa. Sin mora. Total > 0: asiento CxC / ingresos + IVA, factura.emitida y certificación según el modo FEL. Total Q0: exige motivo_sin_costo_id + motivo_sin_costo_texto y el permiso facturas.cargo_sin_costo (403); no hay factura (decisión del PM: nunca una factura de Q0): responde documento = bonificacion con la bonificación (asiento interno 5.1.01 / ingreso, sin CxC, IVA ni DTE). 422 concepto inactivo o de otra empresa, descuentos mayores que el bruto, motivo con total > 0, concepto_exento_con_fel.',
+        respuesta: {
+            status: 201,
+            descripcion: 'Factura emitida o, en Q0, bonificación registrada',
+            esquema: CargoUnicoEmitido,
+        },
         handler: async (ctx, { cuerpo }) => {
             if (cuerpo.servicio_id) await exigirServicio(ctx, cuerpo.servicio_id)
             else if (cuerpo.cliente_id) {
@@ -257,7 +264,41 @@ const facturas: Ruta[] = [
                     throw new Prohibido('Un cargo en Q0 requiere además el permiso facturas.cargo_sin_costo')
                 }
             }
-            return new EmitirCargoUnico().execute(cuerpo, ctx.contextoAccion())
+            const { documento, ...resultado } = await new EmitirCargoUnico().execute(
+                cuerpo,
+                ctx.contextoAccion(),
+            )
+            return documento === 'factura'
+                ? { documento, factura: resultado, bonificacion: null }
+                : { documento, factura: null, bonificacion: resultado }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bonificaciones',
+        operacion: 'bonificacionesListar',
+        resumen: 'Listar bonificaciones (lo que antes era una factura de Q0)',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        query: v.listarBonificacionesValidator,
+        descripcion:
+            'Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero quedan como bonificación: registro interno con su motivo y su asiento 5.1.01 / ingreso, sin CxC, IVA, DTE ni documento para el cliente. Una bonificación de periodo (clave servicio_id-periodo) ocupa el periodo.',
+        respuesta: { status: 200, descripcion: 'Página de bonificaciones', esquema: pagina(Bonificacion) },
+        handler: (ctx, { query }) =>
+            listarBonificaciones(query, ctx.alcance, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/bonificaciones/:id',
+        operacion: 'bonificacionesVer',
+        resumen: 'Ver una bonificación',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        respuesta: { status: 200, descripcion: 'Bonificación', esquema: Bonificacion },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAcceso(ctx, await dimensionesDeBonificacion(id))
+            return verBonificacion(id)
         },
     }),
     definirRuta({
@@ -952,20 +993,20 @@ const reportes: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
-        ruta: '/reportes/facturas-sin-costo',
-        operacion: 'reportesFacturasSinCosto',
-        resumen: 'Facturas en Q0 por motivo y mes (cargos únicos sin costo)',
+        ruta: '/reportes/bonificaciones',
+        operacion: 'reportesBonificaciones',
+        resumen: 'Bonificaciones por motivo, origen y mes (lo que antes era una factura en Q0)',
         etiqueta: 'reportes',
         permiso: 'reportes.ver',
-        query: v.reporteSinCostoValidator,
+        query: v.reporteBonificacionesValidator,
         descripcion:
-            'Cargos únicos en Q0 (sin anular) por mes de emisión y motivo, con el valor bruto entregado sin costo.' +
+            'Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero son bonificaciones (asiento interno 5.1.01 / ingreso por la base). Por mes del periodo, motivo y origen, con el valor bruto entregado sin cobrar y la base del asiento.' +
             DESCRIPCION_EXPORTACION,
-        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteFacturasSinCosto },
+        respuesta: { status: 200, descripcion: 'Reporte', esquema: ReporteBonificaciones },
         handler: async (ctx, { query }) =>
             responderReporte(
                 ctx,
-                await facturasSinCosto(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
+                await bonificacionesPorMotivo(query, ctx.alcance, empresasReporte(ctx, query.empresas)),
                 query.formato,
             ),
     }),

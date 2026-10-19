@@ -858,48 +858,51 @@ export async function egresosPorCategoria(
 
 /*
 |--------------------------------------------------------------------------
-| Facturas en Q0 por motivo (cargo único sin costo)
+| Bonificaciones por motivo (lo que antes era una factura en Q0)
 |--------------------------------------------------------------------------
 */
 
-export const COLUMNAS_SIN_COSTO = definirColumnas([
+export const COLUMNAS_BONIFICACIONES = definirColumnas([
     { clave: 'periodo', titulo: 'Periodo', tipo: 'texto' },
     { clave: 'motivo_id', titulo: 'Motivo (id)', tipo: 'entero' },
     { clave: 'motivo', titulo: 'Motivo', tipo: 'texto' },
-    { clave: 'facturas', titulo: 'Facturas', tipo: 'entero' },
+    { clave: 'origen', titulo: 'Origen', tipo: 'texto' },
+    { clave: 'bonificaciones', titulo: 'Bonificaciones', tipo: 'entero' },
     { clave: 'valor_bruto', titulo: 'Valor bruto', tipo: 'dinero' },
+    { clave: 'base', titulo: 'Base sin IVA', tipo: 'dinero' },
 ])
 
 /**
- * Facturas en Q0 con motivo (cargos únicos sin costo) por mes de emisión y motivo, sin anuladas.
- * `valor_bruto` = Σ líneas antes de descuentos (IVA incluido): lo que se entregó sin cobrar.
+ * Bonificaciones (decisión del PM, 19 oct: una factura de valor 0 nunca se genera) por mes del periodo,
+ * motivo y origen (mes gratis, descuento del 100 %, cargo sin costo, canje). `valor_bruto` = lo que se
+ * entregó sin cobrar (IVA incluido); `base` = el monto del asiento `5.1.01 / ingreso`.
  */
-export async function facturasSinCosto(
-    filtros: { desde?: string; hasta?: string; motivo_id?: number; cliente_id?: number },
+export async function bonificacionesPorMotivo(
+    filtros: { desde?: string; hasta?: string; motivo_id?: number; cliente_id?: number; origen?: string },
     alcance?: Alcance,
     op: EmpresasReporte = UNA_EMPRESA,
 ): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
     const periodo = `to_char(f.periodo, 'YYYY-MM')`
     const consulta = db
-        .from('billing.facturas as f')
-        .join('billing.motivos_sin_costo as ms', 'ms.id', 'f.motivo_sin_costo_id')
+        .from('billing.bonificaciones as f')
+        .join('billing.motivos_sin_costo as ms', 'ms.id', 'f.motivo_id')
         .join('core.clientes as c', 'c.id', 'f.cliente_id')
         .leftJoin('core.servicios as s', 's.id', 'f.servicio_id')
-        .whereNot('f.estado', 'anulada')
         .whereRaw(`f.periodo between date_trunc('month', ?::date) and ?::date`, [desde, hasta])
-        .if(filtros.motivo_id, (q) => q.where('f.motivo_sin_costo_id', filtros.motivo_id!))
+        .if(filtros.motivo_id, (q) => q.where('f.motivo_id', filtros.motivo_id!))
         .if(filtros.cliente_id, (q) => q.where('f.cliente_id', filtros.cliente_id!))
-        .groupByRaw(`${periodo}, ms.id, ms.nombre`)
-        .orderByRaw(`${periodo} asc, ms.nombre asc`)
+        .if(filtros.origen, (q) => q.where('f.origen', filtros.origen!))
+        .groupByRaw(`${periodo}, ms.id, ms.nombre, f.origen`)
+        .orderByRaw(`${periodo} asc, ms.nombre asc, f.origen asc`)
         .select(
             db.raw(`${periodo} as periodo`),
             'ms.id as motivo_id',
             'ms.nombre as motivo',
-            db.raw('count(*)::int as facturas'),
-            db.raw(
-                `coalesce(sum((select sum(l.total) from billing.facturas_lineas l where l.factura_id = f.id and l.tipo <> 'descuento')), 0)::text as valor_bruto`,
-            ),
+            'f.origen',
+            db.raw('count(*)::int as bonificaciones'),
+            db.raw('coalesce(sum(f.bruto), 0)::text as valor_bruto'),
+            db.raw('coalesce(sum(f.base), 0)::text as base'),
         )
     filtrarPorAlcance(consulta, alcance, dimensionesClienteServicio)
     porEmpresa(consulta, 'f.empresa_id', op)
@@ -907,11 +910,12 @@ export async function facturasSinCosto(
         ...f,
         motivo_id: Number(f.motivo_id),
         valor_bruto: dinero(f.valor_bruto),
+        base: dinero(f.base),
     }))
     return armarReporte({
-        reporte: 'facturas_sin_costo',
-        titulo: 'Facturas en Q0 por motivo',
-        columnas: columnasCon(op, COLUMNAS_SIN_COSTO),
+        reporte: 'bonificaciones',
+        titulo: 'Bonificaciones por motivo',
+        columnas: columnasCon(op, COLUMNAS_BONIFICACIONES),
         filas,
         filtros: filtrosCon(op, { ...filtros, desde, hasta }),
     })

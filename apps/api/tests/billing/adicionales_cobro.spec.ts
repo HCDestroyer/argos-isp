@@ -8,18 +8,59 @@ import EmitirFactura from '#billing/actions/emitir_factura'
 import CrearAdicional from '#core/actions/crear_adicional'
 import AgregarAdicionalServicio from '#core/actions/agregar_adicional_servicio'
 import QuitarAdicionalServicio from '#core/actions/quitar_adicional_servicio'
+import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 
 /**
  * Línea mensual de los adicionales `cobrado` (contrato `adicionales.md`): una línea por asignación
  * vigente en el periodo, a su precio con IVA incluido; `incluido` y `cortesia` no generan línea; la
- * factura es única por periodo y cada asignación tiene a lo sumo una línea en ella.
+ * factura es única por periodo y cada asignación tiene a lo sumo una línea por periodo en ella.
+ * Decisiones del PM (19 oct): un periodo que empieza con el servicio suspendido (asignación bloqueada)
+ * no cobra los adicionales; el primer periodo se cobra según `primer_periodo` (`prorrateado`: los días
+ * desde `cobrado_desde` en la siguiente factura; `sin_costo`: nada).
  */
 
-const NOVIEMBRE = periodosHasta(
-    { ciclo: 'dia_fijo', dia: 1, prorrateo: true },
-    '2026-10-01',
-    '2026-11-01',
-)[1]!
+const PERIODOS = periodosHasta({ ciclo: 'dia_fijo', dia: 1, prorrateo: true }, '2026-10-01', '2026-12-01')
+const OCTUBRE = PERIODOS[0]!
+const NOVIEMBRE = PERIODOS[1]!
+const DICIEMBRE = PERIODOS[2]!
+
+/** `cobrado_desde` fijo (medianoche de Guatemala del día dado) para no depender de la fecha de hoy. */
+async function cobradoDesde(asignaciones: number[], dia: string) {
+    await db.rawQuery(
+        `UPDATE core.servicios_adicionales
+            SET cobrado_desde = (?::date)::timestamp AT TIME ZONE 'America/Guatemala'
+          WHERE id = ANY(?::bigint[])`,
+        [dia, asignaciones],
+    )
+}
+
+async function lineasAdicionales(facturaId: number) {
+    const filas = await db
+        .from('billing.facturas_lineas')
+        .where('factura_id', facturaId)
+        .whereNotNull('servicio_adicional_id')
+        .orderBy('id')
+        .select(
+            'total',
+            'servicio_adicional_id',
+            db.raw(`to_char(adicional_periodo, 'YYYY-MM-DD') as periodo`),
+        )
+    return filas.map((l) => [l.total, Number(l.servicio_adicional_id), l.periodo])
+}
+
+async function conIptv(empresas: Awaited<ReturnType<typeof prepararEmpresas>>) {
+    const s = await servicioEn(empresas.B, { precio: '150.00', instalacion: '2026-10-01' })
+    const iptv = await new CrearAdicional().execute(
+        { empresa_id: empresas.B, codigo: unico('IPTV').toUpperCase(), nombre: 'Usuario de IPTV' },
+        empresas.ctx,
+    )
+    const agregar = (datos: Record<string, unknown>) =>
+        new AgregarAdicionalServicio().execute(
+            { servicio_id: s.servicioId, adicional_id: iptv.id, ...datos } as never,
+            empresas.ctx,
+        )
+    return { ...s, agregar }
+}
 
 test.group('Facturas · adicionales cobrados', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
@@ -50,6 +91,8 @@ test.group('Facturas · adicionales cobrados', (group) => {
         await agregar({ modalidad: 'incluido' })
         // dado de baja antes de que empiece el periodo: no se cobra
         const retirado = await agregar({ modalidad: 'cobrado', precio: '20.00', identificador: 'tv-3' })
+        // se cobran desde el primer día de octubre (octubre aún sin facturar: noviembre va completo)
+        await cobradoDesde([primero.id, segundo.id, retirado.id], OCTUBRE.periodo)
         await new QuitarAdicionalServicio().execute(
             { servicio_id: s.servicioId, id: retirado.id, version: retirado.version, motivo: 'ya no lo usa' },
             e.ctx,
@@ -111,8 +154,125 @@ test.group('Facturas · adicionales cobrados', (group) => {
                 iva: '3.75',
                 total: '35.00',
                 servicio_adicional_id: primero.id,
+                adicional_periodo: NOVIEMBRE.periodo,
             }),
         )
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('primer periodo prorrateado: los días desde cobrado_desde van en la siguiente factura, una sola vez', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const s = await conIptv(e)
+        const octubre = await new EmitirFactura().execute(
+            { servicio_id: s.servicioId, periodo: OCTUBRE },
+            e.ctx,
+        )
+        assert.deepEqual(await lineasAdicionales(octubre.factura_id!), [])
+        // se agrega el 20 de octubre, con octubre ya facturado
+        const tv = await s.agregar({ modalidad: 'cobrado', precio: '35.00', identificador: 'tv-1' })
+        assert.equal(tv.primer_periodo, 'prorrateado')
+        await cobradoDesde([tv.id], '2026-10-20')
+
+        const noviembre = await new EmitirFactura().execute(
+            { servicio_id: s.servicioId, periodo: NOVIEMBRE },
+            e.ctx,
+        )
+        // 35 × 12/31 (del 20 al 31 de octubre) = 13.55, y noviembre completo
+        assert.deepEqual(await lineasAdicionales(noviembre.factura_id!), [
+            ['13.55', tv.id, OCTUBRE.periodo],
+            ['35.00', tv.id, NOVIEMBRE.periodo],
+        ])
+        const conceptos = await db
+            .from('billing.facturas_lineas')
+            .where('factura_id', noviembre.factura_id!)
+            .where('servicio_adicional_id', tv.id)
+            .orderBy('id')
+            .select('concepto')
+        assert.match(conceptos[0]!.concepto, /primer periodo, 12\/31 días desde el 2026-10-20/)
+        // diciembre: solo su periodo; el prorrateo ya se cobró
+        const diciembre = await new EmitirFactura().execute(
+            { servicio_id: s.servicioId, periodo: DICIEMBRE },
+            e.ctx,
+        )
+        assert.deepEqual(await lineasAdicionales(diciembre.factura_id!), [
+            ['35.00', tv.id, DICIEMBRE.periodo],
+        ])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('primer periodo sin costo: el periodo de cobrado_desde no se cobra; si aún no se facturaba, va prorrateado en él', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const s = await conIptv(e)
+        const gratis = await s.agregar({
+            modalidad: 'cobrado',
+            precio: '35.00',
+            identificador: 'tv-1',
+            primer_periodo: 'sin_costo',
+        })
+        const prorrateado = await s.agregar({ modalidad: 'cobrado', precio: '31.00', identificador: 'tv-2' })
+        await cobradoDesde([gratis.id, prorrateado.id], '2026-10-20')
+        // octubre se factura después del alta: el prorrateado va en su propia factura, el sin costo no
+        const octubre = await new EmitirFactura().execute(
+            { servicio_id: s.servicioId, periodo: OCTUBRE },
+            e.ctx,
+        )
+        assert.deepEqual(await lineasAdicionales(octubre.factura_id!), [
+            ['12.00', prorrateado.id, OCTUBRE.periodo],
+        ])
+        const noviembre = await new EmitirFactura().execute(
+            { servicio_id: s.servicioId, periodo: NOVIEMBRE },
+            e.ctx,
+        )
+        assert.deepEqual(await lineasAdicionales(noviembre.factura_id!), [
+            ['35.00', gratis.id, NOVIEMBRE.periodo],
+            ['31.00', prorrateado.id, NOVIEMBRE.periodo],
+        ])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('servicio suspendido: el periodo que empieza con la asignación bloqueada no cobra el adicional; el plan sí', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresas()
+        const s = await conIptv(e)
+        const tv = await s.agregar({ modalidad: 'cobrado', precio: '35.00', identificador: 'tv-1' })
+        await cobradoDesde([tv.id], OCTUBRE.periodo)
+        await new CambiarEstadoServicio().execute(
+            { servicioId: s.servicioId, nuevo: 'suspendido', motivo: 'mora' },
+            e.ctx,
+        )
+        const bloqueada = await db.from('core.servicios_adicionales').where('id', tv.id).firstOrFail()
+        assert.equal(bloqueada.bloqueo, 'bloqueado')
+        // el bloqueo es de hoy: diciembre empieza con el servicio suspendido
+        const suspendido = await new EmitirFactura().execute(
+            { servicio_id: s.servicioId, periodo: DICIEMBRE },
+            e.ctx,
+        )
+        assert.deepEqual(await lineasAdicionales(suspendido.factura_id!), [])
+        const plan = await db.from('billing.facturas').where('id', suspendido.factura_id!).firstOrFail()
+        assert.equal(plan.total, '150.00')
+
+        // reactivado antes de que empiece el periodo: vuelve a cobrarse
+        const otro = await conIptv(e)
+        const tv2 = await otro.agregar({ modalidad: 'cobrado', precio: '35.00', identificador: 'tv-9' })
+        await cobradoDesde([tv2.id], OCTUBRE.periodo)
+        await new CambiarEstadoServicio().execute(
+            { servicioId: otro.servicioId, nuevo: 'suspendido', motivo: 'mora' },
+            e.ctx,
+        )
+        await new CambiarEstadoServicio().execute(
+            { servicioId: otro.servicioId, nuevo: 'activo', motivo: 'pagó' },
+            e.ctx,
+        )
+        const activo = await new EmitirFactura().execute(
+            { servicio_id: otro.servicioId, periodo: DICIEMBRE },
+            e.ctx,
+        )
+        assert.deepEqual(await lineasAdicionales(activo.factura_id!), [['35.00', tv2.id, DICIEMBRE.periodo]])
         await afirmarLibro(assert, [e.B, e.C])
     })
 })

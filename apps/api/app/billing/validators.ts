@@ -10,6 +10,7 @@ import {
     versionEsperada,
 } from '#shared/validadores'
 import { reglasPromesaSchema } from '#billing/reglas_promesa'
+import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 import { METODOS_PAGO } from '#shared/eventos'
 import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
 
@@ -515,13 +516,29 @@ export const reporteEgresosValidator = vine.compile(
     }),
 )
 
-export const reporteSinCostoValidator = vine.compile(
+export const reporteBonificacionesValidator = vine.compile(
     vine.object({
         empresas: empresasConsulta(),
         formato,
         ...rango,
         motivo_id: idEntidad().optional().meta({ description: 'Solo un motivo (GET /motivos-sin-costo)' }),
         cliente_id: idEntidad().optional(),
+        origen: vine
+            .enum(ORIGENES_BONIFICACION)
+            .optional()
+            .meta({ description: 'mes_gratis, descuento_100, cargo_sin_costo o canje' }),
+    }),
+)
+
+export const listarBonificacionesValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        cliente_id: idEntidad().optional(),
+        servicio_id: idEntidad().optional(),
+        origen: vine.enum(ORIGENES_BONIFICACION).optional(),
+        desde: fechaIso().optional().meta({ description: 'Periodo desde (YYYY-MM-DD)' }),
+        hasta: fechaIso().optional().meta({ description: 'Periodo hasta (YYYY-MM-DD)' }),
     }),
 )
 

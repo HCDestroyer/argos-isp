@@ -49,6 +49,8 @@ export interface LineaCalculada {
     cuenta_codigo?: string | null
     /** línea mensual de un adicional `cobrado` (`core.servicios_adicionales.id`) */
     servicio_adicional_id?: number | null
+    /** periodo que cobra la línea del adicional (el de la factura o su primer periodo prorrateado) */
+    adicional_periodo?: string | null
 }
 
 /**

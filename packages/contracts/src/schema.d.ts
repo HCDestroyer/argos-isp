@@ -608,6 +608,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bonificaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar bonificaciones (lo que antes era una factura de Q0)
+         * @description Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero quedan como bonificación: registro interno con su motivo y su asiento 5.1.01 / ingreso, sin CxC, IVA, DTE ni documento para el cliente. Una bonificación de periodo (clave servicio_id-periodo) ocupa el periodo.
+         */
+        get: operations["bonificacionesListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bonificaciones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver una bonificación */
+        get: operations["bonificacionesVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cajas": {
         parameters: {
             query?: never;
@@ -1989,7 +2026,7 @@ export interface paths {
         put?: never;
         /**
          * Emitir un cargo único manual (instalación, equipo, visita técnica…)
-         * @description Factura manual con clave_unica cargo-<uuid> (no ocupa ningún periodo). Cada línea sale de un concepto del catálogo de la empresa (GET /conceptos-cargo: cuenta de ingreso e IVA) con su precio bruto y descuentos opcionales (IVA del neto, 5.1.01). Con servicio_id es del servicio (y vencida cuenta para el corte); sin él, del cliente_id en la empresa activa. Sin mora. Total > 0: asiento CxC / ingresos + IVA, factura.emitida y certificación según el modo FEL. Total Q0: exige motivo_sin_costo_id + motivo_sin_costo_texto y el permiso facturas.cargo_sin_costo (403); nace pagada, sin CxC ni DTE. 422 concepto inactivo o de otra empresa, descuentos mayores que el bruto, motivo con total > 0, concepto_exento_con_fel.
+         * @description Factura manual con clave_unica cargo-<uuid> (no ocupa ningún periodo). Cada línea sale de un concepto del catálogo de la empresa (GET /conceptos-cargo: cuenta de ingreso e IVA) con su precio bruto y descuentos opcionales (IVA del neto, 5.1.01). Con servicio_id es del servicio (y vencida cuenta para el corte); sin él, del cliente_id en la empresa activa. Sin mora. Total > 0: asiento CxC / ingresos + IVA, factura.emitida y certificación según el modo FEL. Total Q0: exige motivo_sin_costo_id + motivo_sin_costo_texto y el permiso facturas.cargo_sin_costo (403); no hay factura (decisión del PM: nunca una factura de Q0): responde documento = bonificacion con la bonificación (asiento interno 5.1.01 / ingreso, sin CxC, IVA ni DTE). 422 concepto inactivo o de otra empresa, descuentos mayores que el bruto, motivo con total > 0, concepto_exento_con_fel.
          */
         post: operations["facturasCargoUnico"];
         delete?: never;
@@ -5042,6 +5079,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/bonificaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bonificaciones por motivo, origen y mes (lo que antes era una factura en Q0)
+         * @description Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero son bonificaciones (asiento interno 5.1.01 / ingreso por la base). Por mes del periodo, motivo y origen, con el valor bruto entregado sin cobrar y la base del asiento. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesBonificaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reportes/cartera-vencida": {
         parameters: {
             query?: never;
@@ -5174,26 +5231,6 @@ export interface paths {
          * @description Facturas no anuladas por mes de su periodo: facturado, cobrado y pendiente. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
          */
         get: operations["reportesFacturadoCobrado"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/reportes/facturas-sin-costo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Facturas en Q0 por motivo y mes (cargos únicos sin costo)
-         * @description Cargos únicos en Q0 (sin anular) por mes de emisión y motivo, con el valor bruto entregado sin costo. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
-         */
-        get: operations["reportesFacturasSinCosto"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6389,7 +6426,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad" | "bonificacion";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -6519,6 +6556,40 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        Bonificacion: {
+            id: number;
+            empresa_id: number;
+            cliente_id: number;
+            servicio_id: number | null;
+            /** Format: date */
+            periodo: string;
+            /** @description servicio_id-periodo (ocupa el periodo: el cron no lo vuelve a facturar) o cargo-<uuid> */
+            clave_unica: string;
+            concepto: string;
+            /** @enum {string} */
+            origen: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+            /** @description Valor con IVA de lo entregado sin cobrar */
+            bruto: components["schemas"]["Dinero"];
+            /** @description Sin IVA: monto del asiento 5.1.01 / ingreso */
+            base: components["schemas"]["Dinero"];
+            lineas: {
+                concepto: string;
+                tipo: string;
+                cantidad: string;
+                precio_unitario: components["schemas"]["Dinero"];
+                gravable: boolean;
+                iva: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+                cuenta_codigo?: string;
+            }[];
+            motivo_id: number;
+            motivo_nombre: string;
+            motivo_texto: string;
+            canje_id: number | null;
+            asiento_id: number;
+            /** Format: date-time */
+            created_at: string;
+        };
         Caja: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
             empresa_id?: number;
@@ -6607,6 +6678,8 @@ export interface components {
             /** @description Q descontados; null en un descuento aún reservado */
             descuento: components["schemas"]["Dinero"] | null;
             factura_id: number | null;
+            /** @description Bonificación a la que se aplicó si el descuento dejó el periodo en cero (nunca una factura de Q0) */
+            bonificacion_id?: number | null;
             nota_credito_id: number | null;
             plan_temporal_id: number | null;
             movimiento_id: number | null;
@@ -6649,6 +6722,15 @@ export interface components {
                     nombre: string | null;
                 };
             } | null;
+        };
+        CargoUnicoEmitido: {
+            /**
+             * @description bonificacion si el total quedó en Q0 (decisión del PM: nunca una factura de Q0)
+             * @enum {string}
+             */
+            documento: "factura" | "bonificacion";
+            factura: components["schemas"]["FacturaDetalle"] | null;
+            bonificacion: components["schemas"]["Bonificacion"] | null;
         };
         CastigoCartera: {
             id: number;
@@ -10154,6 +10236,39 @@ export interface components {
             /** Format: date-time */
             generado_en: string;
         };
+        ReporteBonificaciones: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                periodo: string;
+                motivo_id: number;
+                motivo: string;
+                origen: string;
+                bonificaciones: number;
+                valor_bruto: components["schemas"]["Dinero"];
+                base: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                periodo: number | null;
+                motivo_id: number | null;
+                motivo: number | null;
+                origen: number | null;
+                bonificaciones: number | null;
+                valor_bruto: components["schemas"]["Dinero"] | null;
+                base: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ReporteCarteraVencida: {
             reporte: string;
             titulo: string;
@@ -10382,35 +10497,6 @@ export interface components {
                 acreditado?: components["schemas"]["Dinero"] | null;
                 facturado_importado?: components["schemas"]["Dinero"] | null;
                 cobrado_importado?: components["schemas"]["Dinero"] | null;
-            };
-            /** Format: date-time */
-            generado_en: string;
-        };
-        ReporteFacturasSinCosto: {
-            reporte: string;
-            titulo: string;
-            filtros: {
-                [key: string]: unknown;
-            };
-            columnas: components["schemas"]["ColumnaReporte"][];
-            filas: {
-                empresa_id?: number;
-                empresa?: string;
-                periodo: string;
-                motivo_id: number;
-                motivo: string;
-                facturas: number;
-                valor_bruto: components["schemas"]["Dinero"];
-            }[];
-            /** @description Suma de las columnas de dinero y enteros */
-            totales: {
-                empresa_id?: number | null;
-                empresa?: number | null;
-                periodo: number | null;
-                motivo_id: number | null;
-                motivo: number | null;
-                facturas: number | null;
-                valor_bruto: components["schemas"]["Dinero"] | null;
             };
             /** Format: date-time */
             generado_en: string;
@@ -10664,6 +10750,9 @@ export interface components {
             /** @description Ya tenían factura del periodo */
             omitidas: number;
             facturas: number[];
+            /** @description Periodos en cero registrados como bonificación (nunca una factura de Q0) */
+            bonificadas?: number;
+            bonificaciones?: number[];
             /** @description Servicios que no se pudieron facturar (ver log) */
             errores?: number;
         };
@@ -13969,6 +14058,119 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bonificacionesListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cliente_id?: number;
+                servicio_id?: number;
+                origen?: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+                /** @description Periodo desde (YYYY-MM-DD) */
+                desde?: string;
+                /** @description Periodo hasta (YYYY-MM-DD) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de bonificaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Bonificacion"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bonificacionesVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bonificación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Bonificacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19916,13 +20118,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Factura emitida */
+            /** @description Factura emitida o, en Q0, bonificación registrada */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FacturaDetalle"];
+                    "application/json": components["schemas"]["CargoUnicoEmitido"];
                 };
             };
             /** @description No autenticado */
@@ -24832,7 +25034,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad" | "bonificacion";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };
@@ -31365,6 +31567,67 @@ export interface operations {
             };
         };
     };
+    reportesBonificaciones: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                /** @description Solo un motivo (GET /motivos-sin-costo) */
+                motivo_id?: number;
+                cliente_id?: number;
+                /** @description mes_gratis, descuento_100, cargo_sin_costo o canje */
+                origen?: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteBonificaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     reportesCarteraVencida: {
         parameters: {
             query?: {
@@ -31735,65 +31998,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReporteFacturadoCobrado"];
-                };
-            };
-            /** @description No autenticado */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Sin el permiso reportes.ver */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Datos inválidos */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    reportesFacturasSinCosto: {
-        parameters: {
-            query?: {
-                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
-                empresas?: "todas";
-                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
-                formato?: "json" | "csv" | "xlsx";
-                /** @description Por defecto: el día 1 del mes de hace 11 meses */
-                desde?: string;
-                /** @description Por defecto: hoy (Guatemala) */
-                hasta?: string;
-                /** @description Solo un motivo (GET /motivos-sin-costo) */
-                motivo_id?: number;
-                cliente_id?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Reporte */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReporteFacturasSinCosto"];
                 };
             };
             /** @description No autenticado */

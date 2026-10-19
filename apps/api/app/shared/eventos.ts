@@ -317,6 +317,21 @@ export interface CatalogoEventos {
         facturas: number[]
         monto: Dinero
     }
+    /**
+     * Decisión del PM (19 oct): lo que sería una factura de Q0 (mes gratis, descuento del 100 %, cargo
+     * sin costo, canje) es una bonificación interna; sin CxC ni documento para el cliente
+     */
+    'bonificacion.registrada': {
+        bonificacion_id: number
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number | null
+        /** YYYY-MM-DD */
+        periodo: string
+        origen: 'mes_gratis' | 'descuento_100' | 'cargo_sin_costo' | 'canje'
+        /** valor con IVA de lo bonificado */
+        bruto: Dinero
+    }
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
     /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
@@ -649,6 +664,8 @@ interface PayloadCanjeLealtad {
     puntos: number
     /** factura con el descuento (nota de crédito o próxima factura); null si no aplica */
     factura_id: number | null
+    /** aditivo (decisión del PM, 19 oct): la bonificación a la que se aplicó en lugar de una factura de Q0 */
+    bonificacion_id?: number | null
 }
 
 export type NombreEvento = keyof CatalogoEventos
@@ -681,6 +698,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'pago.diferencia_cerrada',
+    'bonificacion.registrada',
     'nota_credito.emitida',
     'nota_credito.anulada',
     'promesa.creada',
