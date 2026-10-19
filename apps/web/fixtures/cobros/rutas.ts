@@ -9,7 +9,6 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, problemaTipado, registrarAccion, usuariosPorToken, versionCambiada } from '../comun'
 import { HOY_FIXTURES } from '../facturacion/datos'
-import { aplicarNotaCredito } from '../facturacion/aplicarNotaCredito'
 import { bancosLibro, fechaGuatemala } from '../libro/datos'
 
 type Errores = NonNullable<Problem['errors']>
@@ -408,10 +407,17 @@ export function siguienteMovimientoBanco(): number {
     return bd.movimientosBanco.reduce((maximo, m) => Math.max(maximo, m.movimiento_id), 9000) + 1
 }
 
+/** Ids de los asientos `diferencia_cobro` de las fixtures (fuera de `bd.asientos`). */
+const ASIENTOS_DIFERENCIA = 990000
+
 /** `diferencia_cobro_tope` (parámetro de diseño de la empresa; Q1.00 por defecto). */
 const TOPE_DIFERENCIA = new Decimal('1.00')
 
-/** Como `CerrarDiferenciaPago` (A3): una nota de crédito por factura con saldo del pago. */
+/**
+ * Como `CerrarDiferenciaPago` (A3, decisión B): el saldo de cada factura del pago se cierra como gasto
+ * con un asiento `diferencia_cobro` (Debe 5.3.05 Diferencias de cobro, Haber CxC del dueño), sin
+ * tocar IVA ni DTE. `pagado` no cambia (solo dinero cobrado) y la factura queda `pagada`.
+ */
 function cerrarDiferencia(solicitud: SolicitudFixture): RespuestaFixture {
     const pago = bd.pagos.find(p => p.id === idDe(solicitud))
     if (!pago) {
@@ -424,7 +430,6 @@ function cerrarDiferencia(solicitud: SolicitudFixture): RespuestaFixture {
     const facturas = [...new Set(pago.aplicaciones.map(a => a.factura_id))]
         .map(id => bd.facturas.find(f => f.id === id))
         .filter((f): f is Schema<'Factura'> => Boolean(f) && ['emitida', 'parcial', 'vencida'].includes(f?.estado ?? '') && new Decimal(f?.total ?? 0).gt(f?.pagado ?? 0))
-        .filter(f => !bd.diferenciasCerradas.some(d => d.pago_id === pago.id && d.factura_id === f.id))
     if (!facturas.length) {
         return conflicto('sin_diferencia', 'Sin diferencia', `El pago ${pago.id} no dejó saldo pendiente en sus facturas`)
     }
@@ -432,17 +437,23 @@ function cerrarDiferencia(solicitud: SolicitudFixture): RespuestaFixture {
     if (total.gt(TOPE_DIFERENCIA)) {
         return regla422('diferencia_sobre_tope', 'Diferencia sobre el tope', `El pago ${pago.id} deja Q${total.toFixed(2)} pendientes y el tope de la empresa es Q${TOPE_DIFERENCIA.toFixed(2)}`, [{ field: 'pago_id', message: `Diferencia Q${total.toFixed(2)} > tope Q${TOPE_DIFERENCIA.toFixed(2)}`, rule: 'diferencia_sobre_tope' }])
     }
-    const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
     const motivo = typeof cuerpo.motivo === 'string' && cuerpo.motivo.trim() ? cuerpo.motivo.trim() : `Diferencia de cobro del pago ${pago.id}`
     const momento = ahora()
-    const notas = facturas.map((factura) => {
-        const saldo = new Decimal(factura.total).minus(factura.pagado)
-        const nota = aplicarNotaCredito(bd, factura, saldo, motivo, usuario ? { id: usuario.id, nombre: usuario.nombre } : undefined, momento)
-        bd.diferenciasCerradas.push({ pago_id: pago.id, factura_id: factura.id })
-        return { factura_id: factura.id, nota_credito_id: nota.id, monto: saldo.toFixed(2), ncre: false }
+    const fecha = fechaGuatemala(momento)
+    const empresaId = pago.empresa_id ?? 1
+    const diferencias = facturas.map((factura) => {
+        const monto = new Decimal(factura.total).minus(factura.pagado).toFixed(2)
+        const id = bd.diferenciasCerradas.reduce((maximo, d) => Math.max(maximo, d.id), 0) + 1
+        // El asiento `diferencia_cobro` (Debe 5.3.05, Haber CxC) no entra en `bd.asientos`: el contrato
+        // aún no declara ese `origen_tipo` (pedido a A3 en `a4.md`). Su id va en un rango propio.
+        const asientoId = ASIENTOS_DIFERENCIA + id
+        const descripcion = `Diferencia de cobro del pago ${pago.id} en la factura ${factura.id} · ${motivo}`
+        bd.diferenciasCerradas.push({ id, empresa_id: empresaId, pago_id: pago.id, factura_id: factura.id, cliente_id: factura.cliente_id, monto, asiento_id: asientoId, fecha, descripcion, revertida_en: null })
+        Object.assign(factura, { estado: 'pagada', version: factura.version + 1, updated_at: momento })
+        return { factura_id: factura.id, diferencia_id: id, monto, asiento_id: asientoId }
     })
     registrarAccion(solicitud, 'pagos.cerrar_diferencia', { tipo: 'pago', id: pago.id }, cuerpo)
-    const resultado: Schema<'DiferenciaCerrada'> = { pago_id: pago.id, empresa_id: pago.empresa_id ?? 1, monto: total.toFixed(2), tope: TOPE_DIFERENCIA.toFixed(2), notas }
+    const resultado: Schema<'DiferenciaCerrada'> = { pago_id: pago.id, empresa_id: empresaId, monto: total.toFixed(2), tope: TOPE_DIFERENCIA.toFixed(2), diferencias }
     return { status: 201, cuerpo: resultado }
 }
 

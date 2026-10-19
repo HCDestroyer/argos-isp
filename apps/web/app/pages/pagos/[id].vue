@@ -86,7 +86,7 @@ function alCerrarDiferencia(resultado: DiferenciaCerrada) {
     diferenciaCerrada.value = resultado
     toast.add({
         title: 'Diferencia cerrada',
-        description: `${formatearQuetzales(resultado.monto)} con ${resultado.notas.length} ${resultado.notas.length === 1 ? 'nota de crédito' : 'notas de crédito'} (tope ${formatearQuetzales(resultado.tope)})`,
+        description: `${formatearQuetzales(resultado.monto)} como gasto en ${resultado.diferencias.length} ${resultado.diferencias.length === 1 ? 'factura' : 'facturas'} (tope ${formatearQuetzales(resultado.tope)})`,
         icon: 'i-lucide-circle-check',
         color: 'success',
     })
@@ -276,15 +276,17 @@ onMounted(cargar)
                 <template #description>
                     <ul class="flex flex-col gap-0.5">
                         <li
-                            v-for="nota in diferenciaCerrada.notas"
-                            :key="nota.nota_credito_id"
+                            v-for="diferencia in diferenciaCerrada.diferencias"
+                            :key="diferencia.diferencia_id"
+                            data-prueba="diferencia-cerrada"
                         >
-                            Factura #{{ nota.factura_id }}:
                             <ULink
-                                :to="enlace(`/notas-credito/${nota.nota_credito_id}`)"
+                                v-if="puede('facturas.ver')"
+                                :to="enlace(`/facturas/${diferencia.factura_id}`)"
                                 class="underline"
-                            >{{ nota.ncre ? 'NCRE' : 'nota de crédito interna' }} #{{ nota.nota_credito_id }}</ULink>
-                            por {{ formatearQuetzales(nota.monto) }}
+                            >Factura #{{ diferencia.factura_id }}</ULink>
+                            <span v-else>Factura #{{ diferencia.factura_id }}</span>:
+                            {{ formatearQuetzales(diferencia.monto) }} a gasto (5.3.05 Diferencias de cobro) · asiento #{{ diferencia.asiento_id }}
                         </li>
                     </ul>
                 </template>
@@ -484,7 +486,7 @@ onMounted(cargar)
                 v-model:open="diferenciaAbierta"
                 titulo="Cerrar diferencia"
                 :descripcion="`Pago #${pago.id} · ${pendienteFacturas ? `saldo ${formatearQuetzales(pendienteFacturas)} en sus facturas` : nombres.nombre(pago.cliente_id)}`"
-                efecto="Cierra con una nota de crédito por factura el saldo pequeño que dejó este pago, hasta el tope de la empresa (NCRE si la factura tiene DTE). Si el saldo supera el tope, la API no lo cierra."
+                efecto="Cierra como gasto (5.3.05 Diferencias de cobro) el saldo pequeño que dejó este pago en cada factura, hasta el tope de la empresa. No toca el IVA ni el DTE; las facturas quedan pagadas. Si el saldo supera el tope, la API no lo cierra. Anular el pago revierte la diferencia."
                 confirmar="Cerrar diferencia"
                 icono="i-lucide-scissors"
                 color="warning"

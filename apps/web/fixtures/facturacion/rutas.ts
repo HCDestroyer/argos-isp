@@ -45,7 +45,7 @@ const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 const ESTADOS_FACTURA = Object.keys({
     por_certificar: true, emitida: true, parcial: true, pagada: true, vencida: true, anulada: true, castigada: true, acreditada: true,
 } satisfies Record<Factura['estado'], true>)
-const TIPOS_FACTURA = Object.keys({ servicio: true, mora: true, cargo: true } satisfies Record<NonNullable<Factura['tipo']>, true>)
+const TIPOS_FACTURA = Object.keys({ servicio: true, mora: true } satisfies Record<NonNullable<Factura['tipo']>, true>)
 /** Como `ESTADOS_PENDIENTES` de la API: solo estas tienen saldo por cobrar. */
 export const ESTADOS_PENDIENTES: readonly Factura['estado'][] = ['emitida', 'parcial', 'vencida']
 const ESTADOS_PAGO: readonly Pago['estado'][] = ['registrado', 'pendiente_verificacion', 'anulado']
@@ -81,25 +81,6 @@ function detalle(factura: Factura): FacturaDetalle {
     const servicio = bd.servicios.find(s => s.id === factura.servicio_id)
     const plan = bd.planes.find(p => p.id === servicio?.plan_id)
     const mora = factura.tipo === 'mora'
-    // H18: el cargo interno lleva una línea `otro` sin IVA, como `crearCargoDiferencia` (A3).
-    if (factura.tipo === 'cargo') {
-        return {
-            ...factura,
-            acreditado: factura.acreditado ?? '0.00',
-            notas_credito: notasDeFactura(factura.id),
-            lineas: [{
-                id: factura.id * 10 + 1,
-                concepto: `Diferencia de cobro devuelta: pago anulado (factura ${factura.factura_origen_id ?? ''})`,
-                tipo: 'otro',
-                cantidad: '1.000',
-                precio_unitario: factura.total,
-                gravable: false,
-                iva: '0.00',
-                total: factura.total,
-            }],
-            reglas_snapshot: { mora_tipo: 'ninguna' },
-        }
-    }
     return {
         ...factura,
         acreditado: factura.acreditado ?? '0.00',
@@ -572,6 +553,11 @@ export const rutasFacturacion: RutasFixture = {
             return reglaNegocio('pago_anulado', `El pago ${pago.id} ya está anulado`)
         }
         const momento = ahora()
+        // Decisión B (A3): anular el pago revierte sus diferencias de cobro y la factura vuelve a
+        // deber el total menos lo que quede pagado (`desaplicar` recalcula el estado).
+        for (const diferencia of bd.diferenciasCerradas.filter(d => d.pago_id === pago.id && d.revertida_en === null)) {
+            diferencia.revertida_en = momento
+        }
         desaplicar(pago)
         Object.assign(pago, { estado: 'anulado', anulado_en: momento, motivo_anulacion: motivo, version: pago.version + 1, updated_at: momento })
         const original = bd.asientos.find(a => a.origen_tipo === 'pago' && a.origen_id === pago.id && a.reversa_de === null)
