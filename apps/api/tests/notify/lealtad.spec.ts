@@ -360,6 +360,25 @@ test.group('notify · interruptor del tipo de aviso lealtad', (group) => {
     })
 })
 
+/**
+ * Registra una corrida por cron de `accion` y devuelve su instante en `audit.acciones` (lo pone la
+ * base con `now()`), redondeado hacia arriba al milisegundo: una revisión en ese instante ya la ve
+ * (`created_at <= ahora`) sin depender de la hora real en que corre la suite.
+ */
+async function registrarCorrida(accion: string): Promise<DateTime> {
+    const ctx = contextoSistema('cron')
+    await new RegistrarCorrida(accion).execute(
+        { parametros: { hoy: 'prueba' }, resultado: { fallidas: [] } },
+        ctx,
+    )
+    const fila = (await db
+        .from('audit.acciones')
+        .where({ accion, request_id: ctx.requestId })
+        .select(db.raw(`(extract(epoch from created_at) * 1000)::text as ms`))
+        .first()) as { ms: string }
+    return DateTime.fromMillis(Math.ceil(Number(fila.ms)), { zone: 'utc' })
+}
+
 test.group('notify · vigilancia de los crons de lealtad', (group) => {
     group.each.setup(() => {
         registrarCanal('telegram', new CanalFalso('telegram'))
@@ -376,18 +395,22 @@ test.group('notify · vigilancia de los crons de lealtad', (group) => {
         const tolerancia = env.get('NOTIFY_CRON_TOLERANCIA_MIN') ?? TOLERANCIA_POR_DEFECTO_MIN
         const cola = new ColaFalsa()
         const claves = ['cron:lealtad.otorgar_antiguedad', 'cron:lealtad.vencer']
-        // Punto de partida: los dos corrieron ahora (cierra lo que otra prueba haya dejado abierto)
-        for (const accion of ['lealtad.otorgar_antiguedad', 'lealtad.vencer']) {
-            await new RegistrarCorrida(accion).execute(
-                { parametros: { hoy: 'prueba' }, resultado: { fallidas: [] } },
-                contextoSistema('cron'),
-            )
-        }
-        const r0 = await ejecutarVigilancia(cola, DateTime.utc().plus({ minutes: 1 }).toISO()!)
-        for (const clave of claves) assert.notInclude(r0.atrasados, clave)
+        // Punto de partida: los dos corrieron (cierra lo que otra prueba haya dejado abierto). Se
+        // revisa en el instante de la corrida, no en «ahora + 1 min»: si entre la corrida y la
+        // revisión cae su hora del día (03:05 o 03:20), la corrida queda antes de esa hora y la
+        // vigilancia la toma por pendiente (en gracia) y no cierra nada.
+        // Cada uno se revisa en el instante de su propia corrida.
+        let corrida = await registrarCorrida('lealtad.otorgar_antiguedad')
+        const r0 = await ejecutarVigilancia(cola, corrida.toISO()!)
+        assert.notInclude(r0.atrasados, 'cron:lealtad.otorgar_antiguedad')
+        corrida = await registrarCorrida('lealtad.vencer')
+        const r0b = await ejecutarVigilancia(cola, corrida.toISO()!)
+        assert.notInclude(r0b.atrasados, 'cron:lealtad.vencer')
 
-        // Mañana: dentro de la tolerancia desde su hora aún no es atraso; pasada, sí (una vez)
-        const manana = DateTime.now().setZone('America/Guatemala').plus({ days: 1 })
+        // El día siguiente al de la corrida (Guatemala): sus 03:05 y 03:20 son posteriores a la
+        // corrida a cualquier hora en que corra la suite. Dentro de la tolerancia desde su hora aún
+        // no es atraso; pasada, sí (una vez).
+        const manana = corrida.setZone('America/Guatemala').plus({ days: 1 })
         const a = (hora: number, minuto: number, despues: number) =>
             manana.set({ hour: hora, minute: minuto, second: 0, millisecond: 0 }).plus({ minutes: despues })
         const r1 = await ejecutarVigilancia(
@@ -422,12 +445,9 @@ test.group('notify · vigilancia de los crons de lealtad', (group) => {
         assert.include(alertas[0]!.cuerpo, 'El vencimiento de puntos de lealtad no se ejecutó a su hora')
         assert.include(alertas[0]!.cuerpo, `Debía correr: ${manana.toFormat('dd/MM/yyyy')} 03:20`)
 
-        // Vuelve a correr: resuelto
-        await new RegistrarCorrida('lealtad.vencer').execute(
-            { parametros: { hoy: 'prueba' }, resultado: { fallidas: [] } },
-            contextoSistema('cron'),
-        )
-        const r3 = await ejecutarVigilancia(cola, DateTime.utc().plus({ minutes: 2 }).toISO()!)
+        // Vuelve a correr: resuelto (revisado en el instante de la corrida, como al principio)
+        const otra = await registrarCorrida('lealtad.vencer')
+        const r3 = await ejecutarVigilancia(cola, otra.toISO()!)
         assert.include(r3.recuperados, 'cron:lealtad.vencer')
         const cerrado = (await db
             .from('notify.incidentes')
