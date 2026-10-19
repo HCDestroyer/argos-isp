@@ -1,9 +1,10 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { facturadoCobrado, ingresos, iva } from '~~/fixtures/reportes/reportes'
 import PaginaReporte from '~/pages/reportes/[reporte].vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Semana 3 (3.ª tanda) · tarea 2: reportes con histórico importado y notas de crédito (A3, filas
@@ -57,20 +58,20 @@ describe('reportes con histórico y notas de crédito', () => {
 
     it('la pantalla: selector de origen, columnas nuevas y la nota de «cobrado»', async () => {
         const vista = await mountSuspended(PaginaReporte, { route: '/reportes/facturado-vs-cobrado?origen=importado' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-reporte"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="tabla-reporte"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="filtro-origen"]').exists()).toBe(true)
         expect(vista.find('[data-prueba="nota-reporte"]').text()).toContain('«Cobrado» ya no incluye las notas de crédito')
         const encabezados = vista.find('[data-prueba="tabla-reporte"]').text()
         for (const titulo of ['Notas de crédito', 'Facturado importado', 'Cobrado importado']) {
             expect(encabezados).toContain(titulo)
         }
-        await vi.waitFor(() => expect(vista.find('[data-prueba="total-facturado"]').text()).toBe('Q 12,400.00'))
+        await esperar(() => expect(vista.find('[data-prueba="total-facturado"]').text()).toBe('Q 12,400.00'))
         expect(useRoute().query.origen).toBe('importado')
     })
 
     it('IVA muestra notas de crédito, base e IVA acreditados', async () => {
         const vista = await mountSuspended(PaginaReporte, { route: '/reportes/iva' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="total-iva_acreditado"]').text()).toBe('Q 18.75'))
+        await esperar(() => expect(vista.find('[data-prueba="total-iva_acreditado"]').text()).toBe('Q 18.75'))
         expect(vista.find('[data-prueba="total-base_acreditada"]').text()).toBe('Q 156.25')
         expect(vista.find('[data-prueba="filtro-origen"]').exists()).toBe(false)
     })

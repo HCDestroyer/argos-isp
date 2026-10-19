@@ -1,9 +1,10 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import PaginaBitacora from '~/pages/bitacora/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 /** Pendientes de `a4.md` resueltos en el día 4 (red del alta, plantilla del técnico, bitácora). */
 describe('pendientes de A4', () => {
@@ -67,7 +68,7 @@ describe('pendientes de A4', () => {
         expect(nombreCampoCambio('facturas_para_cortar')).toBe('facturas_para_cortar')
 
         const vista = await mountSuspended(PaginaBitacora, { route: '/bitacora?tab=cambios&tipo=servicio&entidad=1' })
-        await vi.waitFor(() => expect(vista.find('[data-campo="ipv4"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-campo="ipv4"]').exists()).toBe(true))
         expect(vista.text()).not.toContain('ipv_4')
         expect(vista.text()).toContain('prefijo_enlace_v6')
     })

@@ -52,6 +52,16 @@ function pendiente(datos: Partial<Schema<'PortalFacturaPendiente'>> & { id: numb
     }
 }
 
+/**
+ * Adicionales activos del servicio 41: incluido con su usuario, de cortesía y cobrado aparte. El
+ * servicio está suspendido, así que vienen bloqueados (contrato `adicionales.md`).
+ */
+export const ADICIONALES_FIXTURE: Schema<'PortalAdicional'>[] = [
+    { id: 301, nombre: 'Streaming Plus', identificador: 'maria@example.com', modalidad: 'incluido', precio: null, bloqueado: true },
+    { id: 302, nombre: 'IPTV básico', identificador: null, modalidad: 'cortesia', precio: null, bloqueado: true },
+    { id: 303, nombre: 'IPTV deportes', identificador: 'mgarcia-tv', modalidad: 'cobrado', precio: '35.00', bloqueado: true },
+]
+
 export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
     cliente: CONTACTO_FIXTURE,
     servicios: [
@@ -59,6 +69,9 @@ export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
             id: 41,
             estado: 'suspendido',
             plan: 'Hogar 20 Mbps',
+            plan_tipo: 'residencial',
+            // Uno de cada modalidad, como los devuelve `GET /portal/cuenta` (sin credencial).
+            adicionales: ADICIONALES_FIXTURE,
             direccion: '5a avenida 10-20 zona 1',
             promesa_activa: false,
             monto_adeudado: '550.00',
@@ -90,11 +103,19 @@ export const CUENTA_FIXTURE: Schema<'PortalCuenta'> = {
 export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
     cliente: CONTACTO_FIXTURE,
     servicios: [
-        { ...CUENTA_FIXTURE.servicios[0]!, estado: 'activo', monto_adeudado: '175.00' },
+        {
+            ...CUENTA_FIXTURE.servicios[0]!,
+            estado: 'activo',
+            monto_adeudado: '175.00',
+            // activo: sus adicionales ya no están bloqueados
+            adicionales: ADICIONALES_FIXTURE.map(a => ({ ...a, bloqueado: false })),
+        },
         {
             id: 57,
             estado: 'suspendido',
             plan: 'Fibra 50 Mbps',
+            plan_tipo: 'empresarial',
+            adicionales: [],
             direccion: 'Lotificación El Rosario, casa 14',
             promesa_activa: false,
             monto_adeudado: '398.00',

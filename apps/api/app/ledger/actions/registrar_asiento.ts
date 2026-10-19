@@ -66,6 +66,8 @@ export const ORIGENES_ASIENTO = [
     'alta_activo',
     // pasivo del programa de lealtad (`contratos/lealtad.md` §6); origen_id = `lealtad.movimientos.id`
     'lealtad',
+    // decisiones del PM (19 oct): lo que era una factura de Q0; origen_id = `billing.bonificaciones.id`
+    'bonificacion',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 

@@ -4,7 +4,7 @@ import type { Schema } from '@argosisp/contracts'
 import { UApp } from '#components'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import type { VueWrapper } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
@@ -12,6 +12,7 @@ import PaginaServicio from '~/pages/servicios/[id].vue'
 import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
 import LineaTiempoBitacora from '~/components/LineaTiempoBitacora.vue'
 import PaginacionCursor from '~/components/PaginacionCursor.vue'
+import { esperar } from '../ayudas/esperar'
 
 type Accion = Schema<'AccionAuditoria'>
 
@@ -46,7 +47,7 @@ describe('fallos de las capturas 06 y 07', () => {
     it('captura 06: con el estado de cuenta en 501 solo se ve el aviso y "Reintentar"', async () => {
         simularFalla('GET /api/v1/clientes/:id/estado-cuenta', 501)
         const wrapper = await mountSuspended(ClienteEstadoCuenta, { props: { clienteId: 12 } })
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Reintentar'))
+        await esperar(() => expect(wrapper.text()).toContain('Reintentar'))
 
         const texto = wrapper.text()
         expect(texto).toContain('No implementado')
@@ -60,12 +61,12 @@ describe('fallos de las capturas 06 y 07', () => {
     it('captura 06: al reintentar con la API sana aparece el saldo real', async () => {
         simularFalla('GET /api/v1/clientes/:id/estado-cuenta', 501)
         const wrapper = await mountSuspended(ClienteEstadoCuenta, { props: { clienteId: 12 } })
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Reintentar'))
+        await esperar(() => expect(wrapper.text()).toContain('Reintentar'))
 
         reiniciarFixtures()
         const boton = wrapper.findAll('button').find(b => b.text().includes('Reintentar'))
         await boton?.trigger('click')
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Saldo'))
+        await esperar(() => expect(wrapper.text()).toContain('Saldo'))
         expect(wrapper.text()).not.toContain('Reintentar')
         expect(wrapper.text()).toMatch(/Q [\d,]+\.\d{2}/)
     })
@@ -80,7 +81,7 @@ describe('fallos de las capturas 06 y 07', () => {
         expect(todas.ok && todas.data.data.some(a => a.accion === 'portal.quien_soy')).toBe(true)
 
         const wrapper = await mountSuspended(LineaTiempoBitacora, { props: { filtros: { cliente_id: 2, excluir_canal: 'portal' } } })
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Servicio creado'))
+        await esperar(() => expect(wrapper.text()).toContain('Servicio creado'))
 
         const texto = wrapper.text()
         expect(texto).toContain('Ana Administradora')
@@ -128,7 +129,7 @@ describe('fallos de las capturas 06 y 07', () => {
         // La ficha usa `UTooltip`: necesita el `TooltipProvider` de `UApp`, como en la app real.
         const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaServicio) }) })
         const wrapper = await mountSuspended(conApp, { route: `/servicios/${servicio.id}` })
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Servicio creado'))
+        await esperar(() => expect(wrapper.text()).toContain('Servicio creado'))
         expect(wrapper.text()).not.toContain('Consulta desde la página de corte')
         expect(wrapper.text()).not.toContain('portal.quien_soy')
         wrapper.unmount()

@@ -1,11 +1,12 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import Decimal from 'decimal.js'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
 import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
 import PaginaFactura from '~/pages/facturas/[id].vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Decisión B (A3, `a3.md`): el saldo pequeño que deja un pago se cierra como gasto (asiento
@@ -71,7 +72,7 @@ describe('decisión B · diferencia de cobro como gasto', () => {
         expect(leida.ok && [leida.data.estado, leida.data.pagado]).toEqual(['pagada', pagado])
 
         const vista = await mountSuspended(PaginaFactura, { route: `/facturas/${factura.id}` })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="factura-estado"]').text()).toBe('Pagada'))
+        await esperar(() => expect(vista.find('[data-prueba="factura-estado"]').text()).toBe('Pagada'))
         expect(vista.find('[data-prueba="abrir-nota-credito"]').exists()).toBe(false)
         expect(vista.text()).not.toContain('Q 0.33')
         vista.unmount()
@@ -92,7 +93,7 @@ describe('decisión B · diferencia de cobro como gasto', () => {
         expect(movimientos.at(-1)?.saldo).toBe(cuenta.ok ? cuenta.data.saldo : null)
 
         const vista = await mountSuspended(ClienteEstadoCuenta, { props: { clienteId: factura.cliente_id } })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="movimiento-diferencia"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="movimiento-diferencia"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="movimiento-diferencia"]').text()).toBe('Diferencia cerrada (gasto)')
         vista.unmount()
     })

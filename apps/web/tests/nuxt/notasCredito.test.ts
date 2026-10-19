@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import Decimal from 'decimal.js'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
@@ -9,6 +9,7 @@ import { bd } from '~~/fixtures/bd'
 import ClienteEstadoCuenta from '~/components/ClienteEstadoCuenta.vue'
 import PaginaNota from '~/pages/notas-credito/[id].vue'
 import PaginaNotas from '~/pages/notas-credito/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Semana 3 (3.ª tanda) · tarea 3: lista y detalle de notas de crédito (`GET /notas-credito`,
@@ -57,7 +58,7 @@ describe('notas de crédito', () => {
 
     it('la lista muestra nota, cliente, factura y monto en quetzales', async () => {
         const vista = await mountSuspended(PaginaNotas, { route: '/notas-credito' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-notas"]').text()).toContain('Nota #'))
+        await esperar(() => expect(vista.find('[data-prueba="tabla-notas"]').text()).toContain('Nota #'))
         const [una] = [...bd.notasCredito].sort((a, b) => b.id - a.id)
         expect(vista.text()).toContain(una?.cliente_nombre ?? '—')
         expect(vista.text()).toContain(formatearQuetzales(una?.monto))
@@ -67,28 +68,28 @@ describe('notas de crédito', () => {
     it('con error la lista muestra el aviso y "Reintentar", no una tabla vacía', async () => {
         simularFalla('GET /api/v1/notas-credito', 501)
         const vista = await mountSuspended(PaginaNotas, { route: '/notas-credito' })
-        await vi.waitFor(() => expect(vista.text()).toContain('Reintentar'))
+        await esperar(() => expect(vista.text()).toContain('Reintentar'))
         expect(vista.find('[data-prueba="tabla-notas"]').exists()).toBe(false)
     })
 
     it('el detalle: datos, enlace a la factura y su asiento', async () => {
         const [una] = bd.notasCredito
         const vista = await mountSuspended(PaginaNota, { route: `/notas-credito/${una?.id}` })
-        await vi.waitFor(() => expect(vista.text()).toContain(una?.motivo ?? '—'))
+        await esperar(() => expect(vista.text()).toContain(una?.motivo ?? '—'))
         expect(vista.find('[data-prueba="enlace-factura"]').attributes('href')).toBe(`/facturas/${una?.factura_id}`)
         expect(vista.text()).toContain(formatearQuetzales(una?.iva))
-        await vi.waitFor(() => expect(vista.text()).toContain('Debe'))
+        await esperar(() => expect(vista.text()).toContain('Debe'))
     })
 
     it('el detalle de una nota que no existe dice "no encontrada"', async () => {
         const vista = await mountSuspended(PaginaNota, { route: '/notas-credito/9999' })
-        await vi.waitFor(() => expect(vista.text()).toContain('Nota de crédito no encontrada'))
+        await esperar(() => expect(vista.text()).toContain('Nota de crédito no encontrada'))
     })
 
     it('el movimiento nota_credito del estado de cuenta enlaza a la nota', async () => {
         const [una] = bd.notasCredito
         const vista = await mountSuspended(ClienteEstadoCuenta, { props: { clienteId: una?.cliente_id ?? 0 } })
-        await vi.waitFor(() => expect(vista.find(`a[href="/notas-credito/${una?.id}"]`).exists()).toBe(true))
+        await esperar(() => expect(vista.find(`a[href="/notas-credito/${una?.id}"]`).exists()).toBe(true))
     })
 
     it('menú: "Notas de crédito" con facturas.ver (también el cajero)', () => {

@@ -572,9 +572,13 @@ export async function netoParaDte(
     return { total: dec(f.total).minus(notas.monto), iva: dec(f.iva).minus(notas.iva) }
 }
 
-/** Líneas de la factura con lo acreditado por sus notas internas como descuento de cada ítem. */
+/**
+ * Líneas de la factura con sus líneas `descuento` (lealtad §5) y lo acreditado por sus notas
+ * internas como `Descuento` de cada ítem: un descuento no es un ítem propio del DTE, va en el ítem
+ * que descuenta (precio bruto, descuento, total e IVA netos).
+ */
 async function lineasNetas(cliente: QueryClientContract, facturaId: number): Promise<LineaDocumento[]> {
-    const lineas = (await cliente
+    const todas = (await cliente
         .from('billing.facturas_lineas')
         .where('factura_id', facturaId)
         .orderBy('id')
@@ -587,7 +591,16 @@ async function lineasNetas(cliente: QueryClientContract, facturaId: number): Pro
             'gravable',
             'iva',
             'total',
-        )) as LineaDocumento[]
+            'linea_id',
+        )) as Array<LineaDocumento & { linea_id: number | null }>
+    const lineas: LineaDocumento[] = todas.filter((l) => l.tipo !== 'descuento')
+    const descuento = new Map<number, Dec>()
+    const ivaDescontado = new Map<number, Dec>()
+    const sumar = (m: Map<number, Dec>, id: number, v: Dec) => m.set(id, (m.get(id) ?? CERO).plus(v))
+    for (const d of todas.filter((l) => l.tipo === 'descuento')) {
+        sumar(descuento, Number(d.linea_id), dec(d.total).negated())
+        sumar(ivaDescontado, Number(d.linea_id), dec(d.iva).negated())
+    }
     const notas = (await cliente
         .from('billing.notas_credito as n')
         .where('n.factura_id', facturaId)
@@ -601,10 +614,6 @@ async function lineasNetas(cliente: QueryClientContract, facturaId: number): Pro
         .whereNotExists((q) => q.from('billing.notas_credito_anulaciones as x').whereRaw('x.nota_id = n.id'))
         .orderBy('n.id')
         .select('n.id', 'n.monto', 'n.iva')) as Array<{ id: number; monto: string; iva: string }>
-    if (notas.length === 0) return lineas
-    const descuento = new Map<number, Dec>()
-    const ivaDescontado = new Map<number, Dec>()
-    const sumar = (m: Map<number, Dec>, id: number, v: Dec) => m.set(id, (m.get(id) ?? CERO).plus(v))
     for (const nota of notas) {
         const porLinea = (await cliente
             .from('billing.notas_credito_lineas')

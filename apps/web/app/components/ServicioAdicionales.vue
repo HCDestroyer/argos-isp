@@ -6,7 +6,9 @@ import type { TableColumn } from '@nuxt/ui'
  * Adicionales del servicio (A1, `contratos/adicionales.md`): incluido, cortesía o cobrado, con su
  * identificador. Agregar, editar y quitar con su permiso; la cortesía pide además
  * `servicios.adicional_cortesia`, y la credencial solo se ve con `servicios.ver_credencial_adicional`
- * (cada consulta queda en la bitácora). Un servicio retirado ya no admite cambios.
+ * (cada consulta queda en la bitácora). Un servicio retirado ya no admite cambios. Con el servicio
+ * suspendido los adicionales quedan «Bloqueado» (lo pone y lo quita el estado del servicio, no se
+ * edita a mano) y cada uno tiene su historial de bloqueos (`servicios.ver`).
  */
 const props = defineProps<{
     servicio: Servicio
@@ -30,10 +32,11 @@ const puedeAgregar = computed(() => editable.value && puede('servicios.agregar_a
 const puedeEditar = computed(() => editable.value && puede('servicios.editar_adicional'))
 const puedeQuitar = computed(() => editable.value && puede('servicios.quitar_adicional'))
 const puedeVerCredencial = computed(() => puede('servicios.ver_credencial_adicional'))
+const puedeVerBloqueos = computed(() => puede('servicios.ver'))
 
 const columnas: TableColumn<AdicionalServicio>[] = [
     { accessorKey: 'adicional_nombre', header: 'Adicional', meta: { class: { td: 'whitespace-normal' } } },
-    { accessorKey: 'modalidad', header: 'Modalidad' },
+    { accessorKey: 'modalidad', header: 'Modalidad', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'identificador', header: 'Identificador', meta: SOLO_ANCHO },
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
 ]
@@ -44,6 +47,8 @@ const quitarAbierto = ref(false)
 const quitando = shallowRef<AdicionalServicio | null>(null)
 const credencialAbierta = ref(false)
 const consultando = shallowRef<AdicionalServicio | null>(null)
+const bloqueosAbiertos = ref(false)
+const historial = shallowRef<AdicionalServicio | null>(null)
 
 async function cargar() {
     cargando.value = true
@@ -88,6 +93,11 @@ function abrirCredencial(asignacion: AdicionalServicio) {
     credencialAbierta.value = true
 }
 
+function abrirBloqueos(asignacion: AdicionalServicio) {
+    historial.value = asignacion
+    bloqueosAbiertos.value = true
+}
+
 function alGuardar(asignacion: AdicionalServicio, nuevo: boolean) {
     toast.add({
         title: nuevo ? `${asignacion.adicional_nombre} agregado` : `${asignacion.adicional_nombre} actualizado`,
@@ -107,6 +117,8 @@ function alQuitar(asignacion: AdicionalServicio) {
 
 watch(conBajas, () => void cargar())
 watch(() => props.servicio.id, () => void cargar())
+// Suspender o reactivar desde la ficha bloquea o desbloquea los adicionales (A1): se releen.
+watch(() => props.servicio.estado, () => void cargar())
 onMounted(cargar)
 </script>
 
@@ -166,7 +178,22 @@ onMounted(cargar)
                             variant="subtle"
                             size="sm"
                         />
+                        <UBadge
+                            v-else-if="row.original.bloqueo === 'bloqueado'"
+                            label="Bloqueado"
+                            icon="i-lucide-lock"
+                            color="error"
+                            variant="subtle"
+                            size="sm"
+                            data-prueba="adicional-bloqueado"
+                        />
                     </span>
+                    <span
+                        v-if="row.original.estado !== 'baja' && row.original.bloqueo === 'bloqueado'"
+                        class="text-xs text-muted"
+                        data-prueba="adicional-bloqueado-desde"
+                        title="Lo bloquea la suspensión del servicio y se desbloquea al reactivarlo."
+                    >{{ row.original.bloqueado_en ? `Desde el ${formatearFechaHora(row.original.bloqueado_en)}` : 'Bloqueado' }} · servicio suspendido</span>
                     <span class="font-mono text-xs text-muted">{{ row.original.adicional_codigo }}</span>
                     <span
                         v-if="row.original.identificador"
@@ -193,6 +220,11 @@ onMounted(cargar)
                         class="text-xs tabular-nums text-muted"
                     >{{ formatearQuetzales(row.original.precio) }} al mes</span>
                     <span
+                        v-if="resumenCobroAdicional(row.original)"
+                        class="text-xs text-muted"
+                        data-prueba="adicional-cobro"
+                    >{{ resumenCobroAdicional(row.original) }}</span>
+                    <span
                         v-if="row.original.modalidad === 'cortesia' && row.original.motivo_nombre"
                         class="text-xs text-muted"
                     >{{ row.original.motivo_nombre }}<template v-if="row.original.motivo_detalle"> · {{ row.original.motivo_detalle }}</template></span>
@@ -214,6 +246,18 @@ onMounted(cargar)
                         :aria-label="`Ver credencial de ${row.original.adicional_nombre}`"
                         :data-prueba="`ver-credencial-${row.original.id}`"
                         @click="abrirCredencial(row.original)"
+                    />
+                    <UButton
+                        v-if="puedeVerBloqueos"
+                        label="Bloqueos"
+                        icon="i-lucide-history"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        :ui="{ label: 'hidden lg:inline' }"
+                        :aria-label="`Historial de bloqueos de ${row.original.adicional_nombre}`"
+                        :data-prueba="`bloqueos-adicional-${row.original.id}`"
+                        @click="abrirBloqueos(row.original)"
                     />
                     <UButton
                         v-if="puedeEditar && row.original.estado === 'activo'"
@@ -260,6 +304,12 @@ onMounted(cargar)
             :servicio-id="servicio.id"
             :asignacion="quitando"
             @hecho="alQuitar"
+        />
+        <AdicionalBloqueosModal
+            v-if="puedeVerBloqueos && historial"
+            v-model:open="bloqueosAbiertos"
+            :servicio-id="servicio.id"
+            :asignacion="historial"
         />
         <AdicionalCredencialModal
             v-if="puedeVerCredencial && consultando"
