@@ -13,6 +13,8 @@ const PREFIJO = 'argos_empresa_activa:'
  */
 export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/activos',
+    '/api/v1/adicionales',
+    '/api/v1/adicionales/motivos',
     '/api/v1/bancos/depositos',
     '/api/v1/bancos/extractos',
     '/api/v1/bancos/fondos-en-transito',
