@@ -18,10 +18,16 @@
       "name": "auth"
     },
     {
+      "name": "bancos"
+    },
+    {
       "name": "bitacora"
     },
     {
       "name": "cajas"
+    },
+    {
+      "name": "cartera"
     },
     {
       "name": "clientes"
@@ -458,6 +464,2245 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/conciliaciones": {
+      "post": {
+        "operationId": "bancosConciliar",
+        "summary": "Conciliar una línea del extracto con movimientos, depósitos o traslados del libro",
+        "description": "Nunca reescribe un asiento: liga la línea con lo que ya está en el libro. Un depósito o traslado en tránsito llega con un asiento nuevo Banco / 1.1.11. Σ = monto de la línea (422 conciliacion_descuadrada); 409 linea_conciliada o movimiento_conciliado. Emite banco.conciliado.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "linea_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "movimientos": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 500,
+                    "description": "Movimientos del libro en la cuenta del extracto (GET /bancos/movimientos-sin-conciliar)"
+                  },
+                  "depositos": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 500,
+                    "description": "Depósitos de caja en tránsito que llegan con esta línea (asiento Banco / 1.1.11)"
+                  },
+                  "traslados": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 500,
+                    "description": "Traslados en tránsito que llegan a esta cuenta con esta línea"
+                  }
+                },
+                "required": [
+                  "linea_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conciliación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conciliacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.conciliar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/conciliaciones/{id}/anular": {
+      "post": {
+        "operationId": "bancosAnularConciliacion",
+        "summary": "Deshacer una conciliación (fila de anulación; el libro no cambia)",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conciliación anulada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conciliacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.conciliar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/depositos": {
+      "get": {
+        "operationId": "bancosDepositos",
+        "summary": "Depósitos de caja (en tránsito o acreditados)",
+        "description": "Con bancos.ver, todos los de las empresas (filtros caja_id y turno_id opcionales). Con solo cajas.ver (el cajero), caja_id o turno_id es obligatorio y la caja debe estar en su alcance (403); sin ellos 422.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en_transito",
+                "acreditado"
+              ]
+            }
+          },
+          {
+            "name": "caja_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los de esta caja (obligatoria sin bancos.ver: el cajero ve su caja)",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "turno_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los de este turno",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de depósitos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Deposito"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/extractos": {
+      "get": {
+        "operationId": "bancosExtractos",
+        "summary": "Extractos importados",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cuenta_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de extractos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Extracto"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "bancosImportarExtracto",
+        "summary": "Importar un extracto bancario (neutral al origen; solo inserción)",
+        "description": "Líneas con signo dentro de desde..hasta; Σ líneas = saldo_final − saldo_inicial (422 extracto_descuadrado). El saldo inicial encadena con el final anterior (422 extracto_no_encadena; se fuerza con motivo_no_encadena). Una línea ya importada (huella por cuenta) responde 409 extracto_duplicado. Los adaptadores por banco (CSV, XLSX) son de A6. Emite banco.extracto_importado.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta del extracto: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta del extracto: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta del extracto: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  },
+                  "desde": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "saldo_inicial": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "saldo_final": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "archivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "sha256": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[0-9a-fA-F]{64}$",
+                    "description": "sha256 del archivo original (lo calcula quien lo leyó)"
+                  },
+                  "motivo_no_encadena": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500,
+                    "description": "Fuerza un saldo inicial distinto del final del extracto anterior"
+                  },
+                  "lineas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "fecha": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                          "format": "date"
+                        },
+                        "descripcion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "referencia": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 120
+                        },
+                        "monto": {
+                          "type": "string",
+                          "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                          "examples": [
+                            "-15.00"
+                          ]
+                        },
+                        "saldo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                          "examples": [
+                            "-15.00"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "fecha",
+                        "descripcion",
+                        "monto"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 20000
+                  }
+                },
+                "required": [
+                  "desde",
+                  "hasta",
+                  "saldo_inicial",
+                  "saldo_final",
+                  "lineas"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Extracto importado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Extracto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.importar_extracto; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.importar_extracto",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/extractos/{id}": {
+      "get": {
+        "operationId": "bancosVerExtracto",
+        "summary": "Ver extracto",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Extracto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Extracto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/extractos/{id}/aplicar-reglas": {
+      "post": {
+        "operationId": "bancosAplicarReglas",
+        "summary": "Aplicar las reglas de conciliación a las líneas sin conciliar del extracto",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoAplicarReglas"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.conciliar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/extractos/{id}/lineas": {
+      "get": {
+        "operationId": "bancosLineasExtracto",
+        "summary": "Líneas del extracto con su conciliación",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Líneas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LineaExtracto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/extractos/lineas/{id}/registrar": {
+      "post": {
+        "operationId": "bancosRegistrarDesdeExtracto",
+        "summary": "Registrar una partida del extracto sin documento (asiento nuevo) y conciliarla",
+        "description": "Cargo: contrapartida (por defecto 5.3.07 Gastos y comisiones bancarias) / Banco; abono: Banco / contrapartida (obligatoria). Origen banco, fecha de la línea. 409 linea_registrada.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cuenta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40,
+                    "description": "Código de la contrapartida; por defecto 5.3.07 Gastos y comisiones bancarias en un cargo (obligatoria en un abono)"
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conciliación con el asiento nuevo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conciliacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.conciliar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/fondos-en-transito": {
+      "get": {
+        "operationId": "bancosFondosEnTransito",
+        "summary": "Check fondos_transito: 1.1.11 = depósitos y traslados sin acreditar, por empresa",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen por empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResumenFondosEnTransito"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/llegadas/reatribuir": {
+      "post": {
+        "operationId": "bancosReatribuirLlegada",
+        "summary": "Corregir la llegada al banco atribuida al depósito o traslado equivocado",
+        "description": "Solo inserción: deshace la conciliación de la línea, revierte el asiento de llegada (el documento original vuelve a 1.1.11) y registra la llegada del documento correcto con la misma línea. 404 sin llegada vigente; 422 conciliacion_descuadrada si el monto no coincide.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "deposito",
+                      "traslado"
+                    ]
+                  },
+                  "documento_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Depósito o traslado al que se atribuyó la llegada por error"
+                  },
+                  "nuevo_tipo": {
+                    "type": "string",
+                    "enum": [
+                      "deposito",
+                      "traslado"
+                    ]
+                  },
+                  "nuevo_documento_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Depósito o traslado en tránsito que en verdad llegó"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "documento_id",
+                  "nuevo_tipo",
+                  "nuevo_documento_id",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conciliación nueva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conciliacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.reatribuir_llegada; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.reatribuir_llegada",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/movimientos-sin-conciliar": {
+      "get": {
+        "operationId": "bancosMovimientosSinConciliar",
+        "summary": "Movimientos del libro en una cuenta bancaria sin conciliación vigente",
+        "description": "De la empresa activa o, sin ella, de la empresa dueña de la cuenta.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cuenta_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Movimientos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MovimientoSinConciliar"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/reglas": {
+      "get": {
+        "operationId": "bancosReglas",
+        "summary": "Reglas de conciliación",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reglas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReglaConciliacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "bancosCrearRegla",
+        "summary": "Crear regla de conciliación",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo en esta cuenta bancaria; null = todas"
+                  },
+                  "tipo_condicion": {
+                    "type": "string",
+                    "enum": [
+                      "contiene",
+                      "regex"
+                    ]
+                  },
+                  "patron": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "monto_min": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "monto_max": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "accion": {
+                    "type": "string",
+                    "enum": [
+                      "contrapartida",
+                      "cliente"
+                    ]
+                  },
+                  "contrapartida": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40,
+                    "description": "Código de la cuenta (acción contrapartida)"
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "tipo_condicion",
+                  "patron",
+                  "accion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Regla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaConciliacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.conciliar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/reglas/{id}": {
+      "put": {
+        "operationId": "bancosEditarRegla",
+        "summary": "Editar regla de conciliación (con version)",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo en esta cuenta bancaria; null = todas"
+                  },
+                  "tipo_condicion": {
+                    "type": "string",
+                    "enum": [
+                      "contiene",
+                      "regex"
+                    ]
+                  },
+                  "patron": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "monto_min": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "monto_max": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "accion": {
+                    "type": "string",
+                    "enum": [
+                      "contrapartida",
+                      "cliente"
+                    ]
+                  },
+                  "contrapartida": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40,
+                    "description": "Código de la cuenta (acción contrapartida)"
+                  },
+                  "prioridad": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "activa": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version",
+                  "nombre",
+                  "tipo_condicion",
+                  "patron",
+                  "accion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Regla",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaConciliacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.conciliar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.conciliar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/trasladar": {
+      "post": {
+        "operationId": "bancosTrasladar",
+        "summary": "Trasladar fondos entre cuentas propias de la empresa (1.1.11 / Banco A)",
+        "description": "La llegada a la cuenta de destino (Banco B / 1.1.11) la registra la conciliación de su línea del extracto. Las dos cuentas son de la misma empresa (422 cuenta_de_otra_empresa). 409 traslado_duplicado.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  },
+                  "referencia": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "origen": {
+                    "type": "object",
+                    "properties": {
+                      "cuenta_bancaria_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta de la que sale: cuenta bancaria propia (GET /cuentas-bancarias)"
+                      },
+                      "banco_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta de la que sale: banco del libro (GET /libro/bancos)"
+                      },
+                      "cuenta_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta de la que sale: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "destino": {
+                    "type": "object",
+                    "properties": {
+                      "cuenta_bancaria_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta a la que llega: cuenta bancaria propia (GET /cuentas-bancarias)"
+                      },
+                      "banco_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta a la que llega: banco del libro (GET /libro/bancos)"
+                      },
+                      "cuenta_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "description": "Cuenta a la que llega: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "monto",
+                  "referencia",
+                  "origen",
+                  "destino"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Traslado registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Traslado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.trasladar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.trasladar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bancos/traslados": {
+      "get": {
+        "operationId": "bancosTraslados",
+        "summary": "Traslados entre cuentas propias (en tránsito o acreditados)",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en_transito",
+                "acreditado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de traslados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Traslado"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
         "x-implementado": true
       }
     },
@@ -1279,6 +3524,174 @@
         "x-implementado": true
       }
     },
+    "/api/v1/cajas/{id}/depositar": {
+      "post": {
+        "operationId": "cajasDepositar",
+        "summary": "Depositar al banco efectivo del turno abierto (1.1.11 Fondos en tránsito / Caja)",
+        "description": "Baja el esperado del turno como un egreso; no puede superar el efectivo del turno (422 deposito_excede_efectivo). Llega al banco al conciliar su línea del extracto (Banco / 1.1.11). 409 sin_turno_abierto, 409 deposito_duplicado (boleta repetida en la cuenta). Emite caja.depositada.",
+        "tags": [
+          "cajas"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "monto": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "boleta": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "description": "Número de la boleta"
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Por defecto hoy; no futura"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Cuenta que recibe el depósito: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "monto",
+                  "boleta"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Depósito registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deposito"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cajas.depositar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cajas.depositar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cajas/{id}/turnos": {
       "get": {
         "operationId": "cajasTurnos",
@@ -1397,6 +3810,475 @@
           }
         },
         "x-permiso": "cajas.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cartera/castigos": {
+      "get": {
+        "operationId": "carteraCastigos",
+        "summary": "Castigos de cartera",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CastigoCartera"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "carteraCastigar",
+        "summary": "Castigar facturas incobrables de un cliente (2.1.11 + 1.1.12 o 5.3.02 / CxC)",
+        "description": "Motivo y evidencia de la gestión de cobro obligatorios (422 castigo_sin_evidencia). El IVA de los avisos sin DTE sale de 2.1.11; el resto contra la estimación disponible y luego 5.3.02. La factura queda cubierta y no se certifica. Emite cartera.castigada.",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "facturas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "evidencia": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "Gestión de cobro documentada (llamadas, cartas, avisos) del art. 21.20 de la LAT"
+                  }
+                },
+                "required": [
+                  "facturas",
+                  "motivo",
+                  "evidencia"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Castigo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CastigoCartera"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cartera.castigar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cartera.castigar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cartera/provisionar": {
+      "post": {
+        "operationId": "carteraProvisionar",
+        "summary": "Estimación para cuentas incobrables hasta el tope legal (5.3.02 / 1.1.12)",
+        "description": "Tope = Σ saldos deudores al corte × reserva_incobrables_max (3 %); se registra solo lo que falta para llegar al tope (monto 0 sin asiento si ya está).",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "anio": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Corte de los saldos deudores; por defecto el 31-dic del año (o hoy si es el año en curso)"
+                  }
+                },
+                "required": [
+                  "anio"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Estimación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionCartera"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cartera.provisionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cartera.provisionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cartera/provisiones": {
+      "get": {
+        "operationId": "carteraProvisiones",
+        "summary": "Estimaciones para cuentas incobrables registradas",
+        "tags": [
+          "cartera"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProvisionCartera"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
         "x-implementado": true
       }
     },
@@ -3040,6 +5922,930 @@
           }
         },
         "x-permiso": "pagos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/liquidaciones": {
+      "get": {
+        "operationId": "cobrosLiquidaciones",
+        "summary": "Liquidaciones de proveedores de cobro",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "proveedor_cobro_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de liquidaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LiquidacionCobro"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "cobrosLiquidar",
+        "summary": "Registrar la liquidación de un proveedor (Banco neto + Comisión / 1.1.10.NN bruto)",
+        "description": "bruto = Σ pagos − Σ contracargos (422 liquidacion_descuadrada); neto = bruto − comisión. Cada pago se liquida una vez (409 pago_ya_liquidado); referencia única por proveedor (409 liquidacion_duplicada). Emite cobros.liquidados.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proveedor_cobro_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del depósito; por defecto hoy"
+                  },
+                  "referencia": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "bruto": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "comision": {
+                    "type": "string",
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con hasta 2 decimales, como string",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "neto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^-?\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto con signo y hasta 2 decimales: + entra a la cuenta, − sale",
+                    "examples": [
+                      "-15.00"
+                    ]
+                  },
+                  "pagos": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 5000
+                  },
+                  "contracargos": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 5000,
+                    "description": "Pagos ya liquidados y después anulados que el proveedor descuenta"
+                  },
+                  "archivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "sha256": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[0-9a-fA-F]{64}$",
+                    "description": "sha256 del archivo original (lo calcula quien lo leyó)"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco donde se depositó el neto (por defecto el del proveedor): cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco donde se depositó el neto (por defecto el del proveedor): banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco donde se depositó el neto (por defecto el del proveedor): subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "proveedor_cobro_id",
+                  "referencia",
+                  "bruto",
+                  "comision",
+                  "pagos"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Liquidación registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiquidacionCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cobros.liquidar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cobros.liquidar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/liquidaciones/{id}": {
+      "get": {
+        "operationId": "cobrosVerLiquidacion",
+        "summary": "Ver liquidación",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liquidación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiquidacionCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/por-liquidar": {
+      "get": {
+        "operationId": "cobrosPorLiquidar",
+        "summary": "Cobros por liquidar por proveedor: puente 1.1.10.NN vs pagos pendientes y antigüedad",
+        "description": "Check cobros_por_liquidar (§10.3): saldo de 1.1.10.NN = Σ pagos sin liquidar − contracargos; anomalias = pagos más antiguos que cobros_liquidar_dias.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResumenCobrosPorLiquidar"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/proveedores": {
+      "get": {
+        "operationId": "cobrosProveedores",
+        "summary": "Proveedores de cobro (pasarelas, agentes, débito) con su cuenta puente 1.1.10.NN",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proveedores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProveedorCobro"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bancos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bancos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "cobrosCrearProveedor",
+        "summary": "Dar de alta un proveedor de cobro (crea su subcuenta 1.1.10.NN)",
+        "description": "Desde `desde` (fecha de corte, hoy o futura) los pagos de ese proveedor van a su 1.1.10.NN por el bruto y la comisión sale de la liquidación. Los anteriores quedan contra el banco (§12.11). 409 proveedor_cobro_duplicado.",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "pasarela",
+                      "agente",
+                      "debito"
+                    ]
+                  },
+                  "pasarela": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 60,
+                    "description": "Solo pasarela: el nombre que trae el pago (falsa, recurrente…)"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha de corte (por defecto hoy; no anterior a hoy)"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "metodo",
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Proveedor creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProveedorCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cobros.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cobros.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/cobros/proveedores/{id}": {
+      "put": {
+        "operationId": "cobrosEditarProveedor",
+        "summary": "Editar nombre, banco de liquidación o activo de un proveedor de cobro",
+        "description": "Con version (409 si cambió). La fecha de corte no se edita (422 campo_solo_lectura).",
+        "tags": [
+          "bancos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "activo": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "No se edita (422 campo_solo_lectura)"
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: cuenta bancaria propia (GET /cuentas-bancarias)"
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: banco del libro (GET /libro/bancos)"
+                  },
+                  "cuenta_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Banco que recibe las liquidaciones: subcuenta 1.1.02.NN del libro (una sola de las tres formas)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proveedor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProveedorCobro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso cobros.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "cobros.configurar",
         "x-implementado": true
       }
     },
@@ -7217,7 +11023,9 @@
                 "parcial",
                 "pagada",
                 "vencida",
-                "anulada"
+                "anulada",
+                "castigada",
+                "acreditada"
               ]
             }
           },
@@ -7240,7 +11048,8 @@
               "type": "string",
               "enum": [
                 "servicio",
-                "mora"
+                "mora",
+                "cargo"
               ]
             }
           }
@@ -15396,6 +19205,12 @@
                 "cierre_caja",
                 "ajuste",
                 "reclasificacion",
+                "liquidacion_cobro",
+                "deposito",
+                "traslado",
+                "banco",
+                "provision",
+                "castigo",
                 "lealtad"
               ]
             }
@@ -18869,6 +22684,132 @@
           }
         },
         "x-permiso": "pagos.anular",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/pagos/{id}/cerrar-diferencia": {
+      "post": {
+        "operationId": "pagosCerrarDiferencia",
+        "summary": "Cerrar el saldo pequeño que dejó un pago (hasta diferencia_cobro_tope)",
+        "description": "Una nota de crédito por el saldo de cada factura del pago: NCRE si la factura tiene DTE; si es un aviso sin DTE, nota interna con la base a 5.3.05 Diferencias de cobro y el IVA desde 2.1.11. 422 diferencia_sobre_tope; 409 sin_diferencia o pago_anulado.",
+        "tags": [
+          "pagos"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Diferencia cerrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiferenciaCerrada"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso pagos.cerrar_diferencia; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "pagos.cerrar_diferencia",
         "x-implementado": true
       }
     },
@@ -25280,6 +29221,105 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/conciliacion-bancaria": {
+      "get": {
+        "operationId": "reportesConciliacionBancaria",
+        "summary": "Resumen de conciliación por cuenta y fecha: libro, extracto y partidas en tránsito",
+        "description": "Por cuenta con extractos: saldo del libro, saldo del extracto, partidas en tránsito de cada lado y diferencia (0 = saldo del extracto = libro ± partidas en tránsito).",
+        "tags": [
+          "reportes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cuenta_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "description": "Al día (por defecto hoy, Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen por cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResumenConciliacionBancaria"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso reportes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "reportes.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/egresos": {
       "get": {
         "operationId": "reportesEgresos",
@@ -26227,11 +30267,19 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "bancos.conciliar",
+                        "bancos.importar_extracto",
+                        "bancos.reatribuir_llegada",
+                        "bancos.trasladar",
+                        "bancos.ver",
                         "bitacora.ver",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.crear",
+                        "cajas.depositar",
                         "cajas.ver",
+                        "cartera.castigar",
+                        "cartera.provisionar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -26240,6 +30288,8 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cobros.configurar",
+                        "cobros.liquidar",
                         "compras.anular",
                         "compras.pagar",
                         "compras.registrar",
@@ -26316,6 +30366,7 @@
                         "notificaciones.probar",
                         "notificaciones.ver",
                         "pagos.anular",
+                        "pagos.cerrar_diferencia",
                         "pagos.registrar",
                         "pagos.ver",
                         "planes.crear",
@@ -26486,11 +30537,19 @@
                     "items": {
                       "type": "string",
                       "enum": [
+                        "bancos.conciliar",
+                        "bancos.importar_extracto",
+                        "bancos.reatribuir_llegada",
+                        "bancos.trasladar",
+                        "bancos.ver",
                         "bitacora.ver",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.crear",
+                        "cajas.depositar",
                         "cajas.ver",
+                        "cartera.castigar",
+                        "cartera.provisionar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -26499,6 +30558,8 @@
                         "clientes.quitar_responsable_pago",
                         "clientes.ver",
                         "clientes.vincular_telegram",
+                        "cobros.configurar",
+                        "cobros.liquidar",
                         "compras.anular",
                         "compras.pagar",
                         "compras.registrar",
@@ -26575,6 +30636,7 @@
                         "notificaciones.probar",
                         "notificaciones.ver",
                         "pagos.anular",
+                        "pagos.cerrar_diferencia",
                         "pagos.registrar",
                         "pagos.ver",
                         "planes.crear",
@@ -31622,11 +35684,19 @@
                         "items": {
                           "type": "string",
                           "enum": [
+                            "bancos.conciliar",
+                            "bancos.importar_extracto",
+                            "bancos.reatribuir_llegada",
+                            "bancos.trasladar",
+                            "bancos.ver",
                             "bitacora.ver",
                             "cajas.abrir",
                             "cajas.cerrar",
                             "cajas.crear",
+                            "cajas.depositar",
                             "cajas.ver",
+                            "cartera.castigar",
+                            "cartera.provisionar",
                             "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
@@ -31635,6 +35705,8 @@
                             "clientes.quitar_responsable_pago",
                             "clientes.ver",
                             "clientes.vincular_telegram",
+                            "cobros.configurar",
+                            "cobros.liquidar",
                             "compras.anular",
                             "compras.pagar",
                             "compras.registrar",
@@ -31711,6 +35783,7 @@
                             "notificaciones.probar",
                             "notificaciones.ver",
                             "pagos.anular",
+                            "pagos.cerrar_diferencia",
                             "pagos.registrar",
                             "pagos.ver",
                             "planes.crear",
@@ -33394,6 +37467,12 @@
               "cierre_caja",
               "ajuste",
               "reclasificacion",
+              "liquidacion_cobro",
+              "deposito",
+              "traslado",
+              "banco",
+              "provision",
+              "castigo",
               "lealtad"
             ]
           },
@@ -34238,6 +38317,110 @@
               }
             },
             "description": "Solo con `resultado: vinculacion_requerida`"
+          }
+        }
+      },
+      "CastigoCartera": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cliente_id",
+          "cliente_nombre",
+          "fecha",
+          "motivo",
+          "evidencia",
+          "monto",
+          "iva",
+          "estimacion",
+          "gasto",
+          "asiento_id",
+          "registrado_por",
+          "created_at",
+          "facturas"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cliente_nombre": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "evidencia": {
+            "type": "string",
+            "description": "Gestión de cobro documentada"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "iva": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "IVA de avisos sin DTE que sale de 2.1.11"
+          },
+          "estimacion": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Contra 1.1.12 Estimación para cuentas incobrables"
+          },
+          "gasto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Contra 5.3.02 Cuentas incobrables (lo que no cubrió la estimación)"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "factura_id",
+                "monto",
+                "iva"
+              ],
+              "properties": {
+                "factura_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
           }
         }
       },
@@ -35099,6 +39282,81 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "Conciliacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "grupo",
+          "empresa_id",
+          "cuenta_id",
+          "linea_id",
+          "monto",
+          "regla_id",
+          "creado_por",
+          "created_at",
+          "anulada",
+          "motivo_anulacion",
+          "movimientos"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Primera fila del grupo"
+          },
+          "grupo": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "linea_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "regla_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "anulada": {
+            "type": "boolean"
+          },
+          "motivo_anulacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovimientoConciliado"
+            }
           }
         }
       },
@@ -36563,6 +40821,112 @@
           }
         }
       },
+      "Deposito": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "caja_id",
+          "caja_nombre",
+          "turno_id",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_nombre",
+          "cuenta_bancaria_id",
+          "banco_id",
+          "monto",
+          "boleta",
+          "fecha",
+          "estado",
+          "acreditado_en",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caja_nombre": {
+            "type": "string"
+          },
+          "turno_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Turno del que salió el efectivo (baja su esperado)"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Subcuenta 1.1.02.NN que recibe el depósito"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "cuenta_nombre": {
+            "type": "string"
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "banco_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "boleta": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_transito",
+              "acreditado"
+            ],
+            "description": "en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino"
+          },
+          "acreditado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Fecha de la línea del extracto que lo concilió"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "DeudaEvaluada": {
         "type": "object",
         "required": [
@@ -36692,6 +41056,62 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DiferenciaCerrada": {
+        "type": "object",
+        "required": [
+          "pago_id",
+          "empresa_id",
+          "monto",
+          "tope",
+          "notas"
+        ],
+        "properties": {
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "tope": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "diferencia_cobro_tope de la empresa"
+          },
+          "notas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "factura_id",
+                "nota_credito_id",
+                "monto",
+                "ncre"
+              ],
+              "properties": {
+                "factura_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nota_credito_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "ncre": {
+                  "type": "boolean",
+                  "description": "true = NCRE (la factura tenía DTE); false = nota interna"
+                }
+              }
+            }
           }
         }
       },
@@ -38111,7 +42531,9 @@
           "parcial",
           "pagada",
           "vencida",
-          "anulada"
+          "anulada",
+          "castigada",
+          "acreditada"
         ]
       },
       "EstadoPortal": {
@@ -38588,6 +43010,106 @@
         },
         "additionalProperties": false
       },
+      "Extracto": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_nombre",
+          "cuenta_bancaria_id",
+          "desde",
+          "hasta",
+          "saldo_inicial",
+          "saldo_final",
+          "archivo",
+          "sha256",
+          "motivo_no_encadena",
+          "lineas",
+          "conciliadas",
+          "importado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Subcuenta 1.1.02.NN del extracto"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "cuenta_nombre": {
+            "type": "string"
+          },
+          "cuenta_bancaria_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "saldo_inicial": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "saldo_final": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "archivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo_no_encadena": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Motivo con el que se forzó un saldo inicial distinto del final anterior"
+          },
+          "lineas": {
+            "type": "integer"
+          },
+          "conciliadas": {
+            "type": "integer"
+          },
+          "importado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Factura": {
         "type": "object",
         "required": [
@@ -38741,9 +43263,10 @@
             "type": "string",
             "enum": [
               "servicio",
-              "mora"
+              "mora",
+              "cargo"
             ],
-            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura"
+            "description": "servicio = factura del periodo; mora = recargo por vencimiento de otra factura; cargo = cargo interno no fiscal sin IVA (diferencia de cobro devuelta, H18)"
           },
           "factura_origen_id": {
             "type": [
@@ -38751,7 +43274,7 @@
               "null"
             ],
             "minimum": 1,
-            "description": "Factura que originó la mora"
+            "description": "Factura que originó la mora o el cargo"
           },
           "vencida_en": {
             "type": [
@@ -39925,6 +44448,94 @@
           }
         }
       },
+      "LineaExtracto": {
+        "type": "object",
+        "required": [
+          "id",
+          "extracto_id",
+          "empresa_id",
+          "cuenta_id",
+          "orden",
+          "fecha",
+          "descripcion",
+          "referencia",
+          "monto",
+          "saldo",
+          "huella",
+          "conciliada",
+          "conciliacion_id",
+          "movimientos"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "extracto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "orden": {
+            "type": "integer"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "+ entra a la cuenta, − sale"
+          },
+          "saldo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "huella": {
+            "type": "string",
+            "description": "Única por cuenta: detecta líneas ya importadas"
+          },
+          "conciliada": {
+            "type": "boolean"
+          },
+          "conciliacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Para anularla: POST /bancos/conciliaciones/:id/anular"
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovimientoConciliado"
+            }
+          }
+        }
+      },
       "LineaMayor": {
         "type": "object",
         "required": [
@@ -39973,6 +44584,134 @@
               "null"
             ],
             "minimum": 1
+          }
+        }
+      },
+      "LiquidacionCobro": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "proveedor_cobro_id",
+          "proveedor_codigo",
+          "proveedor_nombre",
+          "fecha",
+          "referencia",
+          "bruto",
+          "comision",
+          "neto",
+          "cuenta_id",
+          "cuenta_codigo",
+          "asiento_id",
+          "archivo",
+          "sha256",
+          "nota",
+          "registrado_por",
+          "created_at",
+          "pagos"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor_cobro_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "proveedor_codigo": {
+            "type": "string"
+          },
+          "proveedor_nombre": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "bruto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "comision": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "neto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Banco que recibió el neto"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "archivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pagos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "pago_id",
+                "tipo",
+                "monto"
+              ],
+              "properties": {
+                "pago_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "cobro",
+                    "contracargo"
+                  ]
+                },
+                "monto": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
           }
         }
       },
@@ -40477,6 +45216,55 @@
           }
         }
       },
+      "MovimientoConciliado": {
+        "type": "object",
+        "required": [
+          "conciliacion_id",
+          "movimiento_id",
+          "asiento_id",
+          "origen_tipo",
+          "origen_id",
+          "fecha",
+          "descripcion",
+          "monto"
+        ],
+        "properties": {
+          "conciliacion_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Fila de ledger.conciliaciones"
+          },
+          "movimiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origen_tipo": {
+            "type": "string"
+          },
+          "origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Neto del movimiento en la cuenta (debe − haber)"
+          }
+        }
+      },
       "MovimientoEstadoCuenta": {
         "type": "object",
         "required": [
@@ -40659,6 +45447,49 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "MovimientoSinConciliar": {
+        "type": "object",
+        "required": [
+          "movimiento_id",
+          "asiento_id",
+          "origen_tipo",
+          "origen_id",
+          "fecha",
+          "descripcion",
+          "monto"
+        ],
+        "properties": {
+          "movimiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origen_tipo": {
+            "type": "string"
+          },
+          "origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "debe − haber en la cuenta"
           }
         }
       },
@@ -41064,6 +45895,29 @@
             ],
             "description": "Banco y alias de la cuenta de destino"
           },
+          "proveedor_cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Proveedor de cobro (pasarela, agente, débito) cuya cuenta puente 1.1.10.NN recibió el pago por el bruto; null = directo al banco"
+          },
+          "proveedor_cobro_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del proveedor de cobro; null sin proveedor"
+          },
+          "liquidacion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Liquidación del proveedor que incluyó el pago; null = sin liquidar"
+          },
           "historico": {
             "type": "boolean",
             "description": "Pago importado de otro sistema con su fecha original (created_at): no pasó por caja ni bancos"
@@ -41094,6 +45948,53 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PagoPorLiquidar": {
+        "type": "object",
+        "required": [
+          "pago_id",
+          "tipo",
+          "cliente_id",
+          "monto",
+          "referencia",
+          "fecha",
+          "dias"
+        ],
+        "properties": {
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "cobro",
+              "contracargo"
+            ],
+            "description": "contracargo = pago liquidado y luego anulado (resta)"
+          },
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "dias": {
+            "type": "integer",
+            "description": "Días desde el pago"
           }
         }
       },
@@ -41298,6 +46199,31 @@
             "items": {
               "$ref": "#/components/schemas/ParametroFiscal"
             }
+          }
+        }
+      },
+      "PartidaEnTransito": {
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "descripcion",
+          "monto"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
           }
         }
       },
@@ -43730,6 +48656,91 @@
           }
         }
       },
+      "ProveedorCobro": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "metodo",
+          "codigo",
+          "nombre",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_liquidacion_id",
+          "cuenta_liquidacion_codigo",
+          "cuenta_liquidacion_nombre",
+          "desde",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "pasarela",
+              "agente",
+              "debito"
+            ]
+          },
+          "codigo": {
+            "type": "string",
+            "description": "Nombre normalizado de la pasarela, o el método"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Subcuenta 1.1.10.NN Cobros por liquidar del proveedor"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "cuenta_liquidacion_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Banco donde deposita las liquidaciones"
+          },
+          "cuenta_liquidacion_codigo": {
+            "type": "string"
+          },
+          "cuenta_liquidacion_nombre": {
+            "type": "string"
+          },
+          "desde": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha de corte: sus pagos desde este día van a 1.1.10.NN"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ProveedorFelCatalogo": {
         "type": "object",
         "required": [
@@ -43802,6 +48813,79 @@
                 "type": "boolean"
               }
             }
+          }
+        }
+      },
+      "ProvisionCartera": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "anio",
+          "fecha",
+          "base",
+          "porcentaje",
+          "tope",
+          "saldo_anterior",
+          "monto",
+          "asiento_id",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "anio": {
+            "type": "integer"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Corte de los saldos deudores"
+          },
+          "base": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Σ saldos deudores de clientes en 1.1.03 al corte"
+          },
+          "porcentaje": {
+            "type": "string",
+            "description": "reserva_incobrables_max vigente (%)"
+          },
+          "tope": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "base × porcentaje: la reserva en 1.1.12 nunca lo supera"
+          },
+          "saldo_anterior": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 1.1.12 antes de esta estimación"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Registrado (5.3.02 / 1.1.12); 0 si ya estaba en el tope"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -44204,6 +49288,118 @@
             "items": {
               "$ref": "#/components/schemas/FraseFiscal"
             }
+          }
+        }
+      },
+      "ReglaConciliacion": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "cuenta_id",
+          "tipo_condicion",
+          "patron",
+          "monto_min",
+          "monto_max",
+          "accion",
+          "contrapartida_cuenta_id",
+          "contrapartida",
+          "prioridad",
+          "activa",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "cuenta_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Solo esta cuenta bancaria; null = todas"
+          },
+          "tipo_condicion": {
+            "type": "string",
+            "enum": [
+              "contiene",
+              "regex"
+            ]
+          },
+          "patron": {
+            "type": "string"
+          },
+          "monto_min": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monto_max": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accion": {
+            "type": "string",
+            "enum": [
+              "contrapartida",
+              "cliente"
+            ]
+          },
+          "contrapartida_cuenta_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "contrapartida": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Código de la contrapartida"
+          },
+          "prioridad": {
+            "type": "integer"
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -46671,6 +51867,69 @@
           }
         }
       },
+      "ResultadoAplicarReglas": {
+        "type": "object",
+        "required": [
+          "extracto_id",
+          "conciliadas",
+          "sin_pago",
+          "sin_regla"
+        ],
+        "properties": {
+          "extracto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "conciliadas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "linea_id",
+                "regla_id",
+                "accion",
+                "conciliacion_id"
+              ],
+              "properties": {
+                "linea_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "regla_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "accion": {
+                  "type": "string",
+                  "enum": [
+                    "contrapartida",
+                    "cliente"
+                  ]
+                },
+                "conciliacion_id": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "sin_pago": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Líneas con regla cliente sin un pago único que coincida"
+          },
+          "sin_regla": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
       "ResultadoCorte": {
         "type": "object",
         "required": [
@@ -47189,6 +52448,83 @@
           }
         }
       },
+      "ResumenCobrosPorLiquidar": {
+        "type": "object",
+        "required": [
+          "proveedor_cobro_id",
+          "empresa_id",
+          "metodo",
+          "codigo",
+          "nombre",
+          "cuenta_codigo",
+          "saldo_libro",
+          "pendiente",
+          "diferencia",
+          "cuadra",
+          "dias_limite",
+          "pagos",
+          "anomalias"
+        ],
+        "properties": {
+          "proveedor_cobro_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "metodo": {
+            "type": "string",
+            "enum": [
+              "pasarela",
+              "agente",
+              "debito"
+            ]
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "saldo_libro": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 1.1.10.NN en el libro de la empresa"
+          },
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Σ pagos sin liquidar − Σ contracargos pendientes"
+          },
+          "diferencia": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "saldo_libro − pendiente (0 = el puente cuadra)"
+          },
+          "cuadra": {
+            "type": "boolean"
+          },
+          "dias_limite": {
+            "type": "integer",
+            "description": "cobros_liquidar_dias de la empresa"
+          },
+          "pagos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoPorLiquidar"
+            }
+          },
+          "anomalias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoPorLiquidar"
+            },
+            "description": "Pagos sin liquidar más antiguos que dias_limite"
+          }
+        }
+      },
       "ResumenComprobantes": {
         "type": "object",
         "required": [
@@ -47213,6 +52549,100 @@
           "monto_pendiente": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Suma de los montos pendientes"
+          }
+        }
+      },
+      "ResumenConciliacionBancaria": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "cuenta_id",
+          "cuenta_codigo",
+          "cuenta_nombre",
+          "fecha",
+          "saldo_libro",
+          "saldo_extracto",
+          "desde",
+          "diferencia_apertura",
+          "libro_en_transito",
+          "total_libro_en_transito",
+          "extracto_en_transito",
+          "total_extracto_en_transito",
+          "diferencia",
+          "cuadra"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_codigo": {
+            "type": "string"
+          },
+          "cuenta_nombre": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "saldo_libro": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de la cuenta en el libro de la empresa al día"
+          },
+          "saldo_extracto": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Saldo inicial del primer extracto + Σ líneas al día"
+          },
+          "desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Primer día cubierto por extractos"
+          },
+          "diferencia_apertura": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo inicial del primer extracto − libro antes de esa fecha"
+          },
+          "libro_en_transito": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaEnTransito"
+            },
+            "description": "Movimientos del libro sin conciliar al día (id = movimiento)"
+          },
+          "total_libro_en_transito": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "extracto_en_transito": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaEnTransito"
+            },
+            "description": "Líneas del extracto sin conciliar al día (id = línea)"
+          },
+          "total_extracto_en_transito": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "diferencia": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "saldo_extracto − (saldo_libro − libro en tránsito + extracto en tránsito); 0 = cuadra"
+          },
+          "cuadra": {
+            "type": "boolean"
           }
         }
       },
@@ -47432,6 +52862,46 @@
               }
             },
             "description": "Último refresco de cada vista (por evento)"
+          }
+        }
+      },
+      "ResumenFondosEnTransito": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "saldo_libro",
+          "pendiente",
+          "diferencia",
+          "cuadra",
+          "depositos",
+          "traslados"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "saldo_libro": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 1.1.11 en el libro de la empresa"
+          },
+          "pendiente": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Σ depósitos y traslados sin acreditar"
+          },
+          "diferencia": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "cuadra": {
+            "type": "boolean"
+          },
+          "depositos": {
+            "type": "integer",
+            "description": "Depósitos en tránsito"
+          },
+          "traslados": {
+            "type": "integer",
+            "description": "Traslados en tránsito"
           }
         }
       },
@@ -48934,6 +54404,84 @@
               "null"
             ],
             "description": "alta, edicion: <campos>, retiro: <motivo> o inicial (migración)"
+          }
+        }
+      },
+      "Traslado": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "cuenta_origen_id",
+          "cuenta_origen_codigo",
+          "cuenta_destino_id",
+          "cuenta_destino_codigo",
+          "monto",
+          "fecha",
+          "referencia",
+          "estado",
+          "acreditado_en",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_origen_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_origen_codigo": {
+            "type": "string"
+          },
+          "cuenta_destino_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cuenta_destino_codigo": {
+            "type": "string"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_transito",
+              "acreditado"
+            ],
+            "description": "en_transito = en 1.1.11; acreditado = conciliado con el extracto del banco de destino"
+          },
+          "acreditado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

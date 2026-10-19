@@ -1,5 +1,5 @@
 import type { DefinicionFrase, DefinicionTipoDte, PaqueteLocalizacion } from '#fiscal/localizacion'
-import { CUENTAS_PAQUETE_GT } from '#fiscal/l10n/gt/cuentas'
+import { CUENTAS_PAQUETE_GT, CUENTAS_PAQUETE_GT_2026_2 } from '#fiscal/l10n/gt/cuentas'
 import { PARAMETROS_GT, REGIMENES_GT, type RegimenGt } from '#fiscal/l10n/gt/parametros'
 import { CUADRICULAS_GT, IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
 
@@ -117,4 +117,16 @@ export const PAQUETE_GT_2026_1: PaqueteLocalizacion = {
     frases_por_regimen: FRASES_POR_REGIMEN_GT,
     tipos_dte: TIPOS_DTE_GT,
     regimenInicial: (datos) => (datos.regimen_isr ? (REGIMEN_DESDE_ISR[datos.regimen_isr] ?? null) : null),
+}
+
+/**
+ * `gt-2026.2` (fase 4): igual que 2026.1 más la cuenta `4.2.03 Recuperación de cuentas incobrables`
+ * (decisión (g) del líder). Instalarla sobre 2026.1 solo agrega esa cuenta.
+ */
+export const PAQUETE_GT_2026_2: PaqueteLocalizacion = {
+    ...PAQUETE_GT_2026_1,
+    codigo: 'gt-2026.2',
+    version: '2026.2.0',
+    publicada_en: '2026-10-18',
+    cuentas: CUENTAS_PAQUETE_GT_2026_2,
 }

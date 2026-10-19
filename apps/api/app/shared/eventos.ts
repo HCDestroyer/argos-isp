@@ -355,6 +355,58 @@ export interface CatalogoEventos {
         cliente_id: number
         motivo: string
     }
+    /**
+     * Cobros y bancos (contrato de localización fiscal §10.3 y §10.9, fase 4). `proveedor` es el código
+     * del proveedor de cobro (`falsa`, `agente`, `debito`); `pagos` los ids incluidos (sin contracargos).
+     */
+    'cobros.liquidados': {
+        liquidacion_id: number
+        empresa_id: number
+        proveedor: string
+        bruto: Dinero
+        comision: Dinero
+        neto: Dinero
+        pagos: number[]
+    }
+    /** Efectivo de un turno de caja depositado en el banco (queda en 1.1.11 hasta conciliarse). */
+    'caja.depositada': {
+        deposito_id: number
+        empresa_id: number
+        caja_id: number
+        /** cuenta bancaria propia (null si el depósito fue a un banco del libro sin cuenta propia) */
+        cuenta_bancaria_id: number | null
+        /** subcuenta del libro (1.1.02.NN) que recibe el depósito */
+        cuenta_id: number
+        monto: Dinero
+    }
+    'banco.extracto_importado': {
+        extracto_id: number
+        empresa_id: number
+        cuenta_bancaria_id: number | null
+        cuenta_id: number
+        /** número de líneas importadas */
+        lineas: number
+        /** Σ de las líneas (con signo) */
+        monto: Dinero
+    }
+    'banco.conciliado': {
+        /** primera fila de la conciliación (su `id` en `POST /bancos/conciliaciones/:id/anular`) */
+        conciliacion_id: number
+        empresa_id: number
+        cuenta_bancaria_id: number | null
+        cuenta_id: number
+        /** línea del extracto conciliada */
+        linea_id: number
+        lineas: number
+        monto: Dinero
+    }
+    'cartera.castigada': {
+        castigo_id: number
+        empresa_id: number
+        cliente_id: number
+        facturas: number[]
+        monto: Dinero
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -514,6 +566,11 @@ export const EVENTOS = [
     'dte.anulado',
     'fel.contingencia_cambiada',
     'factura.sustituida',
+    'cobros.liquidados',
+    'caja.depositada',
+    'banco.extracto_importado',
+    'banco.conciliado',
+    'cartera.castigada',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

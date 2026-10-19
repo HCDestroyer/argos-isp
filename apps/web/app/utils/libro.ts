@@ -13,6 +13,12 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     cierre_caja: { etiqueta: 'Cierre de caja', icono: 'i-lucide-lock' },
     ajuste: { etiqueta: 'Ajuste', icono: 'i-lucide-scale' },
     reclasificacion: { etiqueta: 'Reclasificación de IVA', icono: 'i-lucide-arrow-left-right' },
+    liquidacion_cobro: { etiqueta: 'Liquidación de cobros', icono: 'i-lucide-hand-coins' },
+    deposito: { etiqueta: 'Depósito de caja', icono: 'i-lucide-landmark' },
+    traslado: { etiqueta: 'Traslado entre bancos', icono: 'i-lucide-arrow-right-left' },
+    banco: { etiqueta: 'Partida del extracto', icono: 'i-lucide-file-spreadsheet' },
+    provision: { etiqueta: 'Estimación de incobrables', icono: 'i-lucide-shield-alert' },
+    castigo: { etiqueta: 'Castigo de cartera', icono: 'i-lucide-file-x' },
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
 }
 
