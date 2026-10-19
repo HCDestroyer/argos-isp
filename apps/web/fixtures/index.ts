@@ -21,6 +21,7 @@ import { rutasCartera } from './cartera/rutas'
 import { rutasCobros } from './cobros/rutas'
 import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasLealtad } from './lealtad/rutas'
+import { rutasBonificaciones } from './bonificaciones/rutas'
 import { rutasAdicionales } from './adicionales/rutas'
 import { rutasClientes } from './clientes/rutas'
 import { rutasComprobantes } from './comprobantes/rutas'
@@ -472,6 +473,8 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
         return { status: 200, cuerpo: me }
     },
 
+    // Antes que `POST /facturas/:id/…` y que los reportes genéricos (`GET /reportes/:reporte`).
+    ...rutasBonificaciones,
     // Fase 4 primero: `GET /cobros/por-liquidar` antes que el recibo `GET /cobros/:id`, y
     // `GET /reportes/conciliacion-bancaria` antes que los reportes genéricos.
     ...rutasCobros,

@@ -148,7 +148,11 @@
       "adicionales.editar",
       "adicionales.desactivar",
       "adicionales.crear_motivo",
-      "adicionales.desactivar_motivo"
+      "adicionales.desactivar_motivo",
+      "facturas.emitir_cargo_unico",
+      "facturas.cargo_sin_costo",
+      "facturas.configurar_motivos",
+      "facturas.configurar_conceptos"
     ],
     "alcance_global": true,
     "empresas": [

@@ -81,6 +81,17 @@ function detalle(factura: Factura): FacturaDetalle {
     const servicio = bd.servicios.find(s => s.id === factura.servicio_id)
     const plan = bd.planes.find(p => p.id === servicio?.plan_id)
     const mora = factura.tipo === 'mora'
+    // Cargo único (A3): sus líneas son las del catálogo, no la del plan.
+    const lineasCargo = bd.lineasCargoUnico[factura.id]
+    if (factura.cargo_unico && lineasCargo) {
+        return {
+            ...factura,
+            acreditado: factura.acreditado ?? '0.00',
+            notas_credito: notasDeFactura(factura.id),
+            lineas: structuredClone(lineasCargo),
+            reglas_snapshot: { plantilla_facturacion_id: servicio?.plantilla_facturacion_id ?? null, dias_gracia: 0 },
+        }
+    }
     return {
         ...factura,
         acreditado: factura.acreditado ?? '0.00',

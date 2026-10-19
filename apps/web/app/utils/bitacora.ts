@@ -334,6 +334,7 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     plan_router: { etiqueta: 'Plan en router' },
     plantilla_facturacion: { etiqueta: 'Plantilla de facturación' },
     concepto_cargo: { etiqueta: 'Concepto de cargo único' },
+    bonificacion: { etiqueta: 'Bonificación', ruta: id => `/bonificaciones/${id}` },
     motivo_sin_costo: { etiqueta: 'Motivo de factura en Q0' },
     plantilla_notificacion: { etiqueta: 'Plantilla de notificación' },
     recordatorio: { etiqueta: 'Recordatorio' },

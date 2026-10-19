@@ -7,6 +7,23 @@ definePageMeta({ permiso: 'clientes.ver' })
 const route = useRoute()
 const router = useRouter()
 const { puede } = usePermisos()
+const { empresaId: empresaActivaId } = useEmpresaActiva()
+const toast = useToast()
+
+/** Cargo único sin servicio (venta de equipo, visita…): de la empresa activa. */
+const cargoAbierto = ref(false)
+
+async function alEmitirCargo(resultado: CargoUnicoEmitido) {
+    if (resultado.documento === 'bonificacion' && resultado.bonificacion) {
+        toast.add({ title: 'Bonificación registrada', description: `Sin costo: ${formatearQuetzales(resultado.bonificacion.bruto)} · ${resultado.bonificacion.motivo_nombre}`, icon: 'i-lucide-hand-heart', color: 'success' })
+        await navigateTo(`/bonificaciones/${resultado.bonificacion.id}`)
+        return
+    }
+    if (resultado.factura) {
+        toast.add({ title: 'Cargo único emitido', description: `Factura #${resultado.factura.id} por ${formatearQuetzales(resultado.factura.total)}`, icon: 'i-lucide-receipt', color: 'success' })
+        await navigateTo(`/facturas/${resultado.factura.id}`)
+    }
+}
 
 const clienteId = computed(() => Number(route.params.id))
 
@@ -231,6 +248,15 @@ onMounted(cargar)
                         class="glow-brand"
                     />
                     <UButton
+                        v-if="puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
+                        icon="i-lucide-receipt"
+                        label="Cargo único"
+                        color="neutral"
+                        variant="outline"
+                        data-prueba="abrir-cargo-unico-cliente"
+                        @click="cargoAbierto = true"
+                    />
+                    <UButton
                         v-if="puede('clientes.editar')"
                         :to="`/clientes/${cliente.id}/editar`"
                         icon="i-lucide-pencil"
@@ -404,5 +430,11 @@ onMounted(cargar)
                 etiqueta="Línea de tiempo del cliente"
             />
         </div>
+        <CargoUnicoModal
+            v-if="cliente && puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
+            v-model:open="cargoAbierto"
+            :destino="{ cliente, empresaId: empresaActivaId }"
+            @hecho="alEmitirCargo"
+        />
     </PanelPagina>
 </template>
