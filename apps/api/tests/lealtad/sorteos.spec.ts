@@ -39,12 +39,11 @@ import { REQUISITOS_PARA_EJECUTAR, verificacionSorteo } from '#lealtad/sorteos'
  * de premios como gasto `5.1.03` (efectivo por egreso, bien contra proveedor, servicio como canje) con el
  * ISR retenido a `2.1.05`.
  *
- * El inv. 9 del auditor aún no conoce el origen `sorteo` (asientos de entrega e ISR): las pruebas
- * comprueban que no hay **otras** violaciones y la prueba `.fails` `H-sorteo-origen` deja
- * `afirmarLibro` puro.
+ * El inv. 9 del auditor conoce el origen `sorteo` y el inv. 15 revisa la entrega y los ganadores
+ * (antes `.fails` `H-sorteo-origen`): ya no queda nada pendiente del auditor.
  */
 
-const PENDIENTES_DEL_AUDITOR = ['9.origen_de_asiento_desconocido']
+const PENDIENTES_DEL_AUDITOR: string[] = []
 
 async function otrasViolaciones(empresas: number[]) {
     const violaciones = await verificarLibro(empresas)
@@ -343,7 +342,7 @@ test.group('Lealtad · sorteos', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H-sorteo-origen: entregar un premio en especie deja el libro limpio para el auditor', async ({
+    test('entregar un premio en especie deja el libro limpio para el auditor (antes H-sorteo-origen)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -365,7 +364,5 @@ test.group('Lealtad · sorteos', (group) => {
             e.ctx,
         )
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'H-sorteo-origen: el inv. 9 del auditor aún no conoce el origen de asiento sorteo (entrega en especie e ISR)',
-    )
+    })
 })
