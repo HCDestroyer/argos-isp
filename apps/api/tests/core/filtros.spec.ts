@@ -1,8 +1,13 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { crearPlantillaFila, cuentaBancariaPrueba, generar } from '#tests/billing/ayudas_billing'
+import RegistrarPago from '#billing/actions/registrar_pago'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import VencerFacturas from '#billing/actions/vencer_facturas'
 import {
     crearClienteFila,
+    crearEmpresaFila,
     crearPlanFila,
     crearRouterFila,
     crearServicioFila,
@@ -19,18 +24,54 @@ async function insertar(tabla: string, fila: Record<string, unknown>): Promise<n
     return r!.id
 }
 
-async function facturaVencida(clienteId: number, servicioId: number) {
-    return insertar('billing.facturas', {
-        cliente_id: clienteId,
-        servicio_id: servicioId,
-        periodo: '2026-09-01',
-        clave_unica: unico('fac'),
-        vence_en: '2026-09-10',
-        estado: 'vencida',
-        subtotal: '100.00',
-        iva: '12.00',
-        total: '112.00',
-    })
+/**
+ * Factura vencida del periodo 2026-09 emitida por billing (`GenerarFacturas` + `VencerFacturas`),
+ * con su asiento de CxC: un INSERT directo dejaba cartera sin CxC en la empresa principal y hacía
+ * fallar la conciliación «cartera vencida vs. CxC» de A3 según el orden de los archivos.
+ * `VencerFacturas` no cambia el estado del servicio.
+ */
+/** Factura de 2026-09 emitida por billing y pagada por depósito (`RegistrarPago`), con sus asientos. */
+async function facturaPagada(servicioId: number, clienteId: number, empresaId: number, cuentaId: number) {
+    await db
+        .from('core.servicios')
+        .where('id', servicioId)
+        .update({
+            plantilla_facturacion_id: await crearPlantillaFila({ mora_tipo: 'ninguna' }),
+            fecha_instalacion: '2026-09-01',
+        })
+    await generar(servicioId, '2026-09-01')
+    const factura = await db.from('billing.facturas').where('servicio_id', servicioId).firstOrFail()
+    await new RegistrarPago().execute(
+        {
+            cliente_id: clienteId,
+            empresa_id: empresaId,
+            metodo: 'deposito',
+            monto: String(factura.total),
+            cuenta_bancaria_id: cuentaId,
+            referencia: unico('boleta'),
+            facturas: [Number(factura.id)],
+        },
+        contextoPrueba(),
+    )
+    const pagada = await db.from('billing.facturas').where('id', factura.id).firstOrFail()
+    if (pagada.estado !== 'pagada') throw new Error(`la factura ${factura.id} quedó ${pagada.estado}`)
+}
+
+async function facturaVencida(servicioId: number): Promise<number> {
+    const plantillaId = await crearPlantillaFila({ mora_tipo: 'ninguna' })
+    await db
+        .from('core.servicios')
+        .where('id', servicioId)
+        .update({ plantilla_facturacion_id: plantillaId, fecha_instalacion: '2026-09-01' })
+    await generar(servicioId, '2026-09-01')
+    await new VencerFacturas().execute({ servicio_id: servicioId, hasta: '2026-10-01' }, contextoPrueba())
+    const factura = await db
+        .from('billing.facturas')
+        .where('servicio_id', servicioId)
+        .where('estado', 'vencida')
+        .orderBy('id', 'asc')
+        .firstOrFail()
+    return Number(factura.id)
 }
 
 async function promesa(clienteId: number, servicioId: number, estadoPromesa = 'activa') {
@@ -47,8 +88,16 @@ async function promesa(clienteId: number, servicioId: number, estadoPromesa = 'a
 /**
  * Z1: C1 (S1 R1 P1 activo, factura vencida), C2 (S2 R1 P2 suspendido, promesa activa)
  * Z2: C3 (S3 R2 P1 suspendido + S3b R1 P2 activo, factura pagada), C4 sin servicios
+ *
+ * Todo vive en una **empresa propia de la prueba** (se desactiva al terminar) y todo el dinero pasa
+ * por billing con su asiento: la factura vencida (`GenerarFacturas` + `VencerFacturas`) y la factura
+ * pagada de S3 (`GenerarFacturas` + `RegistrarPago` por depósito). S3 se paga estando activo y luego
+ * se deja suspendido como fila de prueba (pagarlo suspendido lo reactivaría). Las promesas se
+ * insertan directo: no mueven dinero. Cada prueba termina con `afirmarLibro` sobre esa empresa. El
+ * usuario de las pruebas tiene alcance global: ve las dos empresas.
  */
 async function escenario() {
+    const empresa = await crearEmpresaFila()
     const z1 = await crearZonaFila()
     const z2 = await crearZonaFila()
     const r1 = await crearRouterFila()
@@ -59,26 +108,23 @@ async function escenario() {
     const c2 = await crearClienteFila({ zona_id: z1 })
     const c3 = await crearClienteFila({ zona_id: z2 })
     const c4 = await crearClienteFila({ zona_id: z2 })
-    const s1 = await crearServicioFila({ cliente_id: c1, router_id: r1, plan_id: p1 })
-    const s2 = await crearServicioFila({ cliente_id: c2, router_id: r1, plan_id: p2, estado: 'suspendido' })
-    const s3 = await crearServicioFila({ cliente_id: c3, router_id: r2, plan_id: p1, estado: 'suspendido' })
-    const s3b = await crearServicioFila({ cliente_id: c3, router_id: r1, plan_id: p2 })
-    await facturaVencida(c1, s1)
-    await insertar('billing.facturas', {
-        cliente_id: c3,
-        servicio_id: s3,
-        periodo: '2026-09-01',
-        clave_unica: unico('fac'),
-        vence_en: '2026-09-10',
-        estado: 'pagada',
-        subtotal: '100.00',
-        iva: '12.00',
-        total: '112.00',
-        pagado: '112.00',
+    const s1 = await crearServicioFila({ cliente_id: c1, router_id: r1, plan_id: p1, empresa_id: empresa })
+    const s2 = await crearServicioFila({
+        cliente_id: c2,
+        router_id: r1,
+        plan_id: p2,
+        estado: 'suspendido',
+        empresa_id: empresa,
     })
+    const s3 = await crearServicioFila({ cliente_id: c3, router_id: r2, plan_id: p1, empresa_id: empresa })
+    const s3b = await crearServicioFila({ cliente_id: c3, router_id: r1, plan_id: p2, empresa_id: empresa })
+    await facturaVencida(s1)
+    const cuenta = await cuentaBancariaPrueba('Banrural', empresa)
+    await facturaPagada(s3, c3, empresa, Number(cuenta.id))
+    await db.from('core.servicios').where('id', s3).update({ estado: 'suspendido' })
     await promesa(c2, s2)
     await promesa(c3, s3, 'cumplida')
-    return { z1, z2, r1, r2, p1, p2, c1, c2, c3, c4, s1, s2, s3, s3b }
+    return { empresa, cuenta: Number(cuenta.id), z1, z2, r1, r2, p1, p2, c1, c2, c3, c4, s1, s2, s3, s3b }
 }
 
 type Escenario = Awaited<ReturnType<typeof escenario>>
@@ -115,7 +161,8 @@ async function idsServicios(client: any, token: string, qs: Record<string, unkno
 
 const orden = (...ids: number[]) => [...ids].sort((a, b) => a - b)
 
-test.group('Filtros · GET /clientes', () => {
+test.group('Filtros · GET /clientes', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     test('estado_servicio, router_id y plan_id se cumplen en el mismo servicio', async ({
         client,
         assert,
@@ -139,6 +186,7 @@ test.group('Filtros · GET /clientes', () => {
             [e.c3],
         )
         assert.deepEqual(await idsClientes(client, token, { estado_servicio: 'retirado' }, e), [])
+        await afirmarLibro(assert, e.empresa)
     })
 
     test('con_deuda_vencida y con_promesa_activa (true y false), cruzados con zona y q', async ({
@@ -167,6 +215,7 @@ test.group('Filtros · GET /clientes', () => {
             e.c3,
         ])
         assert.deepEqual(await idsClientes(client, token, { q: userPpp, con_deuda_vencida: true }, e), [])
+        await afirmarLibro(assert, e.empresa)
     })
 
     test('valores inválidos: 422', async ({ client }) => {
@@ -182,7 +231,8 @@ test.group('Filtros · GET /clientes', () => {
     })
 })
 
-test.group('Filtros · GET /servicios', () => {
+test.group('Filtros · GET /servicios', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     test('zona_id y con_deuda_vencida cruzados con estado y router', async ({ client, assert }) => {
         const { token } = await usuarioConRoles(['admin'])
         const e = await escenario()
@@ -196,6 +246,7 @@ test.group('Filtros · GET /servicios', () => {
             e.s3,
         ])
         assert.deepEqual(await idsServicios(client, token, { zona_id: e.z2, router_id: e.r1 }, e), [e.s3b])
+        await afirmarLibro(assert, e.empresa)
     })
 
     test('la vista Servicio trae cliente_nombre, plan_nombre, router_nombre y zona_nombre', async ({
@@ -216,26 +267,57 @@ test.group('Filtros · GET /servicios', () => {
             router_nombre: router.nombre,
             zona_nombre: zona.nombre,
         })
-        const sinZona = await crearServicioFila({ cliente_id: await crearClienteFila() })
+        const sinZona = await crearServicioFila({
+            cliente_id: await crearClienteFila(),
+            empresa_id: e.empresa,
+        })
         const r2 = await estado(client.get(`/api/v1/servicios/${sinZona}`).bearerToken(token), 200)
         assert.isNull(r2.body().zona_nombre)
+        await afirmarLibro(assert, e.empresa)
     })
 })
 
-test.group('Filtros · GET /bitacora/acciones', () => {
+test.group('Filtros · GET /bitacora/acciones', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     test('cliente_id trae acciones del cliente, sus servicios, facturas, pagos y promesas; canal y excluir_canal', async ({
         client,
         assert,
     }) => {
         const { token, usuario } = await usuarioConRoles(['admin'])
         const e = await escenario()
-        const facturaId = await facturaVencida(e.c1, e.s1)
-        const pagoId = await insertar('billing.pagos', {
-            cliente_id: e.c1,
-            metodo: 'deposito',
-            monto: '50.00',
-            referencia: unico('boleta'),
-        })
+        // la factura vencida de S1 que dejó el escenario
+        const factura = await db
+            .from('billing.facturas')
+            .where('servicio_id', e.s1)
+            .orderBy('id')
+            .firstOrFail()
+        const facturaId = Number(factura.id)
+        // un abono real de Q50 a esa factura (con su asiento), antes de leer las acciones previas
+        const pago = await new RegistrarPago().execute(
+            {
+                cliente_id: e.c1,
+                empresa_id: e.empresa,
+                metodo: 'deposito',
+                monto: '50.00',
+                cuenta_bancaria_id: e.cuenta,
+                referencia: unico('boleta'),
+                facturas: [facturaId],
+            },
+            contextoPrueba(),
+        )
+        const pagoId = Number(pago.id)
+        // acciones reales que dejó el escenario al emitir y vencer la factura de S1 (canal consola)
+        const previas = await estado(
+            client.get('/api/v1/bitacora/acciones').bearerToken(token).qs({ cliente_id: e.c1, limit: 200 }),
+            200,
+        )
+        const accionesPrevias = (previas.body().data as Array<{ accion: string; canal: string }>).map(
+            (a) => a.accion,
+        )
+        assert.isTrue(
+            (previas.body().data as Array<{ canal: string }>).every((a) => a.canal === 'consola'),
+            'el escenario solo deja acciones de consola',
+        )
         const promesaId = await promesa(e.c1, e.s1, 'cumplida')
 
         // acción real: editar el cliente por la API (canal panel, actor con nombre)
@@ -310,6 +392,7 @@ test.group('Filtros · GET /bitacora/acciones', () => {
         assert.sameMembers(
             todas.map((a) => a.accion),
             [
+                ...accionesPrevias,
                 'clientes.editar',
                 'servicios.cambiar_estado',
                 'facturas.generar',
@@ -365,5 +448,6 @@ test.group('Filtros · GET /bitacora/acciones', () => {
         assert.lengthOf(pagina2.body().data, todas.length - 2)
 
         await estado(client.get('/api/v1/bitacora/acciones').bearerToken(token).qs({ canal: 'x' }), 422)
+        await afirmarLibro(assert, e.empresa)
     })
 })
