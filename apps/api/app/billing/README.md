@@ -170,7 +170,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 `cortes.ts`: `horasDeCorte(hasta, cliente?)` (pública, solo lectura) da las horas de corte distintas (HH:MM de Guatemala) de los servicios vigentes que ya llegaron; es la misma consulta que usa el corte y la que vigila A6 (`VigilarCrons`).
 
-`actions/ejecutar_corte.ts` (`servicios.corte`): procesa cada hora de corte del día que ya llegó (de la plantilla, o la excepción `hora_corte` del servicio) y no está en `billing.cortes_ejecutados`; primero vence lo pendiente y luego evalúa cada servicio con `evaluarEstadoServicio`. `POST /facturas/corte { servicio_id?, ignorar_hora? }` es el corte manual del laboratorio (no registra `cortes_ejecutados`).
+`actions/ejecutar_corte.ts` (`servicios.corte`): procesa cada hora de corte del día que ya llegó (de la plantilla, o la excepción `hora_corte` del servicio) y no está en `billing.cortes_ejecutados`; primero vence lo pendiente y luego evalúa cada servicio con `evaluarEstadoServicio`. `POST /facturas/corte { servicio_id?, ignorar_hora? }` es el corte manual del laboratorio (no registra `cortes_ejecutados`). Pedido por un usuario evalúa y vence solo su empresa activa o las de su alcance; el cron, todas.
 
 ## Pagos (tarea 8, versión de cobro rápido)
 

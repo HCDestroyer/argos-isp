@@ -1,11 +1,20 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import { lineaConIva } from '#billing/facturas'
 import { periodosHasta } from '#billing/periodos'
-import { asientoDe, escenario, eventosDe, facturasDe, generar } from '#tests/billing/ayudas_billing'
+import {
+    asientoDe,
+    escenario,
+    estadoServicio,
+    eventosDe,
+    facturasDe,
+    generar,
+} from '#tests/billing/ayudas_billing'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import VencerFacturas from '#billing/actions/vencer_facturas'
 
 test.group('billing · periodos', () => {
     test('día fijo con prorrateo: primer periodo parcial desde la instalación, luego ciclos completos', ({
@@ -240,7 +249,7 @@ test.group('billing · generarFacturas', (group) => {
         await estado(client.get('/api/v1/facturas/999999999').bearerToken(token), 404)
     })
 
-    test('multiempresa: POST /facturas/generar y /facturas/vencer recorren solo las empresas del usuario', async ({
+    test('multiempresa: POST /facturas/generar, /facturas/vencer y /facturas/corte recorren solo las empresas del usuario', async ({
         client,
         assert,
     }) => {
@@ -283,6 +292,19 @@ test.group('billing · generarFacturas', (group) => {
             facturasC.map((f) => f.estado),
             ['vencida', 'vencida'],
         )
-        await afirmarLibroCuadrado(assert)
+
+        // corte: B también tiene dos vencidas (por el sistema), pero el usuario de C solo evalúa C
+        await new VencerFacturas().execute(
+            { servicio_id: enB.servicioId, hasta: '2026-10-15' },
+            contextoPrueba(),
+        )
+        const corte = await estado(
+            client.post('/api/v1/facturas/corte').bearerToken(token).json({ ignorar_hora: true }),
+            200,
+        )
+        assert.equal(corte.body().evaluados, 1)
+        assert.equal(await estadoServicio(enC.servicioId), 'suspendido')
+        assert.equal(await estadoServicio(enB.servicioId), 'activo', 'la empresa B no es del usuario')
+        await afirmarLibro(assert, [B, C])
     })
 })
