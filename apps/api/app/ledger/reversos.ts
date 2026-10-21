@@ -63,6 +63,11 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'libro.registrar_asiento',
         documento: 'el diferimiento con un asiento de ajuste (las cuotas no se anulan)',
     },
+    // H23: la entrega de un premio de sorteo (en especie e ISR) se deshace junto con el ganador
+    sorteo: {
+        accion: 'sorteos.anular_entrega',
+        documento: 'la entrega del premio (POST /lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega)',
+    },
     // decisión B: la diferencia de cobro se revierte en espejo al anular el pago aplicado a su factura
     diferencia_cobro: {
         accion: 'pagos.anular',

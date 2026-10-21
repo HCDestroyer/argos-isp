@@ -61,6 +61,8 @@ export const cuentas: Cuenta[] = [
     cuenta(18, '1.1.02.04', 'Banco G&T Continental · Cuenta anterior (****5678)', 'activo', 1, true),
     // Caja de Fibra del Sur (empresa 2).
     cuenta(19, '1.1.01.04', 'Caja Sur', 'activo', 2, true),
+    // Inventario de premios de sorteo: la contrapartida `cuenta` de un bien (lista blanca, H25).
+    cuenta(22, '1.1.14', 'Inventario de premios', 'activo', 1, true),
 ]
 
 export const CUENTA_CXC = 7

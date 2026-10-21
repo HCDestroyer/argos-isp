@@ -283,3 +283,18 @@ export const crearNodoPortalValidator = vine.compile(
             .regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
     }),
 )
+
+/** `POST /portal/canjes` (contrato `lealtad.md` §12): el premio y el servicio que recibe el beneficio. */
+export const canjearPuntosValidator = vine.compile(
+    vine.object({
+        premio_id: idEntidad(),
+        servicio_id: idEntidad(),
+    }),
+)
+
+/** `GET /portal/avisos-sorteo`: en qué lugar del portal (decide cómo se identifica al cliente). */
+export const avisosSorteoValidator = vine.compile(
+    vine.object({
+        lugar: vine.enum(['portal_inicio', 'pagina_corte'] as const),
+    }),
+)

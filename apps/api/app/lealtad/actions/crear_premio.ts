@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { verPrograma } from '#lealtad/programas'
@@ -21,7 +21,8 @@ import {
  * - `mejora_plan`: `plan_destino_id` (plan activo) y `dias`.
  * - `bien`: `costo_unitario` opcional (el canje queda bloqueado hasta que el
  *   contador decida el IVA del premio en especie, `premio_bien_iva`).
- * - `boletos`: llega con los sorteos (fase 3): 422 `recompensa_no_disponible`.
+ * - `boletos` (fase 3): `sorteo_id` (sorteo de la misma empresa que admite canjes y aún no cierra el
+ *   corte) y `boletos` (cuántos da cada canje).
  *
  * `existencias` (cualquier tipo): unidades disponibles; null = sin límite. `audit.cambios` y
  * `lealtad.programa_cambiado` (`premios`).
@@ -39,6 +40,8 @@ export interface EntradaPremio {
     dias?: number | null
     costo_unitario?: string | null
     existencias?: number | null
+    sorteo_id?: number | null
+    boletos?: number | null
     en_portal?: boolean
     activo?: boolean
 }
@@ -51,6 +54,8 @@ export interface CamposPremio {
     dias: number | null
     costo_unitario: string | null
     existencias: number | null
+    sorteo_id?: number | null
+    boletos?: number | null
 }
 
 /** Valida los campos del tipo y deja en null los que el tipo no usa. */
@@ -58,13 +63,8 @@ export async function camposDelTipo(
     cliente: QueryClientContract,
     tipo: TipoPremio,
     c: CamposPremio,
+    empresaId?: number,
 ): Promise<CamposPremio> {
-    if (tipo === 'boletos') {
-        throw new ReglaNegocio(
-            'Los premios de boletos llegan con los sorteos (fase 3)',
-            'recompensa_no_disponible',
-        )
-    }
     const errores: ErrorCampo[] = []
     const vacio: CamposPremio = {
         descuento_tipo: null,
@@ -75,6 +75,37 @@ export async function camposDelTipo(
         costo_unitario: null,
         // las existencias aplican a cualquier premio (null = sin límite)
         existencias: c.existencias,
+        sorteo_id: null,
+        boletos: null,
+    }
+    if (tipo === 'boletos') {
+        if (!c.sorteo_id) errores.push({ field: 'sorteo_id', message: 'Obligatorio en un premio de boletos' })
+        if (!c.boletos) errores.push({ field: 'boletos', message: 'Obligatorio en un premio de boletos' })
+        if (c.sorteo_id) {
+            const sorteo = (await cliente
+                .from('lealtad.sorteos')
+                .where('id', c.sorteo_id)
+                .select('empresa_id', 'estado', 'criterios')
+                .first()) as {
+                empresa_id: number
+                estado: string
+                criterios: { admite_canje?: boolean }
+            } | null
+            if (
+                !sorteo ||
+                (empresaId !== undefined && Number(sorteo.empresa_id) !== empresaId) ||
+                !['borrador', 'bases_publicadas', 'participacion_abierta'].includes(sorteo.estado) ||
+                !sorteo.criterios?.admite_canje
+            ) {
+                errores.push({
+                    field: 'sorteo_id',
+                    message: 'El sorteo no es de la empresa, ya cerró el corte o no admite boletos por canje',
+                    rule: 'sorteo',
+                })
+            }
+        }
+        if (errores.length > 0) throw new ValidacionFallida(errores)
+        return { ...vacio, sorteo_id: c.sorteo_id, boletos: c.boletos }
     }
     if (tipo === 'descuento_factura') {
         if (!c.descuento_tipo) {
@@ -127,15 +158,22 @@ export default class CrearPremio extends DomainAction<EntradaPremio, PremioVista
         const programa = await verPrograma(input.programa_id, t.trx)
         exigirAccesoEmpresa(t.ctx, programa.empresa_id)
         t.fijarEmpresa(programa.empresa_id)
-        const campos = await camposDelTipo(t.trx, input.tipo, {
-            descuento_tipo: input.descuento_tipo ?? null,
-            descuento_valor: input.descuento_valor ?? null,
-            tope: input.tope ?? null,
-            plan_destino_id: input.plan_destino_id ?? null,
-            dias: input.dias ?? null,
-            costo_unitario: input.costo_unitario ?? null,
-            existencias: input.existencias ?? null,
-        })
+        const campos = await camposDelTipo(
+            t.trx,
+            input.tipo,
+            {
+                descuento_tipo: input.descuento_tipo ?? null,
+                descuento_valor: input.descuento_valor ?? null,
+                tope: input.tope ?? null,
+                plan_destino_id: input.plan_destino_id ?? null,
+                dias: input.dias ?? null,
+                costo_unitario: input.costo_unitario ?? null,
+                existencias: input.existencias ?? null,
+                sorteo_id: input.sorteo_id ?? null,
+                boletos: input.boletos ?? null,
+            },
+            programa.empresa_id,
+        )
         const [fila] = (await t.trx
             .insertQuery()
             .table('lealtad.premios')
