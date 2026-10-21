@@ -1,26 +1,30 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
 import PaginaBloqueos from '~/pages/libro/bloqueos.vue'
+import { esperar } from '../ayudas/esperar'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
 /**
  * Bloqueos del libro (A3, fase 6 PR A): vigentes por tipo, bloquear (solo avanza), desbloquear con
  * motivo, bloqueo duro con confirmación de texto exacto y sus requisitos, excepciones con fin y
  * revocación (solo admin) y los procesos que una corrida deja pendientes por un bloqueo. La pantalla
- * encadena varias peticiones: plazo de espera explícito.
+ * encadena varias peticiones: se espera con `esperar` (plazo común de `tests/ayudas/esperar.ts`).
  */
-const ESPERA = { timeout: 10_000, interval: 50 }
 
 describe('bloqueos del libro', () => {
     beforeEach(() => {
+        // La excepción sembrada de ventas está vigente hasta el 26/10/2026: la fecha es la de los fixtures.
+        fijarHoyFixtures()
         reiniciarFixtures()
         sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
+        soltarReloj()
         sesionFixture(null)
         useUsuarioActual().value = null
     })
@@ -109,21 +113,21 @@ describe('bloqueos del libro', () => {
 
     it('pantalla: vigentes por tipo, acciones según el permiso, excepciones e historial; correr un proceso muestra lo pendiente', async () => {
         const vista = await mountSuspended(PaginaBloqueos, { route: '/libro/bloqueos' })
-        await vi.waitFor(() => expect(vista.find('[data-tipo="ventas"] [data-prueba="bloqueo-vigente"]').text()).toBe('Hasta 30/09/2026'), ESPERA)
+        await esperar(() => expect(vista.find('[data-tipo="ventas"] [data-prueba="bloqueo-vigente"]').text()).toBe('Hasta 30/09/2026'))
         expect(vista.find('[data-tipo="compras"] [data-prueba="bloqueo-vigente"]').text()).toBe('Sin bloqueo')
         expect(vista.find('[data-tipo="duro"] [data-prueba="bloqueo-vigente"]').text()).toBe('Hasta 30/06/2026')
         expect(vista.find('[data-tipo="compras"]').text()).toContain('Efectivo hasta 31/08/2026')
         for (const boton of ['abrir-bloquear', 'abrir-desbloquear', 'abrir-duro', 'abrir-excepcion']) {
             expect(vista.find(`[data-prueba="${boton}"]`).exists(), boton).toBe(true)
         }
-        await vi.waitFor(() => expect(vista.findAll('[data-prueba="tabla-excepciones"] [data-prueba="excepcion-estado"]').map(b => b.text())).toEqual(['Vigente']), ESPERA)
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tabla-historial-bloqueos"]').text()).toContain('Cierre de agosto'), ESPERA)
+        await esperar(() => expect(vista.findAll('[data-prueba="tabla-excepciones"] [data-prueba="excepcion-estado"]').map(b => b.text())).toEqual(['Vigente']))
+        await esperar(() => expect(vista.find('[data-prueba="tabla-historial-bloqueos"]').text()).toContain('Cierre de agosto'))
 
         await vista.find('[data-prueba="correr-facturar"]').trigger('click')
-        await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Correr ahora'), ESPERA)
+        await esperar(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Correr ahora'))
         const confirmar = [...document.querySelectorAll('[role="dialog"] button')].find(b => b.textContent?.trim() === 'Correr ahora')
         confirmar?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-        await vi.waitFor(() => expect(vista.find('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]').text()).toBe('3 documentos siguen pendientes por un bloqueo'), ESPERA)
+        await esperar(() => expect(vista.find('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]').text()).toBe('3 documentos siguen pendientes por un bloqueo'))
         expect(vista.find('[data-proceso="facturar"] [data-prueba="proceso-bloqueo"]').text()).toContain('Ventas hasta 30/09/2026')
         vista.unmount()
     })
@@ -131,7 +135,7 @@ describe('bloqueos del libro', () => {
     it('sin los permisos de bloqueo solo se lee: ni bloquear, ni duro, ni excepciones, ni correr procesos', async () => {
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => !['libro.bloquear', 'libro.bloquear_duro', 'libro.desbloquear', 'libro.excepcion_bloqueo', 'facturas.generar'].includes(p)) }
         const vista = await mountSuspended(PaginaBloqueos, { route: '/libro/bloqueos' })
-        await vi.waitFor(() => expect(vista.find('[data-tipo="global"] [data-prueba="bloqueo-vigente"]').text()).toBe('Hasta 31/08/2026'), ESPERA)
+        await esperar(() => expect(vista.find('[data-tipo="global"] [data-prueba="bloqueo-vigente"]').text()).toBe('Hasta 31/08/2026'))
         for (const boton of ['abrir-bloquear', 'abrir-desbloquear', 'abrir-duro', 'abrir-excepcion', 'revocar-excepcion']) {
             expect(vista.find(`[data-prueba="${boton}"]`).exists(), boton).toBe(false)
         }

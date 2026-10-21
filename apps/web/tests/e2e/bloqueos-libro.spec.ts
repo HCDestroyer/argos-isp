@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Bloqueos del libro (A3, fase 6 PR A). En los fixtures, ArgosNet tiene global y impuestos hasta el
@@ -7,6 +7,8 @@ import { entrar, ir } from './ayudas'
  * factura de septiembre quedan pendientes por el bloqueo de ventas.
  */
 test('bloquear compras, el duro con su confirmación y sus requisitos, una excepción y los procesos detenidos', async ({ page }) => {
+    // La excepción sembrada de ventas vence el 26/10/2026: la fecha es la de los fixtures.
+    await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Bloqueos del libro', /\/libro\/bloqueos/)
     const empresa = page.locator('[data-prueba="bloqueos-empresa"]').first()
