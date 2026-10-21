@@ -15,6 +15,7 @@ import type { ImagenAnuncioFixture } from './anuncios/datos'
 import { anuncios, imagenesAnuncios, metricasAnuncios } from './anuncios/datos'
 import type { PlanAdicionalFixture } from './adicionales/datos'
 import { adicionales, adicionalesServicio, bloqueosAdicionales, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
+import { asientosBonificaciones, bonificaciones, conceptosCargo, motivosSinCosto } from './bonificaciones/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -161,6 +162,12 @@ interface BaseFixtures {
     /** Diferencias de cobro cerradas como gasto (`billing.diferencias_cobro`, decisión B). */
     diferenciasCerradas: DiferenciaCobroFixture[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
+    /* Cargo único y bonificaciones (A3, decisión del PM: nunca una factura de Q0). */
+    conceptosCargo: Schema<'ConceptoCargo'>[]
+    motivosSinCosto: Schema<'MotivoSinCosto'>[]
+    bonificaciones: Schema<'Bonificacion'>[]
+    /** Líneas de las facturas de cargo único (el detalle de las demás se arma del plan). */
+    lineasCargoUnico: Record<number, Schema<'FacturaLinea'>[]>
     programasLealtad: Schema<'ProgramaLealtad'>[]
     /* Anuncios del portal (A5, `contratos/anuncios.md`). */
     anuncios: Schema<'Anuncio'>[]
@@ -250,6 +257,10 @@ function inicial(): BaseFixtures {
         fiscal: fiscalInicial(),
         fel: felInicial(),
         horus: horusInicial(),
+        conceptosCargo,
+        motivosSinCosto,
+        bonificaciones,
+        lineasCargoUnico: {},
         programasLealtad,
         anuncios,
         imagenesAnuncios,
@@ -272,6 +283,7 @@ function inicial(): BaseFixtures {
     datos.pagos.push(...structuredClone(pagosProveedor))
     datos.asientos.push(...asientosFase4())
     datos.cuentas.push(...structuredClone(cuentasFase4))
+    datos.asientos.push(...asientosBonificaciones())
     return datos
 }
 
