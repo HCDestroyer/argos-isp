@@ -19,6 +19,7 @@ import type { PlanAdicionalFixture } from './adicionales/datos'
 import { adicionales, adicionalesServicio, bloqueosAdicionales, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { asientosBonificaciones, bonificaciones, conceptosCargo, motivosSinCosto } from './bonificaciones/datos'
 import { cierres, egresos } from './egresos/datos'
+import { bloqueosLibro, excepcionesBloqueo, pendientesPorBloqueo, type PendientePorBloqueo } from './libro/bloqueos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
@@ -101,6 +102,10 @@ interface BaseFixtures {
     asientos: Schema<'Asiento'>[]
     egresos: Schema<'Egreso'>[]
     cierres: Schema<'CierrePeriodo'>[]
+    /* Fase 6 (A3): bloqueos del libro, excepciones y lo que una corrida dejó pendiente por un bloqueo. */
+    bloqueosLibro: Schema<'BloqueoLibro'>[]
+    excepcionesBloqueo: Schema<'ExcepcionBloqueo'>[]
+    pendientesPorBloqueo: PendientePorBloqueo[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
@@ -232,6 +237,9 @@ function inicial(): BaseFixtures {
         asientos,
         egresos,
         cierres,
+        bloqueosLibro,
+        excepcionesBloqueo,
+        pendientesPorBloqueo,
         bancos,
         cuentasBancarias,
         empresa,

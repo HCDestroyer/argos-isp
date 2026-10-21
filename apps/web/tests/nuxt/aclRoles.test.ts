@@ -117,6 +117,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/promesas', espera: 'Promesas' },
         { ruta: '/egresos', espera: 'Egresos' },
         { ruta: '/libro', espera: 'Libro' },
+        { ruta: '/libro/bloqueos', espera: 'Cierre de agosto' },
         { ruta: '/usuarios', espera: 'Usuarios' },
         { ruta: '/configuracion/cuentas-bancarias', espera: 'Cuentas bancarias' },
         { ruta: '/configuracion/empresa', espera: 'Contacto y pagos' },

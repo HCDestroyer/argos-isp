@@ -9,11 +9,13 @@ import { HOY_FIXTURES } from '../../fixtures/facturacion/datos'
 /**
  * Fija la fecha del navegador en el "hoy" de los fixtures (`HOY_FIXTURES`, mediodía en Guatemala),
  * como `fijarHoyFixtures()` de Vitest: las pantallas comparan contra el reloj real y, sin esto, una
- * factura de los fixtures pasa a vencida cuando el calendario la alcanza. Solo fija `Date`; los
- * temporizadores siguen corriendo. Va antes de `entrar`.
+ * factura de los fixtures pasa a vencida cuando el calendario la alcanza. Pone `Date` en esa fecha y
+ * lo deja correr desde ahí (`setSystemTime`, no `setFixedTime`): con `Date.now()` congelado, el
+ * `USelect` de un modal no llega a abrir sus opciones (bloqueos del libro). Los temporizadores siguen
+ * reales. Va antes de `entrar`.
  */
 export async function fijarHoyFixtures(page: Page): Promise<void> {
-    await page.clock.setFixedTime(new Date(`${HOY_FIXTURES}T18:00:00.000Z`))
+    await page.clock.setSystemTime(new Date(`${HOY_FIXTURES}T18:00:00.000Z`))
 }
 
 export async function entrar(page: Page, email: string): Promise<void> {

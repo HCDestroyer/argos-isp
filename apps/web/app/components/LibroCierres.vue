@@ -84,7 +84,9 @@ function reabrir(motivo: string, clave: string) {
     if (!aReabrir.value) {
         return Promise.resolve({ ok: false as const, problema: { type: 'about:blank', title: 'Sin mes', status: 0 } })
     }
+    // Bajo el bloqueo duro ningún mes se reabre (409 `bloqueo_duro`): el error se ve con su título.
     return useLibro().reabrirPeriodo(aReabrir.value.periodo, motivo, clave)
+        .then(r => (r.ok ? r : { ok: false as const, problema: problemaBloqueoLegible(r.problema) }))
 }
 
 function alReabrir(cierre: CierrePeriodo) {
