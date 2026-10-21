@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ValidacionFallida } from '#shared/errores'
+import { PeriodoBloqueado, bloqueoVigente } from '#ledger/bloqueos'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { periodoDe, verCierre, type CierreVista } from '#ledger/cierres'
@@ -18,6 +19,8 @@ import { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
  * rompa, solo se reabre un mes si ningún mes posterior **cerrado** del mismo año tiene partidas:
  * 409 `reapertura_fuera_de_orden` (se reabren primero los posteriores, del más reciente hacia
  * atrás).
+ *
+ * Bajo el bloqueo duro (§9.2) ningún mes se reabre: 409 `bloqueo_duro`.
  */
 
 export interface EntradaReabrirPeriodo {
@@ -43,6 +46,10 @@ export default class ReabrirPeriodo extends DomainAction<EntradaReabrirPeriodo, 
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_CIERRES, empresaId])
+        const duro = await bloqueoVigente(t.trx, empresaId, 'duro')
+        if (duro !== null && periodo <= duro) {
+            throw new PeriodoBloqueado('duro', periodo, duro, empresaId)
+        }
         const cierre = await t.trx
             .from('ledger.cierres_mensuales as c')
             .where('c.periodo', periodo)

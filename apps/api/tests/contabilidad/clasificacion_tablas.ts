@@ -49,6 +49,10 @@ export const INMUTABLES: Record<string, string> = {
     // §3.7 y §10.4–§10.5 cierres y bloqueos
     'ledger.bloqueos': 'bloqueo; el vigente es la última fila (§3.7)',
     'ledger.bloqueos_excepciones': 'excepción de bloqueo; revocar = fila nueva (§10.4)',
+    // fase 6 (A3): revocación de una excepción y cuentas que ponen un asiento bajo el bloqueo de impuestos
+    'ledger.bloqueos_excepciones_revocaciones': 'revocación de una excepción de bloqueo (§10.4)',
+    'ledger.cuentas_con_impuesto':
+        'cuentas con impuesto para el bloqueo de impuestos; la cambia una migración (fase 7: etiquetas, §10.2)',
     'ledger.cierres_anuales': 'cierre anual (§3.7)',
     'ledger.cierres_checks': 'lista de verificación de cierre (§10.5)',
     // §10.3 conciliación bancaria

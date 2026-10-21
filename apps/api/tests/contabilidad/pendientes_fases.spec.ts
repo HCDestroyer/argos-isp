@@ -25,12 +25,8 @@ const PENDIENTES: Pendiente[] = [
         criterio:
             'Contrato §9.1: después de libro.cerrar_ejercicio, Σ saldo de cuentas de ingreso y gasto del año = 0 en la empresa; 3.3.03 en cero; reserva legal = reserva_legal_pct × base cuando hubo utilidad; diciembre cerrado.',
     },
-    {
-        titulo: 'un periodo con bloqueo duro rechaza cualquier asiento',
-        fase: 'localización fiscal, fase 5',
-        criterio:
-            'Contrato §9.2: con ledger.bloqueos duro hasta F, todo asiento con fecha ≤ F → 422 periodo_cerrado (acción y trigger), también reversos; reabrir_periodo → 409 bloqueo_duro; un bloqueo duro nuevo nunca retrocede.',
-    },
+    // «un periodo con bloqueo duro rechaza cualquier asiento»: activado en `fase6.spec.ts` (fase 6 PR A), con
+    // 409 bloqueo_duro según la tabla de errores §11 (desvío (c) de §20), no 422 periodo_cerrado
     {
         titulo: 'libros emitidos solo bajo bloqueo, con folios correlativos',
         fase: 'localización fiscal, fase 5',
@@ -58,12 +54,7 @@ const PENDIENTES: Pendiente[] = [
     },
     // Conciliación bancaria (estudio Odoo)
     // «conciliación bancaria solo por inserción»: activado en `fase4.spec.ts` (fase 4, §10.3) salvo el bloqueo duro
-    {
-        titulo: 'el bloqueo duro exige cero líneas del extracto sin conciliar',
-        fase: 'localización fiscal, fase 5 (bloqueos; estudio Odoo n.º 19)',
-        criterio:
-            'Con ledger.bloqueos duro hasta F, ninguna línea de extracto con fecha ≤ F queda sin conciliación vigente; poner el bloqueo con líneas pendientes responde 422.',
-    },
+    // «el bloqueo duro exige cero líneas del extracto sin conciliar»: activado en `fase6.spec.ts`
     // Lealtad
     // lealtad, fase 1: activados en `lealtad.spec.ts` (2.1.10 = lotes vivos; evento repetido)
     {

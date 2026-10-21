@@ -1,6 +1,8 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
-import { fechaValida } from '#ledger/fechas'
+import { fechaValida, hoyGuatemala } from '#ledger/fechas'
+import { bloqueoVigente, impedimentoConExcepcion, type TipoBloqueo } from '#ledger/bloqueos'
+import { diarioDeAsiento } from '#ledger/diarios'
 import { bloquearCliente } from '#billing/cobros'
 import { claveMora, crearMora, morasDebidas, reglaMora, type FacturaConMora } from '#billing/mora'
 
@@ -13,6 +15,9 @@ import { claveMora, crearMora, morasDebidas, reglaMora, type FacturaConMora } fr
  * - Si sigue vencida, crea los recargos de mora pendientes según el `reglas_snapshot` de la
  *   factura (`mora.ts`): el primero al vencer y, con `mora_recurrente`, uno por mes.
  * - Idempotente: una factura ya vencida no vuelve a emitir el evento; los recargos tienen clave.
+ * - Bloqueo del libro (fase 6): si el asiento de la mora (hoy, diario de ventas, con impuesto)
+ *   cae bajo un bloqueo, la factura igual se vence y la mora queda pendiente (`mora_bloqueada`):
+ *   la siguiente corrida la crea.
  * - No decide el estado del servicio: eso lo hace el cron de corte a la `hora_corte`.
  */
 
@@ -24,8 +29,11 @@ export interface EntradaVencerFactura {
 
 export interface ResultadoVencerFactura {
     factura_id: number
+    empresa_id: number
     vencida: boolean
     moras: number[]
+    /** la mora debida no se creó porque su asiento cae bajo un bloqueo del libro */
+    mora_bloqueada: { tipo: TipoBloqueo; hasta: string | null; fecha: string } | null
 }
 
 interface FilaFactura extends FacturaConMora {
@@ -66,7 +74,13 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
             .firstOrFail()) as FilaFactura
         factura.empresa_id = Number(factura.empresa_id)
         t.fijarEmpresa(factura.empresa_id)
-        const resultado: ResultadoVencerFactura = { factura_id: factura.id, vencida: false, moras: [] }
+        const resultado: ResultadoVencerFactura = {
+            factura_id: factura.id,
+            empresa_id: factura.empresa_id,
+            vencida: false,
+            moras: [],
+            mora_bloqueada: null,
+        }
         if (factura.tipo !== 'servicio') return resultado
 
         if ((factura.estado === 'emitida' || factura.estado === 'parcial') && factura.vence_en < hoy) {
@@ -103,6 +117,26 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
                     .select('clave_unica')) as Array<{ clave_unica: string }>
             ).map((f) => f.clave_unica),
         )
+        if (existentes.size < debidas) {
+            const fecha = hoyGuatemala()
+            const diario = await diarioDeAsiento(t.trx, factura.empresa_id, 'mora', [])
+            const { tipo } = await impedimentoConExcepcion(t.trx, {
+                fecha,
+                empresaId: factura.empresa_id,
+                diarioId: diario.id,
+                origen: 'mora',
+                conImpuesto: true,
+                usuarioId: null,
+            })
+            if (tipo !== null && tipo !== 'cerrado') {
+                resultado.mora_bloqueada = {
+                    tipo,
+                    hasta: await bloqueoVigente(t.trx, factura.empresa_id, tipo),
+                    fecha,
+                }
+                return resultado
+            }
+        }
         for (let n = 1; n <= debidas; n++) {
             if (existentes.has(claveMora(factura.id, n))) continue
             const moraId = await crearMora(t, factura, n, hoy)

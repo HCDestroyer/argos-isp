@@ -6,6 +6,7 @@ import { morasDebidas, reglaMora, type ReglaMora } from '#billing/mora'
 import VencerFactura from '#billing/actions/vencer_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { TAMANO_LOTE } from '#billing/actions/generar_facturas'
+import { BloqueosDeCorrida, type BloqueoCorrida } from '#billing/bloqueos_corrida'
 
 /**
  * `facturas.vencer_pendientes` (cron y `POST /facturas/vencer`): todo lo pendiente hasta `hasta`
@@ -16,6 +17,10 @@ import { TAMANO_LOTE } from '#billing/actions/generar_facturas'
  *    mes vencido) → `VencerFactura` crea los que falten.
  *
  * No cambia estados de servicio: el cron de corte los evalúa a la hora de cada plantilla.
+ *
+ * Bloqueos del libro (fase 6): una mora cuyo asiento cae bajo un bloqueo no se crea (la factura
+ * igual se vence); se cuenta en `bloqueados`, se detalla en `bloqueos` y la corrida avisa con
+ * `libro.proceso_bloqueado`. La siguiente corrida la vuelve a intentar.
  */
 
 export interface EntradaVencerFacturas {
@@ -27,6 +32,9 @@ export interface ResultadoVencimiento {
     vencidas: number
     moras: number
     errores: number
+    /** facturas con mora pendiente por un bloqueo del libro (se reintentan) */
+    bloqueados: number
+    bloqueos: BloqueoCorrida[]
 }
 
 interface Candidata {
@@ -41,13 +49,20 @@ export default class VencerFacturas {
 
     async execute(input: EntradaVencerFacturas, ctx: ContextoAccion): Promise<ResultadoVencimiento> {
         const hoy = input.hasta ? fechaValida(input.hasta, 'hasta') : hoyGuatemala()
-        const resultado: ResultadoVencimiento = { vencidas: 0, moras: 0, errores: 0 }
+        const resultado: ResultadoVencimiento = {
+            vencidas: 0,
+            moras: 0,
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        }
+        const bloqueos = new BloqueosDeCorrida()
 
         // 1. por vencer
         await this.recorrer(
             (q) => q.whereIn('f.estado', ['emitida', 'parcial']).where('f.vence_en', '<', hoy),
             input,
-            async (factura) => this.vencer(factura.id, hoy, resultado, ctx),
+            async (factura) => this.vencer(factura.id, hoy, resultado, bloqueos, ctx),
         )
         // 2. vencidas con recargos de mora pendientes
         await this.recorrer(
@@ -58,14 +73,17 @@ export default class VencerFacturas {
             input,
             async (factura) => {
                 const debidas = morasDebidas(reglaMora(factura.reglas_snapshot), factura.vence_en, hoy)
-                if (debidas > factura.moras) await this.vencer(factura.id, hoy, resultado, ctx)
+                if (debidas > factura.moras) await this.vencer(factura.id, hoy, resultado, bloqueos, ctx)
             },
         )
 
+        resultado.bloqueados = bloqueos.total
+        resultado.bloqueos = bloqueos.lista()
         await new RegistrarCorrida(this.nombre).execute(
             {
                 parametros: { hasta: hoy, servicio_id: input.servicio_id ?? null },
                 resultado: { ...resultado },
+                bloqueos: resultado.bloqueos,
             },
             ctx,
         )
@@ -76,13 +94,18 @@ export default class VencerFacturas {
         facturaId: number,
         hoy: string,
         resultado: ResultadoVencimiento,
+        bloqueos: BloqueosDeCorrida,
         ctx: ContextoAccion,
     ) {
         try {
             const r = await new VencerFactura().execute({ factura_id: facturaId, hoy }, ctx)
             if (r.vencida) resultado.vencidas += 1
             resultado.moras += r.moras.length
+            if (r.mora_bloqueada) {
+                bloqueos.registrar({ empresa_id: r.empresa_id, ...r.mora_bloqueada }, facturaId)
+            }
         } catch (error) {
+            if (bloqueos.registrarError(error, facturaId)) return
             resultado.errores += 1
             logger.error({ err: error, facturaId, requestId: ctx.requestId }, 'No se pudo vencer la factura')
         }
