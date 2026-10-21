@@ -332,10 +332,18 @@ jobs:
 
   # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
   # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.
-  e2e-panel:
-    name: Playwright del panel (fixtures)
+  #
+  # Escritorio y teléfono corren en paralelo, cada uno en su runner: juntos pasaban los 25 minutos
+  # del trabajo. El trabajo «Playwright del panel (fixtures)» de abajo reúne los dos y conserva el
+  # nombre del chequeo de siempre.
+  e2e-panel-proyecto:
+    name: Playwright del panel (${{ matrix.proyecto }})
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        proyecto: [escritorio, telefono]
     env:
       CI: "true"
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
@@ -373,14 +381,27 @@ jobs:
         run: pnpm --filter @argosisp/web exec playwright install-deps chromium
 
       - name: Playwright
-        run: pnpm --filter @argosisp/web test:e2e
+        run: pnpm --filter @argosisp/web test:e2e --project=${{ matrix.proyecto }}
 
       - name: Reporte de Playwright
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.proyecto }}
           path: |
             apps/web/playwright-report
             apps/web/test-results
           retention-days: 7
+
+  e2e-panel:
+    name: Playwright del panel (fixtures)
+    runs-on: ubuntu-24.04
+    needs: e2e-panel-proyecto
+    if: always()
+    steps:
+      - name: Escritorio y teléfono en verde
+        env:
+          RESULTADO: ${{ needs.e2e-panel-proyecto.result }}
+        run: |
+          echo "Playwright por proyecto: $RESULTADO"
+          [ "$RESULTADO" = "success" ]
