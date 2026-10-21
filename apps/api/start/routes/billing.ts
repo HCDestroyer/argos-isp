@@ -310,6 +310,8 @@ const facturas: Ruta[] = [
         permiso: 'facturas.generar',
         cuerpo: v.generarFacturasValidator,
         idempotente: true,
+        descripcion:
+            'Recorre solo la empresa activa (X-Empresa-Id) o, sin ella, las empresas del alcance del usuario; con alcance global y sin empresa activa, todas (como el cron).',
         respuesta: { status: 200, descripcion: 'Resultado de la generación', esquema: ResultadoGeneracion },
         handler: (ctx, { cuerpo }) => new GenerarFacturas().execute(cuerpo, ctx.contextoAccion()),
     }),
@@ -322,6 +324,8 @@ const facturas: Ruta[] = [
         permiso: 'facturas.generar',
         cuerpo: v.vencerFacturasValidator,
         idempotente: true,
+        descripcion:
+            'Recorre solo la empresa activa (X-Empresa-Id) o, sin ella, las empresas del alcance del usuario; con alcance global y sin empresa activa, todas (como el cron).',
         respuesta: { status: 200, descripcion: 'Resultado del vencimiento', esquema: ResultadoVencimiento },
         handler: (ctx, { cuerpo }) => new VencerFacturas().execute(cuerpo, ctx.contextoAccion()),
     }),

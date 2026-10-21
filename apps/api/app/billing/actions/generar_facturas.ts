@@ -6,6 +6,7 @@ import { configuracionDeServicio } from '#billing/configuracion'
 import { claveFactura, periodosHasta } from '#billing/periodos'
 import EmitirFactura from '#billing/actions/emitir_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
+import { empresasDelProceso } from '#billing/empresa'
 
 /**
  * `facturas.generar` (cron y `POST /facturas/generar`): emite **todo lo pendiente hasta `hasta`**
@@ -16,6 +17,9 @@ import RegistrarCorrida from '#billing/actions/registrar_corrida'
  * auditada por factura) para cada periodo ya iniciado que no tenga factura con su `clave_unica`.
  * Correrla dos veces no duplica nada. Un servicio que falla no detiene la corrida: se cuenta en
  * `errores` y se registra en el log.
+ *
+ * Multiempresa: pedido por un usuario (`POST /facturas/generar`) recorre solo su empresa activa o,
+ * sin ella, las de su alcance (`empresasDelProceso`); el cron (sistema) recorre todas.
  */
 
 export const TAMANO_LOTE = 500
@@ -60,11 +64,13 @@ export default class GenerarFacturas {
             errores: 0,
         }
 
+        const empresas = empresasDelProceso(ctx)
         let cursor = 0
         for (;;) {
             const lote = (await db
                 .from('core.servicios')
                 .whereIn('estado', ['activo', 'limitado', 'suspendido'])
+                .if(empresas !== null, (q) => q.whereIn('empresa_id', empresas!))
                 .whereNotNull('plantilla_facturacion_id')
                 .where('id', '>', cursor)
                 .if(input.servicio_id, (q) => q.where('id', input.servicio_id!))
@@ -95,7 +101,10 @@ export default class GenerarFacturas {
         }
 
         await new RegistrarCorrida(this.nombre).execute(
-            { parametros: { hasta, servicio_id: input.servicio_id ?? null }, resultado: { ...resultado } },
+            {
+                parametros: { hasta, servicio_id: input.servicio_id ?? null, empresas },
+                resultado: { ...resultado },
+            },
             ctx,
         )
         return resultado

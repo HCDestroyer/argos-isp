@@ -1,8 +1,8 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, nuevaCaja, saldoTexto } from '#tests/ledger/ayudas_libro'
-import { crearZonaFila } from '#tests/core/fabricas'
+import { crearEmpresaFila, crearZonaFila } from '#tests/core/fabricas'
 import {
     cuentaBancariaPrueba,
     bancoId,
@@ -54,20 +54,26 @@ async function netoLibro(
 }
 
 /**
- * Saldo del auxiliar CxC de los clientes dados. La cartera general se compara contra los clientes que
- * lista, no contra toda la CxC de la base: las pruebas de `tests/ledger/` registran asientos crudos de
- * CxC sin factura (clientes sin documentos) y el orden de los archivos varía.
+ * Saldo del auxiliar CxC de una empresa. La cartera general se compara en una empresa propia de la
+ * prueba, nunca contra la empresa principal: allí otras suites insertan facturas directo, sin
+ * asiento (fixtures de notify, portal y núcleo), y registran asientos crudos de CxC sin factura
+ * (`tests/ledger/`). Japa toma los archivos con `fast-glob` sin ordenar, así que cuáles corrieron
+ * antes cambia de una corrida a otra.
  */
-async function saldoCxcDe(clientes: number[]): Promise<string> {
-    return netoLibro(['1.1.03'], (q) => q.whereIn('m.cliente_id', clientes))
+async function saldoCxcDeEmpresa(empresaId: number): Promise<string> {
+    return netoLibro(['1.1.03'], (q) => q.where('a.empresa_id', empresaId))
 }
 
-test.group('billing · reportes', () => {
+test.group('billing · reportes', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
     test('cartera vencida por antigüedad: tramos, agrupación por zona y router, cuadre con CxC', async ({
         client,
         assert,
     }) => {
-        const datos = await servicioCortado()
+        // empresa propia: la cartera de la empresa se compara con su CxC sin datos de otras suites
+        const empresaId = await crearEmpresaFila()
+        const datos = await servicioCortado({ servicio: { empresa_id: empresaId } })
         const zonaId = await crearZonaFila()
         await db.from('core.clientes').where('id', datos.clienteId).update({ zona_id: zonaId })
         const { token } = await usuarioConRoles(['contabilidad'])
@@ -130,11 +136,15 @@ test.group('billing · reportes', () => {
         )
         assert.equal(porRouter.body().filas[0].dias_31_60, '150.00')
 
-        // el total general de la cartera es el saldo del auxiliar CxC de los clientes que lista
-        const general = await carteraVencida({ corte: CORTE })
+        // el total general de la cartera de la empresa es el saldo de su auxiliar CxC
+        const general = await carteraVencida({ corte: CORTE }, undefined, {
+            empresas: [empresaId],
+            consolidado: false,
+        })
         const clientes = (general.filas as Array<{ grupo_id: number }>).map((f) => f.grupo_id)
-        assert.include(clientes, datos.clienteId)
-        assert.equal(general.totales.total, await saldoCxcDe(clientes))
+        assert.deepEqual(clientes, [datos.clienteId])
+        assert.equal(general.totales.total, '300.00')
+        assert.equal(general.totales.total, await saldoCxcDeEmpresa(empresaId))
         await afirmarLibroCuadrado(assert)
     })
 

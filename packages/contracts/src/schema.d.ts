@@ -2190,7 +2190,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generar facturas pendientes (todo lo pendiente hasta la fecha) */
+        /**
+         * Generar facturas pendientes (todo lo pendiente hasta la fecha)
+         * @description Recorre solo la empresa activa (X-Empresa-Id) o, sin ella, las empresas del alcance del usuario; con alcance global y sin empresa activa, todas (como el cron).
+         */
         post: operations["facturasGenerar"];
         delete?: never;
         options?: never;
@@ -2207,7 +2210,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha) */
+        /**
+         * Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha)
+         * @description Recorre solo la empresa activa (X-Empresa-Id) o, sin ella, las empresas del alcance del usuario; con alcance global y sin empresa activa, todas (como el cron).
+         */
         post: operations["facturasVencer"];
         delete?: never;
         options?: never;

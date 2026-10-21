@@ -17373,6 +17373,7 @@
       "post": {
         "operationId": "facturasGenerar",
         "summary": "Generar facturas pendientes (todo lo pendiente hasta la fecha)",
+        "description": "Recorre solo la empresa activa (X-Empresa-Id) o, sin ella, las empresas del alcance del usuario; con alcance global y sin empresa activa, todas (como el cron).",
         "tags": [
           "facturacion"
         ],
@@ -17482,6 +17483,7 @@
       "post": {
         "operationId": "facturasVencer",
         "summary": "Vencer facturas pendientes y aplicar mora (todo lo pendiente hasta la fecha)",
+        "description": "Recorre solo la empresa activa (X-Empresa-Id) o, sin ella, las empresas del alcance del usuario; con alcance global y sin empresa activa, todas (como el cron).",
         "tags": [
           "facturacion"
         ],

@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { crearEmpresaFila } from '#tests/core/fabricas'
 import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import { lineaConIva } from '#billing/facturas'
 import { periodosHasta } from '#billing/periodos'
@@ -81,7 +82,9 @@ test.group('billing · periodos', () => {
     })
 })
 
-test.group('billing · generarFacturas', () => {
+test.group('billing · generarFacturas', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
     test('emite todo lo pendiente con prorrateo, asiento CxC / Ingresos + IVA y factura.emitida; repetir no duplica', async ({
         assert,
     }) => {
@@ -183,20 +186,34 @@ test.group('billing · generarFacturas', () => {
         client,
         assert,
     }) => {
-        const retirado = await escenario({ servicio: { estado: 'retirado' } })
-        const sinPlantilla = await escenario({ servicio: { plantilla_facturacion_id: null } })
-        const normal = await escenario({ fecha_instalacion: '2026-10-01' })
+        // empresa propia: el POST recorre solo la empresa activa (X-Empresa-Id), no los servicios que
+        // dejaron las demás suites en la principal (por eso tardaba más de 30 s según el orden)
+        const empresaId = await crearEmpresaFila()
+        const retirado = await escenario({ servicio: { estado: 'retirado', empresa_id: empresaId } })
+        const sinPlantilla = await escenario({
+            servicio: { plantilla_facturacion_id: null, empresa_id: empresaId },
+        })
+        const normal = await escenario({
+            fecha_instalacion: '2026-10-01',
+            servicio: { empresa_id: empresaId },
+        })
 
         const deRetirado = await generar(retirado.servicioId, '2026-10-15')
         assert.equal(deRetirado.generadas, 0)
 
         const { token } = await usuarioConRoles(['contabilidad'])
         const respuesta = await estado(
-            client.post('/api/v1/facturas/generar').bearerToken(token).json({ hasta: '2026-10-15' }),
+            client
+                .post('/api/v1/facturas/generar')
+                .bearerToken(token)
+                .header('X-Empresa-Id', String(empresaId))
+                .json({ hasta: '2026-10-15' }),
             200,
         )
         const [factura] = await facturasDe(normal.servicioId)
-        assert.include(respuesta.body().facturas, factura!.id)
+        // solo los servicios de la empresa: el normal con su factura de octubre
+        assert.deepEqual(respuesta.body().facturas, [factura!.id])
+        assert.include(respuesta.body(), { generadas: 1, omitidas: 0, errores: 0 })
         assert.lengthOf(await facturasDe(retirado.servicioId), 0)
         assert.lengthOf(await facturasDe(sinPlantilla.servicioId), 0)
         await afirmarLibroCuadrado(assert)
@@ -219,5 +236,51 @@ test.group('billing · generarFacturas', () => {
         assert.equal(detalle.body().lineas[0].iva, '16.07')
         assert.equal(detalle.body().reglas_snapshot.plantilla_id, normal.plantillaId)
         await estado(client.get('/api/v1/facturas/999999999').bearerToken(token), 404)
+    })
+
+    test('multiempresa: POST /facturas/generar y /facturas/vencer recorren solo las empresas del usuario', async ({
+        client,
+        assert,
+    }) => {
+        const B = await crearEmpresaFila()
+        const C = await crearEmpresaFila()
+        const enB = await escenario({ servicio: { empresa_id: B } })
+        const enC = await escenario({ servicio: { empresa_id: C } })
+        // usuario acotado a la empresa C (sin alcance global)
+        const { usuario, token } = await usuarioConRoles(['contabilidad'])
+        await db.from('core.usuarios').where('id', usuario.id).update({ alcance_global: false })
+        await db.table('core.usuarios_empresas').insert({ usuario_id: usuario.id, empresa_id: C })
+
+        const generada = await estado(
+            client.post('/api/v1/facturas/generar').bearerToken(token).json({ hasta: '2026-10-15' }),
+            200,
+        )
+        const deC = await facturasDe(enC.servicioId)
+        assert.lengthOf(deC, 2)
+        assert.sameMembers(
+            generada.body().facturas,
+            deC.map((f) => f.id),
+        )
+        assert.lengthOf(await facturasDe(enB.servicioId), 0, 'la empresa B no es del usuario')
+
+        // vencer: igual, solo la empresa del usuario
+        await generar(enB.servicioId, '2026-10-15')
+        const vencidas = await estado(
+            client.post('/api/v1/facturas/vencer').bearerToken(token).json({ hasta: '2026-10-15' }),
+            200,
+        )
+        // las dos de C (septiembre y octubre) pasan a vencida; las de B no se tocan
+        assert.equal(vencidas.body().vencidas, 2)
+        const facturasB = await facturasDe(enB.servicioId)
+        const facturasC = await facturasDe(enC.servicioId)
+        assert.deepEqual(
+            facturasB.map((f) => f.estado),
+            ['emitida', 'emitida'],
+        )
+        assert.deepEqual(
+            facturasC.map((f) => f.estado),
+            ['vencida', 'vencida'],
+        )
+        await afirmarLibroCuadrado(assert)
     })
 })

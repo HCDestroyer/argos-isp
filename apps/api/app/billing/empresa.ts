@@ -152,3 +152,13 @@ export async function emisorDeFactura(
         ...fiscales,
     }
 }
+
+/**
+ * Empresas que recorre un proceso por lotes (generar o vencer facturas): las del pedido de un
+ * usuario (su empresa activa o, sin ella, las de su alcance) o null = todas (cron, sistema, o un
+ * usuario con alcance global sin empresa activa).
+ */
+export function empresasDelProceso(ctx: ContextoAccion): number[] | null {
+    if (ctx.empresaId !== null && ctx.empresaId !== undefined) return [ctx.empresaId]
+    return ctx.empresasPermitidas ?? null
+}
