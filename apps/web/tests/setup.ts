@@ -11,6 +11,22 @@ import { afterEach } from 'vitest'
 globalThis.Headers = HeadersHappyDom as unknown as typeof globalThis.Headers
 
 /**
+ * Lo mismo con los archivos: `fetch` de happy-dom entrega un `Blob` de happy-dom y
+ * `URL.createObjectURL` es el de Node, que solo acepta los suyos ("must be an instance of Blob").
+ * La pantalla (imagen de un premio, vista previa de un comprobante) solo necesita una URL de objeto:
+ * con un `Blob` ajeno se devuelve una `blob:` propia. En el navegador ambos son nativos.
+ */
+const crearUrlNativa = URL.createObjectURL.bind(URL)
+URL.createObjectURL = (objeto: Blob | MediaSource): string => {
+    try {
+        return crearUrlNativa(objeto)
+    }
+    catch {
+        return `blob:prueba/${crypto.randomUUID()}`
+    }
+}
+
+/**
  * Nada de la prueba sigue vivo cuando el entorno se desmonta. Antes, una pantalla montada con
  * `mountSuspended` quedaba montada al terminar: un temporizador suyo (la búsqueda con espera de
  * `ClienteSelector`, el refresco de la sesión) o una respuesta de los fixtures llegaba después,

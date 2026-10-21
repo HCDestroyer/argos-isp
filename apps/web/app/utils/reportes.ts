@@ -12,6 +12,7 @@ export const CLAVES_REPORTE = [
     'promesas',
     'altas-bajas',
     'egresos',
+    'bonificaciones',
 ] as const
 
 export type ClaveReporte = typeof CLAVES_REPORTE[number]
@@ -32,6 +33,7 @@ export type TipoFacturaReporte = NonNullable<QueryReporte<'facturado-vs-cobrado'
 export type AgruparCartera = NonNullable<QueryReporte<'cartera-vencida'>['agrupar']>
 export type AgruparIngresos = NonNullable<QueryReporte<'ingresos'>['agrupar']>
 export type OrigenReporte = NonNullable<QueryReporte<'ingresos'>['origen']>
+export type OrigenBonificacionReporte = NonNullable<QueryReporte<'bonificaciones'>['origen']>
 
 /** Estado de los filtros de la pantalla; cada reporte toma solo los que acepta. */
 export interface FiltrosReporte {
@@ -51,9 +53,11 @@ export interface FiltrosReporte {
     agrupar_cartera?: AgruparCartera
     agrupar_ingresos?: AgruparIngresos
     origen?: OrigenReporte
+    origen_bonificacion?: OrigenBonificacionReporte
+    motivo_id?: number
 }
 
-export type FiltroReporte = 'rango' | 'corte' | 'cliente' | 'zona' | 'router' | 'plan' | 'caja' | 'metodo_pago' | 'metodo_egreso' | 'categoria' | 'canal' | 'tipo' | 'agrupar_cartera' | 'agrupar_ingresos' | 'origen'
+export type FiltroReporte = 'rango' | 'corte' | 'cliente' | 'zona' | 'router' | 'plan' | 'caja' | 'metodo_pago' | 'metodo_egreso' | 'categoria' | 'canal' | 'tipo' | 'agrupar_cartera' | 'agrupar_ingresos' | 'origen' | 'origen_bonificacion' | 'motivo'
 
 export interface PresentacionReporte {
     titulo: string
@@ -137,6 +141,17 @@ export const REPORTES: Record<ClaveReporte, PresentacionReporte> = {
         filtros: ['rango', 'zona', 'router', 'plan'],
         rangoPorDefecto: DOCE_MESES,
     },
+    'bonificaciones': {
+        titulo: 'Bonificaciones',
+        descripcion: 'Periodos regalados y cargos sin costo por mes, motivo y origen: cuántas y el valor bruto que no se cobró.',
+        icono: 'i-lucide-hand-heart',
+        filtros: ['rango', 'origen_bonificacion', 'motivo', 'cliente'],
+        rangoPorDefecto: DOCE_MESES,
+        nota: {
+            titulo: 'Reemplaza a «Facturas sin costo»',
+            descripcion: 'Desde la decisión del PM no se emiten facturas sin costo: lo regalado queda como bonificación, con su asiento interno 5.1.01 / ingreso (base sin IVA).',
+        },
+    },
     'egresos': {
         titulo: 'Egresos',
         descripcion: 'Gastos por mes y categoría, con su cuenta contable.',
@@ -194,6 +209,7 @@ export const CONSULTAS_REPORTE: { [C in ClaveReporte]: (f: FiltrosReporte) => Qu
     'promesas': f => ({ desde: f.desde, hasta: f.hasta, canal: f.canal, cliente_id: f.cliente_id, zona_id: f.zona_id, router_id: f.router_id, plan_id: f.plan_id }),
     'altas-bajas': f => ({ desde: f.desde, hasta: f.hasta, zona_id: f.zona_id, router_id: f.router_id, plan_id: f.plan_id }),
     'egresos': f => ({ desde: f.desde, hasta: f.hasta, categoria: f.categoria, metodo: f.metodo_egreso }),
+    'bonificaciones': f => ({ desde: f.desde, hasta: f.hasta, origen: f.origen_bonificacion, motivo_id: f.motivo_id, cliente_id: f.cliente_id }),
 }
 
 /** Fila del reporte como pares clave → valor, para pintar cualquier reporte con sus `columnas`. */

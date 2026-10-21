@@ -9,7 +9,8 @@ type Cuenta = Schema<'Cuenta'>
 type LineaMayor = Schema<'LineaMayor'>
 
 const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
-const ORIGENES = ['factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste']
+/** Los de `GET /libro/diario?origen_tipo` en el contrato. */
+const ORIGENES = ['factura', 'pago', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'ajuste', 'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco', 'provision', 'castigo', 'diferencia_cobro', 'compra', 'pago_proveedor', 'depreciacion', 'baja_activo', 'diferido', 'alta_activo', 'lealtad', 'bonificacion']
 
 /** Como `bloqueoReversoDirecto` (A3, `ledger/reversos.ts`): los asientos con documento se corrigen anulándolo. */
 const POR_DOCUMENTO: Record<string, string> = {

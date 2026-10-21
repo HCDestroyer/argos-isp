@@ -26,6 +26,26 @@ export const CATEGORIAS_EGRESO: Record<CategoriaEgreso, string> = {
     premios: 'Premios y promociones',
 }
 
+/**
+ * Si el egreso se anula desde esta lista. La entrega en efectivo de un premio de sorteo (`premios`) se
+ * anula desde el sorteo («Anular entrega»: la API responde 422 `egreso_de_premio_sorteo` aquí) y el de
+ * una compra al contado, con la compra (409 `egreso_de_compra`).
+ */
+export function egresoAnulable(egreso: Pick<Egreso, 'estado' | 'categoria' | 'compra_id'>): boolean {
+    return egreso.estado === 'registrado' && egreso.categoria !== 'premios' && !egreso.compra_id
+}
+
+/** Por qué un egreso registrado no se anula aquí, o `null`. */
+export function motivoNoAnulable(egreso: Pick<Egreso, 'estado' | 'categoria' | 'compra_id'>): string | null {
+    if (egreso.estado !== 'registrado') {
+        return null
+    }
+    if (egreso.categoria === 'premios') {
+        return 'Premio de sorteo: se anula desde el sorteo («Anular entrega»)'
+    }
+    return egreso.compra_id ? `Se anula con la compra #${egreso.compra_id}` : null
+}
+
 export const ESTADOS_EGRESO: Record<EstadoEgreso, { etiqueta: string, color: NonNullable<BadgeProps['color']>, icono: string }> = {
     registrado: { etiqueta: 'Registrado', color: 'success', icono: 'i-lucide-circle-check' },
     anulado: { etiqueta: 'Anulado', color: 'neutral', icono: 'i-lucide-ban' },
