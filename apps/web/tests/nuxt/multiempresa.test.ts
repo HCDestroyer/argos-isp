@@ -13,6 +13,7 @@ import PaginaCobro from '~/pages/cobro/index.vue'
 import PaginaEmpresas from '~/pages/configuracion/empresas.vue'
 import PaginaServicio from '~/pages/servicios/[id].vue'
 import { esperar } from '../ayudas/esperar'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
 /**
  * Multiempresa (`contratos/multiempresa.md`) con los fixtures de dos empresas: ArgosNet (1, la
@@ -213,11 +214,14 @@ describe('multiempresa · acciones contra la API (fixtures)', () => {
 
 describe('multiempresa · pantallas', () => {
     beforeEach(async () => {
+        // El cobro marca por defecto lo vencido a la fecha: tiene que ser la de los fixtures.
+        fijarHoyFixtures()
         reiniciarFixtures()
         await comoUsuario(meAdmin, 'fixture-admin')
     })
 
     afterEach(() => {
+        soltarReloj()
         sesionFixture(null)
         useUsuarioActual().value = null
         // La empresa elegida se recuerda por usuario: cada prueba empieza en "Todas".

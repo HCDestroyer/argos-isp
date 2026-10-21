@@ -113,7 +113,25 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 
 - Un mes está cerrado si tiene un cierre sin reapertura: `ledger.periodo_cerrado(fecha)`, la misma función en la acción (`registrarAsiento`) y en los triggers de asientos y movimientos. Después del cierre ningún asiento puede tener fecha en el mes, **ni siquiera un reverso**: `RevertirAsiento` usa la fecha de hoy (periodo abierto) y con una fecha del mes cerrado responde 422.
 - `cierres_mensuales` y `reaperturas_mensuales` son inmutables (trigger de UPDATE/DELETE/TRUNCATE y `REVOKE`); un trigger impide cerrar un mes ya cerrado.
-- `cerrar_periodo` está en `contabilidad`; `reabrir_periodo` solo en `admin`.
+- `cerrar_periodo` está en `contabilidad`; `reabrir_periodo` solo en `admin`. Bajo el bloqueo duro ningún mes se reabre (409 `bloqueo_duro`).
+
+## Bloqueos por tipo y excepciones (fase 6, `bloqueos.ts`, contrato de localización fiscal §9.2 y §10.4)
+
+| Acción | Archivo | Permiso | Qué hace |
+| --- | --- | --- | --- |
+| `libro.bloquear` | `actions/bloquear_libro.ts` | `libro.bloquear` | `POST /libro/bloqueos { tipo, hasta, motivo }`: `global`, `ventas`, `compras` o `impuestos`. Solo avanza (422 `bloqueo_regresivo`), no futuro (422 `bloqueo_futuro`), nunca antes del duro (422 `bloqueo_bajo_duro`) |
+| `libro.desbloquear` | `actions/desbloquear_libro.ts` | `libro.desbloquear` | `POST /libro/bloqueos/desbloquear { tipo?, hasta?, motivo }`: mueve atrás o quita (`hasta` null) el `global` (por defecto), `ventas` o `compras`. Impuestos no retrocede (422, se usa una excepción); duro nunca (409). 409 `sin_bloqueo` |
+| `libro.bloquear_duro` | `actions/bloquear_duro.ts` | `libro.bloquear_duro` (solo `admin`) | `POST /libro/bloqueos/duro { hasta, motivo, confirmacion }`: `confirmacion` = «BLOQUEO DURO hasta AAAA-MM-DD» (422 `confirmacion_invalida`); solo avanza; requisitos (422 `bloqueo_duro_requisitos`, `rule` = `meses_abiertos`, `dte_pendientes`, `extractos_sin_conciliar`) |
+| `libro.excepcion_bloqueo` | `actions/crear_excepcion_bloqueo.ts`, `actions/revocar_excepcion_bloqueo.ts` | `libro.excepcion_bloqueo` (solo `admin`) | `POST /libro/bloqueos/excepciones { tipo, usuario_id?, motivo, hasta_en }` (sin fin o sobre el duro: 422 `excepcion_sin_fin`) y `POST .../:id/revocar { motivo }` (409 `excepcion_revocada`) |
+
+- Tablas (solo inserción, trigger y `REVOKE`): `ledger.bloqueos` (el vigente de cada tipo es la última fila; `anterior` lo escribe el trigger), `ledger.bloqueos_excepciones`, `ledger.bloqueos_excepciones_revocaciones` y `ledger.cuentas_con_impuesto` (la lista que pone un asiento bajo el bloqueo de impuestos; la fase 7 la reemplaza por las etiquetas de §10.2, aquí y solo aquí).
+- **A qué asiento aplica cada tipo** (`ledger.bloqueo_de(fecha, empresa, diario, origen, con_impuesto, usuario, excepcion)`, la misma función en la acción y en los triggers): `duro` y `global` a todo; `ventas` al diario de ventas; `compras` al diario de compras y a las compras y pagos a proveedores aunque vayan a una caja o banco; `impuestos` a todo asiento con una cuenta de `cuentas_con_impuesto` o una etiqueta de impuesto. El mes cerrado se sigue informando como `cerrado`.
+- **`RegistrarAsiento`**: mes cerrado → 422 `periodo_cerrado`; duro → 409 `bloqueo_duro`; otro tipo → la excepción vigente del usuario (o para todos) de ese tipo, que queda en `ledger.asientos.excepcion_id`, o 422 `periodo_bloqueado` con `errors[0].rule` = el tipo. Una excepción cubre solo su tipo.
+- **Asientos automáticos** (`trasladar_si_bloqueado`): no fallan; van al primer día abierto (`ledger.primer_dia_abierto`) y guardan su fecha real en `ledger.asientos.fecha_documento`. Los usan la reclasificación de `2.1.11` y la confirmación de una factura `por_certificar`, la liquidación de cobros, la llegada de un tránsito al conciliar, la partida desde el extracto, la depreciación, los diferidos y su asiento inicial. Las facturas y la mora del cron no se trasladan: ver `app/billing/README.md` (quedan pendientes y se avisa con `libro.proceso_bloqueado`).
+- **Triggers en dos niveles**: inmediato en `asientos` y `movimientos` (duro, mes cerrado, global, compras por origen) y diferido (`asientos_bloqueo`, constraint trigger `INITIALLY DEFERRED`) con el diario y los movimientos ya escritos. `RegistrarAsiento` lo dispara al terminar (`SET CONSTRAINTS ... IMMEDIATE`), así el error sale de la acción; una inserción directa falla en el `COMMIT`.
+- El periodo del IVA de una compra que cae en un mes cerrado o bloqueado pasa al mes actual; un parámetro fiscal con `vigente_desde` bajo un bloqueo `global`, `impuestos` o `duro` responde 422 `vigencia_en_periodo_bloqueado`.
+- Lecturas (`libro.ver`): `GET /libro/bloqueos` (vigentes por tipo de cada empresa), `/libro/bloqueos/historial`, `/libro/bloqueos/excepciones?estado=vigente|vencida|revocada`.
+- Emite `libro.bloqueo_cambiado { empresa_id, tipo, hasta, anterior }`.
 
 ## Egresos (`egresos.ts`)
 
@@ -197,6 +215,6 @@ Detalle y desvíos en §19 del contrato. Todo de solo inserción (trigger y `REV
 
 ## Eventos
 
-Emite: `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+Emite: `libro.bloqueo_cambiado` (fase 6, arriba); `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
 - `GET /bancos/depositos?caja_id=&turno_id=` (permiso `bancos.ver` **o** `cajas.ver`, `autorizarLecturaDeCaja` de `lectura_caja.ts`): con `bancos.ver`, todos; con solo `cajas.ver` (el cajero), `caja_id` o `turno_id` obligatorio y la caja en su alcance (403; sin filtro 422); sin ninguno, 403.
 - `GET /egresos?caja_id=&turno_id=` (permiso `egresos.ver` **o** `cajas.ver`, mismo patrón): con solo `cajas.ver` el cajero lee los egresos de su caja o turno para el esperado provisional de /caja.

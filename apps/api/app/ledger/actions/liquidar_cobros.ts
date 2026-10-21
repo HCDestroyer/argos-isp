@@ -294,6 +294,8 @@ export default class LiquidarCobros extends DomainAction<EntradaLiquidarCobros, 
                 descripcion: `Liquidación ${liquidacionId} (${referencia}) de ${proveedor.nombre}: ${pagosIds.length} pago(s)${contracargosIds.length ? `, ${contracargosIds.length} contracargo(s)` : ''}`,
                 origen_tipo: 'liquidacion_cobro',
                 origen_id: liquidacionId,
+                // con la fecha cerrada o bloqueada va al primer día abierto (§10.4)
+                trasladar_si_bloqueado: true,
                 movimientos,
             },
             t.ctx,

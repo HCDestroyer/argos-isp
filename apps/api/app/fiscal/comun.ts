@@ -55,9 +55,9 @@ export function exigirAlcanceGlobal(t: Transaccion): void {
 }
 
 /**
- * 422 `vigencia_en_periodo_bloqueado` si `vigenteDesde` cae en un mes cerrado (o antes de uno),
- * porque cambiaría lo ya reportado. Con `empresaId = null` (valor global) mira todas las empresas.
- * En la fase 5 se suman los bloqueos (`ledger.bloqueos`).
+ * 422 `vigencia_en_periodo_bloqueado` si `vigenteDesde` cae en un mes cerrado (o antes de uno) o
+ * bajo un bloqueo `global`, `impuestos` o `duro` vigente (fase 6, §10.4), porque cambiaría lo ya
+ * reportado. Con `empresaId = null` (valor global) mira todas las empresas.
  */
 export async function exigirVigenciaAbierta(
     trx: TransactionClientContract,
@@ -73,4 +73,20 @@ export async function exigirVigenciaAbierta(
         .select(trx.raw(`to_char(c.periodo, 'YYYY-MM') as periodo`))
         .first()) as { periodo: string } | null
     if (fila) throw new VigenciaEnPeriodoBloqueado(vigenteDesde, fila.periodo)
+
+    // bloqueos que cubren lo ya reportado (§10.4): global, impuestos y duro
+    const bloqueo = (await trx
+        .from('ledger.bloqueos as b')
+        .whereIn('b.tipo', ['global', 'impuestos', 'duro'])
+        .whereRaw(
+            'b.id = (select max(x.id) from ledger.bloqueos x where x.empresa_id = b.empresa_id and x.tipo = b.tipo)',
+        )
+        .whereRaw('b.hasta >= ?::date', [vigenteDesde])
+        .if(empresaId !== null, (q) => q.where('b.empresa_id', empresaId!))
+        .orderBy('b.hasta', 'desc')
+        .select('b.tipo', trx.raw(`to_char(b.hasta, 'YYYY-MM-DD') as hasta`))
+        .first()) as { tipo: string; hasta: string } | null
+    if (bloqueo) {
+        throw new VigenciaEnPeriodoBloqueado(vigenteDesde, `bloqueo ${bloqueo.tipo} hasta ${bloqueo.hasta}`)
+    }
 }

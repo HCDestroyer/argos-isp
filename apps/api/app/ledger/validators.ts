@@ -1,7 +1,7 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
 import { dinero, empresasConsulta, fechaIso, idEntidad, motivo } from '#shared/validadores'
-import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
+import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import { METODOS_EGRESO } from '#ledger/egresos'
 
 export const abrirCajaValidator = vine.compile(vine.object({ fondo_inicial: dinero() }))
@@ -104,6 +104,7 @@ export const diarioValidator = vine.compile(
                 'diferido',
                 'alta_activo',
                 'lealtad',
+                'sorteo',
                 'bonificacion',
             ] as const)
             .optional(),
@@ -182,7 +183,7 @@ export const listarEgresosValidator = vine.compile(
         ...reglasPaginacion,
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
-        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO).optional(),
+        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO_CONSULTA).optional(),
         metodo: vine.enum(METODOS_EGRESO).optional(),
         estado: vine.enum(['registrado', 'anulado'] as const).optional(),
         caja_id: idEntidad().optional().meta({

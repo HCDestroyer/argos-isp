@@ -170,6 +170,8 @@ export default class ConciliarLinea extends DomainAction<EntradaConciliarLinea, 
                     descripcion: `Llegada al banco del ${x.tipo === 'deposito' ? 'depósito' : 'traslado'} ${x.id} (línea ${linea.id} del extracto)`,
                     origen_tipo: x.tipo,
                     origen_id: x.id,
+                    // automático: con la fecha cerrada o bloqueada va al primer día abierto (§10.4)
+                    trasladar_si_bloqueado: true,
                     movimientos: [
                         { cuenta: Number(linea.cuenta_id), debe: aTexto(x.monto) },
                         { cuenta: CUENTAS_GT.FONDOS_EN_TRANSITO, haber: aTexto(x.monto) },

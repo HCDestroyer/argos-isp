@@ -68,6 +68,8 @@ export interface LineaCompraEntrada {
     clase_activo?: ClaseActivo | null
     /** total de la línea con el IVA incluido */
     total: string
+    /** unidades de la línea (1 por defecto): un bien para varios premios de un sorteo se reparte por unidad */
+    cantidad?: number | null
     /** IVA del documento si difiere del calculado (redondeo del proveedor) */
     iva?: string | null
     exento?: boolean | null
@@ -100,6 +102,7 @@ export interface LineaCompraCalculada {
     total: Dec
     clase_activo: ClaseActivo | null
     diferir_meses: number | null
+    cantidad: number
 }
 
 export interface TotalesCompra {
@@ -195,6 +198,7 @@ export function calcularLineas(
             total,
             clase_activo: entrada.clase_activo ?? null,
             diferir_meses: entrada.diferir_meses ?? null,
+            cantidad: entrada.cantidad ?? 1,
         }
     })
     if (errores.length > 0) throw new ValidacionFallida(errores)
@@ -282,7 +286,8 @@ export function movimientosCompra(datos: {
 /**
  * Cuenta de cada línea: activo fijo → `1.2.01.NN` de su clase; `categoria` → la cuenta de la
  * categoría de egreso; `cuenta` → una de gasto o de activo imputable y activa (nunca caja, banco,
- * IVA, retenciones, CxC ni proveedores); sin nada, `5.2.04 Vehículos` para combustible y `5.2.99
+ * IVA, retenciones, CxC ni proveedores; propiedad, planta y equipo solo con `activo_fijo`: 422
+ * `cuenta_activo_fijo`); sin nada, `5.2.04 Vehículos` para combustible y `5.2.99
  * Otros gastos` para el resto.
  */
 export async function resolverCuentasLineas(
@@ -352,6 +357,22 @@ export async function resolverCuentasLineas(
         const problema = problemaDeCuentaLinea(fila!, empresaId)
         if (problema) {
             errores.push({ field: `${campo}.cuenta`, message: problema, rule: 'cuenta_compra' })
+            continue
+        }
+        // observación del auditor (sorteos): propiedad, planta y equipo solo con una línea activo_fijo,
+        // que da de alta el activo; si no, 1.2.01.NN quedaría sin su activo (y sin depreciación)
+        const codigoFila = String(fila!.codigo)
+        if (
+            tipo !== 'activo_fijo' &&
+            [CUENTAS_GT.PROPIEDAD_PLANTA_EQUIPO, CUENTAS_GT.DEPRECIACION_ACUMULADA].some(
+                (c) => codigoFila === c || codigoFila.startsWith(`${c}.`),
+            )
+        ) {
+            errores.push({
+                field: `${campo}.cuenta`,
+                message: `La cuenta ${codigoFila} es de activo fijo: usa tipo activo_fijo con su clase_activo (da de alta el activo)`,
+                rule: 'cuenta_activo_fijo',
+            })
             continue
         }
         salida.push({
@@ -460,6 +481,7 @@ export interface CompraVista {
         iva: string
         clase_activo: string | null
         diferir_meses: number | null
+        cantidad: number
     }>
     retenciones: Array<{
         impuesto_codigo: string
@@ -565,6 +587,7 @@ async function completar(cliente: QueryClientContract, filas: FilaCompra[]): Pro
             'l.iva',
             'l.clase_activo',
             'l.diferir_meses',
+            'l.cantidad',
         )) as Array<CompraVista['lineas'][number] & { compra_id: number }>
     const retenciones = (await cliente
         .from('ledger.compras_retenciones')

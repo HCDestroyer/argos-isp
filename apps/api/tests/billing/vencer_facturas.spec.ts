@@ -31,7 +31,13 @@ test.group('billing · vencerFacturas', () => {
         await generar(servicioId, '2026-10-01')
 
         // el 6 de octubre todavía no vence la de octubre (vence_en = 6)
-        assert.deepEqual(await vencer(servicioId, '2026-10-06'), { vencidas: 1, moras: 1, errores: 0 })
+        assert.deepEqual(await vencer(servicioId, '2026-10-06'), {
+            vencidas: 1,
+            moras: 1,
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        })
         await afirmarLibroCuadrado(assert)
         let facturas = await facturasDe(servicioId)
         assert.deepEqual(
@@ -63,8 +69,20 @@ test.group('billing · vencerFacturas', () => {
             vence: '2026-09-06',
         })
 
-        assert.deepEqual(await vencer(servicioId, '2026-10-06'), { vencidas: 0, moras: 0, errores: 0 })
-        assert.deepEqual(await vencer(servicioId, '2026-10-07'), { vencidas: 1, moras: 1, errores: 0 })
+        assert.deepEqual(await vencer(servicioId, '2026-10-06'), {
+            vencidas: 0,
+            moras: 0,
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        })
+        assert.deepEqual(await vencer(servicioId, '2026-10-07'), {
+            vencidas: 1,
+            moras: 1,
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        })
         facturas = await facturasDe(servicioId)
         assert.lengthOf(facturas, 4)
         assert.lengthOf(await eventosDe('factura.vencida', 'servicio_id', servicioId), 2)
@@ -85,15 +103,33 @@ test.group('billing · vencerFacturas', () => {
             },
         })
         await generar(servicioId, '2026-07-01')
-        assert.deepEqual(await vencer(servicioId, '2026-09-10'), { vencidas: 1, moras: 3, errores: 0 })
+        assert.deepEqual(await vencer(servicioId, '2026-09-10'), {
+            vencidas: 1,
+            moras: 3,
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        })
         const todas = await facturasDe(servicioId)
         const moras = todas.filter((f) => f.tipo === 'mora')
         assert.deepEqual(
             moras.map((m) => m.total),
             ['15.00', '15.00', '15.00'],
         )
-        assert.deepEqual(await vencer(servicioId, '2026-09-10'), { vencidas: 0, moras: 0, errores: 0 })
-        assert.deepEqual(await vencer(servicioId, '2026-10-07'), { vencidas: 0, moras: 1, errores: 0 })
+        assert.deepEqual(await vencer(servicioId, '2026-09-10'), {
+            vencidas: 0,
+            moras: 0,
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        })
+        assert.deepEqual(await vencer(servicioId, '2026-10-07'), {
+            vencidas: 0,
+            moras: 1,
+            errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
+        })
         assert.equal(await saldoTexto(clienteId), '210.00')
         await afirmarLibroCuadrado(assert)
     })
@@ -109,7 +145,7 @@ test.group('billing · vencerFacturas', () => {
                 .json({ servicio_id: servicioId, hasta: '2026-09-07' }),
             200,
         )
-        assert.deepEqual(respuesta.body(), { vencidas: 1, moras: 0, errores: 0 })
+        assert.deepEqual(respuesta.body(), { vencidas: 1, moras: 0, errores: 0, bloqueados: 0, bloqueos: [] })
         const [factura] = await facturasDe(servicioId)
         assert.equal(factura!.estado, 'vencida')
         await afirmarLibroCuadrado(assert)

@@ -42,6 +42,10 @@ const PANTALLAS = [
     ['lealtad', '/lealtad'],
     ['puntos del cliente', '/clientes/2?tab=puntos'],
     ['reporte de lealtad', '/reportes/lealtad'],
+    // Sorteos.
+    ['sorteos', '/lealtad/sorteos'],
+    ['sorteo ejecutado', '/lealtad/sorteos/5'],
+    ['sorteo con corte cerrado', '/lealtad/sorteos/4'],
     // Anuncios del portal.
     ['anuncios', '/anuncios'],
     ['ficha de anuncio', '/anuncios/1'],

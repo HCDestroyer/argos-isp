@@ -153,6 +153,15 @@ import CrearNodoPortal from '#portal/actions/crear_nodo_portal'
 import RevocarNodoPortal from '#portal/actions/revocar_nodo_portal'
 import { idDeNodoPorNombre, listarNodosPortal, vistaInterna } from '#portal/nodos_portal'
 import { dimensionesDeFactura } from '#billing/facturas'
+import Canjear from '#lealtad/actions/canjear'
+import { PortalCanje, PortalPremio, PortalPuntosEmpresa } from '#portal/esquemas'
+import { canjearPuntosValidator } from '#portal/validators'
+import { canjePortal, canjesPortal, exigirPremioDelPortal, premiosPortal, puntosPortal } from '#portal/puntos'
+import { PortalAvisoSorteo, PortalSorteoPublico } from '#portal/esquemas'
+import { avisosSorteoValidator } from '#portal/validators'
+import { avisosDeSorteo, sorteoPublico } from '#portal/sorteos'
+import { verificacionSorteo } from '#lealtad/sorteos'
+import { VerificacionSorteo } from '#lealtad/esquemas'
 import { PortalBonificacion } from '#portal/esquemas'
 import { bonificacionesPortal } from '#portal/bonificaciones'
 
@@ -1497,6 +1506,173 @@ const nodosPortalInternos: Ruta[] = [
     }),
 ]
 
+/**
+ * Puntos de lealtad (contrato `lealtad.md` §12): solo con la sesión y solo de las empresas cuyo
+ * programa activo tiene `visible_portal`. El canje lo decide `lealtad.canjear` (A3) con el actor
+ * `cliente`, que exige además `canje_portal`.
+ */
+const SOBRE_LOS_PUNTOS =
+    'Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ' +
+    `ninguna, lista vacía. ${SOBRE_LA_SESION}`
+
+const puntosPortalRutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/puntos',
+        operacion: 'portalPuntos',
+        resumen: 'Puntos del cliente por empresa: saldo, lo que vence pronto, movimientos y términos',
+        descripcion: SOBRE_LOS_PUNTOS,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: {
+            status: 200,
+            descripcion: 'Puntos',
+            esquema: objeto({ data: lista(PortalPuntosEmpresa) }),
+        },
+        handler: async (ctx) => ({
+            data: await puntosPortal(await clienteDeLaSesionLimitada(ctx, 'puntos')),
+        }),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/premios',
+        operacion: 'portalPremios',
+        resumen: 'Premios canjeables desde el portal, con lo que le falta al cliente para cada uno',
+        descripcion: `Activos y con \`en_portal\`, del más barato al más caro. ${SOBRE_LOS_PUNTOS}`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'Premios', esquema: objeto({ data: lista(PortalPremio) }) },
+        handler: async (ctx) => ({
+            data: await premiosPortal(await clienteDeLaSesionLimitada(ctx, 'premios')),
+        }),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/canjes',
+        operacion: 'portalCanjes',
+        resumen: 'Canjes del cliente de la sesión y su estado',
+        descripcion: SOBRE_LA_SESION,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        query: paginaPortalValidator,
+        limitada: true,
+        respuesta: { status: 200, descripcion: 'Página de canjes', esquema: pagina(PortalCanje) },
+        handler: async (ctx, { query }) =>
+            canjesPortal(await clienteDeLaSesionLimitada(ctx, 'canjes-lista'), query),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/portal/canjes',
+        operacion: 'portalCanjear',
+        resumen: 'El cliente canjea sus puntos por un premio',
+        descripcion:
+            'Llama `lealtad.canjear` (A3) con actor `cliente` y canal `portal`. 404 si el premio no está en el ' +
+            'portal (inactivo, sin `en_portal` o de un programa no visible). Errores de la acción: 403 ' +
+            '`canje_portal_inactivo`, 422 `saldo_insuficiente`, `servicio_no_valido`, `premio_inactivo`, ' +
+            '`recompensa_no_disponible`, `parametro_sin_confirmar`; 409 `sin_existencias`, `canje_pendiente`. ' +
+            `Un descuento queda \`reservado\` para la próxima factura del servicio. ${SOBRE_LA_SESION}`,
+        etiqueta: 'portal',
+        seguridad: 'portal',
+        permiso: null,
+        limitada: true,
+        idempotente: true,
+        cuerpo: canjearPuntosValidator,
+        respuesta: { status: 201, descripcion: 'Canje hecho', esquema: PortalCanje },
+        handler: async (ctx, { cuerpo }) => {
+            const clienteId = await clienteDeLaSesionLimitada(ctx, 'canjes')
+            await exigirPremioDelPortal(clienteId, cuerpo.premio_id)
+            const canje = await new Canjear().execute(
+                {
+                    cliente_id: clienteId,
+                    servicio_id: cuerpo.servicio_id,
+                    premio_id: cuerpo.premio_id,
+                    canal: 'portal',
+                },
+                ctx.contextoCliente(clienteId),
+            )
+            return canjePortal(clienteId, canje.id)
+        },
+    }),
+]
+
+/**
+ * Sorteos (contrato `lealtad.md` §7 y §12). La lista con boletos y seudónimo del cliente es
+ * `GET /portal/sorteos` (A3); aquí, el aviso de los próximos (carrusel del inicio y de la página de
+ * corte) y la página pública de bases, resultado y verificación, que también pasa por el proxy del
+ * portal (y por un nodo portal remoto) porque está bajo `/portal`.
+ */
+const sorteosPortalRutas: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/avisos-sorteo',
+        operacion: 'portalAvisosSorteo',
+        resumen: 'Sorteos próximos ya abiertos al público, para el carrusel del portal',
+        descripcion:
+            'Con bases publicadas o participación abierta y fecha de sorteo futura (los activa el panel al ' +
+            'publicar sus bases). `lugar=pagina_corte`: los de la empresa del servicio de la IP (o, sin él, los ' +
+            'del cliente de la sesión); `lugar=portal_inicio`: los de las empresas del cliente de la sesión. ' +
+            `Sin cliente identificado, lista vacía. Sin imágenes ni datos de nadie. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        query: avisosSorteoValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Avisos',
+            esquema: objeto({ data: lista(PortalAvisoSorteo) }),
+        },
+        antes: async (ctx) => {
+            await ipDelCliente(ctx, 'avisos-sorteo')
+        },
+        handler: async (ctx, { query }) => {
+            const ip = (await ipOrigenDelCliente(ctx))!
+            const { clienteId, empresaId } = await clienteDeLosAnuncios(ctx, ip, query.lugar)
+            return { data: await avisosDeSorteo(clienteId, empresaId) }
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/sorteos/:id/publico',
+        operacion: 'portalSorteoPublico',
+        resumen: 'Página pública de un sorteo: bases, premios, compromiso y ganadores por seudónimo',
+        descripcion:
+            'Sin sesión, desde que publica sus bases (antes o inexistente, 404). Los ganadores salen por ' +
+            `seudónimo después de ejecutar. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Sorteo', esquema: PortalSorteoPublico },
+        handler: async (ctx, { params }) => {
+            await ipDelCliente(ctx, 'sorteo-publico')
+            return sorteoPublico(Number(params.id))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/portal/sorteos/:id/verificacion',
+        operacion: 'portalSorteoVerificacion',
+        resumen:
+            'Datos para recalcular el resultado de un sorteo (los de `GET /lealtad/sorteos/:id/verificacion`)',
+        descripcion: `Sin sesión, después de ejecutar (antes, 404). Lista por seudónimo. ${SOBRE_LA_IP}`,
+        etiqueta: 'portal',
+        seguridad: 'publico',
+        limitada: true,
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Verificación', esquema: VerificacionSorteo },
+        handler: async (ctx, { params }) => {
+            await ipDelCliente(ctx, 'sorteo-verificacion')
+            return verificacionSorteo(Number(params.id))
+        },
+    }),
+]
+
 const portal: Ruta[] = [
     ...publicas,
     ...autenticadas,
@@ -1510,6 +1686,8 @@ const portal: Ruta[] = [
     ...anunciosPortal,
     ...nodosPortal,
     ...nodosPortalInternos,
+    ...puntosPortalRutas,
+    ...sorteosPortalRutas,
 ]
 
 export default portal

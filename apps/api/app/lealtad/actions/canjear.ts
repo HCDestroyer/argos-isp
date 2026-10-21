@@ -50,7 +50,10 @@ import { bloquearClienteLealtad, saldoPuntos, salidaCanje } from '#lealtad/punto
  *   (422 `nota_fuera_de_plazo`). Sobre una factura pagada (o por más de su saldo) la nota se emite igual
  *   y el excedente queda como crédito del cliente en Anticipos. Queda `aplicado` con `nota_credito_id`.
  * - `descuento_factura` / `mes_gratis` sin factura: `reservado` para la próxima factura del servicio.
- * - `bien`: 422 `parametro_sin_confirmar` (`premio_bien_iva`, decisión del contador). `boletos`: fase 3.
+ * - `bien`: 422 `parametro_sin_confirmar` (`premio_bien_iva`, decisión del contador).
+ * - `boletos` (fase 3): el sorteo del premio debe estar en `participacion_abierta` y admitir canjes
+ *   (422 `sorteo_cerrado`); los boletos entran en `lealtad.sorteos_boletos` (origen `canje`) y el canje
+ *   queda `aplicado`. Los puntos salen como en cualquier canje (`2.1.10 / 4.1.06` con diferimiento).
  *
  * Portal (A5): con actor `cliente` o canal `portal`, exige `visible_portal` y `canje_portal` del programa
  * (403 `canje_portal_inactivo`) y que el cliente sea el del canje (403); queda con canal `portal` y
@@ -100,10 +103,27 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
         }
         if (premio.tipo === 'bien') throw new ParametroSinConfirmar('premio_bien_iva')
         if (premio.tipo === 'boletos') {
-            throw new ReglaNegocio(
-                'Los canjes por boletos llegan con los sorteos (fase 3)',
-                'recompensa_no_disponible',
-            )
+            // fase 3: el sorteo debe estar abierto a la participación y admitir boletos por canje
+            const sorteo = (await t.trx
+                .from('lealtad.sorteos')
+                .where('id', premio.sorteo_id!)
+                .select('empresa_id', 'estado', 'criterios')
+                .first()) as {
+                empresa_id: number
+                estado: string
+                criterios: { admite_canje?: boolean }
+            } | null
+            if (
+                !sorteo ||
+                Number(sorteo.empresa_id) !== empresaId ||
+                sorteo.estado !== 'participacion_abierta' ||
+                !sorteo.criterios?.admite_canje
+            ) {
+                throw new ReglaNegocio(
+                    `El sorteo ${premio.sorteo_id} no está abierto a boletos por canje`,
+                    'sorteo_cerrado',
+                )
+            }
         }
         const descuento = premio.tipo === 'descuento_factura' || premio.tipo === 'mes_gratis'
         if (input.factura_id && !descuento) {
@@ -219,6 +239,17 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
                 nota_credito_id: nota.id,
                 aplicado_en: new Date(),
             })
+        }
+        if (premio.tipo === 'boletos') {
+            // los boletos entran al sorteo (antes del corte, lo exige un trigger); el canje queda aplicado
+            await t.trx.insertQuery().table('lealtad.sorteos_boletos').insert({
+                sorteo_id: premio.sorteo_id,
+                cliente_id: input.cliente_id,
+                boletos: premio.boletos,
+                origen: 'canje',
+                canje_id: canjeId,
+            })
+            Object.assign(cambios, { estado: 'aplicado', aplicado_en: new Date() })
         }
         await t.trx.from('lealtad.canjes').where('id', canjeId).update(cambios)
         const canje = await verCanje(canjeId, t.trx)

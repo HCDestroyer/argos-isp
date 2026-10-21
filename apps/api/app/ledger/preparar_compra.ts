@@ -4,7 +4,7 @@ import { Conflicto, Problema, ValidacionFallida, type ErrorCampo } from '#shared
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { aTexto, dec, type Dec } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
-import { periodoCerrado } from '#ledger/cierres'
+import { bloqueoDe } from '#ledger/bloqueos'
 import { impuesto as impuestoVigente } from '#fiscal/impuestos'
 import { valorParametro } from '#fiscal/parametros'
 import { verProveedor, type ProveedorVista } from '#ledger/proveedores'
@@ -262,7 +262,18 @@ export async function prepararCompra(
         periodoIva = inicioDeMes(fechaValida(input.periodo_iva, 'periodo_iva'))
     } else {
         periodoIva = [mesDocumento, opciones.periodoMinimo ?? mesDocumento].sort().at(-1)!
-        if (periodoIva < mesHoy && (await periodoCerrado(t.trx, periodoIva, empresaId))) periodoIva = mesHoy
+        // mes del IVA cerrado o bloqueado (declarado: bloqueo de impuestos, §10.4): al mes actual
+        if (
+            periodoIva < mesHoy &&
+            (await bloqueoDe(t.trx, {
+                fecha: periodoIva,
+                empresaId,
+                origen: 'compra',
+                conImpuesto: true,
+            })) !== null
+        ) {
+            periodoIva = mesHoy
+        }
     }
     if (periodoIva < mesDocumento) {
         throw new ValidacionFallida([
@@ -422,6 +433,7 @@ export async function insertarCompra(
                 iva: aTexto(l.iva),
                 clase_activo: l.clase_activo,
                 diferir_meses: l.diferir_meses,
+                cantidad: l.cantidad,
             })),
         )
     if (compra.retenciones.length > 0) {

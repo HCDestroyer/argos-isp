@@ -150,13 +150,13 @@ describe('promociones en /corte', () => {
 
     it('el carrusel solo avanza solo sin movimiento reducido y sin pausa', async () => {
         movimiento(true)
-        const quieto = await mountSuspended(Carrusel, { props: { anuncios: ANUNCIOS_FIXTURE, visible: true } })
+        const quieto = await mountSuspended(Carrusel, { props: { items: ANUNCIOS_FIXTURE.map(anuncio => ({ tipo: 'anuncio' as const, anuncio })), visible: true } })
         await flushPromises()
         expect(quieto.findComponent({ name: 'UCarousel' }).props('autoplay')).toBe(false)
         expect(quieto.find('[data-testid="promo-pausa"]').exists()).toBe(false)
 
         movimiento(false)
-        const movil = await mountSuspended(Carrusel, { props: { anuncios: ANUNCIOS_FIXTURE, visible: true } })
+        const movil = await mountSuspended(Carrusel, { props: { items: ANUNCIOS_FIXTURE.map(anuncio => ({ tipo: 'anuncio' as const, anuncio })), visible: true } })
         await flushPromises()
         expect(movil.findComponent({ name: 'UCarousel' }).props('autoplay')).toMatchObject({
             delay: 8000,

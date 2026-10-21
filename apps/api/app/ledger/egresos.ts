@@ -6,7 +6,12 @@ import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import type { ContextoAccion } from '#shared/contexto'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
-import { CUENTAS, type ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
+import {
+    CLAVES_CATEGORIA_EGRESO,
+    CLAVES_CATEGORIA_EGRESO_CONSULTA,
+    CUENTAS,
+    type ClaveCategoriaEgreso,
+} from '#ledger/plan_cuentas'
 
 /**
  * Egresos: lectura (lista, detalle, categorías). Las acciones (`registrarEgreso`, `anularEgreso`)
@@ -118,7 +123,7 @@ export async function verEgreso(id: number, cliente: QueryClientContract = db.co
 export interface FiltrosEgresos extends OpcionesPaginacion {
     desde?: string
     hasta?: string
-    categoria?: ClaveCategoriaEgreso
+    categoria?: (typeof CLAVES_CATEGORIA_EGRESO_CONSULTA)[number]
     metodo?: MetodoEgreso
     estado?: EstadoEgreso
     caja_id?: number
@@ -154,18 +159,22 @@ export async function dimensionesDeEgreso(id: number) {
 }
 
 export async function listarCategoriasEgreso() {
-    return db
-        .from('ledger.egresos_categorias as ec')
-        .join('ledger.cuentas as cu', 'cu.id', 'ec.cuenta_id')
-        .orderBy('ec.id', 'asc')
-        .select(
-            'ec.id',
-            'ec.clave',
-            'ec.nombre',
-            'cu.id as cuenta_id',
-            'cu.codigo as cuenta_codigo',
-            'cu.nombre as cuenta_nombre',
-        )
+    return (
+        db
+            .from('ledger.egresos_categorias as ec')
+            .join('ledger.cuentas as cu', 'cu.id', 'ec.cuenta_id')
+            // las internas (p. ej. `premios`, entrega de premios de sorteo) no se eligen en POST /egresos
+            .whereIn('ec.clave', [...CLAVES_CATEGORIA_EGRESO])
+            .orderBy('ec.id', 'asc')
+            .select(
+                'ec.id',
+                'ec.clave',
+                'ec.nombre',
+                'cu.id as cuenta_id',
+                'cu.codigo as cuenta_codigo',
+                'cu.nombre as cuenta_nombre',
+            )
+    )
 }
 
 /** Efectivo que salió de un turno de caja (egresos vigentes); baja el esperado del cierre. */
