@@ -127,6 +127,8 @@ export const generarFacturasValidator = vine.compile(
     }),
 )
 
+export const corridasValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
 export const vencerFacturasValidator = vine.compile(
     vine.object({
         servicio_id: idEntidad()

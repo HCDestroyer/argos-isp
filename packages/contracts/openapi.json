@@ -17281,6 +17281,85 @@
         "x-implementado": true
       }
     },
+    "/api/v1/facturas/corridas": {
+      "get": {
+        "operationId": "facturasCorridas",
+        "summary": "Última corrida de facturación y de mora de cada empresa, con lo pendiente por bloqueo",
+        "description": "Por empresa (la activa, o todas las del alcance; empresas=todas con alcance global): la última corrida de facturas.generar y de facturas.vencer_pendientes que la incluyó, con bloqueados y bloqueos[] de esa empresa (documentos que no se contabilizaron por un bloqueo del libro y se reintentan en la siguiente corrida). No corre nada.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Corridas por empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CorridasFacturacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso facturas.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "facturas.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/facturas/corte": {
       "post": {
         "operationId": "facturasCorte",
@@ -29894,6 +29973,385 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/cierres/{tipo}/{periodo}/checks": {
+      "get": {
+        "operationId": "libroChecksCierre",
+        "summary": "Lista de verificación de cierre: checks vigentes de un mes o un año",
+        "description": "tipo mensual (periodo AAAA-MM) o anual (AAAA). Cada check con su última fila: esperado, obtenido, resultado (ok, anomalia) y estado (revisado, anomalia, supervisado). Un check sin fila aún no se verificó. Con historial=true trae todas las filas, la más reciente primero.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "periodo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id)",
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            }
+          },
+          {
+            "name": "historial",
+            "in": "query",
+            "required": false,
+            "description": "Todas las filas, la más reciente primero",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Checks del cierre",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecksCierre"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/cierres/{tipo}/{periodo}/verificar": {
+      "post": {
+        "operationId": "libroVerificarCierre",
+        "summary": "Correr los checks automáticos de un cierre",
+        "description": "Guarda el resultado de cada check (fila nueva solo si cambió, así una supervisión sigue vigente mientras la anomalía sea la misma) y emite libro.checks_verificados. cerrarPeriodo y el bloqueo duro también lo corren y exigen los checks en ok o supervisados (422 checks_pendientes).",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "periodo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id)"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checks verificados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificacionCierre"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.cerrar_periodo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/cierres/checks/{id}/revisar": {
+      "post": {
+        "operationId": "libroRevisarCheck",
+        "summary": "Supervisar un check en anomalía (con nota) o retirar la supervisión",
+        "description": "estado supervisado (nota obligatoria) deja pasar el cierre con esa anomalía; anomalia la retira. 409 check_desactualizado si la fila ya no es la vigente; 422 check_en_orden si el check está ok.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "supervisado",
+                      "anomalia"
+                    ],
+                    "description": "supervisado deja pasar el cierre con esa anomalía; anomalia retira la supervisión"
+                  },
+                  "nota": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "estado",
+                  "nota"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Check revisado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckCierre"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.cerrar_periodo",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/cuentas": {
       "get": {
         "operationId": "libroCuentas",
@@ -30793,7 +31251,7 @@
       "post": {
         "operationId": "libroCerrarPeriodo",
         "summary": "Cerrar un mes del libro",
-        "description": "Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está.",
+        "description": "Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está. Antes verifica la lista de verificación del mes (§10.5): un check en anomalía sin supervisar responde 422 checks_pendientes con un error por clave.",
         "tags": [
           "libro"
         ],
@@ -55284,6 +55742,189 @@
           }
         }
       },
+      "CheckCierre": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "tipo",
+          "periodo",
+          "clave",
+          "titulo",
+          "aviso",
+          "automatico",
+          "esperado",
+          "obtenido",
+          "resultado",
+          "estado",
+          "nota",
+          "detalle",
+          "revisado_por",
+          "revisado_por_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "mensual",
+              "impuestos",
+              "anual"
+            ]
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día del mes (o del año en los anuales)"
+          },
+          "clave": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "aviso": {
+            "type": "boolean",
+            "description": "Un aviso nunca bloquea el cierre"
+          },
+          "automatico": {
+            "type": "boolean",
+            "description": "false = fila de una revisión (supervisión) a mano"
+          },
+          "esperado": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "obtenido": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "anomalia"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "revisado",
+              "anomalia",
+              "supervisado"
+            ]
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detalle": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "Datos del cálculo (conteos, cuentas, diarios con huecos…)"
+          },
+          "revisado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "revisado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ChecksCierre": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "tipo",
+          "periodo",
+          "checks",
+          "sin_verificar",
+          "pasan"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "mensual",
+              "impuestos",
+              "anual"
+            ]
+          },
+          "periodo": {
+            "type": "string",
+            "description": "AAAA-MM o AAAA"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckCierre"
+            },
+            "description": "Última fila de cada clave, en el orden del catálogo"
+          },
+          "sin_verificar": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "titulo"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "titulo": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Checks del catálogo que aún no tienen fila (falta verificar)"
+          },
+          "pasan": {
+            "type": "boolean",
+            "description": "true si todos están en ok o supervisados (el cierre no se bloquea)"
+          },
+          "historial": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckCierre"
+            },
+            "description": "Con historial=true: todas las filas, la más reciente primero"
+          }
+        }
+      },
       "CierrePeriodo": {
         "type": "object",
         "required": [
@@ -57698,6 +58339,139 @@
                   "items": {
                     "type": "string"
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CorridasFacturacion": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "procesos"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "procesos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "proceso",
+                "corrida_en",
+                "actor_tipo",
+                "canal",
+                "hasta",
+                "bloqueados",
+                "bloqueos",
+                "resultado"
+              ],
+              "properties": {
+                "proceso": {
+                  "type": "string",
+                  "enum": [
+                    "facturas.generar",
+                    "facturas.vencer_pendientes"
+                  ]
+                },
+                "corrida_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "description": "null = aún no corrió para la empresa"
+                },
+                "actor_tipo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "canal": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "hasta": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "bloqueados": {
+                  "type": "integer",
+                  "description": "Documentos de la empresa que la corrida no contabilizó por un bloqueo del libro"
+                },
+                "bloqueos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "empresa_id",
+                      "tipo",
+                      "hasta",
+                      "fecha",
+                      "documentos",
+                      "ejemplos"
+                    ],
+                    "properties": {
+                      "empresa_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "global",
+                          "ventas",
+                          "compras",
+                          "impuestos",
+                          "duro"
+                        ]
+                      },
+                      "hasta": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "date",
+                        "description": "Bloqueo vigente de ese tipo"
+                      },
+                      "fecha": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Fecha contable que quedó bajo el bloqueo"
+                      },
+                      "documentos": {
+                        "type": "integer",
+                        "description": "Servicios o facturas que no se contabilizaron"
+                      },
+                      "ejemplos": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "description": "Los primeros 20 ids"
+                      }
+                    }
+                  },
+                  "description": "Solo los de la empresa"
+                },
+                "resultado": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true,
+                  "description": "Resultado completo de la corrida (generadas, vencidas, moras, errores…)"
                 }
               }
             }
@@ -76405,6 +77179,46 @@
           },
           "descripcion": {
             "type": "string"
+          }
+        }
+      },
+      "VerificacionCierre": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "tipo",
+          "periodo",
+          "checks",
+          "anomalias"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "mensual",
+              "impuestos",
+              "anual"
+            ]
+          },
+          "periodo": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckCierre"
+            }
+          },
+          "anomalias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Claves en anomalía sin supervisar"
           }
         }
       },

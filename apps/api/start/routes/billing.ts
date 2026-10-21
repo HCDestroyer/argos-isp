@@ -38,6 +38,7 @@ import AnularNotaCredito from '#billing/actions/anular_nota_credito'
 import { dteVigente } from '#fiscal/fel/dte'
 import db from '@adonisjs/lucid/services/db'
 import { dimensionesDePromesa, listarPromesas, verPromesa } from '#billing/promesas'
+import { ultimasCorridas } from '#billing/corridas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
 import { simularPromesa } from '#billing/simulador_promesas'
@@ -131,6 +132,7 @@ import {
     PlantillaFacturacion,
     Promesa,
     ResultadoGeneracion,
+    CorridasFacturacion,
     ResultadoCorte,
     ResultadoVencimiento,
 } from '#billing/esquemas'
@@ -148,6 +150,13 @@ function empresasEstadoCuenta(ctx: HttpContext, empresaId?: number): number[] | 
         return [empresaId]
     }
     return ctx.empresa?.permitidas ?? null
+}
+
+/** Empresas de una lista (null = todas las de la instalación). */
+async function empresasDeConsulta(ids: number[] | null): Promise<number[]> {
+    if (ids !== null) return ids
+    const filas = (await db.from('core.empresas').orderBy('id').select('id')) as Array<{ id: number }>
+    return filas.map((f) => Number(f.id))
 }
 
 const plantillas: Ruta[] = [
@@ -300,6 +309,20 @@ const facturas: Ruta[] = [
             exigirAcceso(ctx, await dimensionesDeBonificacion(id))
             return verBonificacion(id)
         },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/facturas/corridas',
+        operacion: 'facturasCorridas',
+        resumen: 'Última corrida de facturación y de mora de cada empresa, con lo pendiente por bloqueo',
+        etiqueta: 'facturacion',
+        permiso: 'facturas.ver',
+        query: v.corridasValidator,
+        descripcion:
+            'Por empresa (la activa, o todas las del alcance; empresas=todas con alcance global): la última corrida de facturas.generar y de facturas.vencer_pendientes que la incluyó, con bloqueados y bloqueos[] de esa empresa (documentos que no se contabilizaron por un bloqueo del libro y se reintentan en la siguiente corrida). No corre nada.',
+        respuesta: { status: 200, descripcion: 'Corridas por empresa', esquema: lista(CorridasFacturacion) },
+        handler: async (ctx, { query }) =>
+            ultimasCorridas(await empresasDeConsulta(empresasDeLaLista(ctx.empresa, query.empresas))),
     }),
     definirRuta({
         metodo: 'post',

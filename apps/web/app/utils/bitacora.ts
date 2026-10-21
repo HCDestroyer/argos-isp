@@ -200,6 +200,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'libro.desbloquear': 'Bloqueo del libro movido hacia atrás',
     'libro.excepcion_bloqueo': 'Excepción de bloqueo creada o revocada',
     'libro.cerrar_periodo': 'Periodo contable cerrado',
+    'cierres.verificar': 'Lista de verificación de cierre corrida',
+    'cierres.revisar_check': 'Check de cierre supervisado o reabierto',
     'libro.reabrir_periodo': 'Periodo contable reabierto',
     'libro.sellar': 'Asientos sellados en la cadena de hash',
     'libro.verificar_integridad': 'Integridad del libro verificada',

@@ -1141,3 +1141,14 @@ Rama `a3/fase6` desde `main`. Cuatro PRs en orden, cada una auditada antes de la
 - **Desvío (h) · mora bajo bloqueo.** La factura igual pasa a `vencida` (el corte no se atrasa) y la mora queda pendiente; para decidir se considera que la mora lleva impuesto.
 - El periodo del IVA de una compra en un mes cerrado o bloqueado pasa al mes actual; `vigencia_en_periodo_bloqueado` mira también los bloqueos `global`, `impuestos` y `duro`.
 - Feriados: ningún plazo de la fase 6 es en días hábiles; `fiscal.feriados` sigue para el calendario (fase 7).
+
+**PR B · lista de verificación (§10.5).**
+
+- Decisiones del líder: entran ahora `incobrables` (anual), `apertura_cero`, `iva_por_certificar` y `secuencias_sin_huecos`; `iva_cuadrado` e `iva_liquidado` (tipo `impuestos`) van en la fase 7. Los requisitos del duro que quedaban (cobros por liquidar, cadena de hash, check anual) se cubren con la lista.
+- **Desvío (i) · filas solo cuando cambia.** `cierres.verificar` escribe una fila automática nueva solo si `esperado`, `obtenido` o `resultado` cambió; así repetir la verificación no pisa una supervisión vigente. La revisión humana (`cierres.revisar_check`) es otra fila con `revisado_por` y nota.
+- **Desvío (j) · rutas.** `GET /libro/cierres/:tipo/:periodo/checks`, `POST /libro/cierres/:tipo/:periodo/verificar` y `POST /libro/cierres/checks/:id/revisar`; las dos de escritura con `libro.cerrar_periodo` (quien cierra verifica y supervisa). El periodo va como `AAAA-MM` (mensual) o `AAAA` (anual); se guarda el primer día.
+- **Desvío (k) · cuándo se exige.** `cerrarPeriodo` y el bloqueo duro verifican y exigen dentro de su transacción (422 `checks_pendientes`). El duro exige los anuales solo del año que cruza por primera vez.
+- **Desvío (l) · `incobrables` sin localización.** Sin localización fiscal instalada no hay `reserva_incobrables_max`: el check solo pasa con estimación cero.
+- **Desvío (m) · columnas.** En la tabla, `esperado` y `obtenido` se llaman `valor_esperado` y `valor_obtenido` (texto: conteos, montos, «verificada» o «<= tope»); la API las sigue dando como `esperado` y `obtenido`. Así no se confunden con columnas de dinero (`numeric(14,2)`, prueba 10 del auditor).
+- `turnos_cerrados` cuenta los turnos abiertos **en** el periodo (hora de Guatemala), como dice la tabla; uno de un mes anterior lo señaló el cierre de ese mes.
+- Observación del auditor a la PR A: el trigger inmediato de `movimientos` aplica `ledger.bloqueo_de` completo (diario y si lleva impuesto), no solo duro, mes cerrado y global.

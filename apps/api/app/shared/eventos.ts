@@ -389,6 +389,16 @@ export interface CatalogoEventos {
      * `documentos` porque `fecha` cae bajo el bloqueo `tipo` (hasta `hasta`). Quedan pendientes y
      * se reintentan en la siguiente corrida. Uno por corrida, empresa y tipo.
      */
+    /**
+     * `cierres.verificar` corrió la lista de verificación de cierre de la empresa (§10.5):
+     * `periodo` AAAA-MM o AAAA; `anomalias` = claves en anomalía sin supervisar.
+     */
+    'libro.checks_verificados': {
+        empresa_id: number
+        tipo: 'mensual' | 'impuestos' | 'anual'
+        periodo: string
+        anomalias: string[]
+    }
     'libro.proceso_bloqueado': {
         empresa_id: number
         proceso: string
@@ -804,6 +814,7 @@ export const EVENTOS = [
     'libro.integridad_rota',
     'libro.bloqueo_cambiado',
     'libro.proceso_bloqueado',
+    'libro.checks_verificados',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
     'fiscal.localizacion_instalada',

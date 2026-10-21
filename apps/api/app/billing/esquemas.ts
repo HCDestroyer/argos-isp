@@ -441,6 +441,32 @@ export const CargoUnicoEmitido = definirEsquema(
     }),
 )
 
+export const CorridasFacturacion = definirEsquema(
+    'CorridasFacturacion',
+    objeto({
+        empresa_id: id,
+        procesos: lista(
+            objeto({
+                proceso: enumerado(['facturas.generar', 'facturas.vencer_pendientes']),
+                corrida_en: { ...nulable(instante), description: 'null = aún no corrió para la empresa' },
+                actor_tipo: nulable(texto),
+                canal: nulable(texto),
+                hasta: nulable(fecha),
+                bloqueados: {
+                    type: 'integer',
+                    description:
+                        'Documentos de la empresa que la corrida no contabilizó por un bloqueo del libro',
+                },
+                bloqueos: { ...lista(BloqueoCorrida), description: 'Solo los de la empresa' },
+                resultado: {
+                    ...nulable(jsonLibre),
+                    description: 'Resultado completo de la corrida (generadas, vencidas, moras, errores…)',
+                },
+            }),
+        ),
+    }),
+)
+
 export const ResultadoGeneracion = definirEsquema(
     'ResultadoGeneracion',
     objeto(

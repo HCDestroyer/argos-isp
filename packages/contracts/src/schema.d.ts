@@ -2164,6 +2164,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/facturas/corridas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Última corrida de facturación y de mora de cada empresa, con lo pendiente por bloqueo
+         * @description Por empresa (la activa, o todas las del alcance; empresas=todas con alcance global): la última corrida de facturas.generar y de facturas.vencer_pendientes que la incluyó, con bloqueados y bloqueos[] de esa empresa (documentos que no se contabilizaron por un bloqueo del libro y se reintentan en la siguiente corrida). No corre nada.
+         */
+        get: operations["facturasCorridas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/facturas/corte": {
         parameters: {
             query?: never;
@@ -3973,6 +3993,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libro/cierres/{tipo}/{periodo}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista de verificación de cierre: checks vigentes de un mes o un año
+         * @description tipo mensual (periodo AAAA-MM) o anual (AAAA). Cada check con su última fila: esperado, obtenido, resultado (ok, anomalia) y estado (revisado, anomalia, supervisado). Un check sin fila aún no se verificó. Con historial=true trae todas las filas, la más reciente primero.
+         */
+        get: operations["libroChecksCierre"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/cierres/{tipo}/{periodo}/verificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Correr los checks automáticos de un cierre
+         * @description Guarda el resultado de cada check (fila nueva solo si cambió, así una supervisión sigue vigente mientras la anomalía sea la misma) y emite libro.checks_verificados. cerrarPeriodo y el bloqueo duro también lo corren y exigen los checks en ok o supervisados (422 checks_pendientes).
+         */
+        post: operations["libroVerificarCierre"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libro/cierres/checks/{id}/revisar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Supervisar un check en anomalía (con nota) o retirar la supervisión
+         * @description estado supervisado (nota obligatoria) deja pasar el cierre con esa anomalía; anomalia la retira. 409 check_desactualizado si la fila ya no es la vigente; 422 check_en_orden si el check está ok.
+         */
+        post: operations["libroRevisarCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libro/cuentas": {
         parameters: {
             query?: never;
@@ -4129,7 +4209,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar un mes del libro
-         * @description Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está.
+         * @description Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está. Antes verifica la lista de verificación del mes (§10.5): un check en anomalía sin supervisar responde 422 checks_pendientes con un error por clave.
          */
         post: operations["libroCerrarPeriodo"];
         delete?: never;
@@ -7818,6 +7898,56 @@ export interface components {
             cuenta_codigo: string;
             cuenta_nombre: string;
         };
+        CheckCierre: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            tipo: "mensual" | "impuestos" | "anual";
+            /**
+             * Format: date
+             * @description Primer día del mes (o del año en los anuales)
+             */
+            periodo: string;
+            clave: string;
+            titulo: string;
+            /** @description Un aviso nunca bloquea el cierre */
+            aviso: boolean;
+            /** @description false = fila de una revisión (supervisión) a mano */
+            automatico: boolean;
+            esperado: string | null;
+            obtenido: string | null;
+            /** @enum {string} */
+            resultado: "ok" | "anomalia";
+            /** @enum {string} */
+            estado: "revisado" | "anomalia" | "supervisado";
+            nota: string | null;
+            /** @description Datos del cálculo (conteos, cuentas, diarios con huecos…) */
+            detalle: {
+                [key: string]: unknown;
+            } | null;
+            revisado_por: number | null;
+            revisado_por_nombre: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ChecksCierre: {
+            empresa_id: number;
+            /** @enum {string} */
+            tipo: "mensual" | "impuestos" | "anual";
+            /** @description AAAA-MM o AAAA */
+            periodo: string;
+            /** @description Última fila de cada clave, en el orden del catálogo */
+            checks: components["schemas"]["CheckCierre"][];
+            /** @description Checks del catálogo que aún no tienen fila (falta verificar) */
+            sin_verificar: {
+                clave: string;
+                titulo: string;
+            }[];
+            /** @description true si todos están en ok o supervisados (el cierre no se bloquea) */
+            pasan: boolean;
+            /** @description Con historial=true: todas las filas, la más reciente primero */
+            historial?: components["schemas"]["CheckCierre"][];
+        };
         CierrePeriodo: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
             empresa_id?: number;
@@ -8442,6 +8572,48 @@ export interface components {
                     bajada_bytes: number;
                 }[];
                 direcciones: string[];
+            }[];
+        };
+        CorridasFacturacion: {
+            empresa_id: number;
+            procesos: {
+                /** @enum {string} */
+                proceso: "facturas.generar" | "facturas.vencer_pendientes";
+                /**
+                 * Format: date-time
+                 * @description null = aún no corrió para la empresa
+                 */
+                corrida_en: string | null;
+                actor_tipo: string | null;
+                canal: string | null;
+                /** Format: date */
+                hasta: string | null;
+                /** @description Documentos de la empresa que la corrida no contabilizó por un bloqueo del libro */
+                bloqueados: number;
+                /** @description Solo los de la empresa */
+                bloqueos: {
+                    empresa_id: number;
+                    /** @enum {string} */
+                    tipo: "global" | "ventas" | "compras" | "impuestos" | "duro";
+                    /**
+                     * Format: date
+                     * @description Bloqueo vigente de ese tipo
+                     */
+                    hasta: string | null;
+                    /**
+                     * Format: date
+                     * @description Fecha contable que quedó bajo el bloqueo
+                     */
+                    fecha: string;
+                    /** @description Servicios o facturas que no se contabilizaron */
+                    documentos: number;
+                    /** @description Los primeros 20 ids */
+                    ejemplos: number[];
+                }[];
+                /** @description Resultado completo de la corrida (generadas, vencidas, moras, errores…) */
+                resultado: {
+                    [key: string]: unknown;
+                } | null;
             }[];
         };
         CredencialAdicional: {
@@ -13147,6 +13319,15 @@ export interface components {
         VariableDocumento: {
             nombre: string;
             descripcion: string;
+        };
+        VerificacionCierre: {
+            empresa_id: number;
+            /** @enum {string} */
+            tipo: "mensual" | "impuestos" | "anual";
+            periodo: string;
+            checks: components["schemas"]["CheckCierre"][];
+            /** @description Claves en anomalía sin supervisar */
+            anomalias: string[];
         };
         VerificacionSorteo: {
             sorteo_id: number;
@@ -22446,6 +22627,56 @@ export interface operations {
             };
         };
     };
+    facturasCorridas: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Corridas por empresa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorridasFacturacion"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     facturasCorte: {
         parameters: {
             query?: never;
@@ -29489,6 +29720,229 @@ export interface operations {
             };
             /** @description Sin el permiso libro.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroChecksCierre: {
+        parameters: {
+            query?: {
+                /** @description Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id) */
+                empresa_id?: number | null;
+                /** @description Todas las filas, la más reciente primero */
+                historial?: boolean;
+            };
+            header?: never;
+            path: {
+                tipo: string;
+                periodo: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Checks del cierre */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChecksCierre"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroVerificarCierre: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                tipo: string;
+                periodo: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Checks verificados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificacionCierre"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    libroRevisarCheck: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description supervisado deja pasar el cierre con esa anomalía; anomalia retira la supervisión
+                     * @enum {string}
+                     */
+                    estado: "supervisado" | "anomalia";
+                    nota: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Check revisado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckCierre"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
