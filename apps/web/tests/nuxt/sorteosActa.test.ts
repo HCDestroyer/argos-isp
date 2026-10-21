@@ -156,7 +156,7 @@ describe('sorteos · evidencias, acta, notificación, no reclamado y exportació
         }
         expect(r.data.filas.map(f => f.orden)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
         expect(r.data.filas.map(f => f.codigo_publico)).toEqual([...r.data.filas.map(f => f.codigo_publico)].sort())
-        expect(String(r.data.totales.codigo_publico)).toBe(`lista_hash ${s.lista_hash}`)
+        expect(r.data.totales.codigo_publico).toBe(`lista_hash ${s.lista_hash}`)
         const csv = await useSorteos().descargarParticipantes(SORTEO_EJECUTADO_ID, 'csv')
         const texto = csv.ok ? await csv.data.text() : ''
         expect(texto.split('\n')[0]).toContain('Orden,Código público,Boletos')

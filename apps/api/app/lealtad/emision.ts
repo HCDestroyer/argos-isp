@@ -89,12 +89,17 @@ export async function descuentosParaFactura(
     return salida
 }
 
-/** Marca como `aplicados` a la factura los canjes cuyo descuento llevó (y emite `lealtad.canje_aplicado`). */
+/**
+ * Marca como `aplicados` a la factura (o a la bonificación, si los descuentos dejaron el periodo en cero:
+ * decisión del PM, 19 oct) los canjes cuyo descuento llevó y emite `lealtad.canje_aplicado`.
+ */
 export async function aplicarCanjesEmitidos(
     t: Transaccion,
-    facturaId: number,
+    documento: { factura_id: number } | { bonificacion_id: number },
     canjes: DescuentosEmision['canjes'],
 ): Promise<void> {
+    const facturaId = 'factura_id' in documento ? documento.factura_id : null
+    const bonificacionId = 'bonificacion_id' in documento ? documento.bonificacion_id : null
     for (const c of canjes) {
         const antes = await verCanje(c.id, t.trx)
         await t.trx
@@ -104,6 +109,7 @@ export async function aplicarCanjesEmitidos(
                 estado: 'aplicado',
                 descuento: c.monto,
                 factura_id: facturaId,
+                bonificacion_id: bonificacionId,
                 aplicado_en: t.trx.knexRawQuery('now()'),
                 version: t.trx.knexRawQuery('version + 1'),
                 updated_at: t.trx.knexRawQuery('now()'),
@@ -123,6 +129,7 @@ export async function aplicarCanjesEmitidos(
             tipo: despues.tipo,
             puntos: despues.puntos,
             factura_id: facturaId,
+            bonificacion_id: bonificacionId,
         })
     }
 }

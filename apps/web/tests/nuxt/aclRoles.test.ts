@@ -22,7 +22,7 @@ const LECTURA: Me = { ...meAdmin, id: 90, nombre: 'Solo lectura', roles: ['lectu
 const SIN_PERMISOS: Me = { ...meAdmin, id: 91, nombre: 'Sin permisos', roles: [], permisos: [] }
 
 /** Botones que cambian algo: ninguno debe verse con `lectura`. */
-const ACCION = /^(Nuevo|Nueva|Editar|Anular|Suspender|Reactivar|Limitar|Quitar límite|Retirar|Desconectar|Aprobar|Rechazar|Registrar|Abrir turno|Cerrar turno|Cobrar|Agregar|Asignar|Cambiar a|Guardar|Crear|Generar|Cerrar|Reabrir|Promesa de pago|Mostrar|Logo|Desactivar|Enviar prueba|Reemplazar|Escribir|Borrar|Cambiar empresa|Depositar|Trasladar|Importar|Conciliar|Aplicar reglas|Provisionar|Castigar|Deshacer|Activar|Ajustar|Ejecutar|Entregar|Marcar|Publicar|Abrir participación|Cancelar sorteo)/
+const ACCION = /^(Nuevo|Nueva|Editar|Anular|Suspender|Reactivar|Limitar|Quitar límite|Retirar|Desconectar|Aprobar|Rechazar|Registrar|Abrir turno|Cerrar turno|Cobrar|Agregar|Asignar|Cambiar a|Guardar|Crear|Generar|Cerrar|Reabrir|Promesa de pago|Mostrar|Logo|Desactivar|Enviar prueba|Reemplazar|Escribir|Borrar|Cambiar empresa|Depositar|Trasladar|Importar|Conciliar|Aplicar reglas|Provisionar|Castigar|Deshacer|Activar|Ajustar|Ejecutar|Entregar|Marcar|Publicar|Abrir participación|Cancelar sorteo|Archivar|Cambiar imagen)/
 
 /** Botones y enlaces de la página montada y de lo que teletransporta a `body` (modales, menús). */
 function botones(raiz?: Element): string[] {
@@ -143,6 +143,9 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/lealtad/sorteos/5', espera: 'Verificación pública' },
         { ruta: '/clientes/2?tab=puntos', espera: 'Compensación por falla' },
         { ruta: '/reportes/lealtad', espera: 'Cuadra con el libro' },
+        // Anuncios del portal (A5).
+        { ruta: '/anuncios', espera: 'Duplica tu velocidad en noviembre' },
+        { ruta: '/anuncios/2', espera: 'Tus puntos valen más este mes' },
         // Servicios adicionales y tipo de plan (A1).
         { ruta: '/adicionales', espera: 'Cuenta de streaming' },
         { ruta: '/adicionales/motivos', espera: 'Compensación por falla' },
@@ -164,7 +167,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
 
     // Control: con admin las mismas pantallas sí muestran sus acciones (la prueba de arriba no pasa en vacío).
     // /routers no tiene acciones en la lista (Velocidad abre el panel, cuyas acciones van aparte).
-    for (const ruta of ['/lealtad/sorteos', '/lealtad/sorteos/1', '/lealtad/sorteos/4', '/lealtad/sorteos/5', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1']) {
+    for (const ruta of ['/lealtad/sorteos', '/lealtad/sorteos/1', '/lealtad/sorteos/4', '/lealtad/sorteos/5', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1', '/anuncios', '/anuncios/2']) {
         it(`${ruta}: con admin sí hay botones de acción`, async () => {
             const wrapper = await montar(ruta)
             await esperar(() => expect(botones(wrapper.element).filter(texto => ACCION.test(texto)).length, ruta).toBeGreaterThan(0))

@@ -46,6 +46,9 @@ const PANTALLAS = [
     ['sorteos', '/lealtad/sorteos'],
     ['sorteo ejecutado', '/lealtad/sorteos/5'],
     ['sorteo con corte cerrado', '/lealtad/sorteos/4'],
+    // Anuncios del portal.
+    ['anuncios', '/anuncios'],
+    ['ficha de anuncio', '/anuncios/1'],
     // Servicios adicionales y tipo de plan.
     ['adicionales', '/adicionales'],
     ['motivos de cortesía', '/adicionales/motivos'],

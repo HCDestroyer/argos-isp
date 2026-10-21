@@ -138,6 +138,8 @@
       "lealtad.ver",
       "lealtad.configurar",
       "lealtad.ajustar",
+      "anuncios.ver",
+      "anuncios.administrar",
       "sorteos.ver",
       "sorteos.gestionar",
       "sorteos.publicar",
@@ -183,7 +185,11 @@
       "lealtad.canjear",
       "lealtad.revertir_canje",
       "lealtad.entregar",
-      "nodos_portal.administrar"
+      "nodos_portal.administrar",
+      "facturas.emitir_cargo_unico",
+      "facturas.cargo_sin_costo",
+      "facturas.configurar_motivos",
+      "facturas.configurar_conceptos"
     ],
     "alcance_global": true,
     "empresas": [

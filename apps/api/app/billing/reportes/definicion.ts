@@ -89,7 +89,12 @@ const ColumnaReporte = definirEsquema(
 )
 
 /** Schema OpenAPI del reporte con sus filas tipadas. */
-export function esquemaReporte(nombre: string, propias: readonly Columna[]): EsquemaJson {
+export function esquemaReporte(
+    nombre: string,
+    propias: readonly Columna[],
+    /** totales que no son una suma (los de `extra` en `armarReporte`), con su propio tipo */
+    totalesPropios: Record<string, EsquemaJson> = {},
+): EsquemaJson {
     const columnas: readonly Columna[] = [...COLUMNAS_EMPRESA, ...propias]
     const propiedades = Object.fromEntries(
         columnas.map((c) => {
@@ -98,7 +103,10 @@ export function esquemaReporte(nombre: string, propias: readonly Columna[]): Esq
         }),
     )
     const totales = Object.fromEntries(
-        columnas.map((c) => [c.clave, c.tipo === 'dinero' ? nulable(Dinero) : { type: ['number', 'null'] }]),
+        columnas.map((c) => [
+            c.clave,
+            totalesPropios[c.clave] ?? (c.tipo === 'dinero' ? nulable(Dinero) : { type: ['number', 'null'] }),
+        ]),
     )
     const opcionales = columnas.filter((c) => c.agregada).map((c) => c.clave)
     return definirEsquema(

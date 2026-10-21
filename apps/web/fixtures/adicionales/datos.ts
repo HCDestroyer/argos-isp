@@ -5,6 +5,7 @@ type Adicional = Schema<'Adicional'>
 type MotivoCortesia = Schema<'MotivoCortesia'>
 type AdicionalServicio = Schema<'AdicionalServicio'>
 type Servicio = Schema<'Servicio'>
+type BloqueoAdicional = Schema<'BloqueoAdicional'>
 
 /** Fila de `network.planes_adicionales`: la vista `AdicionalPlan` se arma en las rutas. */
 export interface PlanAdicionalFixture {
@@ -63,6 +64,11 @@ export function asignacion(id: number, servicio: Pick<Servicio, 'id' | 'empresa_
         alta_en: momento,
         baja_en: null,
         motivo_baja: null,
+        // A1 (adicionales con el servicio suspendido): bloqueo por estado y primer periodo del cobrado.
+        bloqueo: 'vigente',
+        bloqueado_en: null,
+        primer_periodo: datos.modalidad === 'cobrado' ? 'prorrateado' : null,
+        cobrado_desde: datos.modalidad === 'cobrado' ? momento : null,
         version: 1,
         created_at: momento,
         updated_at: momento,
@@ -85,9 +91,10 @@ const servicioUno = servicios.find(s => s.id === 1)
  * cobrado con credencial, IPTV de cortesía (compensación por falla) y un antivirus dado de baja.
  * Los servicios del plan Pyme de ArgosNet traen sus incluidos, como al darlos de alta.
  */
-function semilla(): { asignaciones: AdicionalServicio[], credenciales: Record<number, string> } {
+function semilla(): { asignaciones: AdicionalServicio[], credenciales: Record<number, string>, bloqueos: BloqueoAdicional[] } {
     const lista: AdicionalServicio[] = []
     const credenciales: Record<number, string> = {}
+    const bloqueos: BloqueoAdicional[] = []
     if (servicioUno) {
         lista.push(
             asignacion(1, servicioUno, porId(1), { identificador: 'cliente1@stream.test', tiene_credencial: true }),
@@ -109,10 +116,32 @@ function semilla(): { asignaciones: AdicionalServicio[], credenciales: Record<nu
             }
         }
     }
-    return { asignaciones: lista, credenciales }
+    // El servicio 2 (suspendido por deuda) tiene un IPTV cobrado que entró «sin costo este mes».
+    const servicioDos = servicios.find(s => s.id === 2)
+    if (servicioDos) {
+        lista.push(asignacion(lista.length + 1, servicioDos, porId(2), { modalidad: 'cobrado', precio: '35.00', identificador: 'iptv-0101', primer_periodo: 'sin_costo' }, '2026-08-15T16:00:00.000Z'))
+    }
+    // Como `aplicarBloqueoPorEstado` de A1: con el servicio suspendido, sus adicionales activos
+    // están bloqueados desde la suspensión, con su fila en el historial.
+    for (const fila of lista) {
+        const servicio = servicios.find(s => s.id === fila.servicio_id)
+        if (servicio?.estado === 'suspendido' && fila.estado === 'activo') {
+            const desde = servicio.updated_at
+            Object.assign(fila, { bloqueo: 'bloqueado', bloqueado_en: desde })
+            bloqueos.push({ id: bloqueos.length + 1, asignacion_id: fila.id, accion: 'bloqueado', estado_servicio: 'suspendido', motivo: 'Corte por facturas vencidas', created_at: desde })
+        }
+    }
+    // El IPTV cobrado del servicio 1 estuvo bloqueado dos días de septiembre.
+    bloqueos.push(
+        { id: bloqueos.length + 1, asignacion_id: 2, accion: 'bloqueado', estado_servicio: 'suspendido', motivo: 'Corte por 1 factura vencida', created_at: '2026-09-10T12:05:00.000Z' },
+        { id: bloqueos.length + 2, asignacion_id: 2, accion: 'desbloqueado', estado_servicio: 'activo', motivo: 'Pago registrado', created_at: '2026-09-12T15:40:00.000Z' },
+    )
+    return { asignaciones: lista, credenciales, bloqueos }
 }
 
 const inicial = semilla()
 export const adicionalesServicio: AdicionalServicio[] = inicial.asignaciones
 /** Credenciales en claro de los fixtures (en la API, cifradas): solo las lee `GET …/credencial`. */
 export const credencialesAdicionales: Record<number, string> = inicial.credenciales
+/** `core.servicios_adicionales_bloqueos` (solo inserción): bloqueos y desbloqueos por estado. */
+export const bloqueosAdicionales: BloqueoAdicional[] = inicial.bloqueos

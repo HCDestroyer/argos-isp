@@ -66,6 +66,25 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 - Estado según lo pagado (`estadoSegunPago`): `pagada` si `pagado = total`; si ya pasó por `vencerFacturas` (`vencida_en`), `vencida`; si no, `parcial` o `emitida`.
 - FEL (`emision.ts`, contrato de localización fiscal §8.3; detalle en `app/fiscal/README.md`): con FEL desactivada todo queda como arriba. Con `certificar_al = pagar` (por defecto en plantillas nuevas) y FEL obligatoria u opcional, la factura es un **aviso de cobro** (`aviso_cobro`): su IVA va a `2.1.11 IVA por certificar` y, al certificarse, se reclasifica a `2.1.02` (`fel_facturas.ts`). Con FEL obligatoria y `emitir`, nace `por_certificar`: sin asiento, sin `factura.emitida` y sin contar para el corte, hasta que `facturas.confirmar_emision` la emite con la fecha de certificación.
 
+### Adicionales cobrados
+
+`facturas.emitir` agrega las líneas de las asignaciones `cobrado` de `core.servicios_adicionales` (fuente: `cobrado_desde`, `primer_periodo`, `bloqueo` de A1; decisiones del PM 2 y 3, 19 oct): concepto = nombre del adicional (con su identificador), precio con IVA incluido desglosado (`lineaConIva`), tipo `otro` (`4.1.03`), `servicio_adicional_id` y `adicional_periodo` (el periodo que cobra la línea).
+
+- **Periodo de la factura, completo** (× el mismo factor de prorrateo que el plan): si se cobra desde el primer día del periodo o antes, no tenía baja al empezar el periodo y no estaba **bloqueada** al empezar el periodo (servicio suspendido: último registro de `core.servicios_adicionales_bloqueos` antes de la medianoche de Guatemala del primer día). El plan del servicio suspendido se factura igual.
+- **Primer periodo** (el que contiene `cobrado_desde`): `prorrateado` → `precio × días desde cobrado_desde hasta el fin del periodo / días del ciclo`, una sola vez (ninguna factura viva tiene ya la línea de esa asignación y ese periodo), en la factura de ese periodo si aún no se emitía o en la siguiente; si empezó el primer día de un periodo ya facturado, la siguiente lo cobra completo. `sin_costo` → ese periodo no se cobra.
+- `incluido` y `cortesia` no generan línea. Índice único (`factura_id`, `servicio_adicional_id`, `adicional_periodo`).
+
+### Bonificaciones (nunca una factura de Q0)
+
+Decisión del PM (19 oct): **una factura de valor 0 nunca se genera**, tampoco el mes gratis ni un cargo único sin costo. Lo que antes era una factura de Q0 es una **bonificación** (`billing.bonificaciones`, `#billing/bonificaciones`, solo inserción):
+
+- Servicio o cliente, periodo, concepto, `bruto` (con IVA), `base` (sin IVA), las líneas (copia), motivo del catálogo de su empresa (`billing.motivos_sin_costo`, obligatorio: los canjes usan «Canje de lealtad», un descuento del 100 % sin motivo «Promoción») y `origen`: `mes_gratis`, `descuento_100`, `cargo_sin_costo`, `canje`.
+- Su único asiento es el interno `5.1.01 Descuentos / ingreso de cada línea` por la base, origen `bonificacion` (diario `VAR`; no se revierte directo): sin CxC, sin IVA, sin DTE, sin folio ni documento para el cliente.
+- `clave_unica` comparte espacio con las facturas (trigger en las dos tablas): con `servicio_id-periodo` el periodo queda ocupado y el cron no lo vuelve a facturar (`generarFacturas` cuenta `bonificadas`/`bonificaciones`). `facturas_total_positivo` impide una factura nueva en cero (salvo la importación histórica «sin cargo»).
+- `facturas.emitir`: si los descuentos (canje de mes gratis o de descuento, `descuentos` del 100 %) dejan el periodo en cero, responde `{ factura_id: null, bonificacion_id, motivo: 'bonificacion' }` y los canjes quedan `aplicados` con `bonificacion_id` (no se revierten: 409 `canje_no_revertible`).
+- `facturas.emitir_cargo_unico` en Q0: bonificación `cargo_sin_costo`; `POST /facturas/cargo-unico` responde `{ documento: 'factura' | 'bonificacion', factura, bonificacion }`.
+- Evento `bonificacion.registrada`. Lectura: `GET /bonificaciones` (filtros `cliente_id`, `servicio_id`, `origen`, `desde`, `hasta`) y `GET /bonificaciones/:id` (`facturas.ver`). Reporte `GET /reportes/bonificaciones` (reemplaza `/reportes/facturas-sin-costo`).
+
 ## Anular factura
 
 `actions/anular_factura.ts` (`facturas.anular`, `POST /facturas/:id/anular` con `motivo`): si recibió saldo a favor de notas de crédito (lealtad §15.2), primero lo devuelve a Anticipos (fila de reverso en `notas_credito_aplicaciones`, monto negativo con `reversa_de`, y asiento `CxC / Anticipos`) y al final lo aplica a la otra deuda del cliente; 409 `factura_con_pagos` si ella o sus moras tienen pagos aplicados (anular el pago primero) y `factura_anulada` si ya lo estaba. Pasa a `anulada` (`anulada_en`, `anulada_por`, `motivo_anulacion`) junto con sus recargos de mora pendientes, revierte cada asiento (`factura`/`mora`) con `RevertirAsiento`, emite `factura.anulada` por cada una y re-evalúa el servicio (sube de inmediato). La `clave_unica` queda ocupada: el periodo no se vuelve a emitir (para corregirla, `facturas.sustituir`). Con DTE certificado la anulación es en dos pasos (dentro de `dte_anulacion_plazo`; exige además `fel.anular`) y revierte también la reclasificación del IVA; fuera de plazo 422 `anulacion_fuera_de_plazo`. Una factura con notas de crédito no se anula (409 `factura_con_notas_credito`): se acredita el resto con otra nota.
@@ -87,6 +106,19 @@ No exceptuables: `nombre`, `ciclo`. `validarExcepcion(campo, valor)` valida (422
 ## Sustituir factura
 
 `actions/sustituir_factura.ts` (`facturas.sustituir`, `POST /facturas/:id/sustituir { motivo, cliente_fiscal? }`, contrato §10.9): para un dato mal emitido cuando el periodo ya está ocupado. Sin pagos (409 `sustitucion_no_permitida`). Sin DTE certificado anula la original; con DTE, la acredita con una NCRE por todo su saldo. Emite la nueva con las mismas líneas, periodo y vencimiento, `clave_unica = <clave>#s<n>` y el receptor corregido en su `reglas_snapshot`. `billing.sustituciones` (solo inserción) traza la relación; evento `factura.sustituida`.
+
+## Cargo único manual (`actions/emitir_cargo_unico.ts`, `cargos_unicos.ts`)
+
+`facturas.emitir_cargo_unico` (`POST /facturas/cargo-unico` + `Idempotency-Key`, 201 `FacturaDetalle`): factura de un cargo que no es de un periodo (instalación, equipo, visita técnica…).
+
+- `clave_unica = cargo-<uuid>` (nunca ocupa `servicio_id-periodo` ni `importada-`); `periodo` = primer día del mes de emisión; `cargo_unico: true` en la respuesta.
+- Cada línea sale de un **concepto de cargo** (`billing.conceptos_cargo`, por empresa): cuenta de ingreso (`cuenta_codigo`, guardada en `facturas_lineas.cuenta_codigo`), IVA (`gravable`) y bien/servicio (`tipo` `producto`/`otro`). Precio bruto con IVA (> 0) × `cantidad`; `descuentos[]` por línea como líneas `descuento` (IVA del neto, `5.1.01`). La cuenta no se adivina: sin una más fina, `4.1.03 Otros ingresos` (sembrado).
+- Con `servicio_id`: del servicio (empresa, cliente, días de gracia, `certificar_al`), y vencida cuenta para el corte. Sin él: del `cliente_id` en la empresa indicada o la activa, vence hoy salvo `vence_en`. Sin mora.
+- Total > 0: asiento `CxC + 5.1.01 / ingreso de cada concepto + IVA`, `factura.emitida`, anticipos, y certificación según el modo FEL. Concepto exento con FEL activa → 422 `concepto_exento_con_fel`.
+- **Total Q0**: `motivo_sin_costo_id` (catálogo activo de la empresa) + `motivo_sin_costo_texto` obligatorios; la ruta exige además `facturas.cargo_sin_costo` (403). No hay factura: es una **bonificación** `cargo_sin_costo` (ver «Bonificaciones»), con su asiento `5.1.01 / ingreso` por la base, sin CxC ni DTE. Un motivo con total > 0 → 422.
+- Catálogos: `GET/POST/PUT /conceptos-cargo[/:id]` (`facturas.configurar_conceptos`; la cuenta debe ser de ingreso, imputable y global o de la empresa) y `GET/POST/PUT /motivos-sin-costo[/:id]` (`facturas.configurar_motivos`). Lectura con `facturas.ver`. `version` (409), nombre único por empresa, `audit.cambios`, se desactivan (`activo`), nunca se borran. Un trigger los siembra con cada empresa nueva.
+- Notas de crédito: por línea y por monto debitan la cuenta de la línea (`cuentaIngresoDeLinea`) y el neto de sus descuentos.
+- Reporte `GET /reportes/bonificaciones` (`reportes.ver`): bonificaciones por mes, motivo y origen, con `valor_bruto` y `base`.
 
 ## Importación (para A6, sin endpoint)
 
@@ -295,8 +327,14 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=343 node ace tes
 | GET      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.ver`           |
 | PUT      | `/api/v1/plantillas-facturacion/:id`              | `plantillas.editar`        |
 | GET      | `/api/v1/facturas`, `/api/v1/facturas/:id`        | `facturas.ver`             |
+| GET      | `/api/v1/bonificaciones`, `/api/v1/bonificaciones/:id` | `facturas.ver`        |
 | POST     | `/api/v1/facturas/generar`, `/vencer`, `/corte`   | `facturas.generar`         |
 | POST     | `/api/v1/facturas/:id/anular`                     | `facturas.anular`          |
+| POST     | `/api/v1/facturas/cargo-unico`                    | `facturas.emitir_cargo_unico` (Q0: + `facturas.cargo_sin_costo`) |
+| GET      | `/api/v1/conceptos-cargo`, `/api/v1/motivos-sin-costo` (y `/:id`) | `facturas.ver` |
+| POST/PUT | `/api/v1/conceptos-cargo[/:id]`                   | `facturas.configurar_conceptos` |
+| POST/PUT | `/api/v1/motivos-sin-costo[/:id]`                 | `facturas.configurar_motivos` |
+| GET      | `/api/v1/reportes/facturas-sin-costo`             | `reportes.ver`             |
 | GET      | `/api/v1/pagos`, `/api/v1/pagos/:id`              | `pagos.ver`                |
 | GET      | `/api/v1/cobros/:id`                              | `pagos.ver`                |
 | POST     | `/api/v1/pagos`                                   | `pagos.registrar`          |

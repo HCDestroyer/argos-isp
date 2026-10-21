@@ -13,8 +13,10 @@ import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, line
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
 import { premiosLealtad, sorteos, sorteosPrivados, type SorteoPrivado } from './sorteos/datos'
 import { compras } from './compras/datos'
+import type { ImagenAnuncioFixture } from './anuncios/datos'
+import { anuncios, imagenesAnuncios, metricasAnuncios } from './anuncios/datos'
 import type { PlanAdicionalFixture } from './adicionales/datos'
-import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
+import { adicionales, adicionalesServicio, bloqueosAdicionales, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
 import { cierres, egresos } from './egresos/datos'
 import { acciones } from './bitacora/datos'
 import { clientes } from './clientes/datos'
@@ -162,6 +164,10 @@ interface BaseFixtures {
     diferenciasCerradas: DiferenciaCobroFixture[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
     programasLealtad: Schema<'ProgramaLealtad'>[]
+    /* Anuncios del portal (A5, `contratos/anuncios.md`). */
+    anuncios: Schema<'Anuncio'>[]
+    imagenesAnuncios: Record<number, ImagenAnuncioFixture>
+    metricasAnuncios: Record<number, Schema<'MetricasAnuncio'>>
     /* Servicios adicionales (A1, `contratos/adicionales.md`). */
     adicionales: Schema<'Adicional'>[]
     motivosCortesia: Schema<'MotivoCortesia'>[]
@@ -169,6 +175,8 @@ interface BaseFixtures {
     /** Credencial en claro por asignación (la API la guarda cifrada y nunca la lista). */
     credencialesAdicionales: Record<number, string>
     planesAdicionales: PlanAdicionalFixture[]
+    /** Bloqueos y desbloqueos de los adicionales por el estado del servicio (A1). */
+    bloqueosAdicionales: Schema<'BloqueoAdicional'>[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
     movimientosPuntos: Schema<'MovimientoPuntos'>[]
     lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
@@ -255,11 +263,15 @@ function inicial(): BaseFixtures {
         fel: felInicial(),
         horus: horusInicial(),
         programasLealtad,
+        anuncios,
+        imagenesAnuncios,
+        metricasAnuncios,
         adicionales,
         motivosCortesia,
         adicionalesServicio,
         credencialesAdicionales,
         planesAdicionales,
+        bloqueosAdicionales,
         reglasLealtad,
         movimientosPuntos,
         lotesPuntos,

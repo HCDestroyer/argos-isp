@@ -1081,9 +1081,8 @@ export const rutasSorteos: RutasFixture = {
         if (formato === 'xlsx') {
             return { status: 200, cuerpo: new Uint8Array([0x50, 0x4B, 0x03, 0x04]), contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
         }
-        // Como la API: el pie lleva `lista_hash …` en la columna del código. El OpenAPI tipa los totales
-        // como número (pedido a A3 en `a4.md`), así que el reporte se arma con su forma real.
-        const reporte: Omit<Schema<'ReporteParticipantesSorteo'>, 'totales'> & { totales: Record<string, string | number | null> } = {
+        // Como la API: el pie lleva `lista_hash …` en la columna del código (`totales.codigo_publico`).
+        const reporte: Schema<'ReporteParticipantesSorteo'> = {
             reporte: `participantes-sorteo-${s.id}`,
             titulo: `Participantes del sorteo ${s.nombre}`,
             filtros: { sorteo_id: s.id },

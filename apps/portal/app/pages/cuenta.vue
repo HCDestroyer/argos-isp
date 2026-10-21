@@ -330,6 +330,7 @@ watch(() => route.hash, async (hash) => {
                         @accion="alAcceso(grupo, $event)"
                         @pedir-promesa="pedirPromesa"
                     />
+                    <PromoPromociones lugar="portal_inicio" />
                 </div>
 
                 <div

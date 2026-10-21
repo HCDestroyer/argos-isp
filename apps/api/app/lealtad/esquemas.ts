@@ -279,29 +279,40 @@ export const PaginaPremiosLealtad = definirEsquema('PaginaPremiosLealtad', pagin
 
 export const CanjeLealtad = definirEsquema(
     'CanjeLealtad',
-    objeto({
-        id,
-        empresa_id: id,
-        programa_id: id,
-        cliente_id: id,
-        servicio_id: id,
-        premio_id: id,
-        premio_nombre: texto,
-        tipo: enumerado(TIPOS_PREMIO),
-        puntos: entero,
-        estado: enumerado(ESTADOS_CANJE),
-        descuento: { ...nulable(Dinero), description: 'Q descontados; null en un descuento aún reservado' },
-        factura_id: nulable(id),
-        nota_credito_id: nulable(id),
-        plan_temporal_id: nulable(id),
-        movimiento_id: nulable(id),
-        canal: enumerado(CANALES_CANJE),
-        aplicado_en: nulable(instante),
-        revertido_en: nulable(instante),
-        motivo: nulable(texto),
-        creado_por: nulable(id),
-        ...auditable,
-    }),
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            programa_id: id,
+            cliente_id: id,
+            servicio_id: id,
+            premio_id: id,
+            premio_nombre: texto,
+            tipo: enumerado(TIPOS_PREMIO),
+            puntos: entero,
+            estado: enumerado(ESTADOS_CANJE),
+            descuento: {
+                ...nulable(Dinero),
+                description: 'Q descontados; null en un descuento aún reservado',
+            },
+            factura_id: nulable(id),
+            bonificacion_id: {
+                ...nulable(id),
+                description:
+                    'Bonificación a la que se aplicó si el descuento dejó el periodo en cero (nunca una factura de Q0)',
+            },
+            nota_credito_id: nulable(id),
+            plan_temporal_id: nulable(id),
+            movimiento_id: nulable(id),
+            canal: enumerado(CANALES_CANJE),
+            aplicado_en: nulable(instante),
+            revertido_en: nulable(instante),
+            motivo: nulable(texto),
+            creado_por: nulable(id),
+            ...auditable,
+        },
+        ['bonificacion_id'],
+    ),
 )
 
 export const PaginaCanjesLealtad = definirEsquema('PaginaCanjesLealtad', pagina(CanjeLealtad))
@@ -502,7 +513,17 @@ const ElegidoPublico = objeto({
     premio_posicion: nulable(entero),
 })
 
-export const ReporteParticipantesSorteo = esquemaReporte('ReporteParticipantesSorteo', COLUMNAS_PARTICIPANTES)
+export const ReporteParticipantesSorteo = esquemaReporte(
+    'ReporteParticipantesSorteo',
+    COLUMNAS_PARTICIPANTES,
+    {
+        // al pie, en la columna del código: «lista_hash <sha256>» (pedido de A4)
+        codigo_publico: {
+            ...nulable(texto),
+            description: 'Al pie: «lista_hash <SHA-256>» de la lista del corte',
+        },
+    },
+)
 
 export const VerificacionSorteo = definirEsquema(
     'VerificacionSorteo',
