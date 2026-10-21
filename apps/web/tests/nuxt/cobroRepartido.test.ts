@@ -6,6 +6,7 @@ import { bd } from '~~/fixtures/bd'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import PaginaCobro from '~/pages/cobro/index.vue'
 import { esperar } from '../ayudas/esperar'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
 /**
  * Cobro repartido (A3, `contratos/multiempresa.md`): un cobro en efectivo con avisos de ArgosNet
@@ -15,6 +16,8 @@ import { esperar } from '../ayudas/esperar'
  */
 describe('cobro repartido por empresa', () => {
     beforeEach(async () => {
+        // El cobro marca por defecto lo vencido a la fecha: tiene que ser la de los fixtures.
+        fijarHoyFixtures()
         reiniciarFixtures()
         sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
@@ -22,6 +25,7 @@ describe('cobro repartido por empresa', () => {
     })
 
     afterEach(() => {
+        soltarReloj()
         sesionFixture(null)
         useUsuarioActual().value = null
         localStorage.clear()
