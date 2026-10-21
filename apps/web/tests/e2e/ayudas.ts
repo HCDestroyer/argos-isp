@@ -1,9 +1,20 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { HOY_FIXTURES } from '../../fixtures/facturacion/datos'
 
 /**
  * Piezas comunes de las pruebas de flujo. En modo fixtures los datos viven en memoria: después
  * de entrar se navega por la SPA (menú, enlaces), nunca con `page.goto`, que los reiniciaría.
  */
+
+/**
+ * Fija la fecha del navegador en el "hoy" de los fixtures (`HOY_FIXTURES`, mediodía en Guatemala),
+ * como `fijarHoyFixtures()` de Vitest: las pantallas comparan contra el reloj real y, sin esto, una
+ * factura de los fixtures pasa a vencida cuando el calendario la alcanza. Solo fija `Date`; los
+ * temporizadores siguen corriendo. Va antes de `entrar`.
+ */
+export async function fijarHoyFixtures(page: Page): Promise<void> {
+    await page.clock.setFixedTime(new Date(`${HOY_FIXTURES}T18:00:00.000Z`))
+}
 
 export async function entrar(page: Page, email: string): Promise<void> {
     await page.goto('/login')

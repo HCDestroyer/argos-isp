@@ -605,6 +605,75 @@ export interface CatalogoEventos {
     'lealtad.canje_reservado': PayloadCanjeLealtad
     'lealtad.canje_aplicado': PayloadCanjeLealtad
     'lealtad.canje_revertido': PayloadCanjeLealtad
+    // sorteos (lealtad fase 3, `contratos/lealtad.md` §7 y §13)
+    /** bases congeladas y compromiso de la semilla publicados */
+    'sorteo.bases_publicadas': {
+        sorteo_id: number
+        empresa_id: number
+        bases_hash: string
+        compromiso: string
+        /** ISO 8601 */
+        fecha_sorteo: string
+    }
+    /** foto del corte: participantes, boletos y `lista_hash` */
+    'sorteo.corte_cerrado': {
+        sorteo_id: number
+        empresa_id: number
+        participantes: number
+        boletos: number
+        lista_hash: string
+    }
+    /** resultado calculado con `argos-sorteo-v1`; A6 avisa a los titulares */
+    'sorteo.ejecutado': {
+        sorteo_id: number
+        empresa_id: number
+        ganadores: Array<{ cliente_id: number; tipo: 'titular' | 'suplente'; posicion: number }>
+    }
+    'sorteo.premio_entregado': {
+        sorteo_id: number
+        empresa_id: number
+        cliente_id: number
+        posicion: number
+    }
+    'sorteo.cancelado': { sorteo_id: number; empresa_id: number; motivo: string }
+    /** §7.4: se avisó a un ganador (titular o suplente que tomó un premio); notify avisa al cliente */
+    'sorteo.ganador_notificado': {
+        sorteo_id: number
+        empresa_id: number
+        ganador_id: number
+        cliente_id: number
+        posicion: number
+        tipo: 'titular' | 'suplente'
+        /** código público (seudónimo) del participante */
+        codigo: string
+        premio: { posicion: number; nombre: string; valor: Dinero; tipo: string }
+        /** ISO 8601: fin del plazo para reclamar */
+        reclamar_antes: string
+        /** el ganador cuyo premio no reclamado toma (suplente), o null */
+        sustituye_a: number | null
+    }
+    /** §7.4: venció el plazo de reclamo; el premio pasó al siguiente suplente (o quedó sin reclamar) */
+    'sorteo.premio_no_reclamado': {
+        sorteo_id: number
+        empresa_id: number
+        ganador_id: number
+        cliente_id: number
+        posicion: number
+        premio_posicion: number
+        /** el suplente que lo toma, o null si no quedan */
+        suplente_id: number | null
+        motivo: string
+    }
+    /** §7.3 punto 6: se cerró el acta (PDF con su SHA-256) */
+    'sorteo.acta_cerrada': { sorteo_id: number; empresa_id: number; acta_hash: string }
+    /** H22: se deshizo la entrega de un premio (egreso, asiento o canje, e ISR) con `sorteos.anular_entrega` */
+    'sorteo.entrega_anulada': {
+        sorteo_id: number
+        empresa_id: number
+        cliente_id: number
+        posicion: number
+        motivo: string
+    }
     'lealtad.referido_calificado': {
         /** `lealtad.referidos.id` */
         referido_id: number
@@ -761,6 +830,15 @@ export const EVENTOS = [
     'lealtad.canje_reservado',
     'lealtad.canje_aplicado',
     'lealtad.canje_revertido',
+    'sorteo.bases_publicadas',
+    'sorteo.corte_cerrado',
+    'sorteo.ejecutado',
+    'sorteo.premio_entregado',
+    'sorteo.cancelado',
+    'sorteo.entrega_anulada',
+    'sorteo.ganador_notificado',
+    'sorteo.premio_no_reclamado',
+    'sorteo.acta_cerrada',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',

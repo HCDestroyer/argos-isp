@@ -999,7 +999,7 @@ async function verificarLibroCon(
                                       'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
                                       'provision', 'castigo', 'compra', 'pago_proveedor', 'depreciacion',
                                       'baja_activo', 'diferido', 'alta_activo', 'lealtad', 'diferencia_cobro',
-                                      'bonificacion')`,
+                                      'sorteo', 'bonificacion')`,
     )
 
     /*
@@ -2216,11 +2216,16 @@ async function verificarLibroCon(
             AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo = 'egreso' AND a.origen_id = e.id)`,
     )
     await revisar(
-        '15.retenciones_por_pagar_distintas (2.1.04 = Σ retención de IVA, 2.1.05 = Σ retención de ISR de las compras vigentes)',
+        '15.retenciones_por_pagar_distintas (2.1.04 = Σ retención de IVA, 2.1.05 = Σ retención de ISR de las compras vigentes + Σ ISR de los premios de sorteo entregados)',
         `WITH docs AS (
-             SELECT c.empresa_id, sum(c.retencion_iva) AS iva, sum(c.retencion_isr) AS isr
-               FROM ledger.compras c WHERE ${E('c.empresa_id')} AND NOT ${compraAnulada('c')}
-              GROUP BY 1
+             SELECT empresa_id, sum(iva) AS iva, sum(isr) AS isr FROM (
+                 SELECT c.empresa_id, c.retencion_iva AS iva, c.retencion_isr AS isr
+                   FROM ledger.compras c WHERE ${E('c.empresa_id')} AND NOT ${compraAnulada('c')}
+                 UNION ALL
+                 SELECT s.empresa_id, 0, g.retencion_isr
+                   FROM lealtad.sorteos_ganadores g JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+                  WHERE ${E('s.empresa_id')} AND g.estado = 'entregado'
+             ) x GROUP BY 1
          ), libro AS (
              SELECT a.empresa_id,
                     sum(CASE WHEN c.codigo = '${RET_IVA_POR_PAGAR}' THEN m.haber - m.debe ELSE 0 END) AS iva,
@@ -2651,6 +2656,210 @@ async function verificarLibroCon(
         `SELECT reversa_de, count(*)::int AS reversos FROM lealtad.movimientos
           WHERE reversa_de IS NOT NULL AND ${E('empresa_id')}
           GROUP BY reversa_de HAVING count(*) > 1 OR bool_or(puntos > 0)`,
+    )
+
+    /*
+    | 16 · Sorteos (`contratos/lealtad.md` §7 y §8; rama a3/sorteos): ganadores = resultado y premio
+    | entregado = su asiento vigente. Efectivo: egreso `premios` (5.1.03) por valor − ISR y asiento sorteo
+    | 5.1.03 / 2.1.05 por el ISR; bien ligado a su compra (decisión del PM): 5.1.03 / cuenta de la línea por
+    | su base (nada si la línea ya fue a 5.1.03) más el ISR; bien contra un activo: 5.1.03 (valor + ISR) /
+    | activo (valor) / 2.1.05; servicio: canje sin puntos del ganador y, si retiene, 5.1.03 / 2.1.05. Una
+    | entrega anulada (`sorteos.anular_entrega`) deja sus asientos revertidos y el ganador sin documentos.
+    | Boletos por canje: inv. 14. El ISR de los premios en 2.1.05: inv. 15.retenciones.
+    */
+    await revisar(
+        '16.premio_de_sorteo_mal_contabilizado (entregado, titular o suplente con el premio de un no reclamado; el bien de una compra por su parte compra_base de la línea, nunca de activo fijo: ISR = round(valor × pct), un asiento sorteo vigente de su empresa con origen = ganador, efectivo con egreso premios por valor − ISR, bien con su compra (5.1.03 / cuenta de la línea por la base) o contra un activo (valor), servicio con canje sin puntos del ganador; sin entregar, sin documentos ni asientos vigentes)',
+        `WITH g AS (
+             SELECT g.id, g.sorteo_id, g.estado, g.tipo, g.retencion_isr, g.asiento_id, g.egreso_id, g.canje_id,
+                    g.compra_linea_id, g.compra_unidades, g.compra_base, s.empresa_id, p.tipo AS premio, p.valor, pa.cliente_id,
+                    CASE WHEN p.retiene_isr THEN round(p.valor * p.isr_pct / 100, 2) ELSE 0 END AS isr,
+                    cl.base AS base_compra, cuc.codigo AS cuenta_compra, cl.tipo AS tipo_linea, co.empresa_id AS empresa_compra,
+                    co.tipo_documento, ${compraAnulada('co')} AS compra_anulada
+               FROM lealtad.sorteos_ganadores g
+               JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+               JOIN lealtad.sorteos_participantes pa ON pa.id = g.participante_id
+               LEFT JOIN lealtad.sorteos_premios p ON p.sorteo_id = g.sorteo_id
+                    AND p.posicion = coalesce(g.premio_posicion, g.premio_sustitucion)
+               LEFT JOIN ledger.compras_lineas cl ON cl.id = g.compra_linea_id
+               LEFT JOIN ledger.compras co ON co.id = cl.compra_id
+               LEFT JOIN ledger.cuentas cuc ON cuc.id = cl.cuenta_id
+              WHERE ${E('s.empresa_id')}
+         ), x AS (
+             SELECT g.*, a.empresa_id AS empresa_asiento, a.origen_tipo, a.origen_id,
+                    (SELECT count(*) FROM ledger.asientos o
+                      WHERE o.origen_tipo = 'sorteo' AND o.origen_id = g.id AND o.reversa_de IS NULL
+                        AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = o.id)) AS asientos,
+                    (SELECT count(DISTINCT m.cuenta_id) FROM ledger.movimientos m WHERE m.asiento_id = a.id) AS n,
+                    (SELECT coalesce(sum(m.debe), 0) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE m.asiento_id = a.id AND c.codigo = '${CUENTAS_GT.PREMIOS_PROMOCIONES}') AS gasto,
+                    (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE m.asiento_id = a.id AND c.codigo = '${CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR}') AS isr_libro,
+                    (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE m.asiento_id = a.id AND c.codigo NOT IN ('${CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR}', '${CUENTAS_GT.PREMIOS_PROMOCIONES}')
+                        AND CASE WHEN g.compra_linea_id IS NOT NULL THEN c.codigo = g.cuenta_compra
+                                 ELSE c.tipo = 'activo' AND (c.empresa_id IS NULL OR c.empresa_id = g.empresa_id) END) AS contra,
+                    e.monto AS egreso_monto, e.empresa_id AS empresa_egreso, ec.clave AS categoria,
+                    cc.codigo AS cuenta_categoria, k.puntos AS canje_puntos, k.cliente_id AS canje_cliente,
+                    k.empresa_id AS canje_empresa, k.sorteo_ganador_id AS canje_ganador,
+                    -- lo que el bien carga a 5.1.03 además del ISR y lo que acredita a su contrapartida
+                    CASE WHEN g.compra_linea_id IS NULL THEN g.valor
+                         WHEN g.cuenta_compra = '${CUENTAS_GT.PREMIOS_PROMOCIONES}' THEN 0 ELSE g.compra_base END AS bien
+               FROM g
+               LEFT JOIN ledger.asientos a ON a.id = g.asiento_id
+               LEFT JOIN ledger.egresos e ON e.id = g.egreso_id
+               LEFT JOIN ledger.egresos_categorias ec ON ec.id = e.categoria_id
+               LEFT JOIN ledger.cuentas cc ON cc.id = ec.cuenta_id
+               LEFT JOIN lealtad.canjes k ON k.id = g.canje_id
+         )
+         SELECT id, sorteo_id, estado, premio, valor::text, isr::text, retencion_isr::text, asiento_id, asientos::int,
+                n::int, gasto::text, isr_libro::text, contra::text, bien::text, egreso_id, egreso_monto::text, categoria,
+                canje_id, compra_linea_id
+           FROM x
+          WHERE (estado <> 'entregado' AND (asiento_id IS NOT NULL OR egreso_id IS NOT NULL OR canje_id IS NOT NULL
+                                            OR compra_linea_id IS NOT NULL OR compra_unidades IS NOT NULL
+                                            OR compra_base IS NOT NULL OR asientos <> 0 OR retencion_isr IS NOT NULL))
+             OR (estado = 'entregado' AND (
+                    premio IS NULL OR retencion_isr IS DISTINCT FROM isr
+                 OR asientos <> CASE WHEN (premio = 'bien' AND bien > 0) OR isr > 0 THEN 1 ELSE 0 END
+                 OR (asientos = 0) <> (asiento_id IS NULL)
+                 OR (asiento_id IS NOT NULL AND (
+                        origen_tipo <> 'sorteo' OR origen_id <> id OR empresa_asiento <> empresa_id
+                     OR gasto <> CASE WHEN premio = 'bien' THEN bien + isr ELSE isr END
+                     OR isr_libro <> isr
+                     OR contra <> CASE WHEN premio = 'bien' THEN bien ELSE 0 END
+                     OR n <> (CASE WHEN premio = 'bien' AND bien > 0 THEN 2 ELSE 0 END)
+                             + (CASE WHEN isr > 0 THEN CASE WHEN premio = 'bien' AND bien > 0 THEN 1 ELSE 2 END ELSE 0 END)))
+                 OR (premio = 'efectivo' AND (egreso_id IS NULL OR categoria IS DISTINCT FROM 'premios'
+                        OR cuenta_categoria IS DISTINCT FROM '${CUENTAS_GT.PREMIOS_PROMOCIONES}'
+                        OR egreso_monto <> valor - isr OR empresa_egreso <> empresa_id))
+                 OR (premio <> 'efectivo' AND egreso_id IS NOT NULL)
+                 OR (premio = 'servicio' AND (canje_id IS NULL OR canje_puntos <> 0 OR canje_ganador IS DISTINCT FROM id
+                        OR canje_cliente <> cliente_id OR canje_empresa <> empresa_id))
+                 OR (premio <> 'servicio' AND canje_id IS NOT NULL)
+                 OR (premio <> 'bien' AND compra_linea_id IS NOT NULL)
+                 OR (compra_linea_id IS NOT NULL AND (tipo_linea <> 'bien' OR empresa_compra <> empresa_id
+                        OR tipo_documento = 'NCRE' OR compra_unidades IS NULL OR compra_unidades < 1
+                        OR compra_base IS NULL OR compra_base < 0
+                        OR cuenta_compra LIKE '${CUENTAS_GT.PROPIEDAD_PLANTA_EQUIPO}.%'
+                        OR cuenta_compra LIKE '${CUENTAS_GT.DEPRECIACION_ACUMULADA}.%'))
+                 OR (compra_linea_id IS NULL AND (compra_unidades IS NOT NULL OR compra_base IS NOT NULL))))`,
+    )
+    await revisar(
+        '16.asiento_de_sorteo_sin_ganador (todo asiento sorteo original es de un ganador de su empresa: el vigente es el de su entrega; uno revertido, de una entrega anulada que ya no lo tiene)',
+        `SELECT a.id, a.origen_id, a.empresa_id,
+                EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id) AS revertido
+           FROM ledger.asientos a
+          WHERE a.origen_tipo = 'sorteo' AND a.reversa_de IS NULL AND ${E('a.empresa_id')}
+            AND NOT EXISTS (SELECT 1 FROM lealtad.sorteos_ganadores g JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+                             WHERE g.id = a.origen_id AND s.empresa_id = a.empresa_id
+                               AND CASE WHEN EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)
+                                        THEN g.asiento_id IS DISTINCT FROM a.id
+                                        ELSE g.asiento_id = a.id END)`,
+    )
+    await revisar(
+        '16.premio_entregado_deshecho (un premio entregado no tiene su egreso anulado, su canje revertido, su asiento revertido ni su compra anulada)',
+        `SELECT g.id, g.sorteo_id, g.egreso_id, g.canje_id, g.asiento_id, g.compra_linea_id, k.estado AS estado_canje
+           FROM lealtad.sorteos_ganadores g JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+           LEFT JOIN lealtad.canjes k ON k.id = g.canje_id
+           LEFT JOIN ledger.compras_lineas cl ON cl.id = g.compra_linea_id
+           LEFT JOIN ledger.compras co ON co.id = cl.compra_id
+          WHERE g.estado = 'entregado' AND ${E('s.empresa_id')}
+            AND (EXISTS (SELECT 1 FROM ledger.egresos_anulaciones x WHERE x.egreso_id = g.egreso_id)
+                 OR k.estado = 'revertido'
+                 OR EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = g.asiento_id)
+                 OR (co.id IS NOT NULL AND ${compraAnulada('co')}))`,
+    )
+    await revisar(
+        '16.asiento_de_sorteo_revertido (un asiento sorteo se revierte solo al anular la entrega: el reverso es uno por asiento y su ganador queda sin entregar o con otra entrega)',
+        `SELECT r.id, r.reversa_de, r.empresa_id, o.origen_id AS ganador_id
+           FROM ledger.asientos r JOIN ledger.asientos o ON o.id = r.reversa_de
+          WHERE r.origen_tipo = 'sorteo' AND ${E('r.empresa_id')}
+            AND (o.origen_tipo <> 'sorteo' OR o.origen_id IS DISTINCT FROM r.origen_id
+                 OR (SELECT count(*) FROM ledger.asientos r2 WHERE r2.reversa_de = o.id) <> 1
+                 OR EXISTS (SELECT 1 FROM lealtad.sorteos_ganadores g WHERE g.id = o.origen_id AND g.asiento_id = o.id))`,
+    )
+    await revisar(
+        '16.unidades_de_compra_de_mas (por línea de compra: Σ unidades de las entregas vivas ≤ cantidad y Σ compra_base ≤ base; con todas las unidades entregadas, Σ compra_base = base; cada parte = su prorrateo ± el resto de la última)',
+        `SELECT l.id AS linea_id, l.cantidad, l.base::text, sum(g.compra_unidades)::int AS unidades,
+                sum(g.compra_base)::text AS base_entregada
+           FROM ledger.compras_lineas l JOIN lealtad.sorteos_ganadores g ON g.compra_linea_id = l.id
+           JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+          WHERE ${E('s.empresa_id')} AND g.estado = 'entregado'
+          GROUP BY l.id, l.cantidad, l.base
+         HAVING sum(g.compra_unidades) > l.cantidad OR sum(g.compra_base) > l.base
+             OR (sum(g.compra_unidades) = l.cantidad AND sum(g.compra_base) <> l.base)
+             OR bool_or(abs(g.compra_base - l.base * g.compra_unidades / l.cantidad) >= g.compra_unidades * 0.01 + 0.01)`,
+    )
+    await revisar(
+        '16.sustitucion_mal_formada (sorteos-2: el suplente que toma un premio sustituye a un ganador del mismo sorteo que quedó sustituido, sin entregar, con ese mismo premio; todo sustituido tiene un solo suplente; un no reclamado, ninguno)',
+        `SELECT g.id, g.sorteo_id, g.tipo, g.sustituye_a, g.premio_sustitucion, o.estado AS estado_sustituido,
+                coalesce(o.premio_posicion, o.premio_sustitucion) AS premio_sustituido
+           FROM lealtad.sorteos_ganadores g JOIN lealtad.sorteos s ON s.id = g.sorteo_id
+           LEFT JOIN lealtad.sorteos_ganadores o ON o.id = g.sustituye_a
+          WHERE ${E('s.empresa_id')} AND g.sustituye_a IS NOT NULL
+            AND (o.id IS NULL OR o.sorteo_id <> g.sorteo_id OR g.tipo <> 'suplente' OR o.estado <> 'sustituido'
+                 OR coalesce(o.premio_posicion, o.premio_sustitucion) IS DISTINCT FROM g.premio_sustitucion
+                 OR g.premio_posicion IS NOT NULL)
+         UNION ALL
+         SELECT o.id, o.sorteo_id, o.tipo, NULL, NULL, o.estado, coalesce(o.premio_posicion, o.premio_sustitucion)
+           FROM lealtad.sorteos_ganadores o JOIN lealtad.sorteos s ON s.id = o.sorteo_id
+          WHERE ${E('s.empresa_id')}
+            AND ((o.estado = 'sustituido' AND (SELECT count(*) FROM lealtad.sorteos_ganadores g WHERE g.sustituye_a = o.id) <> 1)
+                 OR (o.estado <> 'sustituido' AND EXISTS (SELECT 1 FROM lealtad.sorteos_ganadores g WHERE g.sustituye_a = o.id))
+                 OR (o.estado IN ('sustituido', 'no_reclamado') AND (o.no_reclamado_en IS NULL
+                     OR coalesce(o.premio_posicion, o.premio_sustitucion) IS NULL)))`,
+    )
+    await revisar(
+        '16.ganadores_distintos_del_resultado (ejecutado: SHA-256(semilla) = compromiso, lista_hash = la de los participantes, resultado = columnas, ganadores = elegidos en orden, titulares primero y premio por puesto; sin ejecutar, sin semilla ni ganadores)',
+        `WITH s AS (
+             SELECT s.* FROM lealtad.sorteos s WHERE ${E('s.empresa_id')}
+         ), lista AS (
+             SELECT p.sorteo_id,
+                    encode(sha256(convert_to(string_agg(p.codigo_publico || '|' || p.boletos || chr(10), ''
+                                                        ORDER BY p.codigo_publico COLLATE "C"), 'UTF8')), 'hex') AS hash
+               FROM lealtad.sorteos_participantes p WHERE p.sorteo_id IN (SELECT id FROM s) GROUP BY 1
+         ), elegidos AS (
+             SELECT s.id AS sorteo_id, e.codigo, e.i::int AS posicion
+               FROM s, jsonb_array_elements_text(s.resultado -> 'elegidos') WITH ORDINALITY e(codigo, i)
+              WHERE s.resultado IS NOT NULL
+         ), puestos AS (
+             SELECT x.sorteo_id, x.posicion AS premio,
+                    row_number() OVER (PARTITION BY x.sorteo_id ORDER BY x.posicion, k)::int AS puesto
+               FROM lealtad.sorteos_premios x, generate_series(1, x.cantidad) k
+              WHERE x.sorteo_id IN (SELECT id FROM s)
+         ), ganadores AS (
+             SELECT g.sorteo_id, g.posicion, g.tipo, g.premio_posicion, p.codigo_publico AS codigo
+               FROM lealtad.sorteos_ganadores g JOIN lealtad.sorteos_participantes p ON p.id = g.participante_id
+              WHERE g.sorteo_id IN (SELECT id FROM s)
+         )
+         SELECT 'sorteo' AS que, s.id AS sorteo_id, null::int AS posicion, s.estado, null AS codigo
+           FROM s LEFT JOIN lista l ON l.sorteo_id = s.id
+          WHERE (s.estado IN ('ejecutado', 'acta_cerrada', 'premios_entregados') AND (
+                    s.resultado IS NULL
+                 OR encode(sha256(decode(s.semilla, 'hex')), 'hex') IS DISTINCT FROM s.compromiso
+                 OR l.hash IS DISTINCT FROM s.lista_hash
+                 OR s.resultado ->> 'semilla' IS DISTINCT FROM s.semilla
+                 OR s.resultado ->> 'valor_publico' IS DISTINCT FROM s.valor_publico
+                 OR s.resultado ->> 'lista_hash' IS DISTINCT FROM s.lista_hash
+                 OR s.resultado ->> 'bases_hash' IS DISTINCT FROM s.bases_hash
+                 OR s.resultado ->> 'algoritmo' IS DISTINCT FROM s.algoritmo
+                 OR (s.resultado ->> 'suplentes')::int IS DISTINCT FROM s.suplentes
+                 OR (s.resultado ->> 'titulares')::int
+                    IS DISTINCT FROM (SELECT count(*) FROM puestos u WHERE u.sorteo_id = s.id)::int))
+             OR (s.estado NOT IN ('ejecutado', 'acta_cerrada', 'premios_entregados')
+                 AND (s.resultado IS NOT NULL OR s.semilla IS NOT NULL
+                      OR EXISTS (SELECT 1 FROM ganadores g WHERE g.sorteo_id = s.id)))
+         UNION ALL
+         SELECT 'ganador', coalesce(g.sorteo_id, e.sorteo_id), coalesce(g.posicion, e.posicion), g.tipo,
+                coalesce(g.codigo, e.codigo)
+           FROM ganadores g
+           FULL JOIN elegidos e ON e.sorteo_id = g.sorteo_id AND e.posicion = g.posicion
+           JOIN s ON s.id = coalesce(g.sorteo_id, e.sorteo_id)
+           LEFT JOIN puestos u ON u.sorteo_id = g.sorteo_id AND u.puesto = g.posicion
+          WHERE s.estado IN ('ejecutado', 'acta_cerrada', 'premios_entregados')
+            AND (g.codigo IS DISTINCT FROM e.codigo
+                 OR (g.tipo = 'titular') <> (g.posicion <= (s.resultado ->> 'titulares')::int)
+                 OR (g.tipo = 'titular' AND g.premio_posicion IS DISTINCT FROM u.premio))`,
     )
 
     /*

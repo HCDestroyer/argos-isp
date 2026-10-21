@@ -127,7 +127,9 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
             periodo: datos.periodo,
             clave_unica: datos.clave_unica,
             vence_en: datos.vence_en,
-            estado: modo === 'por_certificar' ? 'por_certificar' : 'emitida',
+            // un descuento del 100 % (mes gratis) deja la factura en cero: nace pagada
+            estado:
+                modo === 'por_certificar' ? 'por_certificar' : totales.total.lte(0) ? 'pagada' : 'emitida',
             subtotal: aTexto(totales.subtotal),
             iva: aTexto(totales.iva),
             total: aTexto(totales.total),

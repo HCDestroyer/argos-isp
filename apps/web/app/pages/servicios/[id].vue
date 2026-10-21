@@ -70,6 +70,24 @@ function alCambiarEmpresa(actualizado: Servicio) {
     void lineaTiempo.value?.recargar()
 }
 const simuladorAbierto = ref(false)
+/** Cargo único (A3): instalación, equipo…; con todo descontado queda como bonificación. */
+const puedeCargoUnico = computed(() => puede('facturas.emitir_cargo_unico') && puede('facturas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
+const cargoAbierto = ref(false)
+const periodosBonificados = useTemplateRef('periodosBonificados')
+
+async function alEmitirCargo(resultado: CargoUnicoEmitido) {
+    void lineaTiempo.value?.recargar()
+    if (resultado.documento === 'bonificacion' && resultado.bonificacion) {
+        toast.add({ title: 'Bonificación registrada', description: `Sin costo: ${formatearQuetzales(resultado.bonificacion.bruto)} · ${resultado.bonificacion.motivo_nombre}`, icon: 'i-lucide-hand-heart', color: 'success' })
+        void periodosBonificados.value?.recargar()
+        await navigateTo(`/bonificaciones/${resultado.bonificacion.id}`)
+        return
+    }
+    if (resultado.factura) {
+        toast.add({ title: 'Cargo único emitido', description: `Factura #${resultado.factura.id} por ${formatearQuetzales(resultado.factura.total)}`, icon: 'i-lucide-receipt', color: 'success' })
+        await navigateTo(`/facturas/${resultado.factura.id}`)
+    }
+}
 
 /**
  * Captura 07: sin `excluir_canal` una página de 50 podía venir llena de `portal.quien_soy` (una por
@@ -343,7 +361,7 @@ onMounted(cargar)
             </UAlert>
 
             <div
-                v-if="acciones.length || puedePromesa || puedeSimular || puedeCambiarEmpresa"
+                v-if="acciones.length || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
@@ -364,6 +382,15 @@ onMounted(cargar)
                     color="info"
                     variant="outline"
                     @click="abrirPromesa"
+                />
+                <UButton
+                    v-if="puedeCargoUnico"
+                    label="Cargo único"
+                    icon="i-lucide-receipt"
+                    color="neutral"
+                    variant="outline"
+                    data-prueba="abrir-cargo-unico"
+                    @click="cargoAbierto = true"
                 />
                 <UButton
                     v-if="puedeSimular"
@@ -607,6 +634,12 @@ onMounted(cargar)
                 />
             </section>
 
+            <PeriodosBonificados
+                v-if="puede('facturas.ver')"
+                ref="periodosBonificados"
+                :servicio-id="servicio.id"
+            />
+
             <section
                 v-if="puede('promesas.ver')"
                 class="flex flex-col gap-3"
@@ -706,6 +739,12 @@ onMounted(cargar)
                 @creada="alCrearPromesa"
             />
 
+            <CargoUnicoModal
+                v-if="puedeCargoUnico"
+                v-model:open="cargoAbierto"
+                :destino="{ servicio }"
+                @hecho="alEmitirCargo"
+            />
             <ServicioCambiarEmpresaModal
                 v-if="puedeCambiarEmpresa"
                 v-model:open="cambiarEmpresaAbierto"

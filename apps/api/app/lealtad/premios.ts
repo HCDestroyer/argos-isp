@@ -28,6 +28,9 @@ export interface PremioVista {
     dias: number | null
     costo_unitario: string | null
     existencias: number | null
+    /** `boletos` (fase 3): sorteo y boletos que da el canje */
+    sorteo_id: number | null
+    boletos: number | null
     en_portal: boolean
     activo: boolean
     version: number
@@ -45,6 +48,8 @@ export const CAMPOS_PREMIO = [
     'dias',
     'costo_unitario',
     'existencias',
+    'sorteo_id',
+    'boletos',
     'en_portal',
     'activo',
 ] as const
@@ -61,6 +66,8 @@ function aVista(f: Record<string, any>): PremioVista {
         plan_destino_id: n(f.plan_destino_id),
         dias: n(f.dias),
         existencias: n(f.existencias),
+        sorteo_id: n(f.sorteo_id),
+        boletos: n(f.boletos),
         version: Number(f.version),
     } as PremioVista
 }
@@ -79,6 +86,8 @@ const COLUMNAS = [
     'dias',
     'costo_unitario',
     'existencias',
+    'sorteo_id',
+    'boletos',
     'en_portal',
     'activo',
     'version',

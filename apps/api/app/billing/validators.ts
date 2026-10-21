@@ -12,7 +12,7 @@ import {
 import { reglasPromesaSchema } from '#billing/reglas_promesa'
 import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 import { METODOS_PAGO } from '#shared/eventos'
-import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
+import { CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 
 /*
 |--------------------------------------------------------------------------
@@ -511,7 +511,7 @@ export const reporteEgresosValidator = vine.compile(
         empresas: empresasConsulta(),
         formato,
         ...rango,
-        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO).optional(),
+        categoria: vine.enum(CLAVES_CATEGORIA_EGRESO_CONSULTA).optional(),
         metodo: vine.enum(['caja', 'banco', 'cuenta_bancaria'] as const).optional(),
     }),
 )

@@ -22,6 +22,8 @@ export interface EntradaEditarPremio {
     dias?: number | null
     costo_unitario?: string | null
     existencias?: number | null
+    sorteo_id?: number | null
+    boletos?: number | null
     en_portal?: boolean
     activo?: boolean
 }
@@ -37,15 +39,22 @@ export default class EditarPremio extends DomainAction<EntradaEditarPremio, Prem
         exigirAccesoEmpresa(t.ctx, actual.empresa_id)
         t.fijarEmpresa(actual.empresa_id)
         if (actual.version !== input.version) throw new ConflictoVersion('El premio', input.id)
-        const campos = await camposDelTipo(t.trx, actual.tipo, {
-            descuento_tipo: o(input.descuento_tipo, actual.descuento_tipo),
-            descuento_valor: o(input.descuento_valor, actual.descuento_valor),
-            tope: o(input.tope, actual.tope),
-            plan_destino_id: o(input.plan_destino_id, actual.plan_destino_id),
-            dias: o(input.dias, actual.dias),
-            costo_unitario: o(input.costo_unitario, actual.costo_unitario),
-            existencias: o(input.existencias, actual.existencias),
-        })
+        const campos = await camposDelTipo(
+            t.trx,
+            actual.tipo,
+            {
+                descuento_tipo: o(input.descuento_tipo, actual.descuento_tipo),
+                descuento_valor: o(input.descuento_valor, actual.descuento_valor),
+                tope: o(input.tope, actual.tope),
+                plan_destino_id: o(input.plan_destino_id, actual.plan_destino_id),
+                dias: o(input.dias, actual.dias),
+                costo_unitario: o(input.costo_unitario, actual.costo_unitario),
+                existencias: o(input.existencias, actual.existencias),
+                sorteo_id: o(input.sorteo_id, actual.sorteo_id),
+                boletos: o(input.boletos, actual.boletos),
+            },
+            actual.empresa_id,
+        )
         await t.trx
             .from('lealtad.premios')
             .where('id', actual.id)

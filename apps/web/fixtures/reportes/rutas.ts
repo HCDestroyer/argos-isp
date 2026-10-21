@@ -13,7 +13,7 @@ const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
 const HOY = '2026-10-16'
 
 /** Totales como `armarReporte` de la API: dinero con decimal.js (string), enteros sumados, el resto null. */
-function totales(columnas: Columna[], filas: readonly Record<string, Valor>[]): Record<string, Valor> {
+export function totales(columnas: Columna[], filas: readonly Record<string, Valor>[]): Record<string, Valor> {
     return Object.fromEntries(columnas.map((c): [string, Valor] => {
         if (c.tipo === 'dinero') {
             return [c.clave, filas.reduce((s, f) => s.plus(f[c.clave] ?? 0), new Decimal(0)).toFixed(2)]
@@ -31,7 +31,7 @@ function porcentaje(parte: Decimal.Value, total: Decimal.Value): number {
 }
 
 /** CSV como lo exporta la API: títulos, filas y la fila "Total". */
-function csv(columnas: Columna[], filas: readonly Record<string, Valor>[], suma: Record<string, Valor>): Uint8Array {
+export function csv(columnas: Columna[], filas: readonly Record<string, Valor>[], suma: Record<string, Valor>): Uint8Array {
     const celda = (v: Valor) => (v === null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
     const lineas = [
         columnas.map(c => celda(c.titulo)).join(','),
@@ -70,7 +70,7 @@ const dec = (valor: Decimal.Value) => new Decimal(valor)
  * fixtures son de ArgosNet (1); con otra empresa elegida el reporte sale vacío.
  */
 const EMPRESA_FILAS = 1
-const COLUMNAS_EMPRESA: Columna[] = [
+export const COLUMNAS_EMPRESA: Columna[] = [
     { clave: 'empresa_id', titulo: 'Empresa', tipo: 'id' },
     { clave: 'empresa', titulo: 'Nombre de la empresa', tipo: 'texto' },
 ]

@@ -10135,6 +10135,15 @@
                             "150.00"
                           ]
                         },
+                        "cantidad": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "maximum": 100000,
+                          "description": "Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad"
+                        },
                         "iva": {
                           "type": [
                             "string",
@@ -10931,6 +10940,15 @@
                           "examples": [
                             "150.00"
                           ]
+                        },
+                        "cantidad": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "maximum": 100000,
+                          "description": "Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad"
                         },
                         "iva": {
                           "type": [
@@ -14387,7 +14405,8 @@
                 "nomina",
                 "vehiculos",
                 "alquileres",
-                "otros"
+                "otros",
+                "premios"
               ]
             }
           },
@@ -23198,7 +23217,7 @@
                       "bien",
                       "boletos"
                     ],
-                    "description": "descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien; boletos llega en la fase 3"
+                    "description": "descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien, boletos (sorteo_id y boletos)"
                   },
                   "nombre": {
                     "type": "string",
@@ -23278,6 +23297,23 @@
                       "null"
                     ],
                     "minimum": 0
+                  },
+                  "sorteo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo boletos: el sorteo (que admita canjes)"
+                  },
+                  "boletos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "description": "Solo boletos: cuántos da cada canje"
                   },
                   "en_portal": {
                     "type": "boolean"
@@ -23540,6 +23576,23 @@
                       "null"
                     ],
                     "minimum": 0
+                  },
+                  "sorteo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Solo boletos: el sorteo (que admita canjes)"
+                  },
+                  "boletos": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "description": "Solo boletos: cuántos da cada canje"
                   },
                   "en_portal": {
                     "type": "boolean"
@@ -25459,6 +25512,3018 @@
         "x-implementado": true
       }
     },
+    "/api/v1/lealtad/sorteos": {
+      "get": {
+        "operationId": "lealtadSorteos",
+        "summary": "Sorteos de la empresa",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "borrador",
+                "bases_publicadas",
+                "participacion_abierta",
+                "corte_cerrado",
+                "ejecutado",
+                "acta_cerrada",
+                "premios_entregados",
+                "cancelado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaSorteosLealtad"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "lealtadCrearSorteo",
+        "summary": "Crear un sorteo en borrador",
+        "description": "Bases (§7.2), criterios del corte (boletos_por_servicio por servicio activo sin facturas vencidas; admite_canje) y premios (efectivo, bien o servicio; ISR parametrizado). Empresa: la indicada o la activa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 4000
+                  },
+                  "bases": {
+                    "type": "object",
+                    "properties": {
+                      "mecanica": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "regla_participacion": {
+                        "type": "string",
+                        "maxLength": 2000,
+                        "description": "Cómo se ganan boletos; es lo que ve el cliente en el portal"
+                      },
+                      "plazo_reclamo_dias": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 365
+                      },
+                      "no_reclamados": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "publicacion_resultados": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "resolucion_gobernacion": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 200
+                      },
+                      "fuente_valor_publico": {
+                        "type": "string",
+                        "maxLength": 1000,
+                        "description": "Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Bases (§7.2); todas obligatorias para publicar salvo la resolución"
+                  },
+                  "criterios": {
+                    "type": "object",
+                    "properties": {
+                      "boletos_por_servicio": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "Boletos por servicio activo sin facturas vencidas al corte (por defecto 1)"
+                      },
+                      "admite_canje": {
+                        "description": "Admite boletos canjeados con puntos",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "inscripcion_desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "corte_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "fecha_sorteo": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "lugar": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "suplentes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 20
+                  },
+                  "premios": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "nombre": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "cantidad": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "imagen_url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 1000,
+                          "description": "Solo null: la imagen se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen)"
+                        },
+                        "valor": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con hasta 2 decimales, como string",
+                          "examples": [
+                            "150.00"
+                          ]
+                        },
+                        "tipo": {
+                          "type": "string",
+                          "enum": [
+                            "efectivo",
+                            "bien",
+                            "servicio"
+                          ],
+                          "description": "efectivo (egreso de Caja o Bancos), bien (5.1.03 / 2.1.03 o una cuenta de activo) o servicio (canje sin puntos)"
+                        },
+                        "premio_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Solo servicio: descuento o mes gratis del catálogo de lealtad de la empresa"
+                        },
+                        "retiene_isr": {
+                          "type": "boolean"
+                        },
+                        "isr_pct": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{1,3}(\\.\\d{1,2})?$",
+                          "description": "Porcentaje del ISR del premio (10 por defecto)"
+                        }
+                      },
+                      "required": [
+                        "nombre",
+                        "valor",
+                        "tipo"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 50
+                  },
+                  "aviso_portal": {
+                    "description": "Se anuncia en el portal (false por defecto)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "nombre"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}": {
+      "get": {
+        "operationId": "lealtadVerSorteo",
+        "summary": "Ver un sorteo con su checklist, participantes y ganadores",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "lealtadEditarSorteo",
+        "summary": "Editar un sorteo en borrador",
+        "description": "Solo en borrador; premios reemplaza la lista. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "descripcion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 4000
+                  },
+                  "bases": {
+                    "type": "object",
+                    "properties": {
+                      "mecanica": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "regla_participacion": {
+                        "type": "string",
+                        "maxLength": 2000,
+                        "description": "Cómo se ganan boletos; es lo que ve el cliente en el portal"
+                      },
+                      "plazo_reclamo_dias": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 365
+                      },
+                      "no_reclamados": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "publicacion_resultados": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "resolucion_gobernacion": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 200
+                      },
+                      "fuente_valor_publico": {
+                        "type": "string",
+                        "maxLength": 1000,
+                        "description": "Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Bases (§7.2); todas obligatorias para publicar salvo la resolución"
+                  },
+                  "criterios": {
+                    "type": "object",
+                    "properties": {
+                      "boletos_por_servicio": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "Boletos por servicio activo sin facturas vencidas al corte (por defecto 1)"
+                      },
+                      "admite_canje": {
+                        "description": "Admite boletos canjeados con puntos",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "inscripcion_desde": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "corte_en": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "fecha_sorteo": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "lugar": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "suplentes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 20
+                  },
+                  "premios": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "nombre": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "cantidad": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "imagen_url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 1000,
+                          "description": "Solo null: la imagen se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen)"
+                        },
+                        "valor": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                          "description": "Monto con hasta 2 decimales, como string",
+                          "examples": [
+                            "150.00"
+                          ]
+                        },
+                        "tipo": {
+                          "type": "string",
+                          "enum": [
+                            "efectivo",
+                            "bien",
+                            "servicio"
+                          ],
+                          "description": "efectivo (egreso de Caja o Bancos), bien (5.1.03 / 2.1.03 o una cuenta de activo) o servicio (canje sin puntos)"
+                        },
+                        "premio_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Solo servicio: descuento o mes gratis del catálogo de lealtad de la empresa"
+                        },
+                        "retiene_isr": {
+                          "type": "boolean"
+                        },
+                        "isr_pct": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{1,3}(\\.\\d{1,2})?$",
+                          "description": "Porcentaje del ISR del premio (10 por defecto)"
+                        }
+                      },
+                      "required": [
+                        "nombre",
+                        "valor",
+                        "tipo"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 50
+                  },
+                  "aviso_portal": {
+                    "description": "Se anuncia en el portal (false por defecto)",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/abrir": {
+      "post": {
+        "operationId": "lealtadAbrirSorteo",
+        "summary": "Abrir la participación (boletos por canje)",
+        "description": "bases_publicadas → participacion_abierta. Exige el requisito bases_diaco (422 `requisito_pendiente`). 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.publicar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/acta": {
+      "get": {
+        "operationId": "lealtadActaSorteo",
+        "summary": "PDF del acta del sorteo",
+        "description": "application/pdf con ETag = acta_hash. 404 si el acta aún no se cerró.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/archivos": {
+      "post": {
+        "operationId": "lealtadSubirArchivoSorteo",
+        "summary": "Subir una evidencia del checklist o la constancia de una entrega",
+        "description": "multipart/form-data con `archivo` (PDF, JPEG, PNG o WebP según su contenido, hasta 5 MB) y `uso` (evidencia o constancia). Solo inserción, con su SHA-256. Luego se cita en POST .../requisitos/:clave (archivo_id) o en la entrega (constancia_archivo_id). 422 en `archivo`.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uso": {
+                    "type": "string",
+                    "enum": [
+                      "evidencia",
+                      "constancia"
+                    ],
+                    "description": "evidencia del checklist o constancia firmada de una entrega"
+                  },
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PDF, JPEG, PNG o WebP, hasta 5 MB"
+                  }
+                },
+                "required": [
+                  "uso",
+                  "archivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Archivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivoSorteo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.marcar_requisito; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.marcar_requisito",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/archivos/{archivoId}": {
+      "get": {
+        "operationId": "lealtadArchivoSorteo",
+        "summary": "Descargar un archivo del sorteo (evidencia, constancia, imagen o acta)",
+        "description": "Con su tipo y ETag (SHA-256). 404 si no es del sorteo o si el archivo en disco ya no coincide con su huella.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "archivoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/aviso-portal": {
+      "put": {
+        "operationId": "lealtadAvisoPortalSorteo",
+        "summary": "Anunciar (o no) el sorteo en el portal del cliente",
+        "description": "Pedido del PM: false por defecto; editable hasta antes de ejecutar (después, 409), con version y audit.cambios. El portal solo lista los sorteos con aviso_portal. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "aviso_portal": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version",
+                  "aviso_portal"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/bases": {
+      "get": {
+        "operationId": "lealtadBasesSorteo",
+        "summary": "Bases publicadas de un sorteo (público)",
+        "description": "Sin sesión, desde bases_publicadas (404 antes): el documento cuyo SHA-256 es bases_hash y el compromiso.",
+        "tags": [
+          "lealtad"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bases",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasesSorteoPublicas"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/cancelar": {
+      "post": {
+        "operationId": "lealtadCancelarSorteo",
+        "summary": "Cancelar un sorteo antes de ejecutarlo",
+        "description": "Con motivo. Evento sorteo.cancelado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.publicar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/cerrar-acta": {
+      "post": {
+        "operationId": "lealtadCerrarActaSorteo",
+        "summary": "Cerrar el acta del sorteo (PDF con su SHA-256)",
+        "description": "ejecutado → acta_cerrada. Exige publicacion_resultados (422 requisito_pendiente) y la constancia. Genera el PDF una sola vez (resolución, checklist, hashes, semilla, valor público con su fuente y evidencia, algoritmo, ganadores con seudónimo y nombre, asistentes, constancia y publicación) y guarda su SHA-256 en acta_hash. Sin premios pendientes, pasa a premios_entregados. Evento sorteo.acta_cerrada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "constancia": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 2000,
+                    "description": "Firma o constancia del notario o del delegado"
+                  }
+                },
+                "required": [
+                  "constancia"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.ejecutar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.ejecutar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/cerrar-corte": {
+      "post": {
+        "operationId": "lealtadCerrarCorteSorteo",
+        "summary": "Cerrar el corte: foto de participantes y lista_hash",
+        "description": "participacion_abierta → corte_cerrado, en corte_en o después (422 `corte_no_vencido`). Boletos por criterio (servicios activos sin facturas vencidas) más los canjeados; seudónimo por participante y lista_hash. Evento sorteo.corte_cerrado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.publicar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/ejecutar": {
+      "post": {
+        "operationId": "lealtadEjecutarSorteo",
+        "summary": "Ejecutar el sorteo (argos-sorteo-v1)",
+        "description": "corte_cerrado → ejecutado. Exige el checklist de ejecución (422 `requisito_pendiente` con la clave) y el valor_publico del acto. Revela la semilla, verifica el compromiso y elige titulares y suplentes; el resultado se audita y se reproduce con GET /lealtad/sorteos/:id/verificacion y scripts/verificar-sorteo.mjs. Evento sorteo.ejecutado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "valor_publico": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "El valor de la fuente declarada en las bases (bases.fuente_valor_publico), conocido en el acto"
+                  },
+                  "valor_publico_evidencia": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 2000,
+                    "description": "Cómo se obtuvo el valor (acta del notario, enlace o número de la publicación oficial)"
+                  },
+                  "asistentes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "nombre": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "rol": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 200
+                        }
+                      },
+                      "required": [
+                        "nombre"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 20
+                  }
+                },
+                "required": [
+                  "valor_publico",
+                  "valor_publico_evidencia"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.ejecutar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.ejecutar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/anular-entrega": {
+      "post": {
+        "operationId": "lealtadAnularEntregaSorteo",
+        "summary": "Anular la entrega del premio de un ganador (todo junto)",
+        "description": "H22: deshace la entrega en una transacción: anula el egreso (efectivo), revierte el asiento sorteo (bien) o el canje sin puntos (servicio; 409 canje_no_revertible si ya se aplicó a una factura) y el asiento del ISR. El ganador vuelve a por_notificar y un sorteo premios_entregados vuelve a ejecutado. Por separado, anular el egreso, revertir el canje o revertir el asiento responden 422. Evento sorteo.entrega_anulada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "ganadorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.entregar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/entregar": {
+      "post": {
+        "operationId": "lealtadEntregarPremioSorteo",
+        "summary": "Registrar la entrega del premio de un titular",
+        "description": "Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: 5.1.03 / 2.1.03 (proveedor) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "ganadorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "metodo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "caja",
+                          "banco",
+                          "cuenta_bancaria"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo efectivo: de dónde sale el dinero (como POST /egresos)"
+                  },
+                  "caja_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "contrapartida": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "compra",
+                          "proveedor",
+                          "cuenta"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra)"
+                  },
+                  "cuenta_codigo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30
+                  },
+                  "constancia_archivo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Constancia firmada de la entrega (POST /lealtad/sorteos/:id/archivos, uso constancia)"
+                  },
+                  "compra_linea_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con contrapartida compra: línea (bien) de una compra registrada de la empresa"
+                  },
+                  "unidades": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con contrapartida compra: unidades de la línea que se entregan (1 por defecto); sin pasar de su cantidad"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 2000
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.entregar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/no-reclamado": {
+      "post": {
+        "operationId": "lealtadNoReclamadoSorteo",
+        "summary": "Dar por no reclamado un premio: pasa al siguiente suplente",
+        "description": "Vencido el plazo de reclamo (422 plazo_reclamo_vigente antes; 422 ganador_no_notificado si no se notificó). El premio pasa al siguiente suplente en espera, que se notifica; el ganador queda sustituido (o no_reclamado si no quedan suplentes). Evento sorteo.premio_no_reclamado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "ganadorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.entregar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/notificar-ganadores": {
+      "post": {
+        "operationId": "lealtadNotificarGanadoresSorteo",
+        "summary": "Notificar a los ganadores (evento a notify) con su plazo de reclamo",
+        "description": "ejecutado o acta_cerrada. Cada ganador con premio que sigue por_notificar pasa a notificado con reclamar_antes = ahora + bases.plazo_reclamo_dias, y sale un sorteo.ganador_notificado por ganador (notify avisa al cliente). Idempotente. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.entregar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/participantes": {
+      "get": {
+        "operationId": "lealtadParticipantesSorteo",
+        "summary": "Lista de participantes del corte (JSON, CSV o XLSX)",
+        "description": "Desde el corte (409 antes). Orden canónico por codigo_publico con boletos y cliente; al pie, lista_hash (SHA-256 de las líneas codigo|boletos). Con formato=csv o xlsx responde el archivo. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "description": "json (por defecto), csv o xlsx (descarga, con lista_hash al pie)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Participantes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteParticipantesSorteo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.exportar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.exportar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/premios/{posicion}/imagen": {
+      "get": {
+        "operationId": "lealtadVerImagenPremioSorteo",
+        "summary": "Imagen de un premio (panel)",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "posicion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagen",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "lealtadImagenPremioSorteo",
+        "summary": "Subir la imagen de un premio (solo en borrador)",
+        "description": "multipart/form-data con `imagen`: PNG, JPEG o WebP según su contenido, hasta 1 MB y de 64 a 4096 px por lado (como las imágenes de los anuncios). El portal no carga URLs externas: la imagen se sirve por el mismo origen. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "posicion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "imagen": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PNG, JPEG o WebP, hasta 1 MB"
+                  }
+                },
+                "required": [
+                  "imagen"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.gestionar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/publicar-bases": {
+      "post": {
+        "operationId": "lealtadPublicarBasesSorteo",
+        "summary": "Publicar las bases: congela, calcula bases_hash y compromete la semilla",
+        "description": "borrador → bases_publicadas. 422 `bases_incompletas` con el campo que falta (§7.2). La semilla (32 bytes aleatorios) se guarda cifrada y se publica su SHA-256 (`compromiso`). Evento sorteo.bases_publicadas. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SorteoDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.publicar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/requisitos/{clave}": {
+      "post": {
+        "operationId": "lealtadMarcarRequisitoSorteo",
+        "summary": "Marcar un requisito del checklist legal",
+        "description": "cumplido o no_aplica exigen evidencia (referencia o texto; archivos en la segunda PR). Solo inserción: vale la última marca por clave. Referencia; valídelo con su contador o abogado.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bases_diaco",
+                "autorizacion_gobernacion",
+                "fianza",
+                "isr_premios",
+                "timbre_fiscal",
+                "delegado_o_notario",
+                "publicacion_resultados",
+                "lista_a_gobernacion"
+              ]
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "estado": {
+                    "type": "string",
+                    "enum": [
+                      "cumplido",
+                      "no_aplica",
+                      "pendiente"
+                    ]
+                  },
+                  "valor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Número de resolución, monto de la fianza…"
+                  },
+                  "evidencia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 2000,
+                    "description": "Obligatoria con cumplido o no_aplica: referencia o texto (archivos en la segunda PR)"
+                  },
+                  "archivo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Evidencia como archivo de este sorteo (POST /lealtad/sorteos/:id/archivos, uso evidencia)"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "estado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checklist vigente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RequisitoSorteo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sorteos.marcar_requisito; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sorteos.marcar_requisito",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/lealtad/sorteos/{id}/verificacion": {
+      "get": {
+        "operationId": "lealtadVerificacionSorteo",
+        "summary": "Datos para recalcular el resultado (público)",
+        "description": "Sin sesión, después de ejecutar (404 antes): algoritmo, bases_hash, compromiso, semilla, valor_publico, lista (seudónimos y boletos) y ganadores. scripts/verificar-sorteo.mjs hace el mismo cálculo.",
+        "tags": [
+          "lealtad"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verificación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificacionSorteo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/asientos/{id}": {
       "get": {
         "operationId": "libroVerAsiento",
@@ -27006,6 +30071,7 @@
                 "diferido",
                 "alta_activo",
                 "lealtad",
+                "sorteo",
                 "bonificacion"
               ]
             }
@@ -35361,6 +38427,74 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/avisos-sorteo": {
+      "get": {
+        "operationId": "portalAvisosSorteo",
+        "summary": "Sorteos próximos ya abiertos al público, para el carrusel del portal",
+        "description": "Con bases publicadas o participación abierta y fecha de sorteo futura (los activa el panel al publicar sus bases). `lugar=pagina_corte`: los de la empresa del servicio de la IP (o, sin él, los del cliente de la sesión); `lugar=portal_inicio`: los de las empresas del cliente de la sesión. Sin cliente identificado, lista vacía. Sin imágenes ni datos de nadie. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "lugar",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "portal_inicio",
+                "pagina_corte"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Avisos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalAvisoSorteo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/bancos": {
       "get": {
         "operationId": "portalBancos",
@@ -35464,6 +38598,209 @@
           },
           "401": {
             "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/canjes": {
+      "get": {
+        "operationId": "portalCanjes",
+        "summary": "Canjes del cliente de la sesión y su estado",
+        "description": "Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de canjes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalCanje"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "portalCanjear",
+        "summary": "El cliente canjea sus puntos por un premio",
+        "description": "Llama `lealtad.canjear` (A3) con actor `cliente` y canal `portal`. 404 si el premio no está en el portal (inactivo, sin `en_portal` o de un programa no visible). Errores de la acción: 403 `canje_portal_inactivo`, 422 `saldo_insuficiente`, `servicio_no_valido`, `premio_inactivo`, `recompensa_no_disponible`, `parametro_sin_confirmar`; 409 `sin_existencias`, `canje_pendiente`. Un descuento queda `reservado` para la próxima factura del servicio. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "premio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "servicio_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "premio_id",
+                  "servicio_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Canje hecho",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalCanje"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -36926,6 +40263,65 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/premios": {
+      "get": {
+        "operationId": "portalPremios",
+        "summary": "Premios canjeables desde el portal, con lo que le falta al cliente para cada uno",
+        "description": "Activos y con `en_portal`, del más barato al más caro. Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Premios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalPremio"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/promesas": {
       "get": {
         "operationId": "portalPromesas",
@@ -37179,6 +40575,65 @@
         "x-implementado": true
       }
     },
+    "/api/v1/portal/puntos": {
+      "get": {
+        "operationId": "portalPuntos",
+        "summary": "Puntos del cliente por empresa: saldo, lo que vence pronto, movimientos y términos",
+        "description": "Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Puntos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortalPuntosEmpresa"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/quien-soy": {
       "get": {
         "operationId": "portalQuienSoy",
@@ -37231,6 +40686,246 @@
           },
           "401": {
             "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/sorteos": {
+      "get": {
+        "operationId": "portalSorteos",
+        "summary": "Sorteos publicados y vigentes de las empresas del cliente (portal)",
+        "description": "Sesión del portal (401 sin ella). Publicados y no cancelados, con fecha de sorteo desde hace 30 días: premios, regla de participación, sus boletos, su seudónimo y, al terminar, el resultado. Nunca nombres de otros clientes.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PortalSorteo"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/sorteos/{id}/premios/{posicion}/imagen": {
+      "get": {
+        "operationId": "portalImagenPremioSorteo",
+        "summary": "Imagen de un premio de un sorteo anunciado en el portal",
+        "description": "Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.",
+        "tags": [
+          "portal"
+        ],
+        "security": [
+          {
+            "portal": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "posicion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagen",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
+          },
+          "401": {
+            "description": "Sin sesión del portal (cookie vencida o ausente)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/sorteos/{id}/publico": {
+      "get": {
+        "operationId": "portalSorteoPublico",
+        "summary": "Página pública de un sorteo: bases, premios, compromiso y ganadores por seudónimo",
+        "description": "Sin sesión, desde que publica sus bases (antes o inexistente, 404). Los ganadores salen por seudónimo después de ejecutar. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sorteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSorteoPublico"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas peticiones; reintentar después de `Retry-After` segundos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/portal/sorteos/{id}/verificacion": {
+      "get": {
+        "operationId": "portalSorteoVerificacion",
+        "summary": "Datos para recalcular el resultado de un sorteo (los de `GET /lealtad/sorteos/:id/verificacion`)",
+        "description": "Sin sesión, después de ejecutar (antes, 404). Lista por seudónimo. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "tags": [
+          "portal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verificación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificacionSorteo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40200,7 +43895,8 @@
                 "nomina",
                 "vehiculos",
                 "alquileres",
-                "otros"
+                "otros",
+                "premios"
               ]
             }
           },
@@ -49872,6 +53568,79 @@
           }
         }
       },
+      "ArchivoSorteo": {
+        "type": "object",
+        "required": [
+          "id",
+          "sorteo_id",
+          "empresa_id",
+          "uso",
+          "nombre",
+          "tipo",
+          "tamano",
+          "sha256",
+          "ancho",
+          "alto",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sorteo_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uso": {
+            "type": "string",
+            "enum": [
+              "evidencia",
+              "imagen_premio",
+              "acta",
+              "constancia"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ]
+          },
+          "tamano": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "ancho": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "alto": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Asiento": {
         "type": "object",
         "required": [
@@ -49927,6 +53696,7 @@
               "diferido",
               "alta_activo",
               "lealtad",
+              "sorteo",
               "bonificacion"
             ]
           },
@@ -50396,6 +54166,46 @@
           },
           "cuenta_nombre": {
             "type": "string"
+          }
+        }
+      },
+      "BasesSorteoPublicas": {
+        "type": "object",
+        "required": [
+          "sorteo_id",
+          "estado",
+          "bases_hash",
+          "compromiso",
+          "bases"
+        ],
+        "properties": {
+          "sorteo_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "bases_publicadas",
+              "participacion_abierta",
+              "corte_cerrado",
+              "ejecutado",
+              "acta_cerrada",
+              "premios_entregados",
+              "cancelado"
+            ]
+          },
+          "bases_hash": {
+            "type": "string"
+          },
+          "compromiso": {
+            "type": "string"
+          },
+          "bases": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Documento cuyo SHA-256 del JSON canónico es bases_hash"
           }
         }
       },
@@ -55131,8 +58941,10 @@
               "nomina",
               "vehiculos",
               "alquileres",
-              "otros"
-            ]
+              "otros",
+              "premios"
+            ],
+            "description": "Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos"
           },
           "categoria_nombre": {
             "type": "string"
@@ -58431,6 +62243,10 @@
               "integer",
               "null"
             ]
+          },
+          "cantidad": {
+            "type": "integer",
+            "description": "Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad"
           }
         }
       },
@@ -60068,6 +63884,27 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReglaLealtad"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginaSorteosLealtad": {
+        "type": "object",
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SorteoLealtad"
             }
           },
           "nextCursor": {
@@ -61774,6 +65611,66 @@
           }
         }
       },
+      "PortalAvisoSorteo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "estado",
+          "corte_en",
+          "fecha_sorteo",
+          "premio_principal",
+          "premios"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "bases_publicadas",
+              "participacion_abierta"
+            ],
+            "description": "Abierto al público"
+          },
+          "corte_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Hasta cuándo se ganan boletos"
+          },
+          "fecha_sorteo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "premio_principal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del primer premio"
+          },
+          "premios": {
+            "type": "integer",
+            "description": "Cuántos premios en total (suma de cantidades)"
+          }
+        }
+      },
       "PortalBanco": {
         "type": "object",
         "required": [
@@ -61834,6 +65731,83 @@
               "cargo_sin_costo",
               "canje"
             ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PortalCanje": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "servicio_id",
+          "premio_nombre",
+          "tipo",
+          "puntos",
+          "estado",
+          "descuento",
+          "aplicado_en",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "premio_nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "descuento_factura",
+              "mes_gratis",
+              "mejora_plan",
+              "bien",
+              "boletos"
+            ]
+          },
+          "puntos": {
+            "type": "integer"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "reservado",
+              "aplicado",
+              "revertido",
+              "rechazado"
+            ],
+            "description": "`reservado`: para la próxima factura; `aplicado`; `revertido`; `rechazado`"
+          },
+          "descuento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Q descontados; null mientras está reservado"
+          },
+          "aplicado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           },
           "created_at": {
             "type": "string",
@@ -62852,6 +66826,118 @@
           }
         }
       },
+      "PortalPremio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "tipo",
+          "nombre",
+          "costo_puntos",
+          "descuento_tipo",
+          "descuento_valor",
+          "tope",
+          "dias",
+          "plan_destino",
+          "agotado",
+          "canjeable",
+          "motivo_no_canjeable",
+          "faltan"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "descuento_factura",
+              "mes_gratis",
+              "mejora_plan",
+              "bien",
+              "boletos"
+            ]
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "costo_puntos": {
+            "type": "integer"
+          },
+          "descuento_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "monto",
+              "porcentaje"
+            ]
+          },
+          "descuento_valor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dias": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Días de la mejora de plan"
+          },
+          "plan_destino": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre del plan de la mejora"
+          },
+          "agotado": {
+            "type": "boolean"
+          },
+          "canjeable": {
+            "type": "boolean",
+            "description": "Para la tarjeta; la acción `lealtad.canjear` decide"
+          },
+          "motivo_no_canjeable": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "canje_desactivado",
+              "puntos_insuficientes",
+              "agotado",
+              "no_disponible_en_portal"
+            ]
+          },
+          "faltan": {
+            "type": "integer",
+            "description": "Puntos que faltan (el mayor entre costo y mínimo, menos el saldo)"
+          }
+        }
+      },
       "PortalPromesa": {
         "type": "object",
         "required": [
@@ -62954,6 +67040,164 @@
               }
             ],
             "description": "Estado del servicio tras la promesa (solo si quedó aprobada)"
+          }
+        }
+      },
+      "PortalPuntosEmpresa": {
+        "type": "object",
+        "required": [
+          "empresa",
+          "programa",
+          "saldo",
+          "por_vencer",
+          "proximo_vencimiento",
+          "vencen_pronto",
+          "movimientos"
+        ],
+        "properties": {
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa",
+            "description": "Empresa del programa (los puntos son por NIT)"
+          },
+          "programa": {
+            "type": "object",
+            "required": [
+              "nombre",
+              "terminos",
+              "minimo_canje",
+              "vencimiento_meses",
+              "aviso_vencimiento_dias",
+              "canje_portal"
+            ],
+            "properties": {
+              "nombre": {
+                "type": "string"
+              },
+              "terminos": {
+                "type": "string",
+                "description": "Términos publicados del programa (texto plano)"
+              },
+              "minimo_canje": {
+                "type": "integer",
+                "description": "Saldo mínimo para canjear"
+              },
+              "vencimiento_meses": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "null = los puntos no vencen"
+              },
+              "aviso_vencimiento_dias": {
+                "type": "integer"
+              },
+              "canje_portal": {
+                "type": "boolean",
+                "description": "El cliente puede canjear desde el portal"
+              }
+            }
+          },
+          "saldo": {
+            "type": "integer",
+            "description": "Puede ser negativo tras un reverso; entonces no canjea"
+          },
+          "por_vencer": {
+            "type": "integer",
+            "description": "Puntos que vencen dentro del aviso del programa"
+          },
+          "proximo_vencimiento": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "vencen_pronto": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "puntos",
+                "vence_en"
+              ],
+              "properties": {
+                "puntos": {
+                  "type": "integer"
+                },
+                "vence_en": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "tipo",
+                "origen_tipo",
+                "puntos",
+                "servicio_id",
+                "vence_en",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "acumulacion",
+                    "canje",
+                    "vencimiento",
+                    "reverso",
+                    "ajuste"
+                  ]
+                },
+                "origen_tipo": {
+                  "type": "string",
+                  "enum": [
+                    "factura",
+                    "pago",
+                    "servicio",
+                    "referido",
+                    "canje",
+                    "sorteo",
+                    "ajuste",
+                    "nota_credito",
+                    "lote"
+                  ]
+                },
+                "puntos": {
+                  "type": "integer",
+                  "description": "Con signo: positivo gana, negativo sale"
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "vence_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "description": "Los últimos 20, del más reciente; sin motivos internos ni valores contables"
           }
         }
       },
@@ -63078,6 +67322,414 @@
               "null"
             ],
             "description": "Destino enmascarado (\"m***a@e***.com\", \"tu Telegram vinculado\"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente"
+          }
+        }
+      },
+      "PortalSorteo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "descripcion",
+          "estado",
+          "regla_participacion",
+          "inscripcion_desde",
+          "corte_en",
+          "fecha_sorteo",
+          "lugar",
+          "premios",
+          "bases_hash",
+          "compromiso",
+          "mis_boletos",
+          "mi_codigo",
+          "ganadores"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "bases_publicadas",
+              "participacion_abierta",
+              "corte_cerrado",
+              "ejecutado",
+              "acta_cerrada",
+              "premios_entregados",
+              "cancelado"
+            ]
+          },
+          "regla_participacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inscripcion_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "corte_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fecha_sorteo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lugar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "premios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "posicion",
+                "nombre",
+                "cantidad",
+                "imagen_url",
+                "valor"
+              ],
+              "properties": {
+                "posicion": {
+                  "type": "integer"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "integer"
+                },
+                "imagen_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "valor": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "bases_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compromiso": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mis_boletos": {
+            "type": "integer",
+            "description": "Boletos del cliente (al corte, los de la lista)"
+          },
+          "mi_codigo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Su seudónimo en la lista (desde el corte)"
+          },
+          "ganadores": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "required": [
+                "posicion",
+                "tipo",
+                "codigo",
+                "premio_posicion"
+              ],
+              "properties": {
+                "posicion": {
+                  "type": "integer"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "titular",
+                    "suplente"
+                  ]
+                },
+                "codigo": {
+                  "type": "string",
+                  "description": "Seudónimo del participante"
+                },
+                "premio_posicion": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "Solo después de ejecutar"
+          }
+        }
+      },
+      "PortalSorteoPublico": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa",
+          "nombre",
+          "descripcion",
+          "estado",
+          "inscripcion_desde",
+          "corte_en",
+          "fecha_sorteo",
+          "lugar",
+          "premios",
+          "bases",
+          "bases_hash",
+          "compromiso",
+          "motivo_cancelacion",
+          "verificable",
+          "ganadores"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa": {
+            "$ref": "#/components/schemas/PortalMarcaEmpresa"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "bases_publicadas",
+              "participacion_abierta",
+              "corte_cerrado",
+              "ejecutado",
+              "acta_cerrada",
+              "premios_entregados",
+              "cancelado"
+            ]
+          },
+          "inscripcion_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "corte_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fecha_sorteo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lugar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "premios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "posicion",
+                "nombre",
+                "cantidad",
+                "valor",
+                "imagen_url"
+              ],
+              "properties": {
+                "posicion": {
+                  "type": "integer"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "integer"
+                },
+                "valor": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "imagen_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "bases": {
+            "type": "object",
+            "required": [
+              "mecanica",
+              "regla_participacion",
+              "plazo_reclamo_dias",
+              "no_reclamados",
+              "publicacion_resultados",
+              "fuente_valor_publico",
+              "resolucion_gobernacion"
+            ],
+            "properties": {
+              "mecanica": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "regla_participacion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plazo_reclamo_dias": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "no_reclamados": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "publicacion_resultados": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fuente_valor_publico": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "De dónde sale el valor público del acto (p. ej. un número de la lotería)"
+              },
+              "resolucion_gobernacion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "bases_hash": {
+            "type": "string",
+            "description": "SHA-256 del JSON canónico de las bases y los premios"
+          },
+          "compromiso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 de la semilla, publicado con las bases"
+          },
+          "motivo_cancelacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verificable": {
+            "type": "boolean",
+            "description": "Ya se ejecutó: hay datos para recalcular el resultado"
+          },
+          "ganadores": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "required": [
+                "posicion",
+                "tipo",
+                "codigo",
+                "premio_posicion"
+              ],
+              "properties": {
+                "posicion": {
+                  "type": "integer"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "titular",
+                    "suplente"
+                  ]
+                },
+                "codigo": {
+                  "type": "string",
+                  "description": "Seudónimo del participante, nunca su nombre"
+                },
+                "premio_posicion": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "Solo después de ejecutar"
           }
         }
       },
@@ -63289,6 +67941,21 @@
               "null"
             ],
             "description": "null = sin límite"
+          },
+          "sorteo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Solo boletos: el sorteo"
+          },
+          "boletos": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Solo boletos: cuántos da cada canje"
           },
           "en_portal": {
             "type": "boolean"
@@ -67375,6 +72042,149 @@
           }
         }
       },
+      "ReporteParticipantesSorteo": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "orden",
+                "codigo_publico",
+                "boletos",
+                "cliente_id",
+                "cliente",
+                "servicio_id"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "orden": {
+                  "type": "integer"
+                },
+                "codigo_publico": {
+                  "type": "string"
+                },
+                "boletos": {
+                  "type": "integer"
+                },
+                "cliente_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cliente": {
+                  "type": "string"
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "orden",
+              "codigo_publico",
+              "boletos",
+              "cliente_id",
+              "cliente",
+              "servicio_id"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "orden": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "codigo_publico": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Al pie: «lista_hash <SHA-256>» de la lista del corte"
+              },
+              "boletos": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cliente_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cliente": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "servicio_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ReportePromesas": {
         "type": "object",
         "required": [
@@ -67568,6 +72378,73 @@
           },
           "generado_en": {
             "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RequisitoSorteo": {
+        "type": "object",
+        "required": [
+          "clave",
+          "estado",
+          "valor",
+          "evidencia",
+          "nota",
+          "marcado_en"
+        ],
+        "properties": {
+          "clave": {
+            "type": "string",
+            "enum": [
+              "bases_diaco",
+              "autorizacion_gobernacion",
+              "fianza",
+              "isr_premios",
+              "timbre_fiscal",
+              "delegado_o_notario",
+              "publicacion_resultados",
+              "lista_a_gobernacion"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "cumplido",
+              "no_aplica",
+              "pendiente"
+            ]
+          },
+          "valor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archivo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Evidencia como archivo (GET .../archivos/:archivoId)"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "marcado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           }
         }
@@ -70109,6 +74986,864 @@
           }
         }
       },
+      "SorteoDetalle": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "programa_id",
+          "nombre",
+          "descripcion",
+          "estado",
+          "bases",
+          "criterios",
+          "bases_hash",
+          "inscripcion_desde",
+          "corte_en",
+          "fecha_sorteo",
+          "lugar",
+          "suplentes",
+          "algoritmo",
+          "compromiso",
+          "semilla",
+          "valor_publico",
+          "lista_hash",
+          "resultado",
+          "motivo_cancelacion",
+          "publicado_en",
+          "corte_cerrado_en",
+          "ejecutado_en",
+          "cancelado_en",
+          "premios",
+          "version",
+          "created_at",
+          "updated_at",
+          "requisitos",
+          "participantes",
+          "boletos",
+          "ganadores"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "bases_publicadas",
+              "participacion_abierta",
+              "corte_cerrado",
+              "ejecutado",
+              "acta_cerrada",
+              "premios_entregados",
+              "cancelado"
+            ]
+          },
+          "bases": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Bases (§7.2): mecanica, regla_participacion, plazo_reclamo_dias…"
+          },
+          "criterios": {
+            "type": "object",
+            "required": [
+              "boletos_por_servicio",
+              "admite_canje"
+            ],
+            "properties": {
+              "boletos_por_servicio": {
+                "type": "integer"
+              },
+              "admite_canje": {
+                "type": "boolean"
+              }
+            }
+          },
+          "bases_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inscripcion_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "corte_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fecha_sorteo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lugar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suplentes": {
+            "type": "integer"
+          },
+          "algoritmo": {
+            "type": "string"
+          },
+          "compromiso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 de la semilla, público desde que se publican las bases"
+          },
+          "semilla": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Revelada al ejecutar"
+          },
+          "valor_publico": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valor_publico_evidencia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico"
+          },
+          "lista_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resultado": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "motivo_cancelacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "corte_cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ejecutado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "cancelado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "premios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "posicion",
+                "nombre",
+                "cantidad",
+                "imagen_url",
+                "valor",
+                "tipo",
+                "premio_id",
+                "retiene_isr",
+                "isr_pct"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "posicion": {
+                  "type": "integer"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "integer"
+                },
+                "imagen_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "valor": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Valor de libre competencia"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "efectivo",
+                    "bien",
+                    "servicio"
+                  ]
+                },
+                "premio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Solo servicio: premio del catálogo que se entrega"
+                },
+                "retiene_isr": {
+                  "type": "boolean"
+                },
+                "isr_pct": {
+                  "type": "string",
+                  "description": "Porcentaje del ISR del premio"
+                },
+                "imagen_archivo_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Imagen subida (POST /lealtad/sorteos/:id/premios/:posicion/imagen); imagen_url es su ruta"
+                }
+              }
+            }
+          },
+          "aviso_portal": {
+            "type": "boolean",
+            "description": "Se anuncia en el portal (PUT /lealtad/sorteos/:id/aviso-portal; hasta antes de ejecutar)"
+          },
+          "acta_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 del PDF del acta (GET /lealtad/sorteos/:id/acta.pdf)"
+          },
+          "acta_archivo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "acta_constancia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acta_cerrada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requisitos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequisitoSorteo"
+            }
+          },
+          "participantes": {
+            "type": "integer"
+          },
+          "boletos": {
+            "type": "integer"
+          },
+          "ganadores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "posicion",
+                "tipo",
+                "participante_id",
+                "cliente_id",
+                "codigo_publico",
+                "premio_posicion",
+                "estado",
+                "retencion_isr",
+                "contrapartida",
+                "asiento_id",
+                "egreso_id",
+                "canje_id",
+                "entregado_en",
+                "version"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "posicion": {
+                  "type": "integer"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "titular",
+                    "suplente"
+                  ]
+                },
+                "participante_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cliente_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "codigo_publico": {
+                  "type": "string"
+                },
+                "premio_posicion": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "estado": {
+                  "type": "string",
+                  "enum": [
+                    "por_notificar",
+                    "notificado",
+                    "entregado",
+                    "no_reclamado",
+                    "sustituido"
+                  ]
+                },
+                "retencion_isr": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "contrapartida": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "asiento_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "egreso_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "canje_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "entregado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "compra_linea_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Línea de la compra con factura del bien entregado"
+                },
+                "premio": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Premio que le toca: el de su puesto o, un suplente que tomó uno no reclamado, premio_sustitucion"
+                },
+                "premio_sustitucion": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "sustituye_a": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Ganador cuyo premio no reclamado toma este suplente"
+                },
+                "notificado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "reclamar_antes": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "no_reclamado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "constancia_archivo_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "compra_unidades": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Unidades de esa línea que consumió la entrega"
+                },
+                "compra_base": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Parte de la base de la línea que le tocó (base / cantidad por unidad; la última lleva el resto)"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "archivos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArchivoSorteo"
+            }
+          }
+        }
+      },
+      "SorteoLealtad": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "programa_id",
+          "nombre",
+          "descripcion",
+          "estado",
+          "bases",
+          "criterios",
+          "bases_hash",
+          "inscripcion_desde",
+          "corte_en",
+          "fecha_sorteo",
+          "lugar",
+          "suplentes",
+          "algoritmo",
+          "compromiso",
+          "semilla",
+          "valor_publico",
+          "lista_hash",
+          "resultado",
+          "motivo_cancelacion",
+          "publicado_en",
+          "corte_cerrado_en",
+          "ejecutado_en",
+          "cancelado_en",
+          "premios",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "programa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "bases_publicadas",
+              "participacion_abierta",
+              "corte_cerrado",
+              "ejecutado",
+              "acta_cerrada",
+              "premios_entregados",
+              "cancelado"
+            ]
+          },
+          "bases": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Bases (§7.2): mecanica, regla_participacion, plazo_reclamo_dias…"
+          },
+          "criterios": {
+            "type": "object",
+            "required": [
+              "boletos_por_servicio",
+              "admite_canje"
+            ],
+            "properties": {
+              "boletos_por_servicio": {
+                "type": "integer"
+              },
+              "admite_canje": {
+                "type": "boolean"
+              }
+            }
+          },
+          "bases_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inscripcion_desde": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "corte_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fecha_sorteo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lugar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suplentes": {
+            "type": "integer"
+          },
+          "algoritmo": {
+            "type": "string"
+          },
+          "compromiso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 de la semilla, público desde que se publican las bases"
+          },
+          "semilla": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Revelada al ejecutar"
+          },
+          "valor_publico": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valor_publico_evidencia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico"
+          },
+          "lista_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resultado": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "motivo_cancelacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "corte_cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ejecutado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "cancelado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "premios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "posicion",
+                "nombre",
+                "cantidad",
+                "imagen_url",
+                "valor",
+                "tipo",
+                "premio_id",
+                "retiene_isr",
+                "isr_pct"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "posicion": {
+                  "type": "integer"
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "integer"
+                },
+                "imagen_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "valor": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Valor de libre competencia"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "efectivo",
+                    "bien",
+                    "servicio"
+                  ]
+                },
+                "premio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Solo servicio: premio del catálogo que se entrega"
+                },
+                "retiene_isr": {
+                  "type": "boolean"
+                },
+                "isr_pct": {
+                  "type": "string",
+                  "description": "Porcentaje del ISR del premio"
+                },
+                "imagen_archivo_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Imagen subida (POST /lealtad/sorteos/:id/premios/:posicion/imagen); imagen_url es su ruta"
+                }
+              }
+            }
+          },
+          "aviso_portal": {
+            "type": "boolean",
+            "description": "Se anuncia en el portal (PUT /lealtad/sorteos/:id/aviso-portal; hasta antes de ejecutar)"
+          },
+          "acta_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 del PDF del acta (GET /lealtad/sorteos/:id/acta.pdf)"
+          },
+          "acta_archivo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "acta_constancia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acta_cerrada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SustitucionFactura": {
         "type": "object",
         "required": [
@@ -70670,6 +76405,132 @@
           },
           "descripcion": {
             "type": "string"
+          }
+        }
+      },
+      "VerificacionSorteo": {
+        "type": "object",
+        "required": [
+          "sorteo_id",
+          "algoritmo",
+          "bases_hash",
+          "bases",
+          "compromiso",
+          "semilla",
+          "valor_publico",
+          "fuente_valor_publico",
+          "valor_publico_evidencia",
+          "acta_hash",
+          "lista_hash",
+          "lista",
+          "titulares",
+          "suplentes",
+          "ganadores"
+        ],
+        "properties": {
+          "sorteo_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "algoritmo": {
+            "type": "string"
+          },
+          "bases_hash": {
+            "type": "string"
+          },
+          "bases": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "compromiso": {
+            "type": "string"
+          },
+          "semilla": {
+            "type": "string"
+          },
+          "valor_publico": {
+            "type": "string"
+          },
+          "fuente_valor_publico": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Fuente pública del valor declarada en las bases (congelada con bases_hash)"
+          },
+          "valor_publico_evidencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acta_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 del acta, cuando ya se cerró"
+          },
+          "lista_hash": {
+            "type": "string"
+          },
+          "lista": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "codigo",
+                "boletos"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string"
+                },
+                "boletos": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "titulares": {
+            "type": "integer"
+          },
+          "suplentes": {
+            "type": "integer"
+          },
+          "ganadores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "posicion",
+                "tipo",
+                "codigo",
+                "premio_posicion"
+              ],
+              "properties": {
+                "posicion": {
+                  "type": "integer"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "titular",
+                    "suplente"
+                  ]
+                },
+                "codigo": {
+                  "type": "string",
+                  "description": "Seudónimo del participante"
+                },
+                "premio_posicion": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       },
