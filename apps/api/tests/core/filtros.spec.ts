@@ -1,10 +1,11 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearPlantillaFila, generar } from '#tests/billing/ayudas_billing'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import {
     crearClienteFila,
+    crearEmpresaFila,
     crearPlanFila,
     crearRouterFila,
     crearServicioFila,
@@ -58,8 +59,15 @@ async function promesa(clienteId: number, servicioId: number, estadoPromesa = 'a
 /**
  * Z1: C1 (S1 R1 P1 activo, factura vencida), C2 (S2 R1 P2 suspendido, promesa activa)
  * Z2: C3 (S3 R2 P1 suspendido + S3b R1 P2 activo, factura pagada), C4 sin servicios
+ *
+ * Todo el dinero del escenario vive en una **empresa propia de la prueba** (se desactiva al
+ * terminar; ningún reporte de las demás pruebas la lee): la factura vencida sale de billing con su
+ * asiento, pero la factura pagada, el pago y las promesas se insertan directo (pagar por la acción
+ * reactivaría el servicio suspendido y cambiaría el escenario). Así la empresa principal no queda
+ * con dinero sin asiento. El usuario de las pruebas tiene alcance global: ve las dos empresas.
  */
 async function escenario() {
+    const empresa = await crearEmpresaFila()
     const z1 = await crearZonaFila()
     const z2 = await crearZonaFila()
     const r1 = await crearRouterFila()
@@ -70,10 +78,22 @@ async function escenario() {
     const c2 = await crearClienteFila({ zona_id: z1 })
     const c3 = await crearClienteFila({ zona_id: z2 })
     const c4 = await crearClienteFila({ zona_id: z2 })
-    const s1 = await crearServicioFila({ cliente_id: c1, router_id: r1, plan_id: p1 })
-    const s2 = await crearServicioFila({ cliente_id: c2, router_id: r1, plan_id: p2, estado: 'suspendido' })
-    const s3 = await crearServicioFila({ cliente_id: c3, router_id: r2, plan_id: p1, estado: 'suspendido' })
-    const s3b = await crearServicioFila({ cliente_id: c3, router_id: r1, plan_id: p2 })
+    const s1 = await crearServicioFila({ cliente_id: c1, router_id: r1, plan_id: p1, empresa_id: empresa })
+    const s2 = await crearServicioFila({
+        cliente_id: c2,
+        router_id: r1,
+        plan_id: p2,
+        estado: 'suspendido',
+        empresa_id: empresa,
+    })
+    const s3 = await crearServicioFila({
+        cliente_id: c3,
+        router_id: r2,
+        plan_id: p1,
+        estado: 'suspendido',
+        empresa_id: empresa,
+    })
+    const s3b = await crearServicioFila({ cliente_id: c3, router_id: r1, plan_id: p2, empresa_id: empresa })
     await facturaVencida(s1)
     await insertar('billing.facturas', {
         cliente_id: c3,
@@ -89,7 +109,7 @@ async function escenario() {
     })
     await promesa(c2, s2)
     await promesa(c3, s3, 'cumplida')
-    return { z1, z2, r1, r2, p1, p2, c1, c2, c3, c4, s1, s2, s3, s3b }
+    return { empresa, z1, z2, r1, r2, p1, p2, c1, c2, c3, c4, s1, s2, s3, s3b }
 }
 
 type Escenario = Awaited<ReturnType<typeof escenario>>
@@ -126,7 +146,8 @@ async function idsServicios(client: any, token: string, qs: Record<string, unkno
 
 const orden = (...ids: number[]) => [...ids].sort((a, b) => a - b)
 
-test.group('Filtros · GET /clientes', () => {
+test.group('Filtros · GET /clientes', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     test('estado_servicio, router_id y plan_id se cumplen en el mismo servicio', async ({
         client,
         assert,
@@ -193,7 +214,8 @@ test.group('Filtros · GET /clientes', () => {
     })
 })
 
-test.group('Filtros · GET /servicios', () => {
+test.group('Filtros · GET /servicios', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     test('zona_id y con_deuda_vencida cruzados con estado y router', async ({ client, assert }) => {
         const { token } = await usuarioConRoles(['admin'])
         const e = await escenario()
@@ -227,13 +249,17 @@ test.group('Filtros · GET /servicios', () => {
             router_nombre: router.nombre,
             zona_nombre: zona.nombre,
         })
-        const sinZona = await crearServicioFila({ cliente_id: await crearClienteFila() })
+        const sinZona = await crearServicioFila({
+            cliente_id: await crearClienteFila(),
+            empresa_id: e.empresa,
+        })
         const r2 = await estado(client.get(`/api/v1/servicios/${sinZona}`).bearerToken(token), 200)
         assert.isNull(r2.body().zona_nombre)
     })
 })
 
-test.group('Filtros · GET /bitacora/acciones', () => {
+test.group('Filtros · GET /bitacora/acciones', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
     test('cliente_id trae acciones del cliente, sus servicios, facturas, pagos y promesas; canal y excluir_canal', async ({
         client,
         assert,
@@ -260,6 +286,7 @@ test.group('Filtros · GET /bitacora/acciones', () => {
             'el escenario solo deja acciones de consola',
         )
         const pagoId = await insertar('billing.pagos', {
+            empresa_id: e.empresa,
             cliente_id: e.c1,
             metodo: 'deposito',
             monto: '50.00',
