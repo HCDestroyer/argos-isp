@@ -1,6 +1,8 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { crearPlantillaFila, generar } from '#tests/billing/ayudas_billing'
+import VencerFacturas from '#billing/actions/vencer_facturas'
 import {
     crearClienteFila,
     crearPlanFila,
@@ -19,18 +21,27 @@ async function insertar(tabla: string, fila: Record<string, unknown>): Promise<n
     return r!.id
 }
 
-async function facturaVencida(clienteId: number, servicioId: number) {
-    return insertar('billing.facturas', {
-        cliente_id: clienteId,
-        servicio_id: servicioId,
-        periodo: '2026-09-01',
-        clave_unica: unico('fac'),
-        vence_en: '2026-09-10',
-        estado: 'vencida',
-        subtotal: '100.00',
-        iva: '12.00',
-        total: '112.00',
-    })
+/**
+ * Factura vencida del periodo 2026-09 emitida por billing (`GenerarFacturas` + `VencerFacturas`),
+ * con su asiento de CxC: un INSERT directo dejaba cartera sin CxC en la empresa principal y hacía
+ * fallar la conciliación «cartera vencida vs. CxC» de A3 según el orden de los archivos.
+ * `VencerFacturas` no cambia el estado del servicio.
+ */
+async function facturaVencida(servicioId: number): Promise<number> {
+    const plantillaId = await crearPlantillaFila({ mora_tipo: 'ninguna' })
+    await db
+        .from('core.servicios')
+        .where('id', servicioId)
+        .update({ plantilla_facturacion_id: plantillaId, fecha_instalacion: '2026-09-01' })
+    await generar(servicioId, '2026-09-01')
+    await new VencerFacturas().execute({ servicio_id: servicioId, hasta: '2026-10-01' }, contextoPrueba())
+    const factura = await db
+        .from('billing.facturas')
+        .where('servicio_id', servicioId)
+        .where('estado', 'vencida')
+        .orderBy('id', 'asc')
+        .firstOrFail()
+    return Number(factura.id)
 }
 
 async function promesa(clienteId: number, servicioId: number, estadoPromesa = 'activa') {
@@ -63,7 +74,7 @@ async function escenario() {
     const s2 = await crearServicioFila({ cliente_id: c2, router_id: r1, plan_id: p2, estado: 'suspendido' })
     const s3 = await crearServicioFila({ cliente_id: c3, router_id: r2, plan_id: p1, estado: 'suspendido' })
     const s3b = await crearServicioFila({ cliente_id: c3, router_id: r1, plan_id: p2 })
-    await facturaVencida(c1, s1)
+    await facturaVencida(s1)
     await insertar('billing.facturas', {
         cliente_id: c3,
         servicio_id: s3,
@@ -229,7 +240,25 @@ test.group('Filtros · GET /bitacora/acciones', () => {
     }) => {
         const { token, usuario } = await usuarioConRoles(['admin'])
         const e = await escenario()
-        const facturaId = await facturaVencida(e.c1, e.s1)
+        // la factura vencida de S1 que dejó el escenario
+        const factura = await db
+            .from('billing.facturas')
+            .where('servicio_id', e.s1)
+            .orderBy('id')
+            .firstOrFail()
+        const facturaId = Number(factura.id)
+        // acciones reales que dejó el escenario al emitir y vencer la factura de S1 (canal consola)
+        const previas = await estado(
+            client.get('/api/v1/bitacora/acciones').bearerToken(token).qs({ cliente_id: e.c1, limit: 200 }),
+            200,
+        )
+        const accionesPrevias = (previas.body().data as Array<{ accion: string; canal: string }>).map(
+            (a) => a.accion,
+        )
+        assert.isTrue(
+            (previas.body().data as Array<{ canal: string }>).every((a) => a.canal === 'consola'),
+            'el escenario solo deja acciones de consola',
+        )
         const pagoId = await insertar('billing.pagos', {
             cliente_id: e.c1,
             metodo: 'deposito',
@@ -310,6 +339,7 @@ test.group('Filtros · GET /bitacora/acciones', () => {
         assert.sameMembers(
             todas.map((a) => a.accion),
             [
+                ...accionesPrevias,
                 'clientes.editar',
                 'servicios.cambiar_estado',
                 'facturas.generar',
