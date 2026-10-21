@@ -53,6 +53,8 @@ export const cuentas: Cuenta[] = [
     cuenta(15, '5.1.02', 'Comisiones de pasarelas', 'gasto', 14, true),
     // Decisión B (A3): el saldo pequeño de un pago se cierra como gasto.
     cuenta(20, '5.3.05', 'Diferencias de cobro', 'gasto', 14, true),
+    // Decisión del PM (A3): lo regalado sin cobrar (bonificaciones) va a gasto contra el ingreso.
+    cuenta(21, '5.1.01', 'Descuentos y bonificaciones', 'gasto', 14, true),
     // Subcuentas de las cuentas bancarias propias (`bancos/datos.ts`), como las crea A3.
     cuenta(16, '1.1.02.02', 'Banco Industrial · Monetaria (****3456)', 'activo', 1, true),
     cuenta(17, '1.1.02.03', 'Banco Industrial · Dólares (****7651)', 'activo', 1, true),
@@ -65,6 +67,7 @@ export const CUENTA_CXC = 7
 export const CUENTA_IVA = 10
 export const CUENTA_INGRESOS = 12
 export const CUENTA_BANCO = 6
+export const CUENTA_BONIFICACIONES = 21
 
 /** Cuenta de cada caja (`Caja.cuenta_id`). */
 const CUENTA_DE_CAJA: Record<number, number> = { 1: 3, 2: 4, 3: 5, 4: 19 }

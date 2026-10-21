@@ -146,6 +146,10 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         { ruta: '/adicionales/motivos', espera: 'Compensación por falla' },
         { ruta: '/planes/3', espera: 'Usuario de IPTV' },
         { ruta: '/servicios/1', espera: 'iptv-0002' },
+        // Bonificaciones (A3, decisión del PM).
+        { ruta: '/bonificaciones', espera: 'Cortesía comercial' },
+        { ruta: '/bonificaciones/3', espera: 'Promoción de instalación' },
+        { ruta: '/reportes/bonificaciones', espera: 'Programa de lealtad' },
     ]
 
     for (const { ruta, espera } of PANTALLAS) {
