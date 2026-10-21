@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.1](https://github.com/HCDestroyer/argos-isp/compare/v0.9.0...v0.9.1) (2026-10-19)
+
+
+### Funcionalidades
+
+* **billing:** decisión B, cerrar diferencia como gasto interno 5.3.05 (auditado) ([104f490](https://github.com/HCDestroyer/argos-isp/commit/104f4905deb2af364f6db905c207570acc52e7f7))
+* **billing:** decisiones del PM, sin facturas de Q0 (bonificaciones), cargo único, saldo a favor y adicionales cobrados (auditado) ([#118](https://github.com/HCDestroyer/argos-isp/issues/118)) ([18a33c1](https://github.com/HCDestroyer/argos-isp/commit/18a33c194da935ccea02a009b3446c2b0bad6ce5))
+* **core:** adicionales bloqueados con el servicio suspendido y primer periodo del cobrado ([4ec5fb1](https://github.com/HCDestroyer/argos-isp/commit/4ec5fb1d6ce5736c3aa04ec7354a7443962a808b))
+* **core:** adicionales bloqueados con el servicio suspendido y primer periodo prorrateado o sin costo ([e163071](https://github.com/HCDestroyer/argos-isp/commit/e1630713bdc9d1408c6438e56f0c3dafefe86104))
+* **infra:** prueba de punta a punta final con una versión publicada ([ad94452](https://github.com/HCDestroyer/argos-isp/commit/ad94452432af8e4b48dfe0ef0a21f8bb11650709))
+* **portal:** adicionales bloqueados por suspensión en /cuenta ([a8024f7](https://github.com/HCDestroyer/argos-isp/commit/a8024f771d9be496280a7e0092b2161330e7fa39))
+* **portal:** anuncios y promociones del portal con su panel, y vista de lealtad ([a9ad99c](https://github.com/HCDestroyer/argos-isp/commit/a9ad99c721f48c09378be33c098ce5ea6fcd60bc))
+* **portal:** servicios adicionales y tipo de plan en el portal, con estado bloqueado ([cd5cd66](https://github.com/HCDestroyer/argos-isp/commit/cd5cd6616eb6733d6da90362e9952de73da4edd4))
+* **web:** adicionales bloqueados por la suspensión y primer periodo del cobrado ([#123](https://github.com/HCDestroyer/argos-isp/issues/123)) ([d7f5aa6](https://github.com/HCDestroyer/argos-isp/commit/d7f5aa6bc4ba3776a2cc3531b5cae4c5744aeaeb))
+
+
+### Correcciones
+
+* **core:** la búsqueda de clientes usa el teléfono solo si q tiene forma de teléfono ([51ce999](https://github.com/HCDestroyer/argos-isp/commit/51ce999732118fbb355c5492b45b243da71f1698))
+* **notify:** la vigilancia de crons cuenta la corrida de su mismo milisegundo ([d587f04](https://github.com/HCDestroyer/argos-isp/commit/d587f043bb30ecf480f1614e5f2d56032d2054f8))
+* **notify:** la vigilancia de crons ve una corrida en el mismo milisegundo y su prueba no depende de la hora ([6df75be](https://github.com/HCDestroyer/argos-isp/commit/6df75be5f2d8e4a6e0f4cb39465f245a5ba63547))
+
 ## 0.9.0 (2026-10-19)
 
 

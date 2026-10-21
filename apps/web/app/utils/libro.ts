@@ -27,6 +27,8 @@ export const ORIGENES_ASIENTO: Record<Origen, { etiqueta: string, icono: string 
     diferido: { etiqueta: 'Diferido', icono: 'i-lucide-calendar-range' },
     alta_activo: { etiqueta: 'Alta de activo', icono: 'i-lucide-package-plus' },
     lealtad: { etiqueta: 'Programa de lealtad', icono: 'i-lucide-gift' },
+    sorteo: { etiqueta: 'Premio de sorteo', icono: 'i-lucide-ticket' },
+    bonificacion: { etiqueta: 'Bonificación', icono: 'i-lucide-badge-percent' },
 }
 
 interface OrigenVisual {
@@ -85,6 +87,10 @@ export function rutaOrigen(asiento: Pick<AsientoLibro, 'origen_tipo' | 'origen_i
     }
     if (asiento.origen_tipo === 'pago') {
         return `/pagos/${asiento.origen_id}`
+    }
+    // Decisión del PM (A3): el periodo regalado o el cargo sin costo es una bonificación, no una factura.
+    if (asiento.origen_tipo === 'bonificacion') {
+        return `/bonificaciones/${asiento.origen_id}`
     }
     if (asiento.origen_tipo === 'nota_credito') {
         return `/notas-credito/${asiento.origen_id}`

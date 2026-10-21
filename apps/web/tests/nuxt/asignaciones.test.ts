@@ -1,7 +1,8 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import ServicioAsignaciones from '~/components/ServicioAsignaciones.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('ficha de servicio · historial de asignaciones', () => {
     beforeEach(() => {
@@ -25,12 +26,12 @@ describe('ficha de servicio · historial de asignaciones', () => {
 
     it('muestra el vigente y, con error, solo el aviso con Reintentar', async () => {
         const vista = await mountSuspended(ServicioAsignaciones, { props: { servicioId: 4 } })
-        await vi.waitFor(() => expect(vista.text()).toContain('Vigente'))
+        await esperar(() => expect(vista.text()).toContain('Vigente'))
         expect(vista.text()).toContain('edicion: plan, ipv4')
 
         simularFalla('GET /api/v1/servicios/:id/asignaciones', 500)
         const conError = await mountSuspended(ServicioAsignaciones, { props: { servicioId: 4 } })
-        await vi.waitFor(() => expect(conError.text()).toContain('Reintentar'))
+        await esperar(() => expect(conError.text()).toContain('Reintentar'))
         expect(conError.text()).not.toContain('Vigente')
     })
 })

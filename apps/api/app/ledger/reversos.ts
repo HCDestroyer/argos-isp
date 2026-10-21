@@ -63,6 +63,21 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'libro.registrar_asiento',
         documento: 'el diferimiento con un asiento de ajuste (las cuotas no se anulan)',
     },
+    // H23: la entrega de un premio de sorteo (en especie e ISR) se deshace junto con el ganador
+    sorteo: {
+        accion: 'sorteos.anular_entrega',
+        documento: 'la entrega del premio (POST /lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega)',
+    },
+    // decisión B: la diferencia de cobro se revierte en espejo al anular el pago aplicado a su factura
+    diferencia_cobro: {
+        accion: 'pagos.anular',
+        documento: 'el pago aplicado a la factura (POST /pagos/:id/anular): revierte sus diferencias',
+    },
+    // decisiones del PM (19 oct): la bonificación (lo que era una factura de Q0) es de solo inserción
+    bonificacion: {
+        accion: 'libro.registrar_asiento',
+        documento: 'la bonificación con un asiento de ajuste (las bonificaciones no se anulan)',
+    },
 }
 
 /** null si el asiento se puede revertir directo; si no, qué acción usar. */

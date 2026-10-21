@@ -1,10 +1,11 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import { resumenDashboard } from '~~/fixtures/reportes/datos'
 import PaginaInicio from '~/pages/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 describe('semana 2 · dashboard', () => {
     beforeEach(() => {
@@ -44,7 +45,7 @@ describe('semana 2 · dashboard', () => {
 
     it('muestra los indicadores y las dos gráficas', async () => {
         const vista = await mountSuspended(PaginaInicio, { route: '/' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="kpi-mes"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="kpi-mes"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="servicios-activo"]').text()).toContain('412')
         expect(vista.find('[data-prueba="servicios-suspendido"]').text()).toContain('37')
         expect(vista.find('[data-prueba="servicios-limitado"]').text()).toContain('18')
@@ -62,7 +63,7 @@ describe('semana 2 · dashboard', () => {
     it('con error muestra el aviso con Reintentar y ninguna cifra', async () => {
         simularFalla('GET /api/v1/dashboard/resumen', 500)
         const vista = await mountSuspended(PaginaInicio, { route: '/' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="tablero-error"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="tablero-error"]').exists()).toBe(true))
         expect(vista.text()).toContain('Reintentar')
         expect(vista.text()).not.toContain('Q ')
         expect(vista.find('[data-prueba="kpi-mes"]').exists()).toBe(false)
@@ -73,7 +74,7 @@ describe('semana 2 · dashboard', () => {
         sesionFixture('fixture-cajero')
         useUsuarioActual().value = meCajero
         const vista = await mountSuspended(PaginaInicio, { route: '/' })
-        await vi.waitFor(() => expect(vista.text()).toContain('Accesos'))
+        await esperar(() => expect(vista.text()).toContain('Accesos'))
         expect(vista.find('[data-prueba="tablero-servicios"]').exists()).toBe(false)
         expect(vista.find('[data-prueba="tablero-error"]').exists()).toBe(false)
     })

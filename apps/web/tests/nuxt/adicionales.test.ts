@@ -1,6 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
@@ -14,6 +14,7 @@ import PaginaAdicionales from '~/pages/adicionales/index.vue'
 import PaginaMotivos from '~/pages/adicionales/motivos.vue'
 import PaginaPlan from '~/pages/planes/[id].vue'
 import PaginaPlanes from '~/pages/planes/index.vue'
+import { esperar } from '../ayudas/esperar'
 
 type Me = Schema<'Me'>
 
@@ -59,7 +60,7 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
             expect(esquemaAsignacion.safeParse({ ...base, adicional_id: 1, precio: '0' }).error?.issues[0]?.message).toBe('El precio debe ser mayor que cero')
             expect(esquemaAsignacion.safeParse({ ...base, adicional_id: 1, modalidad: 'cortesia' }).error?.issues[0]?.message).toBe('Elige el motivo de la cortesía')
             const cobrado = esquemaAsignacion.parse({ ...base, adicional_id: 2, precio: '35', motivo_id: 4 })
-            expect(cuerpoAsignacion(cobrado, '')).toEqual({ adicional_id: 2, modalidad: 'cobrado', identificador: null, credencial: null, precio: '35.00', motivo_id: null, motivo_detalle: null })
+            expect(cuerpoAsignacion(cobrado, '')).toEqual({ adicional_id: 2, modalidad: 'cobrado', identificador: null, credencial: null, precio: '35.00', motivo_id: null, motivo_detalle: null, primer_periodo: 'prorrateado' })
             expect(esquemaAdicional.parse({ codigo: ' iptv-hd ', nombre: 'IPTV HD', descripcion: '', precio_sugerido: '' }).codigo).toBe('IPTV-HD')
             expect(esquemaAdicional.safeParse({ codigo: 'con espacio', nombre: 'X1', descripcion: '', precio_sugerido: '' }).success).toBe(false)
             expect(esquemaAdicionalesPlan.safeParse({ adicionales: [{ adicional_id: 1, cantidad: 1 }, { adicional_id: 1, cantidad: 2 }] }).error?.issues[0]?.message).toBe('Ya está en la lista: sube la cantidad')
@@ -74,7 +75,7 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
             const datos = esquemaAsignacion.parse({ ...entradaAsignacion(cortesia), identificador: 'iptv-0099' })
             expect(cambiosAsignacion(cortesia, datos, { accion: 'conservar', valor: '' })).toEqual({ version: cortesia.version, identificador: 'iptv-0099' })
             const aCobrado = esquemaAsignacion.parse({ ...entradaAsignacion(cortesia), modalidad: 'cobrado', precio: '30' })
-            expect(cambiosAsignacion(cortesia, aCobrado, { accion: 'borrar', valor: '' })).toEqual({ version: cortesia.version, modalidad: 'cobrado', precio: '30.00', credencial: null })
+            expect(cambiosAsignacion(cortesia, aCobrado, { accion: 'borrar', valor: '' })).toEqual({ version: cortesia.version, modalidad: 'cobrado', precio: '30.00', primer_periodo: 'prorrateado', credencial: null })
         })
 
         it('tipo de plan: etiqueta propia y uno desconocido por su nombre', () => {
@@ -190,7 +191,7 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
         it('ficha del servicio: modalidades, precio, motivo, "Ver credencial" solo con credencial y bajas a pedido', async () => {
             const servicio = bd.servicios.find(s => s.id === 1)
             const vista = await mountSuspended(enApp(ServicioAdicionales, { servicio }))
-            await vi.waitFor(() => expect(vista.findAll('[data-modalidad]').length).toBe(3))
+            await esperar(() => expect(vista.findAll('[data-modalidad]').length).toBe(3))
             expect(vista.findAll('[data-modalidad]').map(b => b.text())).toEqual(['Cortesía', 'Cobrado', 'Incluido'])
             expect(vista.text()).toContain('Q 35.00 al mes')
             expect(vista.text()).toContain('Compensación por falla · Tres días sin servicio en septiembre')
@@ -198,12 +199,12 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
             expect(vista.find('[data-prueba="ver-credencial-2"]').exists()).toBe(true)
             expect(vista.find('[data-prueba="ver-credencial-3"]').exists()).toBe(false)
             await vista.find('[role="switch"]').trigger('click')
-            await vi.waitFor(() => expect(vista.text()).toContain('El cliente ya no lo usa'))
+            await esperar(() => expect(vista.text()).toContain('El cliente ya no lo usa'))
             vista.unmount()
 
             useUsuarioActual().value = SIN_CREDENCIAL
             const sinPermiso = await mountSuspended(enApp(ServicioAdicionales, { servicio }))
-            await vi.waitFor(() => expect(sinPermiso.findAll('[data-modalidad]').length).toBe(3))
+            await esperar(() => expect(sinPermiso.findAll('[data-modalidad]').length).toBe(3))
             expect(sinPermiso.find('[data-prueba^="ver-credencial"]').exists()).toBe(false)
             sinPermiso.unmount()
         })
@@ -211,7 +212,7 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
         it('si la lista falla: el error con Reintentar y ninguna fila', async () => {
             simularFalla('GET /api/v1/servicios/:id/adicionales', 500)
             const vista = await mountSuspended(enApp(ServicioAdicionales, { servicio: bd.servicios.find(s => s.id === 1) }))
-            await vi.waitFor(() => expect(vista.text()).toContain('Reintentar'))
+            await esperar(() => expect(vista.text()).toContain('Reintentar'))
             expect(vista.find('[data-modalidad]').exists()).toBe(false)
             vista.unmount()
         })
@@ -220,9 +221,9 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
             useUsuarioActual().value = SOPORTE
             const servicio = bd.servicios.find(s => s.id === 1)
             const vista = await mountSuspended(enApp(AdicionalServicioModal, { servicio, asignacion: null, open: true }))
-            await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="asignacion-modalidad"]')).not.toBeNull())
+            await esperar(() => expect(document.body.querySelector('[data-prueba="asignacion-modalidad"]')).not.toBeNull())
             ;(document.body.querySelector('[data-prueba="asignacion-modalidad"]') as HTMLElement).click()
-            await vi.waitFor(() => expect(document.body.querySelectorAll('[role="option"]').length).toBeGreaterThan(0))
+            await esperar(() => expect(document.body.querySelectorAll('[role="option"]').length).toBeGreaterThan(0))
             const opciones = [...document.body.querySelectorAll('[role="option"]')].map(o => o.textContent?.trim())
             expect(opciones).toEqual(['Incluido', 'Cobrado'])
             vista.unmount()
@@ -237,15 +238,15 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
             const vista = await mountSuspended(defineComponent({
                 render: () => h(UApp, null, { default: () => h(AdicionalCredencialModal, { 'servicioId': 1, asignacion, 'segundos': 1, 'open': abierto.value, 'onUpdate:open': (valor: boolean) => { abierto.value = valor } }) }),
             }))
-            await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="credencial-valor"]')?.textContent).toBe('Str3am-0001'))
+            await esperar(() => expect(document.body.querySelector('[data-prueba="credencial-valor"]')?.textContent).toBe('Str3am-0001'))
             expect(document.body.textContent).toContain('Se oculta sola en 1 s')
-            await vi.waitFor(() => expect(abierto.value).toBe(false), { timeout: 3000 })
+            await esperar(() => expect(abierto.value).toBe(false), { timeout: 3000 })
             vista.unmount()
         })
 
         it('ficha del plan: tipo, adicionales incluidos con cantidad y el aviso de que aplica a altas y cambios', async () => {
             const vista = await mountSuspended(enApp(PaginaPlan), { route: '/planes/3' })
-            await vi.waitFor(() => expect(vista.find('[data-prueba="plan-adicionales"]').text()).toContain('Usuario de IPTV'))
+            await esperar(() => expect(vista.find('[data-prueba="plan-adicionales"]').text()).toContain('Usuario de IPTV'))
             expect(vista.find('[data-prueba="tipo-plan"]').text()).toBe('Empresarial')
             expect(vista.find('[data-prueba="plan-adicionales"]').text()).toContain('próxima alta o cambio de plan')
             expect(vista.find('[data-prueba="plan-adicionales"]').text()).toContain('2')
@@ -254,25 +255,25 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
 
             useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'planes.editar') }
             const lectura = await mountSuspended(enApp(PaginaPlan), { route: '/planes/3' })
-            await vi.waitFor(() => expect(lectura.find('[data-prueba="plan-adicionales"]').text()).toContain('Usuario de IPTV'))
+            await esperar(() => expect(lectura.find('[data-prueba="plan-adicionales"]').text()).toContain('Usuario de IPTV'))
             expect(lectura.find('[data-prueba="editar-adicionales-plan"]').exists()).toBe(false)
             lectura.unmount()
         })
 
         it('lista de planes con su tipo y catálogo y motivos con sus estados', async () => {
             const planes = await mountSuspended(enApp(PaginaPlanes), { route: '/planes' })
-            await vi.waitFor(() => expect(planes.findAll('[data-tipo-plan]').length).toBe(4))
+            await esperar(() => expect(planes.findAll('[data-tipo-plan]').length).toBe(4))
             expect(planes.find('[data-tipo-plan="empresarial"]').text()).toBe('Empresarial')
             planes.unmount()
 
             const catalogo = await mountSuspended(enApp(PaginaAdicionales), { route: '/adicionales' })
-            await vi.waitFor(() => expect(catalogo.text()).toContain('Cuenta de streaming'))
+            await esperar(() => expect(catalogo.text()).toContain('Cuenta de streaming'))
             expect(catalogo.text()).not.toContain('Antivirus familiar')
             expect(catalogo.find('[data-prueba="desactivar-adicional-1"]').exists()).toBe(true)
             catalogo.unmount()
 
             const motivos = await mountSuspended(enApp(PaginaMotivos), { route: '/adicionales/motivos' })
-            await vi.waitFor(() => expect(motivos.text()).toContain('Empleado de la empresa'))
+            await esperar(() => expect(motivos.text()).toContain('Empleado de la empresa'))
             expect(motivos.text()).toContain('Común')
             motivos.unmount()
         })
@@ -280,9 +281,9 @@ describe('servicios adicionales y tipo de plan (A1)', () => {
         it('guardar un plan dedicado asimétrico avisa con las advertencias, sin error', async () => {
             const plan = bd.planes.find(p => p.id === 1)
             const vista = await mountSuspended(enApp(PlanFormulario, { plan: { ...plan, tipo: 'dedicado' }, open: true }))
-            await vi.waitFor(() => expect(document.body.querySelector('#form-plan')).not.toBeNull())
+            await esperar(() => expect(document.body.querySelector('#form-plan')).not.toBeNull())
             ;(document.body.querySelector('#form-plan') as HTMLFormElement).requestSubmit()
-            await vi.waitFor(() => expect(useToast().toasts.value.map(t => t.title)).toContain('Plan guardado con advertencias'))
+            await esperar(() => expect(useToast().toasts.value.map(t => t.title)).toContain('Plan guardado con advertencias'))
             const aviso = useToast().toasts.value.find(t => t.title === 'Plan guardado con advertencias')
             expect(aviso?.color).toBe('warning')
             expect(aviso?.description).toContain('Plan dedicado asimétrico')

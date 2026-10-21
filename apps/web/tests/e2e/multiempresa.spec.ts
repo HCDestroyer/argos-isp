@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Multiempresa con fixtures de dos empresas: ArgosNet (1) y Fibra del Sur (2, las sucursales de los
@@ -60,6 +60,7 @@ test('el cajero tiene una sola empresa: no ve el selector', async ({ page }) => 
 })
 
 test('cobro repartido: un pago por empresa y el recibo con una sección por empresa', async ({ page }) => {
+    await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Cobrar', /\/cobro/)
     await page.getByPlaceholder('Buscar cliente…').fill('Comercial El Progreso')

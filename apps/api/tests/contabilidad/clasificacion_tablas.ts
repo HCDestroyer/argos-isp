@@ -30,6 +30,8 @@ export const INMUTABLES: Record<string, string> = {
     // localización fiscal, fase 3 (FEL)
     'billing.notas_credito_lineas': 'nota de crédito por línea (§10.9)',
     'billing.sustituciones': 'sustitución de una factura (§10.9)',
+    'billing.notas_credito_aplicaciones':
+        'aplicación del saldo a favor de una nota de crédito a una factura (dinero; lealtad §15.2)',
     'fiscal.dte_intentos': 'bitácora ante el certificador (§3.6)',
     // localización fiscal §10.7 (numeración guardada)
     'ledger.asientos_numeros': 'número de diario asignado al insertar (§10.7)',
@@ -85,6 +87,14 @@ export const INMUTABLES: Record<string, string> = {
     'lealtad.movimientos': 'auxiliar de puntos: lotes y salidas; corregir = reverso (lealtad §3)',
     'lealtad.consumos': 'qué lote paga cada salida de puntos (lealtad §3)',
     'lealtad.avisos_vencimiento': 'aviso de puntos por vencer, uno por lote (lealtad §6.1)',
+    // sorteos, fase 3 (lealtad §7 y §15.3)
+    'lealtad.sorteos_boletos':
+        'boletos de un sorteo (criterio al corte o canje), antes del corte (lealtad §7)',
+    'lealtad.sorteos_participantes':
+        'foto del corte con seudónimo y boletos; base de lista_hash (lealtad §7.3)',
+    'lealtad.sorteos_requisitos': 'marca del checklist legal; vale la última por clave (lealtad §8)',
+    'lealtad.sorteos_archivos':
+        'evidencias, imágenes de premios, acta y constancias con su SHA-256; el archivo vive en disco (lealtad §15.4)',
     // servicios adicionales (`contratos/adicionales.md`, A1)
     'core.servicios_adicionales_bloqueos':
         'historial de bloqueos de adicionales por la suspensión del servicio',
@@ -112,6 +122,14 @@ export const MUTABLES: Record<string, string> = {
     'lealtad.reglas':
         'reglas para ganar con version y audit.cambios; se desactivan, no se borran (lealtad §3)',
     'lealtad.referidos': 'estado del referido por acción, con version y audit.cambios (lealtad §3)',
+    'lealtad.premios':
+        'catálogo de premios con version y audit.cambios; existencias por canje (lealtad §3, fase 2)',
+    'lealtad.canjes':
+        'estado del canje por acción, con version y audit.cambios; los puntos van en movimientos (lealtad §3, fase 2)',
+    'lealtad.sorteos':
+        'estado por acción con version y audit.cambios; bases, semilla, lista_hash y resultado congelados por trigger (lealtad §7)',
+    'lealtad.sorteos_premios': 'premios del sorteo; solo cambian en borrador (trigger) (lealtad §7.1)',
+    'lealtad.sorteos_ganadores': 'estado de la entrega por acción con version y audit.cambios (lealtad §7.4)',
     // servicios adicionales (`contratos/adicionales.md`, A1): no son dinero ni libro; la factura de
     // los `cobrado` la hace A3 en billing
     'core.adicionales': 'catálogo por empresa con version y audit.cambios; se desactiva, no se borra',

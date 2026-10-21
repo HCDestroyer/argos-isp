@@ -71,6 +71,59 @@ for (const tema of ['light', 'dark'] as const) {
             await revisar(page, 'contacto')
         })
 
+        test('promociones: tarjeta y carrusel en /corte e inicio de /cuenta sin violaciones de axe', async ({ page }) => {
+            // `?anuncios=N` en fixtures: N anuncios del panel (se recuerda en la pestaña)
+            await page.goto('/corte?anuncios=1')
+            await page.getByTestId('promociones-pagina_corte').waitFor({ timeout: 90_000 })
+            await revisar(page, 'corte con una promoción')
+            await page.goto('/corte?anuncios=3')
+            await page.getByTestId('promo-carrusel').waitFor()
+            await revisar(page, 'corte con carrusel')
+            // la promo va debajo de pagar y de pedir promesa
+            const pagar = await page.getByTestId('pagar-en-linea').boundingBox()
+            const promesa = await page.getByTestId('solicitar-promesa').boundingBox()
+            const promo = await page.getByTestId('promociones-pagina_corte').boundingBox()
+            expect(promo!.y).toBeGreaterThan(pagar!.y)
+            expect(promo!.y).toBeGreaterThan(promesa!.y)
+            // sin desbordar a lo ancho (390 px incluidos)
+            const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+            expect(ancho).toBeLessThanOrEqual(0)
+            await entrar(page, null)
+            await page.getByTestId('promociones-portal_inicio').waitFor()
+            await revisar(page, 'cuenta con promociones')
+        })
+
+        test('puntos: saldo, premios, historial y confirmación sin violaciones de axe', async ({ page }) => {
+            // `?puntos=canje` en fixtures: programa visible con canje (se recuerda en la pestaña)
+            await page.goto('/corte?puntos=canje')
+            await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 90_000 })
+            await entrar(page, null)
+            await page.getByTestId('resumen-puntos').waitFor()
+            await revisar(page, 'cuenta con puntos: inicio')
+            await seccion(page, 'Puntos', 'premios')
+            await revisar(page, 'cuenta: puntos')
+            const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+            expect(ancho).toBeLessThanOrEqual(0)
+            await page.getByTestId('premio-501').getByTestId('canjear').click()
+            await page.getByTestId('confirmar-canje').waitFor()
+            await revisar(page, 'puntos: confirmar canje')
+        })
+
+        test('sorteos: aviso en /corte, página pública y sección de la cuenta sin violaciones de axe', async ({ page }) => {
+            await page.goto('/corte?sorteos=1&anuncios=1')
+            await page.getByTestId('aviso-sorteo').first().waitFor({ timeout: 90_000 })
+            await revisar(page, 'corte con aviso de sorteo')
+            await page.goto('/sorteos/27')
+            await page.getByTestId('verificacion').waitFor()
+            await revisar(page, 'sorteo público')
+            const ancho = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+            expect(ancho).toBeLessThanOrEqual(0)
+            await entrar(page, null)
+            await page.getByTestId('aviso-sorteo-boletos').first().click()
+            await page.getByTestId('sorteo-27').waitFor()
+            await revisar(page, 'cuenta: sorteos')
+        })
+
         for (const cuenta of [null, 'dos_empresas'] as const) {
             const nombre = cuenta ? 'dos empresas' : 'una empresa'
             test(`/cuenta con ${nombre} sin violaciones de axe`, async ({ page }) => {

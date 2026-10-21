@@ -1,12 +1,13 @@
 import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import meCajero from '~~/fixtures/auth/me.cajero.json'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import PaginaSinPermiso from '~/pages/sin-permiso.vue'
+import { esperar } from '../ayudas/esperar'
 
 /**
  * Revisión de ACL del panel en ejecución (semana 3, tarea 3; checklist en
@@ -21,7 +22,7 @@ const LECTURA: Me = { ...meAdmin, id: 90, nombre: 'Solo lectura', roles: ['lectu
 const SIN_PERMISOS: Me = { ...meAdmin, id: 91, nombre: 'Sin permisos', roles: [], permisos: [] }
 
 /** Botones que cambian algo: ninguno debe verse con `lectura`. */
-const ACCION = /^(Nuevo|Nueva|Editar|Anular|Suspender|Reactivar|Limitar|Quitar límite|Retirar|Desconectar|Aprobar|Rechazar|Registrar|Abrir turno|Cerrar turno|Cobrar|Agregar|Asignar|Cambiar a|Guardar|Crear|Generar|Cerrar|Reabrir|Promesa de pago|Mostrar|Logo|Desactivar|Enviar prueba|Reemplazar|Escribir|Borrar|Cambiar empresa|Depositar|Trasladar|Importar|Conciliar|Aplicar reglas|Provisionar|Castigar|Deshacer|Activar|Ajustar)/
+const ACCION = /^(Nuevo|Nueva|Editar|Anular|Suspender|Reactivar|Limitar|Quitar límite|Retirar|Desconectar|Aprobar|Rechazar|Registrar|Abrir turno|Cerrar turno|Cobrar|Agregar|Asignar|Cambiar a|Guardar|Crear|Generar|Cerrar|Reabrir|Promesa de pago|Mostrar|Logo|Desactivar|Enviar prueba|Reemplazar|Escribir|Borrar|Cambiar empresa|Depositar|Trasladar|Importar|Conciliar|Aplicar reglas|Provisionar|Castigar|Deshacer|Activar|Ajustar|Ejecutar|Entregar|Marcar|Publicar|Abrir participación|Cancelar sorteo|Archivar|Cambiar imagen)/
 
 /** Botones y enlaces de la página montada y de lo que teletransporta a `body` (modales, menús). */
 function botones(raiz?: Element): string[] {
@@ -136,20 +137,32 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         // Lealtad, fase 1.
         { ruta: '/lealtad', espera: 'Puntos Argos' },
         { ruta: '/lealtad/referidos', espera: 'Rosa Elena Cifuentes' },
+        // Sorteos (A3, lealtad §15.3): borrador, corte cerrado y ejecutado.
+        { ruta: '/lealtad/sorteos', espera: 'Día del cliente' },
+        { ruta: '/lealtad/sorteos/1', espera: 'Gran sorteo de Navidad 2026' },
+        { ruta: '/lealtad/sorteos/4', espera: 'Timbre fiscal' },
+        { ruta: '/lealtad/sorteos/5', espera: 'Verificación pública' },
         { ruta: '/clientes/2?tab=puntos', espera: 'Compensación por falla' },
         { ruta: '/reportes/lealtad', espera: 'Cuadra con el libro' },
+        // Anuncios del portal (A5).
+        { ruta: '/anuncios', espera: 'Duplica tu velocidad en noviembre' },
+        { ruta: '/anuncios/2', espera: 'Tus puntos valen más este mes' },
         // Servicios adicionales y tipo de plan (A1).
         { ruta: '/adicionales', espera: 'Cuenta de streaming' },
         { ruta: '/adicionales/motivos', espera: 'Compensación por falla' },
         { ruta: '/planes/3', espera: 'Usuario de IPTV' },
         { ruta: '/servicios/1', espera: 'iptv-0002' },
+        // Bonificaciones (A3, decisión del PM).
+        { ruta: '/bonificaciones', espera: 'Cortesía comercial' },
+        { ruta: '/bonificaciones/3', espera: 'Promoción de instalación' },
+        { ruta: '/reportes/bonificaciones', espera: 'Programa de lealtad' },
     ]
 
     for (const { ruta, espera } of PANTALLAS) {
         it(`${ruta}: con el rol lectura no hay botones de acción`, async () => {
             useUsuarioActual().value = LECTURA
             const wrapper = await montar(ruta)
-            await vi.waitFor(() => expect(wrapper.text()).toContain(espera))
+            await esperar(() => expect(wrapper.text()).toContain(espera))
             await new Promise(listo => setTimeout(listo, 50))
             const acciones = botones(wrapper.element).filter(texto => ACCION.test(texto))
             expect(acciones, ruta).toEqual([])
@@ -159,10 +172,10 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
 
     // Control: con admin las mismas pantallas sí muestran sus acciones (la prueba de arriba no pasa en vacío).
     // /routers no tiene acciones en la lista (Velocidad abre el panel, cuyas acciones van aparte).
-    for (const ruta of ['/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera']) {
+    for (const ruta of ['/lealtad/sorteos', '/lealtad/sorteos/1', '/lealtad/sorteos/4', '/lealtad/sorteos/5', '/lealtad', '/lealtad/referidos', '/clientes/2?tab=puntos', '/configuracion/proveedores-cobro', '/cobros/por-liquidar', '/bancos/transito', '/bancos/extractos', '/bancos/extractos/1', '/bancos/reglas', '/cartera', '/clientes', '/planes', '/caja', '/egresos', '/configuracion/cuentas-bancarias', '/configuracion/empresas', '/configuracion/notificaciones', '/usuarios', `/pagos/${bd.pagos.find(pago => pago.estado !== 'anulado')?.id}`, '/adicionales', '/adicionales/motivos', '/planes/3', '/servicios/1', '/anuncios', '/anuncios/2']) {
         it(`${ruta}: con admin sí hay botones de acción`, async () => {
             const wrapper = await montar(ruta)
-            await vi.waitFor(() => expect(botones(wrapper.element).filter(texto => ACCION.test(texto)).length, ruta).toBeGreaterThan(0))
+            await esperar(() => expect(botones(wrapper.element).filter(texto => ACCION.test(texto)).length, ruta).toBeGreaterThan(0))
             wrapper.unmount()
         })
     }
@@ -174,7 +187,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         for (const ruta of [`/servicios/${suspendido?.id}`, `/facturas/${pendiente?.id}`]) {
             useUsuarioActual().value = LECTURA
             const lectura = await montar(ruta)
-            await vi.waitFor(() => expect(lectura.text()).toMatch(/Historial|Líneas|Aviso/))
+            await esperar(() => expect(lectura.text()).toMatch(/Historial|Líneas|Aviso/))
             await new Promise(listo => setTimeout(listo, 50))
             expect(botones(lectura.element).filter(texto => ACCION.test(texto)), ruta).toEqual([])
             lectura.unmount()
@@ -182,7 +195,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
 
             useUsuarioActual().value = meAdmin
             const admin = await montar(ruta)
-            await vi.waitFor(() => expect(botones(admin.element).filter(texto => ACCION.test(texto)).length, ruta).toBeGreaterThan(0))
+            await esperar(() => expect(botones(admin.element).filter(texto => ACCION.test(texto)).length, ruta).toBeGreaterThan(0))
             admin.unmount()
             document.body.innerHTML = ''
         }
@@ -192,7 +205,7 @@ describe('semana 3 · ACL por pantalla (en ejecución)', () => {
         useUsuarioActual().value = meCajero
         const activo = bd.servicios.find(servicio => servicio.estado === 'activo')
         const wrapper = await montar(`/servicios/${activo?.id}`)
-        await vi.waitFor(() => expect(botones(wrapper.element)).toContain('Promesa de pago'))
+        await esperar(() => expect(botones(wrapper.element)).toContain('Promesa de pago'))
         const textos = botones(wrapper.element)
         for (const accion of ['Suspender', 'Limitar', 'Retirar', 'Desconectar', 'Editar', 'Mostrar']) {
             expect(textos.some(texto => texto.startsWith(accion)), accion).toBe(false)

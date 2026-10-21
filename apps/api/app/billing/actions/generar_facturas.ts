@@ -35,6 +35,12 @@ export interface ResultadoGeneracion {
     /** periodos que ya tenían factura */
     omitidas: number
     facturas: number[]
+    /**
+     * decisión del PM (19 oct): periodos que quedaron en cero (mes gratis, descuento del 100 %) se
+     * registran como bonificación, nunca como factura de Q0
+     */
+    bonificadas: number
+    bonificaciones: number[]
     errores: number
     /** servicios que no se facturaron por un bloqueo del libro (se reintentan) */
     bloqueados: number
@@ -57,6 +63,8 @@ export default class GenerarFacturas {
             generadas: 0,
             omitidas: 0,
             facturas: [],
+            bonificadas: 0,
+            bonificaciones: [],
             errores: 0,
             bloqueados: 0,
             bloqueos: [],
@@ -139,6 +147,9 @@ export default class GenerarFacturas {
             if (emitida.creada && emitida.factura_id) {
                 resultado.generadas += 1
                 resultado.facturas.push(emitida.factura_id)
+            } else if (emitida.creada && emitida.bonificacion_id) {
+                resultado.bonificadas += 1
+                resultado.bonificaciones.push(emitida.bonificacion_id)
             } else if (emitida.motivo === 'ya_existe') {
                 resultado.omitidas += 1
             }
@@ -146,11 +157,15 @@ export default class GenerarFacturas {
     }
 }
 
+/** Claves ya ocupadas: las facturas del periodo y las bonificaciones (el periodo bonificado no se factura). */
 async function clavesExistentes(servicios: number[]): Promise<Set<string>> {
     const filas = (await db
         .from('billing.facturas')
         .whereIn('servicio_id', servicios)
         .where('tipo', 'servicio')
-        .select('clave_unica')) as Array<{ clave_unica: string }>
+        .select('clave_unica')
+        .union((q) =>
+            q.from('billing.bonificaciones').whereIn('servicio_id', servicios).select('clave_unica'),
+        )) as Array<{ clave_unica: string }>
     return new Set(filas.map((f) => f.clave_unica))
 }

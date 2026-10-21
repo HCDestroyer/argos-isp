@@ -5,7 +5,8 @@ import Decimal from 'decimal.js'
  * Portal con sesión: el "dashboard" del cliente, pensado para el teléfono.
  *
  * - Encabezado compacto con el total y el estado más urgente; "Actualizar" y jalar para actualizar.
- * - Cuatro secciones en la URL (`?seccion=inicio|pagar|facturas|cuenta`, `utils/navegacion.ts`)
+ * - Secciones en la URL (`?seccion=inicio|pagar|facturas|puntos|sorteos|cuenta`, `utils/navegacion.ts`;
+ *   «Puntos» solo con el programa visible en el portal; «Sorteos», desde el aviso del carrusel)
  *   con la barra inferior del layout en el teléfono y la barra superior en escritorio.
  * - Inicio: accesos rápidos (`utils/accesos.ts`: solo lo que la API aceptaría ahora) y los
  *   servicios, agrupados por la empresa que los factura (`utils/empresas.ts`). Con varias empresas,
@@ -330,6 +331,8 @@ watch(() => route.hash, async (hash) => {
                         @accion="alAcceso(grupo, $event)"
                         @pedir-promesa="pedirPromesa"
                     />
+                    <PuntosResumen />
+                    <PromoPromociones lugar="portal_inicio" />
                 </div>
 
                 <div
@@ -452,6 +455,17 @@ watch(() => route.hash, async (hash) => {
                         <CuentaNotasCredito :key="`notas-${recargas}`" />
                     </section>
                 </div>
+
+                <SorteoSeccion
+                    v-else-if="seccion === 'sorteos'"
+                    :key="`sorteos-${recargas}`"
+                />
+
+                <PuntosSeccion
+                    v-else-if="seccion === 'puntos'"
+                    :key="`puntos-${recargas}`"
+                    :servicios="cuenta.servicios"
+                />
 
                 <div
                     v-else

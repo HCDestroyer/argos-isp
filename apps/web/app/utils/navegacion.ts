@@ -47,7 +47,10 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'promesas', etiqueta: 'Promesas', descripcion: 'Promesas de pago y su evaluación.', icono: 'i-lucide-calendar-clock', ruta: '/promesas', permiso: 'promesas.ver' },
             { id: 'dte', etiqueta: 'Cola de DTE', descripcion: 'Certificación FEL: pendientes, rechazados, en contingencia y anulaciones.', icono: 'i-lucide-badge-check', ruta: '/dte', permiso: 'fel.ver' },
             { id: 'notas-credito', etiqueta: 'Notas de crédito', descripcion: 'Rebajas sobre el saldo de una factura, con su asiento.', icono: 'i-lucide-file-minus', ruta: '/notas-credito', permiso: 'facturas.ver' },
+            { id: 'bonificaciones', etiqueta: 'Bonificaciones', descripcion: 'Periodos regalados y cargos sin costo, con su motivo: ya no son facturas.', icono: 'i-lucide-hand-heart', ruta: '/bonificaciones', permiso: 'facturas.ver' },
             { id: 'lealtad', etiqueta: 'Lealtad', descripcion: 'Programa de puntos de la empresa, reglas para ganarlos y referidos.', icono: 'i-lucide-gem', ruta: '/lealtad', permiso: 'lealtad.ver' },
+            { id: 'sorteos', etiqueta: 'Sorteos', descripcion: 'Bases, checklist legal, corte, ejecución verificable y entrega de premios.', icono: 'i-lucide-ticket', ruta: '/lealtad/sorteos', permiso: 'sorteos.ver' },
+            { id: 'anuncios', etiqueta: 'Anuncios', descripcion: 'Promociones en el inicio del portal y en la página de corte, con vistas y clics.', icono: 'i-lucide-megaphone', ruta: '/anuncios', permiso: 'anuncios.ver' },
         ],
     },
     {

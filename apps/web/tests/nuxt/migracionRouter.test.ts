@@ -1,10 +1,11 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import PaginaMigracion from '~/pages/routers/migracion.vue'
+import { esperar } from '../ayudas/esperar'
 
 const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(PaginaMigracion) }) })
 
@@ -68,7 +69,7 @@ describe('migración de router con la API de A2', () => {
 
     it('pantalla sin fecha: lo dice, no cuenta, y muestra los fallos de red de los últimos 7 días', async () => {
         const wrapper = await mountSuspended(conApp, { route: '/routers/migracion?router=1' })
-        await vi.waitFor(() => expect(dato(wrapper, 'migracion-aaa-desde')).toBe('Sin marcar'))
+        await esperar(() => expect(dato(wrapper, 'migracion-aaa-desde')).toBe('Sin marcar'))
         expect(dato(wrapper, 'migracion-sin-fecha')).toContain('Marca desde cuándo')
         expect(dato(wrapper, 'migracion-pendientes')).toBeNull()
         expect(dato(wrapper, 'migracion-eventos')).toContain('Fallos de red de los últimos 7 días')
@@ -77,9 +78,9 @@ describe('migración de router con la API de A2', () => {
 
     it('marcar desde la pantalla guarda la fecha y aparecen los números del resumen', async () => {
         const wrapper = await mountSuspended(conApp, { route: '/routers/migracion?router=1' })
-        await vi.waitFor(() => expect(wrapper.find('[data-prueba="abrir-marcar-migrado"]').exists()).toBe(true))
+        await esperar(() => expect(wrapper.find('[data-prueba="abrir-marcar-migrado"]').exists()).toBe(true))
         await wrapper.get('[data-prueba="abrir-marcar-migrado"]').trigger('click')
-        await vi.waitFor(() => expect(document.body.querySelector('[data-prueba="marcar-motivo"]')).not.toBeNull())
+        await esperar(() => expect(document.body.querySelector('[data-prueba="marcar-motivo"]')).not.toBeNull())
         const motivo = document.body.querySelector<HTMLTextAreaElement>('[data-prueba="marcar-motivo"] textarea, textarea[data-prueba="marcar-motivo"]')
         expect(motivo).not.toBeNull()
         if (motivo) {
@@ -87,8 +88,8 @@ describe('migración de router con la API de A2', () => {
             motivo.dispatchEvent(new Event('input'))
         }
         document.body.querySelector<HTMLButtonElement>('[data-prueba="marcar-guardar"]')?.click()
-        await vi.waitFor(() => expect(bd.migracionesAaa[1]?.aaa_desde).toBeTruthy())
-        await vi.waitFor(() => expect(dato(wrapper, 'migracion-servicios')).not.toBeNull())
+        await esperar(() => expect(bd.migracionesAaa[1]?.aaa_desde).toBeTruthy())
+        await esperar(() => expect(dato(wrapper, 'migracion-servicios')).not.toBeNull())
         const resumen = await useRouters().resumenSesiones(1)
         expect(dato(wrapper, 'migracion-pendientes')).toBe(String(resumen.ok ? resumen.data.sin_sesion_desde.length : -1))
         expect(dato(wrapper, 'migracion-eventos')).toContain('Fallos de red desde el cambio')
@@ -99,7 +100,7 @@ describe('migración de router con la API de A2', () => {
         bd.migracionesAaa[1] = { router_id: 1, aaa_desde: '2026-10-10T06:00:00.000Z', motivo: 'x', version: 1, updated_at: '2026-10-10T06:00:00.000Z', primer_accounting: null }
         simularFalla('GET /api/v1/routers/:id/resumen-sesiones', 501)
         const wrapper = await mountSuspended(conApp, { route: '/routers/migracion?router=1' })
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Reintentar'))
+        await esperar(() => expect(wrapper.text()).toContain('Reintentar'))
         expect(dato(wrapper, 'migracion-servicios')).toBeNull()
         expect(dato(wrapper, 'migracion-pendientes')).toBeNull()
         wrapper.unmount()
@@ -109,7 +110,7 @@ describe('migración de router con la API de A2', () => {
         useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => !['sesiones.ver', 'red.ver', 'routers.marcar_migrado'].includes(p)) }
         bd.migracionesAaa[1] = { router_id: 1, aaa_desde: '2026-10-10T06:00:00.000Z', motivo: 'x', version: 1, updated_at: '2026-10-10T06:00:00.000Z', primer_accounting: null }
         const wrapper = await mountSuspended(conApp, { route: '/routers/migracion?router=1' })
-        await vi.waitFor(() => expect(wrapper.text()).toContain('Sin permiso sesiones.ver'))
+        await esperar(() => expect(wrapper.text()).toContain('Sin permiso sesiones.ver'))
         expect(wrapper.text()).toContain('Sin permiso red.ver')
         expect(wrapper.find('[data-prueba="abrir-marcar-migrado"]').exists()).toBe(false)
         expect(dato(wrapper, 'migracion-servicios')).toBeNull()

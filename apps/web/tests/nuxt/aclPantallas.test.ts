@@ -127,6 +127,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'BloqueoLibroModal.vue': { permisos: ['libro.bloquear', 'libro.desbloquear'], desde: ['pages/libro/bloqueos.vue'] },
     'BloqueoDuroModal.vue': { permisos: ['libro.bloquear_duro'], desde: ['pages/libro/bloqueos.vue'] },
     'ExcepcionBloqueoModal.vue': { permisos: ['libro.excepcion_bloqueo'], desde: ['pages/libro/bloqueos.vue'] },
+    'CargoUnicoModal.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id].vue', 'pages/clientes/[id]/index.vue'] },
+    'PeriodosBonificados.vue': { permisos: ['facturas.ver'], desde: ['components/ClienteEstadoCuenta.vue', 'pages/servicios/[id].vue'] },
     'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
     'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },
     'DteFicha.vue': { permisos: ['fel.ver'], desde: ['components/DteDocumento.vue', 'pages/dte/[id].vue'] },
@@ -147,6 +149,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'TrasladoModal.vue': { permisos: ['bancos.trasladar'], desde: ['pages/bancos/transito.vue'] },
     'ClientePuntos.vue': { permisos: ['lealtad.ver'], desde: ['pages/clientes/[id]/index.vue'] },
     'ProgramaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
+    // Anuncios del portal (A5, `contratos/anuncios.md`).
+    'AnuncioFormulario.vue': { permisos: ['anuncios.administrar'], desde: ['pages/anuncios/index.vue', 'pages/anuncios/[id].vue'] },
+    'AnuncioImagenModal.vue': { permisos: ['anuncios.administrar'], desde: ['pages/anuncios/[id].vue'] },
+    'AnuncioMetricas.vue': { permisos: ['anuncios.ver'], desde: ['pages/anuncios/[id].vue'] },
     'PuntosAjusteModal.vue': { permisos: ['lealtad.ajustar'], desde: ['components/ClientePuntos.vue'] },
     'ReglaLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/index.vue'] },
     'CajaCierreModal.vue': { permisos: ['cajas.cerrar'], desde: ['pages/caja/index.vue'] },
@@ -167,6 +173,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     // La ficha del plan solo edita; el alta ("Nuevo plan", `planes.crear`) está en la lista.
     'PlanFormulario.vue': { permisos: ['planes.crear', 'planes.editar', 'planes.ver'], desde: ['pages/planes/index.vue', 'pages/planes/[id].vue'], exentos: { 'pages/planes/[id].vue': ['planes.crear'] } },
     // Servicios adicionales (A1, `contratos/adicionales.md`).
+    'AdicionalBloqueosModal.vue': { permisos: ['servicios.ver'], desde: ['components/ServicioAdicionales.vue'] },
     'AdicionalCredencialModal.vue': { permisos: ['servicios.ver_credencial_adicional'], desde: ['components/ServicioAdicionales.vue'] },
     'AdicionalModal.vue': { permisos: ['adicionales.crear', 'adicionales.editar'], desde: ['pages/adicionales/index.vue'] },
     'AdicionalQuitarModal.vue': { permisos: ['servicios.quitar_adicional'], desde: ['components/ServicioAdicionales.vue'] },
@@ -185,6 +192,12 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ServicioAsignaciones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioEditar.vue': { permisos: ['servicios.editar', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'UsuarioEmpresasModal.vue': { permisos: ['usuarios.asignar_empresas'], desde: ['pages/usuarios/index.vue'] },
+    'SorteoFormulario.vue': { permisos: ['sorteos.gestionar'], desde: ['pages/lealtad/sorteos/index.vue', 'pages/lealtad/sorteos/[id].vue'] },
+    'SorteoEjecutarModal.vue': { permisos: ['sorteos.ejecutar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
+    'SorteoImagenPremioModal.vue': { permisos: ['sorteos.gestionar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
+    'SorteoAnularEntregaModal.vue': { permisos: ['sorteos.entregar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
+    'SorteoEntregarModal.vue': { permisos: ['sorteos.entregar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
+    'SorteoMarcarRequisitoModal.vue': { permisos: ['sorteos.marcar_requisito'], desde: ['pages/lealtad/sorteos/[id].vue'] },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {

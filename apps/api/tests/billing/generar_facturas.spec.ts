@@ -135,6 +135,8 @@ test.group('billing · generarFacturas', () => {
             generadas: 0,
             omitidas: 2,
             facturas: [],
+            bonificadas: 0,
+            bonificaciones: [],
             errores: 0,
             bloqueados: 0,
             bloqueos: [],

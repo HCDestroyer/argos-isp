@@ -141,6 +141,9 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     baja_activo: 'VAR',
     diferido: 'VAR',
     alta_activo: 'VAR',
+    sorteo: 'VAR',
+    // decisiones del PM (19 oct): bonificación interna (5.1.01 / ingreso), no es venta
+    bonificacion: 'VAR',
 }
 
 export interface DiarioAsiento {

@@ -25,6 +25,14 @@ const SOLO_SESION = [
     'portalNotaCreditoXml',
     'portalNotaCreditoPdf',
     'portalComprobantes',
+    // lealtad fase 3 (A3): sorteos de las empresas del cliente
+    'portalSorteos',
+    'portalPuntos',
+    'portalPremios',
+    'portalCanjes',
+    'portalCanjear',
+    'portalImagenPremioSorteo',
+    'portalBonificaciones',
 ]
 
 type Operacion = {

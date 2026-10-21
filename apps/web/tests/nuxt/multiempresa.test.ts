@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import Decimal from 'decimal.js'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
@@ -12,6 +12,8 @@ import PaginaCliente from '~/pages/clientes/[id]/index.vue'
 import PaginaCobro from '~/pages/cobro/index.vue'
 import PaginaEmpresas from '~/pages/configuracion/empresas.vue'
 import PaginaServicio from '~/pages/servicios/[id].vue'
+import { esperar } from '../ayudas/esperar'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
 /**
  * Multiempresa (`contratos/multiempresa.md`) con los fixtures de dos empresas: ArgosNet (1, la
@@ -212,11 +214,14 @@ describe('multiempresa · acciones contra la API (fixtures)', () => {
 
 describe('multiempresa · pantallas', () => {
     beforeEach(async () => {
+        // El cobro marca por defecto lo vencido a la fecha: tiene que ser la de los fixtures.
+        fijarHoyFixtures()
         reiniciarFixtures()
         await comoUsuario(meAdmin, 'fixture-admin')
     })
 
     afterEach(() => {
+        soltarReloj()
         sesionFixture(null)
         useUsuarioActual().value = null
         // La empresa elegida se recuerda por usuario: cada prueba empieza en "Todas".
@@ -225,7 +230,7 @@ describe('multiempresa · pantallas', () => {
 
     it('Empresas: lista con la principal y las acciones; la principal no se desactiva', async () => {
         const vista = await mountSuspended(PaginaEmpresas, { route: '/configuracion/empresas' })
-        await vi.waitFor(() => expect(vista.text()).toContain('Fibra del Sur'))
+        await esperar(() => expect(vista.text()).toContain('Fibra del Sur'))
         expect(vista.text()).toContain('ArgosNet')
         expect(vista.text()).toContain('Principal')
         const desactivar = vista.findAll('button').filter(b => b.text() === 'Desactivar')
@@ -234,14 +239,14 @@ describe('multiempresa · pantallas', () => {
 
     it('ficha del servicio: muestra su empresa y "Cambiar empresa" explica el saldo pendiente', async () => {
         const vista = await mountSuspended(PaginaServicio, { route: '/servicios/4' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="empresa-servicio"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="empresa-servicio"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="empresa-servicio"]').text()).toContain('Fibra del Sur')
         expect(vista.find('[data-prueba="abrir-cambiar-empresa"]').exists()).toBe(true)
     })
 
     it('ficha del cliente: avisos pendientes agrupados por empresa con lo que falta en cada una', async () => {
         const vista = await mountSuspended(PaginaCliente, { route: '/clientes/3?tab=cuenta' })
-        await vi.waitFor(() => expect(vista.find('[data-prueba="pendientes-empresa-2"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="pendientes-empresa-2"]').exists()).toBe(true))
         expect(vista.get('[data-prueba="pendientes-empresa-1"]').text()).toContain('ArgosNet')
         expect(vista.get('[data-prueba="pendientes-empresa-2"]').text()).toContain('Fibra del Sur')
         // El saldo de cada empresa sale de `EstadoCuenta.empresas[]` (A3), no se calcula en pantalla.
@@ -250,11 +255,11 @@ describe('multiempresa · pantallas', () => {
 
     it('cobro: facturas de dos empresas se muestran como un pago por empresa', async () => {
         const vista = await mountSuspended(PaginaCobro, { route: '/cobro?cliente=3' })
-        await vi.waitFor(() => expect(vista.find('[data-factura="410"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-factura="410"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="reparto-empresas"]').exists()).toBe(false)
         await vista.get('[data-factura="310"] button[role="checkbox"]').trigger('click')
         await vista.get('[data-factura="410"] button[role="checkbox"]').trigger('click')
-        await vi.waitFor(() => expect(vista.find('[data-prueba="reparto-empresas"]').exists()).toBe(true))
+        await esperar(() => expect(vista.find('[data-prueba="reparto-empresas"]').exists()).toBe(true))
         const reparto = vista.get('[data-prueba="reparto-empresas"]').text()
         expect(reparto).toContain('Un pago por empresa')
         expect(reparto).toContain('ArgosNet')

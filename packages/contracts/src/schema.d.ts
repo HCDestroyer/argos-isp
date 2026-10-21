@@ -179,6 +179,135 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/anuncios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Anuncios del portal (de la empresa activa) */
+        get: operations["anunciosListar"];
+        put?: never;
+        /**
+         * Crear un anuncio (en borrador)
+         * @description En la empresa activa (`X-Empresa-Id`; 422 `empresa_requerida` si el usuario tiene varias y no eligió). Texto plano. El botón lleva texto y URL juntos: `http(s)://…` o una ruta del portal (`/…`).
+         */
+        post: operations["anunciosCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ver un anuncio
+         * @description Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        get: operations["anunciosVer"];
+        /**
+         * Editar un anuncio (borrador o publicado)
+         * @description Solo los campos enviados; `null` borra los opcionales. Archivado: 422 `anuncio_archivado`. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        put: operations["anunciosEditar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/archivar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archivar un anuncio (deja de verse; conserva sus métricas)
+         * @description Desde borrador o publicado; ya archivado no cambia nada. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        post: operations["anunciosArchivar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Imagen de un anuncio (vista previa del panel, con ETag)
+         * @description Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        get: operations["anunciosImagen"];
+        put?: never;
+        /**
+         * Subir o quitar la imagen de un anuncio
+         * @description `multipart/form-data` con `imagen`: PNG, JPEG o WebP (por su contenido), hasta 1 MB y de 64 a 4096 px por lado; `alt` (texto alternativo) obligatorio si el anuncio aún no tiene. `quitar=true` sin archivo la quita. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        post: operations["anunciosCambiarImagen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/metricas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Vistas y clics de un anuncio (totales, por lugar y por día)
+         * @description Visitantes distintos (uno por sesión del navegador), sin datos personales. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        get: operations["anunciosMetricas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/anuncios/{id}/publicar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publicar un anuncio (se ve en el portal dentro de su vigencia)
+         * @description Desde borrador o archivado; ya publicado no cambia nada. Con `fin` pasado, 422 `anuncio_vencido`. Solo de una empresa a la que el usuario tiene acceso (403 `empresa_no_permitida`). Contrato `anuncios.md`.
+         */
+        post: operations["anunciosPublicar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -600,6 +729,43 @@ export interface paths {
         };
         /** Cambios por campo de una entidad */
         get: operations["bitacoraCambios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bonificaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar bonificaciones (lo que antes era una factura de Q0)
+         * @description Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero quedan como bonificación: registro interno con su motivo y su asiento 5.1.01 / ingreso, sin CxC, IVA, DTE ni documento para el cliente. Una bonificación de periodo (clave servicio_id-periodo) ocupa el periodo.
+         */
+        get: operations["bonificacionesListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bonificaciones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver una bonificación */
+        get: operations["bonificacionesVer"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1245,6 +1411,45 @@ export interface paths {
          * @description Sin pago ni asiento; la referencia queda libre para subirlo de nuevo. 409 comprobante_revisado si ya se revisó.
          */
         post: operations["comprobantesRechazar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conceptos-cargo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catálogo de conceptos de cargo único (cuenta de ingreso e IVA) por empresa */
+        get: operations["conceptosCargoListar"];
+        put?: never;
+        /**
+         * Crear concepto de cargo único
+         * @description 422 cuenta_codigo si la cuenta no existe, no es de ingreso, no es imputable o es de otra empresa; 409 concepto_cargo_duplicado.
+         */
+        post: operations["conceptosCargoCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conceptos-cargo/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver concepto de cargo único */
+        get: operations["conceptosCargoVer"];
+        /** Editar o desactivar concepto de cargo único */
+        put: operations["conceptosCargoEditar"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1933,6 +2138,26 @@ export interface paths {
          * @description Anula la original (sin DTE certificado) o la acredita con una NCRE por todo su saldo (con DTE certificado) y emite una nueva con las mismas líneas, periodo y vencimiento y el receptor corregido (cliente_fiscal). Emite factura.sustituida. 409 sustitucion_no_permitida (pagos, mora, ya sustituida), factura_anulada; 422 nota_fuera_de_plazo.
          */
         post: operations["facturasSustituir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/facturas/cargo-unico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emitir un cargo único manual (instalación, equipo, visita técnica…)
+         * @description Factura manual con clave_unica cargo-<uuid> (no ocupa ningún periodo). Cada línea sale de un concepto del catálogo de la empresa (GET /conceptos-cargo: cuenta de ingreso e IVA) con su precio bruto y descuentos opcionales (IVA del neto, 5.1.01). Con servicio_id es del servicio (y vencida cuenta para el corte); sin él, del cliente_id en la empresa activa. Sin mora. Total > 0: asiento CxC / ingresos + IVA, factura.emitida y certificación según el modo FEL. Total Q0: exige motivo_sin_costo_id + motivo_sin_costo_texto y el permiso facturas.cargo_sin_costo (403); no hay factura (decisión del PM: nunca una factura de Q0): responde documento = bonificacion con la bonificación (asiento interno 5.1.01 / ingreso, sin CxC, IVA ni DTE). 422 concepto inactivo o de otra empresa, descuentos mayores que el bruto, motivo con total > 0, concepto_exento_con_fel.
+         */
+        post: operations["facturasCargoUnico"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2846,6 +3071,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lealtad/canjes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Canjes de puntos y su estado */
+        get: operations["lealtadCanjes"];
+        put?: never;
+        /**
+         * Canjear puntos por un premio
+         * @description Los puntos salen al crear el canje (lotes que vencen antes primero; con diferimiento, asiento 2.1.10 / 4.1.06). mejora_plan programa el plan temporal (falla todo si no se puede); un descuento con factura_id emite la nota de crédito sobre la línea del plan (422 `nota_fuera_de_plazo`); sin factura queda reservado para la próxima factura. 422 `programa_inactivo`, `premio_inactivo`, `servicio_no_valido`, `saldo_insuficiente`, `parametro_sin_confirmar` (bien); 409 `sin_existencias`, `canje_pendiente`.
+         */
+        post: operations["lealtadCanjear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/canjes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un canje */
+        get: operations["lealtadVerCanje"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/canjes/{id}/revertir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revertir un canje reservado (devuelve los puntos)
+         * @description Solo reservado: los puntos vuelven con su vencimiento original (un lote nuevo por cada lote que pagó el canje, asiento 4.1.05 / 2.1.10). 409 `canje_no_revertible`.
+         */
+        post: operations["lealtadRevertirCanje"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/premios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catálogo de premios */
+        get: operations["lealtadPremios"];
+        put?: never;
+        /**
+         * Agregar un premio al catálogo
+         * @description Campos por tipo (§5): descuento_factura con descuento_tipo y descuento_valor (tope opcional en porcentaje); mes_gratis; mejora_plan con plan_destino_id y dias; bien (el canje espera la decisión premio_bien_iva). 422 `recompensa_no_disponible` con boletos (fase 3).
+         */
+        post: operations["lealtadCrearPremio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/premios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un premio */
+        get: operations["lealtadVerPremio"];
+        /**
+         * Editar o desactivar un premio
+         * @description El tipo no cambia; activo = false lo saca del catálogo (no se borra).
+         */
+        put: operations["lealtadEditarPremio"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lealtad/programa": {
         parameters: {
             query?: never;
@@ -3019,6 +3344,429 @@ export interface paths {
          * @description El tipo no cambia; condiciones se valida con el esquema del tipo de la regla (422 en condiciones.<campo>). Una regla no se borra: activa = false. Aplica a los otorgamientos nuevos.
          */
         put: operations["lealtadEditarRegla"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sorteos de la empresa */
+        get: operations["lealtadSorteos"];
+        put?: never;
+        /**
+         * Crear un sorteo en borrador
+         * @description Bases (§7.2), criterios del corte (boletos_por_servicio por servicio activo sin facturas vencidas; admite_canje) y premios (efectivo, bien o servicio; ISR parametrizado). Empresa: la indicada o la activa.
+         */
+        post: operations["lealtadCrearSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver un sorteo con su checklist, participantes y ganadores */
+        get: operations["lealtadVerSorteo"];
+        /**
+         * Editar un sorteo en borrador
+         * @description Solo en borrador; premios reemplaza la lista. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        put: operations["lealtadEditarSorteo"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/abrir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abrir la participación (boletos por canje)
+         * @description bases_publicadas → participacion_abierta. Exige el requisito bases_diaco (422 `requisito_pendiente`). 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadAbrirSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/acta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PDF del acta del sorteo
+         * @description application/pdf con ETag = acta_hash. 404 si el acta aún no se cerró.
+         */
+        get: operations["lealtadActaSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/archivos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subir una evidencia del checklist o la constancia de una entrega
+         * @description multipart/form-data con `archivo` (PDF, JPEG, PNG o WebP según su contenido, hasta 5 MB) y `uso` (evidencia o constancia). Solo inserción, con su SHA-256. Luego se cita en POST .../requisitos/:clave (archivo_id) o en la entrega (constancia_archivo_id). 422 en `archivo`.
+         */
+        post: operations["lealtadSubirArchivoSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/archivos/{archivoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Descargar un archivo del sorteo (evidencia, constancia, imagen o acta)
+         * @description Con su tipo y ETag (SHA-256). 404 si no es del sorteo o si el archivo en disco ya no coincide con su huella.
+         */
+        get: operations["lealtadArchivoSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/aviso-portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Anunciar (o no) el sorteo en el portal del cliente
+         * @description Pedido del PM: false por defecto; editable hasta antes de ejecutar (después, 409), con version y audit.cambios. El portal solo lista los sorteos con aviso_portal. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        put: operations["lealtadAvisoPortalSorteo"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/bases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bases publicadas de un sorteo (público)
+         * @description Sin sesión, desde bases_publicadas (404 antes): el documento cuyo SHA-256 es bases_hash y el compromiso.
+         */
+        get: operations["lealtadBasesSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/cancelar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar un sorteo antes de ejecutarlo
+         * @description Con motivo. Evento sorteo.cancelado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadCancelarSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/cerrar-acta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar el acta del sorteo (PDF con su SHA-256)
+         * @description ejecutado → acta_cerrada. Exige publicacion_resultados (422 requisito_pendiente) y la constancia. Genera el PDF una sola vez (resolución, checklist, hashes, semilla, valor público con su fuente y evidencia, algoritmo, ganadores con seudónimo y nombre, asistentes, constancia y publicación) y guarda su SHA-256 en acta_hash. Sin premios pendientes, pasa a premios_entregados. Evento sorteo.acta_cerrada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadCerrarActaSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/cerrar-corte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar el corte: foto de participantes y lista_hash
+         * @description participacion_abierta → corte_cerrado, en corte_en o después (422 `corte_no_vencido`). Boletos por criterio (servicios activos sin facturas vencidas) más los canjeados; seudónimo por participante y lista_hash. Evento sorteo.corte_cerrado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadCerrarCorteSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/ejecutar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ejecutar el sorteo (argos-sorteo-v1)
+         * @description corte_cerrado → ejecutado. Exige el checklist de ejecución (422 `requisito_pendiente` con la clave) y el valor_publico del acto. Revela la semilla, verifica el compromiso y elige titulares y suplentes; el resultado se audita y se reproduce con GET /lealtad/sorteos/:id/verificacion y scripts/verificar-sorteo.mjs. Evento sorteo.ejecutado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadEjecutarSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/anular-entrega": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular la entrega del premio de un ganador (todo junto)
+         * @description H22: deshace la entrega en una transacción: anula el egreso (efectivo), revierte el asiento sorteo (bien) o el canje sin puntos (servicio; 409 canje_no_revertible si ya se aplicó a una factura) y el asiento del ISR. El ganador vuelve a por_notificar y un sorteo premios_entregados vuelve a ejecutado. Por separado, anular el egreso, revertir el canje o revertir el asiento responden 422. Evento sorteo.entrega_anulada. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadAnularEntregaSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/entregar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar la entrega del premio de un titular
+         * @description Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: 5.1.03 / 2.1.03 (proveedor) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadEntregarPremioSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/ganadores/{ganadorId}/no-reclamado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dar por no reclamado un premio: pasa al siguiente suplente
+         * @description Vencido el plazo de reclamo (422 plazo_reclamo_vigente antes; 422 ganador_no_notificado si no se notificó). El premio pasa al siguiente suplente en espera, que se notifica; el ganador queda sustituido (o no_reclamado si no quedan suplentes). Evento sorteo.premio_no_reclamado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadNoReclamadoSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/notificar-ganadores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Notificar a los ganadores (evento a notify) con su plazo de reclamo
+         * @description ejecutado o acta_cerrada. Cada ganador con premio que sigue por_notificar pasa a notificado con reclamar_antes = ahora + bases.plazo_reclamo_dias, y sale un sorteo.ganador_notificado por ganador (notify avisa al cliente). Idempotente. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadNotificarGanadoresSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/participantes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista de participantes del corte (JSON, CSV o XLSX)
+         * @description Desde el corte (409 antes). Orden canónico por codigo_publico con boletos y cliente; al pie, lista_hash (SHA-256 de las líneas codigo|boletos). Con formato=csv o xlsx responde el archivo. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        get: operations["lealtadParticipantesSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/premios/{posicion}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Imagen de un premio (panel) */
+        get: operations["lealtadVerImagenPremioSorteo"];
+        put?: never;
+        /**
+         * Subir la imagen de un premio (solo en borrador)
+         * @description multipart/form-data con `imagen`: PNG, JPEG o WebP según su contenido, hasta 1 MB y de 64 a 4096 px por lado (como las imágenes de los anuncios). El portal no carga URLs externas: la imagen se sirve por el mismo origen. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadImagenPremioSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/publicar-bases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publicar las bases: congela, calcula bases_hash y compromete la semilla
+         * @description borrador → bases_publicadas. 422 `bases_incompletas` con el campo que falta (§7.2). La semilla (32 bytes aleatorios) se guarda cifrada y se publica su SHA-256 (`compromiso`). Evento sorteo.bases_publicadas. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.
+         */
+        post: operations["lealtadPublicarBasesSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/requisitos/{clave}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marcar un requisito del checklist legal
+         * @description cumplido o no_aplica exigen evidencia (referencia o texto; archivos en la segunda PR). Solo inserción: vale la última marca por clave. Referencia; valídelo con su contador o abogado.
+         */
+        post: operations["lealtadMarcarRequisitoSorteo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lealtad/sorteos/{id}/verificacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datos para recalcular el resultado (público)
+         * @description Sin sesión, después de ejecutar (404 antes): algoritmo, bases_hash, compromiso, semilla, valor_publico, lista (seudónimos y boletos) y ganadores. scripts/verificar-sorteo.mjs hace el mismo cálculo.
+         */
+        get: operations["lealtadVerificacionSorteo"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -3492,6 +4240,45 @@ export interface paths {
         put?: never;
         /** Quitar una de mis vinculaciones de autologin */
         post: operations["meVinculacionesQuitar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/motivos-sin-costo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catálogo de motivos de facturas en Q0 por empresa */
+        get: operations["motivosSinCostoListar"];
+        put?: never;
+        /**
+         * Crear motivo de factura en Q0
+         * @description 409 motivo_sin_costo_duplicado.
+         */
+        post: operations["motivosSinCostoCrear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/motivos-sin-costo/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver motivo de factura en Q0 */
+        get: operations["motivosSinCostoVer"];
+        /** Renombrar o desactivar motivo de factura en Q0 */
+        put: operations["motivosSinCostoEditar"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4241,6 +5028,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/anuncios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Anuncios vigentes para el cliente en un lugar del portal
+         * @description `lugar=pagina_corte`: el cliente del servicio de la IP (solo su empresa) o, si no, el de la sesión. `lugar=portal_inicio`: el de la sesión. Solo publicados, dentro de su vigencia y cuya audiencia le aplica (`todos`, `suspendidos`: algún servicio suspendido o limitado, `al_dia`: sin eso ni facturas vencidas, `con_puntos`: saldo de puntos > 0). Sin cliente identificado: lista vacía. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalAnuncios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/anuncios/{id}/eventos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cuenta una vista o un clic de un anuncio vigente
+         * @description `visitante` es un UUID que el navegador genera por sesión (sin datos personales; nada va en la URL). Idempotente: una vista y un clic por visitante y anuncio. 404 si el anuncio no está vigente. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        post: operations["portalAnuncioEvento"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/anuncios/{id}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Imagen de un anuncio vigente (mismo origen del portal, con ETag)
+         * @description Solo de anuncios publicados y vigentes; si no, 404. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalAnuncioImagen"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/avisos-sorteo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sorteos próximos ya abiertos al público, para el carrusel del portal
+         * @description Con bases publicadas o participación abierta y fecha de sorteo futura (los activa el panel al publicar sus bases). `lugar=pagina_corte`: los de la empresa del servicio de la IP (o, sin él, los del cliente de la sesión); `lugar=portal_inicio`: los de las empresas del cliente de la sesión. Sin cliente identificado, lista vacía. Sin imágenes ni datos de nadie. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalAvisosSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/bancos": {
         parameters: {
             query?: never;
@@ -4255,6 +5122,50 @@ export interface paths {
         get: operations["portalBancos"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/bonificaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Periodos bonificados del cliente de la sesión (mes gratis, canje, cargo sin costo)
+         * @description Decisión del PM: un periodo en cero no es una factura de Q0 sino una bonificación (A3). Sin montos, documento ni motivo interno: el portal la muestra como «Mes bonificado». Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalBonificaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/canjes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Canjes del cliente de la sesión y su estado
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalCanjes"];
+        put?: never;
+        /**
+         * El cliente canjea sus puntos por un premio
+         * @description Llama `lealtad.canjear` (A3) con actor `cliente` y canal `portal`. 404 si el premio no está en el portal (inactivo, sin `en_portal` o de un programa no visible). Errores de la acción: 403 `canje_portal_inactivo`, 422 `saldo_insuficiente`, `servicio_no_valido`, `premio_inactivo`, `recompensa_no_disponible`, `parametro_sin_confirmar`; 409 `sin_existencias`, `canje_pendiente`. Un descuento queda `reservado` para la próxima factura del servicio. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        post: operations["portalCanjear"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4605,6 +5516,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/premios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Premios canjeables desde el portal, con lo que le falta al cliente para cada uno
+         * @description Activos y con `en_portal`, del más barato al más caro. Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalPremios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/promesas": {
         parameters: {
             query?: never;
@@ -4649,6 +5580,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/puntos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Puntos del cliente por empresa: saldo, lo que vence pronto, movimientos y términos
+         * @description Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalPuntos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/quien-soy": {
         parameters: {
             query?: never;
@@ -4683,6 +5634,86 @@ export interface paths {
          * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
          */
         post: operations["portalSalir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sorteos publicados y vigentes de las empresas del cliente (portal)
+         * @description Sesión del portal (401 sin ella). Publicados y no cancelados, con fecha de sorteo desde hace 30 días: premios, regla de participación, sus boletos, su seudónimo y, al terminar, el resultado. Nunca nombres de otros clientes.
+         */
+        get: operations["portalSorteos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos/{id}/premios/{posicion}/imagen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Imagen de un premio de un sorteo anunciado en el portal
+         * @description Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.
+         */
+        get: operations["portalImagenPremioSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos/{id}/publico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Página pública de un sorteo: bases, premios, compromiso y ganadores por seudónimo
+         * @description Sin sesión, desde que publica sus bases (antes o inexistente, 404). Los ganadores salen por seudónimo después de ejecutar. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalSorteoPublico"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos/{id}/verificacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datos para recalcular el resultado de un sorteo (los de `GET /lealtad/sorteos/:id/verificacion`)
+         * @description Sin sesión, después de ejecutar (antes, 404). Lista por seudónimo. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalSorteoVerificacion"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4958,6 +5989,26 @@ export interface paths {
          * @description Altas por fecha de instalación; el resto por eventos servicio.estado_cambiado. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
          */
         get: operations["reportesAltasBajas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/bonificaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bonificaciones por motivo, origen y mes (lo que antes era una factura en Q0)
+         * @description Decisión del PM (19 oct): una factura de valor 0 nunca se genera. Mes gratis, descuento del 100 %, cargo único sin costo y canjes que dejan el periodo en cero son bonificaciones (asiento interno 5.1.01 / ingreso por la base). Por mes del periodo, motivo y origen, con el valor bruto entregado sin cobrar y la base del asiento. Con `formato=csv` o `formato=xlsx` responde el archivo (Content-Type text/csv o de Excel, Content-Disposition attachment) con la fila de totales al final.
+         */
+        get: operations["reportesBonificaciones"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6271,6 +7322,50 @@ export interface components {
             movimiento: components["schemas"]["MovimientoPuntos"];
             saldo: number;
         };
+        Anuncio: {
+            id: number;
+            empresa_id: number;
+            titulo: string;
+            /** @description Texto plano, sin HTML */
+            texto: string;
+            imagen: {
+                /** @description `/api/v1/anuncios/:id/imagen?v=…` (con sesión del panel) */
+                url: string;
+                /** @enum {string} */
+                tipo: "image/png" | "image/jpeg" | "image/webp";
+                ancho: number;
+                alto: number;
+                alt: string | null;
+            } | null;
+            boton: {
+                texto: string;
+                /** @description `http(s)://…` o ruta del portal que empieza con `/` */
+                url: string;
+            } | null;
+            /** Format: date-time */
+            inicio: string | null;
+            /** Format: date-time */
+            fin: string | null;
+            /** @enum {string} */
+            audiencia: "todos" | "suspendidos" | "con_puntos" | "al_dia";
+            lugares: ("portal_inicio" | "pagina_corte")[];
+            orden: number;
+            /** @enum {string} */
+            estado: "borrador" | "publicado" | "archivado";
+            /** @description Publicado y dentro de su vigencia ahora mismo */
+            vigente: boolean;
+            /** Format: date-time */
+            publicado_en: string | null;
+            /** Format: date-time */
+            archivado_en: string | null;
+            creado_por: number | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         AplicacionPago: {
             factura_id: number;
             monto: components["schemas"]["Dinero"];
@@ -6285,6 +7380,22 @@ export interface components {
             en: string;
             nota: string | null;
         };
+        ArchivoSorteo: {
+            id: number;
+            sorteo_id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            uso: "evidencia" | "imagen_premio" | "acta" | "constancia";
+            nombre: string;
+            /** @enum {string} */
+            tipo: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+            tamano: number;
+            sha256: string;
+            ancho: number | null;
+            alto: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         Asiento: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
             empresa_id?: number;
@@ -6293,7 +7404,7 @@ export interface components {
             fecha: string;
             descripcion: string;
             /** @enum {string} */
-            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+            origen_tipo: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad" | "sorteo" | "bonificacion";
             origen_id: number | null;
             /** @description Asiento que este revierte (correcciones por reverso) */
             reversa_de: number | null;
@@ -6419,6 +7530,17 @@ export interface components {
             cuenta_codigo: string;
             cuenta_nombre: string;
         };
+        BasesSorteoPublicas: {
+            sorteo_id: number;
+            /** @enum {string} */
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
+            bases_hash: string;
+            compromiso: string;
+            /** @description Documento cuyo SHA-256 del JSON canónico es bases_hash */
+            bases: {
+                [key: string]: unknown;
+            };
+        };
         BloqueoAdicional: {
             id: number;
             asignacion_id: number;
@@ -6483,6 +7605,40 @@ export interface components {
             };
             /** @description Última fila de cada tipo que tiene alguna */
             ultimos: components["schemas"]["BloqueoLibro"][];
+        };
+        Bonificacion: {
+            id: number;
+            empresa_id: number;
+            cliente_id: number;
+            servicio_id: number | null;
+            /** Format: date */
+            periodo: string;
+            /** @description servicio_id-periodo (ocupa el periodo: el cron no lo vuelve a facturar) o cargo-<uuid> */
+            clave_unica: string;
+            concepto: string;
+            /** @enum {string} */
+            origen: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+            /** @description Valor con IVA de lo entregado sin cobrar */
+            bruto: components["schemas"]["Dinero"];
+            /** @description Sin IVA: monto del asiento 5.1.01 / ingreso */
+            base: components["schemas"]["Dinero"];
+            lineas: {
+                concepto: string;
+                tipo: string;
+                cantidad: string;
+                precio_unitario: components["schemas"]["Dinero"];
+                gravable: boolean;
+                iva: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+                cuenta_codigo?: string;
+            }[];
+            motivo_id: number;
+            motivo_nombre: string;
+            motivo_texto: string;
+            canje_id: number | null;
+            asiento_id: number;
+            /** Format: date-time */
+            created_at: string;
         };
         Caja: {
             /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
@@ -6556,6 +7712,42 @@ export interface components {
             };
             conector_id: string;
         };
+        CanjeLealtad: {
+            id: number;
+            empresa_id: number;
+            programa_id: number;
+            cliente_id: number;
+            servicio_id: number;
+            premio_id: number;
+            premio_nombre: string;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            puntos: number;
+            /** @enum {string} */
+            estado: "reservado" | "aplicado" | "revertido" | "rechazado";
+            /** @description Q descontados; null en un descuento aún reservado */
+            descuento: components["schemas"]["Dinero"] | null;
+            factura_id: number | null;
+            /** @description Bonificación a la que se aplicó si el descuento dejó el periodo en cero (nunca una factura de Q0) */
+            bonificacion_id?: number | null;
+            nota_credito_id: number | null;
+            plan_temporal_id: number | null;
+            movimiento_id: number | null;
+            /** @enum {string} */
+            canal: "panel" | "portal";
+            /** Format: date-time */
+            aplicado_en: string | null;
+            /** Format: date-time */
+            revertido_en: string | null;
+            motivo: string | null;
+            creado_por: number | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         CanjeSso: {
             /**
              * @description `sesion`: cookie del panel puesta, ir a `ruta`. `vinculacion_requerida`: mostrar el login normal y mandarlo a `POST /auth/sso/vincular` con `vinculacion.token`
@@ -6580,6 +7772,15 @@ export interface components {
                     nombre: string | null;
                 };
             } | null;
+        };
+        CargoUnicoEmitido: {
+            /**
+             * @description bonificacion si el total quedó en Q0 (decisión del PM: nunca una factura de Q0)
+             * @enum {string}
+             */
+            documento: "factura" | "bonificacion";
+            factura: components["schemas"]["FacturaDetalle"] | null;
+            bonificacion: components["schemas"]["Bonificacion"] | null;
         };
         CastigoCartera: {
             id: number;
@@ -6879,6 +8080,29 @@ export interface components {
             verificado_en: string | null;
             /** @description Solo al aprobar: el pago registrado (aplicaciones y servicios) */
             pago?: components["schemas"]["Pago"];
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ConceptoCargo: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            /**
+             * @description producto = bien, otro = servicio (DTE)
+             * @enum {string}
+             */
+            tipo: "producto" | "otro";
+            /** @description Cuenta de ingreso del plan de cuentas */
+            cuenta_codigo: string;
+            cuenta_nombre: string | null;
+            /** @description Lleva IVA (incluido en el precio) */
+            gravable: boolean;
+            /** @description Uno inactivo no se usa en cargos nuevos */
+            activo: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -7546,8 +8770,11 @@ export interface components {
             id: number;
             /** Format: date */
             fecha: string;
-            /** @enum {string} */
-            categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+            /**
+             * @description Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos
+             * @enum {string}
+             */
+            categoria: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
             categoria_nombre: string;
             /** @description Cuenta de gasto del plan */
             cuenta_codigo: string;
@@ -8049,6 +9276,13 @@ export interface components {
              */
             anulada_en?: string | null;
             motivo_anulacion?: string | null;
+            /** @description Cargo único manual (POST /facturas/cargo-unico, clave_unica cargo-<uuid>) */
+            cargo_unico?: boolean;
+            /** @description Cargo en Q0: motivo del catálogo (GET /motivos-sin-costo) */
+            motivo_sin_costo_id?: number | null;
+            motivo_sin_costo_nombre?: string | null;
+            /** @description Explicación del cargo en Q0 */
+            motivo_sin_costo_texto?: string | null;
             /** @description Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp */
             origen?: string | null;
             /** @description Id de la factura en su sistema de origen */
@@ -8078,13 +9312,21 @@ export interface components {
             id: number;
             concepto: string;
             /** @enum {string} */
-            tipo: "servicio" | "producto" | "mora" | "otro";
+            tipo: "servicio" | "producto" | "mora" | "otro" | "descuento";
             /** @description Decimal con hasta 3 decimales */
             cantidad: string;
             precio_unitario: components["schemas"]["Dinero"];
             gravable: boolean;
+            /** @description En una línea descuento, negativo: el IVA de la factura es el del neto */
             iva: components["schemas"]["Dinero"];
+            /** @description En una línea descuento, negativo */
             total: components["schemas"]["Dinero"];
+            /** @description Solo en tipo descuento: la línea que descuenta (de la misma factura) */
+            linea_id?: number | null;
+            /** @description Suma de los descuentos de esta línea (0.00 si no tiene) */
+            descuento?: components["schemas"]["Dinero"];
+            /** @description Cuenta de ingreso de la línea (concepto de un cargo único); null = la de su tipo */
+            cuenta_codigo?: string | null;
         };
         FacturasVencidasResumen: {
             /** @description Número de facturas vencidas con saldo */
@@ -8384,6 +9626,8 @@ export interface components {
             iva: components["schemas"]["Dinero"];
             clase_activo: string | null;
             diferir_meses: number | null;
+            /** @description Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad */
+            cantidad?: number;
         };
         LineaExtracto: {
             id: number;
@@ -8551,6 +9795,25 @@ export interface components {
             /** @description Solo en `GET /me`: empresa activa de la petición (`X-Empresa-Id` o la única del usuario); null si tiene varias y no eligió */
             empresa_activa_id?: number | null;
         };
+        MetricasAnuncio: {
+            anuncio_id: number;
+            /** @description Visitantes distintos que lo vieron (uno por sesión del navegador) */
+            vistas: number;
+            /** @description Visitantes distintos que tocaron su botón */
+            clics: number;
+            por_lugar: {
+                /** @enum {string} */
+                lugar: "portal_inicio" | "pagina_corte";
+                vistas: number;
+                clics: number;
+            }[];
+            por_dia: {
+                /** Format: date */
+                dia: string;
+                vistas: number;
+                clics: number;
+            }[];
+        };
         MigracionAaaRouter: {
             router_id: number;
             /**
@@ -8575,6 +9838,19 @@ export interface components {
             empresa_id: number | null;
             codigo: string;
             nombre: string;
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MotivoSinCosto: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            /** @description Uno inactivo no se usa en cargos nuevos */
             activo: boolean;
             /** @description Control optimista: envíala al editar */
             version: number;
@@ -8760,10 +10036,18 @@ export interface components {
             /** @description Cómo quedó el servicio de la factura (reactivación inmediata) */
             servicios: components["schemas"]["ServicioEvaluado"][];
         };
+        PaginaCanjesLealtad: {
+            data: components["schemas"]["CanjeLealtad"][];
+            nextCursor: string | null;
+        };
         PaginaComprobantes: {
             data: components["schemas"]["Comprobante"][];
             nextCursor: string | null;
             resumen: components["schemas"]["ResumenComprobantes"];
+        };
+        PaginaPremiosLealtad: {
+            data: components["schemas"]["PremioLealtad"][];
+            nextCursor: string | null;
         };
         PaginaReferidosLealtad: {
             data: components["schemas"]["ReferidoLealtad"][];
@@ -8771,6 +10055,10 @@ export interface components {
         };
         PaginaReglasLealtad: {
             data: components["schemas"]["ReglaLealtad"][];
+            nextCursor: string | null;
+        };
+        PaginaSorteosLealtad: {
+            data: components["schemas"]["SorteoLealtad"][];
             nextCursor: string | null;
         };
         Pago: {
@@ -9180,9 +10468,101 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        PortalAdicional: {
+            id: number;
+            nombre: string;
+            /** @description Usuario de IPTV, correo de la cuenta… */
+            identificador: string | null;
+            /**
+             * @description `incluido` en el plan, de `cortesia` (sin cobro) o `cobrado` aparte (`precio`)
+             * @enum {string}
+             */
+            modalidad: "incluido" | "cortesia" | "cobrado";
+            /** @description Precio mensual; solo con `cobrado` */
+            precio: components["schemas"]["Dinero"] | null;
+            /** @description Bloqueado por la suspensión del servicio; vuelve solo al reactivarse */
+            bloqueado: boolean;
+        };
+        PortalAnuncio: {
+            id: number;
+            empresa_id: number;
+            titulo: string;
+            /** @description Texto plano: mostrar como texto, nunca como HTML */
+            texto: string;
+            imagen: {
+                /** @description `/api/v1/portal/anuncios/:id/imagen?v=…` (mismo origen) */
+                url: string;
+                ancho: number;
+                alto: number;
+                alt: string;
+            } | null;
+            boton: {
+                texto: string;
+                /** @description `http(s)://…` o ruta del portal que empieza con `/` */
+                url: string;
+            } | null;
+        };
+        PortalAvisoSorteo: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            /**
+             * @description Abierto al público
+             * @enum {string}
+             */
+            estado: "bases_publicadas" | "participacion_abierta";
+            /**
+             * Format: date-time
+             * @description Hasta cuándo se ganan boletos
+             */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            /** @description Nombre del primer premio */
+            premio_principal: string | null;
+            /** @description Cuántos premios en total (suma de cantidades) */
+            premios: number;
+        };
         PortalBanco: {
             id: number;
             nombre: string;
+        };
+        PortalBonificacion: {
+            id: number;
+            /** @description Empresa que bonificó el periodo */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            servicio_id: number | null;
+            /**
+             * Format: date
+             * @description Primer día del periodo bonificado
+             */
+            periodo: string;
+            /** @description Qué se bonificó, sin el motivo interno */
+            concepto: string;
+            /** @enum {string} */
+            origen: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+            /** Format: date-time */
+            created_at: string;
+        };
+        PortalCanje: {
+            id: number;
+            empresa_id: number;
+            servicio_id: number;
+            premio_nombre: string;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            puntos: number;
+            /**
+             * @description `reservado`: para la próxima factura; `aplicado`; `revertido`; `rechazado`
+             * @enum {string}
+             */
+            estado: "reservado" | "aplicado" | "revertido" | "rechazado";
+            /** @description Q descontados; null mientras está reservado */
+            descuento: components["schemas"]["Dinero"] | null;
+            /** Format: date-time */
+            aplicado_en: string | null;
+            /** Format: date-time */
+            created_at: string;
         };
         PortalComprobante: {
             id: number;
@@ -9285,6 +10665,8 @@ export interface components {
             saldo_a_favor: components["schemas"]["Dinero"];
             /** @description Emitidas, parciales y vencidas de esta empresa, la más antigua primero */
             facturas_pendientes: components["schemas"]["PortalFacturaPendiente"][];
+            /** @description Periodos bonificados recientes (este mes y los dos anteriores), el más reciente primero */
+            bonificaciones: components["schemas"]["PortalBonificacion"][];
         };
         PortalDte: {
             /** @description Tipo de DTE de la SAT: FACT, FCAM, NDEB, NCRE… */
@@ -9452,6 +10834,29 @@ export interface components {
             /** Format: date-time */
             pagado_en: string | null;
         };
+        PortalPremio: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            nombre: string;
+            costo_puntos: number;
+            /** @enum {string|null} */
+            descuento_tipo: "monto" | "porcentaje" | null;
+            descuento_valor: components["schemas"]["Dinero"] | null;
+            tope: components["schemas"]["Dinero"] | null;
+            /** @description Días de la mejora de plan */
+            dias: number | null;
+            /** @description Nombre del plan de la mejora */
+            plan_destino: string | null;
+            agotado: boolean;
+            /** @description Para la tarjeta; la acción `lealtad.canjear` decide */
+            canjeable: boolean;
+            /** @enum {string|null} */
+            motivo_no_canjeable: "canje_desactivado" | "puntos_insuficientes" | "agotado" | "no_disponible_en_portal" | null;
+            /** @description Puntos que faltan (el mayor entre costo y mínimo, menos el saldo) */
+            faltan: number;
+        };
         PortalPromesa: {
             id: number;
             servicio_id: number;
@@ -9479,10 +10884,59 @@ export interface components {
             /** @description Estado del servicio tras la promesa (solo si quedó aprobada) */
             servicio_estado: components["schemas"]["EstadoServicio"] | null;
         };
+        PortalPuntosEmpresa: {
+            /** @description Empresa del programa (los puntos son por NIT) */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            programa: {
+                nombre: string;
+                /** @description Términos publicados del programa (texto plano) */
+                terminos: string;
+                /** @description Saldo mínimo para canjear */
+                minimo_canje: number;
+                /** @description null = los puntos no vencen */
+                vencimiento_meses: number | null;
+                aviso_vencimiento_dias: number;
+                /** @description El cliente puede canjear desde el portal */
+                canje_portal: boolean;
+            };
+            /** @description Puede ser negativo tras un reverso; entonces no canjea */
+            saldo: number;
+            /** @description Puntos que vencen dentro del aviso del programa */
+            por_vencer: number;
+            /** Format: date */
+            proximo_vencimiento: string | null;
+            vencen_pronto: {
+                puntos: number;
+                /** Format: date */
+                vence_en: string;
+            }[];
+            /** @description Los últimos 20, del más reciente; sin motivos internos ni valores contables */
+            movimientos: {
+                id: number;
+                /** @enum {string} */
+                tipo: "acumulacion" | "canje" | "vencimiento" | "reverso" | "ajuste";
+                /** @enum {string} */
+                origen_tipo: "factura" | "pago" | "servicio" | "referido" | "canje" | "sorteo" | "ajuste" | "nota_credito" | "lote";
+                /** @description Con signo: positivo gana, negativo sale */
+                puntos: number;
+                servicio_id: number | null;
+                /** Format: date */
+                vence_en: string | null;
+                /** Format: date-time */
+                created_at: string;
+            }[];
+        };
         PortalServicio: {
             id: number;
             estado: components["schemas"]["EstadoServicio"];
             plan: string | null;
+            /**
+             * @description Tipo del plan: residencial, empresarial o dedicado (null sin plan)
+             * @enum {string|null}
+             */
+            plan_tipo: "residencial" | "empresarial" | "dedicado" | null;
+            /** @description Servicios adicionales activos (streaming, IPTV…), sin la credencial */
+            adicionales: components["schemas"]["PortalAdicional"][];
             direccion: string | null;
             promesa_activa: boolean;
             monto_adeudado: components["schemas"]["Dinero"];
@@ -9515,6 +10969,92 @@ export interface components {
             /** @description Destino enmascarado ("m***a@e***.com", "tu Telegram vinculado"). Solo al pedir por IP; por identificador siempre null, exista o no el cliente */
             destino: string | null;
         };
+        PortalSorteo: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            descripcion: string | null;
+            /** @enum {string} */
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
+            regla_participacion: string | null;
+            /** Format: date */
+            inscripcion_desde: string | null;
+            /** Format: date-time */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            lugar: string | null;
+            premios: {
+                posicion: number;
+                nombre: string;
+                cantidad: number;
+                imagen_url: string | null;
+                valor: components["schemas"]["Dinero"];
+            }[];
+            bases_hash: string | null;
+            compromiso: string | null;
+            /** @description Boletos del cliente (al corte, los de la lista) */
+            mis_boletos: number;
+            /** @description Su seudónimo en la lista (desde el corte) */
+            mi_codigo: string | null;
+            /** @description Solo después de ejecutar */
+            ganadores: {
+                posicion: number;
+                /** @enum {string} */
+                tipo: "titular" | "suplente";
+                /** @description Seudónimo del participante */
+                codigo: string;
+                premio_posicion: number | null;
+            }[] | null;
+        };
+        PortalSorteoPublico: {
+            id: number;
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            nombre: string;
+            descripcion: string | null;
+            /** @enum {string} */
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
+            /** Format: date */
+            inscripcion_desde: string | null;
+            /** Format: date-time */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            lugar: string | null;
+            premios: {
+                posicion: number;
+                nombre: string;
+                cantidad: number;
+                valor: components["schemas"]["Dinero"];
+                imagen_url: string | null;
+            }[];
+            bases: {
+                mecanica: string | null;
+                regla_participacion: string | null;
+                plazo_reclamo_dias: number | null;
+                no_reclamados: string | null;
+                publicacion_resultados: string | null;
+                /** @description De dónde sale el valor público del acto (p. ej. un número de la lotería) */
+                fuente_valor_publico: string | null;
+                resolucion_gobernacion: string | null;
+            };
+            /** @description SHA-256 del JSON canónico de las bases y los premios */
+            bases_hash: string;
+            /** @description SHA-256 de la semilla, publicado con las bases */
+            compromiso: string | null;
+            motivo_cancelacion: string | null;
+            /** @description Ya se ejecutó: hay datos para recalcular el resultado */
+            verificable: boolean;
+            /** @description Solo después de ejecutar */
+            ganadores: {
+                posicion: number;
+                /** @enum {string} */
+                tipo: "titular" | "suplente";
+                /** @description Seudónimo del participante, nunca su nombre */
+                codigo: string;
+                premio_posicion: number | null;
+            }[] | null;
+        };
         PortalTelegram: {
             /** @description El cliente tiene un chat de Telegram vinculado */
             vinculado: boolean;
@@ -9545,6 +11085,36 @@ export interface components {
             vence_en: string;
             /** @description Empresa cuyo bot se vincula (null = el bot global) */
             empresa_id: number | null;
+        };
+        PremioLealtad: {
+            id: number;
+            empresa_id: number;
+            programa_id: number;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            nombre: string;
+            costo_puntos: number;
+            /** @enum {string|null} */
+            descuento_tipo: "monto" | "porcentaje" | null;
+            descuento_valor: components["schemas"]["Dinero"] | null;
+            tope: components["schemas"]["Dinero"] | null;
+            plan_destino_id: number | null;
+            dias: number | null;
+            costo_unitario: components["schemas"]["Dinero"] | null;
+            /** @description null = sin límite */
+            existencias: number | null;
+            /** @description Solo boletos: el sorteo */
+            sorteo_id?: number | null;
+            /** @description Solo boletos: cuántos da cada canje */
+            boletos?: number | null;
+            en_portal: boolean;
+            activo: boolean;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         Problem: {
             type: string;
@@ -9585,6 +11155,10 @@ export interface components {
             terminos: string;
             /** @description SHA-256 de los términos publicados */
             terminos_hash: string;
+            /** @description El cliente ve sus puntos en el portal */
+            visible_portal: boolean;
+            /** @description El cliente canjea desde el portal (solo con visible_portal) */
+            canje_portal: boolean;
             /** Format: date */
             vigente_desde: string;
             /** Format: date */
@@ -10020,6 +11594,39 @@ export interface components {
             /** Format: date-time */
             generado_en: string;
         };
+        ReporteBonificaciones: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                periodo: string;
+                motivo_id: number;
+                motivo: string;
+                origen: string;
+                bonificaciones: number;
+                valor_bruto: components["schemas"]["Dinero"];
+                base: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                periodo: number | null;
+                motivo_id: number | null;
+                motivo: number | null;
+                origen: number | null;
+                bonificaciones: number | null;
+                valor_bruto: components["schemas"]["Dinero"] | null;
+                base: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ReporteCarteraVencida: {
             reporte: string;
             titulo: string;
@@ -10412,6 +12019,38 @@ export interface components {
             /** Format: date-time */
             generado_en: string;
         };
+        ReporteParticipantesSorteo: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                orden: number;
+                codigo_publico: string;
+                boletos: number;
+                cliente_id: number;
+                cliente: string;
+                servicio_id: number | null;
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                orden: number | null;
+                /** @description Al pie: «lista_hash <SHA-256>» de la lista del corte */
+                codigo_publico: string | null;
+                boletos: number | null;
+                cliente_id: number | null;
+                cliente: number | null;
+                servicio_id: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
         ReportePromesas: {
             reporte: string;
             titulo: string;
@@ -10453,6 +12092,19 @@ export interface components {
             };
             /** Format: date-time */
             generado_en: string;
+        };
+        RequisitoSorteo: {
+            /** @enum {string} */
+            clave: "bases_diaco" | "autorizacion_gobernacion" | "fianza" | "isr_premios" | "timbre_fiscal" | "delegado_o_notario" | "publicacion_resultados" | "lista_a_gobernacion";
+            /** @enum {string} */
+            estado: "cumplido" | "no_aplica" | "pendiente";
+            valor: string | null;
+            evidencia: string | null;
+            /** @description Evidencia como archivo (GET .../archivos/:archivoId) */
+            archivo_id?: number | null;
+            nota: string | null;
+            /** Format: date-time */
+            marcado_en: string | null;
         };
         ResolucionIp: {
             servicio_id: number;
@@ -10501,6 +12153,9 @@ export interface components {
             /** @description Ya tenían factura del periodo */
             omitidas: number;
             facturas: number[];
+            /** @description Periodos en cero registrados como bonificación (nunca una factura de Q0) */
+            bonificadas?: number;
+            bonificaciones?: number[];
             /** @description Servicios que no se pudieron facturar (ver log) */
             errores?: number;
             /** @description Documentos que no se contabilizaron por un bloqueo del libro; se reintentan en la siguiente corrida */
@@ -11140,6 +12795,206 @@ export interface components {
             creado: boolean;
             motivo: string | null;
         };
+        SorteoDetalle: {
+            id: number;
+            empresa_id: number;
+            programa_id: number | null;
+            nombre: string;
+            descripcion: string | null;
+            /** @enum {string} */
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
+            /** @description Bases (§7.2): mecanica, regla_participacion, plazo_reclamo_dias… */
+            bases: {
+                [key: string]: unknown;
+            };
+            criterios: {
+                boletos_por_servicio: number;
+                admite_canje: boolean;
+            };
+            bases_hash: string | null;
+            /** Format: date */
+            inscripcion_desde: string | null;
+            /** Format: date-time */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            lugar: string | null;
+            suplentes: number;
+            algoritmo: string;
+            /** @description SHA-256 de la semilla, público desde que se publican las bases */
+            compromiso: string | null;
+            /** @description Revelada al ejecutar */
+            semilla: string | null;
+            valor_publico: string | null;
+            /** @description Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico */
+            valor_publico_evidencia?: string | null;
+            lista_hash: string | null;
+            resultado: {
+                [key: string]: unknown;
+            } | null;
+            motivo_cancelacion: string | null;
+            /** Format: date-time */
+            publicado_en: string | null;
+            /** Format: date-time */
+            corte_cerrado_en: string | null;
+            /** Format: date-time */
+            ejecutado_en: string | null;
+            /** Format: date-time */
+            cancelado_en: string | null;
+            premios: {
+                id: number;
+                posicion: number;
+                nombre: string;
+                cantidad: number;
+                imagen_url: string | null;
+                /** @description Valor de libre competencia */
+                valor: components["schemas"]["Dinero"];
+                /** @enum {string} */
+                tipo: "efectivo" | "bien" | "servicio";
+                /** @description Solo servicio: premio del catálogo que se entrega */
+                premio_id: number | null;
+                retiene_isr: boolean;
+                /** @description Porcentaje del ISR del premio */
+                isr_pct: string;
+                /** @description Imagen subida (POST /lealtad/sorteos/:id/premios/:posicion/imagen); imagen_url es su ruta */
+                imagen_archivo_id?: number | null;
+            }[];
+            /** @description Se anuncia en el portal (PUT /lealtad/sorteos/:id/aviso-portal; hasta antes de ejecutar) */
+            aviso_portal?: boolean;
+            /** @description SHA-256 del PDF del acta (GET /lealtad/sorteos/:id/acta.pdf) */
+            acta_hash?: string | null;
+            acta_archivo_id?: number | null;
+            acta_constancia?: string | null;
+            /** Format: date-time */
+            acta_cerrada_en?: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            requisitos: components["schemas"]["RequisitoSorteo"][];
+            participantes: number;
+            boletos: number;
+            ganadores: {
+                id: number;
+                posicion: number;
+                /** @enum {string} */
+                tipo: "titular" | "suplente";
+                participante_id: number;
+                cliente_id: number;
+                codigo_publico: string;
+                premio_posicion: number | null;
+                /** @enum {string} */
+                estado: "por_notificar" | "notificado" | "entregado" | "no_reclamado" | "sustituido";
+                retencion_isr: components["schemas"]["Dinero"] | null;
+                contrapartida: string | null;
+                asiento_id: number | null;
+                egreso_id: number | null;
+                canje_id: number | null;
+                /** Format: date-time */
+                entregado_en: string | null;
+                /** @description Línea de la compra con factura del bien entregado */
+                compra_linea_id?: number | null;
+                /** @description Premio que le toca: el de su puesto o, un suplente que tomó uno no reclamado, premio_sustitucion */
+                premio?: number | null;
+                premio_sustitucion?: number | null;
+                /** @description Ganador cuyo premio no reclamado toma este suplente */
+                sustituye_a?: number | null;
+                /** Format: date-time */
+                notificado_en?: string | null;
+                /** Format: date-time */
+                reclamar_antes?: string | null;
+                /** Format: date-time */
+                no_reclamado_en?: string | null;
+                constancia_archivo_id?: number | null;
+                /** @description Unidades de esa línea que consumió la entrega */
+                compra_unidades?: number | null;
+                /** @description Parte de la base de la línea que le tocó (base / cantidad por unidad; la última lleva el resto) */
+                compra_base?: components["schemas"]["Dinero"] | null;
+                version: number;
+            }[];
+            archivos?: components["schemas"]["ArchivoSorteo"][];
+        };
+        SorteoLealtad: {
+            id: number;
+            empresa_id: number;
+            programa_id: number | null;
+            nombre: string;
+            descripcion: string | null;
+            /** @enum {string} */
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
+            /** @description Bases (§7.2): mecanica, regla_participacion, plazo_reclamo_dias… */
+            bases: {
+                [key: string]: unknown;
+            };
+            criterios: {
+                boletos_por_servicio: number;
+                admite_canje: boolean;
+            };
+            bases_hash: string | null;
+            /** Format: date */
+            inscripcion_desde: string | null;
+            /** Format: date-time */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            lugar: string | null;
+            suplentes: number;
+            algoritmo: string;
+            /** @description SHA-256 de la semilla, público desde que se publican las bases */
+            compromiso: string | null;
+            /** @description Revelada al ejecutar */
+            semilla: string | null;
+            valor_publico: string | null;
+            /** @description Cómo se obtuvo en el acto el valor de la fuente declarada en bases.fuente_valor_publico */
+            valor_publico_evidencia?: string | null;
+            lista_hash: string | null;
+            resultado: {
+                [key: string]: unknown;
+            } | null;
+            motivo_cancelacion: string | null;
+            /** Format: date-time */
+            publicado_en: string | null;
+            /** Format: date-time */
+            corte_cerrado_en: string | null;
+            /** Format: date-time */
+            ejecutado_en: string | null;
+            /** Format: date-time */
+            cancelado_en: string | null;
+            premios: {
+                id: number;
+                posicion: number;
+                nombre: string;
+                cantidad: number;
+                imagen_url: string | null;
+                /** @description Valor de libre competencia */
+                valor: components["schemas"]["Dinero"];
+                /** @enum {string} */
+                tipo: "efectivo" | "bien" | "servicio";
+                /** @description Solo servicio: premio del catálogo que se entrega */
+                premio_id: number | null;
+                retiene_isr: boolean;
+                /** @description Porcentaje del ISR del premio */
+                isr_pct: string;
+                /** @description Imagen subida (POST /lealtad/sorteos/:id/premios/:posicion/imagen); imagen_url es su ruta */
+                imagen_archivo_id?: number | null;
+            }[];
+            /** @description Se anuncia en el portal (PUT /lealtad/sorteos/:id/aviso-portal; hasta antes de ejecutar) */
+            aviso_portal?: boolean;
+            /** @description SHA-256 del PDF del acta (GET /lealtad/sorteos/:id/acta.pdf) */
+            acta_hash?: string | null;
+            acta_archivo_id?: number | null;
+            acta_constancia?: string | null;
+            /** Format: date-time */
+            acta_cerrada_en?: string | null;
+            /** @description Control optimista: envíala al editar */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         SustitucionFactura: {
             /** @description La factura sustituida (anulada o acreditada por completo) */
             original: components["schemas"]["FacturaDetalle"];
@@ -11292,6 +13147,37 @@ export interface components {
         VariableDocumento: {
             nombre: string;
             descripcion: string;
+        };
+        VerificacionSorteo: {
+            sorteo_id: number;
+            algoritmo: string;
+            bases_hash: string;
+            bases: {
+                [key: string]: unknown;
+            };
+            compromiso: string;
+            semilla: string;
+            valor_publico: string;
+            /** @description Fuente pública del valor declarada en las bases (congelada con bases_hash) */
+            fuente_valor_publico: string | null;
+            valor_publico_evidencia: string | null;
+            /** @description SHA-256 del acta, cuando ya se cerró */
+            acta_hash: string | null;
+            lista_hash: string;
+            lista: {
+                codigo: string;
+                boletos: number;
+            }[];
+            titulares: number;
+            suplentes: number;
+            ganadores: {
+                posicion: number;
+                /** @enum {string} */
+                tipo: "titular" | "suplente";
+                /** @description Seudónimo del participante */
+                codigo: string;
+                premio_posicion: number | null;
+            }[];
         };
         VersionInstalada: {
             /** @description SemVer de la imagen instalada (`1.4.2`) o `desarrollo` fuera de una imagen publicada */
@@ -12276,6 +14162,605 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso adicionales.desactivar_motivo; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "borrador" | "publicado" | "archivado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de anuncios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Anuncio"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    titulo: string;
+                    /** @description Texto plano (sin HTML; el portal lo muestra tal cual, con saltos de línea) */
+                    texto?: string;
+                    boton_texto?: string | null;
+                    /** @description `https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`) */
+                    boton_url?: string | null;
+                    /** Format: date-time */
+                    inicio?: string | null;
+                    /** Format: date-time */
+                    fin?: string | null;
+                    /** @enum {string} */
+                    audiencia?: "todos" | "suspendidos" | "con_puntos" | "al_dia";
+                    lugares?: ("portal_inicio" | "pagina_corte")[];
+                    /** @description Mayor primero en el carrusel; a igual orden, el más nuevo */
+                    orden?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Anuncio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    titulo?: string;
+                    /** @description Texto alternativo de la imagen (solo si el anuncio tiene imagen) */
+                    imagen_alt?: string;
+                    /** @description Texto plano (sin HTML; el portal lo muestra tal cual, con saltos de línea) */
+                    texto?: string;
+                    boton_texto?: string | null;
+                    /** @description `https://…`, `http://…` o una ruta del portal que empieza con `/` (p. ej. `/cuenta`) */
+                    boton_url?: string | null;
+                    /** Format: date-time */
+                    inicio?: string | null;
+                    /** Format: date-time */
+                    fin?: string | null;
+                    /** @enum {string} */
+                    audiencia?: "todos" | "suspendidos" | "con_puntos" | "al_dia";
+                    lugares?: ("portal_inicio" | "pagina_corte")[];
+                    /** @description Mayor primero en el carrusel; a igual orden, el más nuevo */
+                    orden?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosArchivar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio archivado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosImagen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosCambiarImagen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /** @description Texto alternativo; obligatorio al subir si el anuncio aún no tiene */
+                    alt?: string;
+                    /** @description true = quitar la imagen (sin archivo) */
+                    quitar?: boolean;
+                    /**
+                     * Format: binary
+                     * @description PNG, JPEG o WebP, hasta 1 MB
+                     */
+                    imagen?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio con su imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosMetricas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Métricas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricasAnuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    anunciosPublicar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Anuncio publicado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Anuncio"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso anuncios.administrar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13850,6 +16335,119 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bonificacionesListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cliente_id?: number;
+                servicio_id?: number;
+                origen?: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+                /** @description Periodo desde (YYYY-MM-DD) */
+                desde?: string;
+                /** @description Periodo hasta (YYYY-MM-DD) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de bonificaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Bonificacion"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    bonificacionesVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bonificación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Bonificacion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16017,6 +18615,8 @@ export interface operations {
                          * @example 150.00
                          */
                         total: string;
+                        /** @description Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad */
+                        cantidad?: number | null;
                         /**
                          * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
                          * @example 150.00
@@ -16372,6 +18972,8 @@ export interface operations {
                          * @example 150.00
                          */
                         total: string;
+                        /** @description Unidades de la línea (1 por defecto); un bien para premios de sorteo se entrega por unidad */
+                        cantidad?: number | null;
                         /**
                          * @description IVA del documento si difiere del calculado (hasta Q0.05 de redondeo)
                          * @example 150.00
@@ -16762,6 +19364,252 @@ export interface operations {
                 };
             };
             /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    conceptosCargoListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Solo activos (true) o inactivos */
+                activo?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conceptos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptoCargo"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    conceptosCargoCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa del catálogo; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                    nombre: string;
+                    /**
+                     * @description producto = bien, otro = servicio (DTE); por defecto otro
+                     * @enum {string}
+                     */
+                    tipo?: "producto" | "otro";
+                    /** @description Cuenta de ingreso imputable del plan (p. ej. 4.1.03) */
+                    cuenta_codigo: string;
+                    /** @description Lleva IVA (por defecto sí) */
+                    gravable?: boolean;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Concepto creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptoCargo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.configurar_conceptos; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    conceptosCargoVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Concepto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptoCargo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    conceptosCargoEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    /** @enum {string} */
+                    tipo?: "producto" | "otro";
+                    cuenta_codigo?: string;
+                    gravable?: boolean;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Concepto actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptoCargo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.configurar_conceptos; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -18054,7 +20902,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
                 estado?: "registrado" | "anulado";
                 /** @description Solo los de esta caja (obligatoria sin egresos.ver: el cajero ve su caja) */
@@ -19471,6 +22319,106 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    facturasCargoUnico: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Servicio del cargo (su empresa, cliente, días de gracia y modo FEL); vencido cuenta para el corte */
+                    servicio_id?: number | null;
+                    /** @description Cliente del cargo: obligatorio sin servicio; con servicio, si viene, debe ser su dueño */
+                    cliente_id?: number | null;
+                    /** @description Empresa del cargo sin servicio; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                    /**
+                     * Format: date
+                     * @description Hoy o después; por defecto hoy + días de gracia del servicio (sin servicio: hoy)
+                     */
+                    vence_en?: string | null;
+                    lineas: {
+                        /** @description Concepto del catálogo (GET /conceptos-cargo) */
+                        concepto_id: number;
+                        descripcion?: string | null;
+                        /** @description Por defecto 1 */
+                        cantidad?: string;
+                        /**
+                         * @description Precio bruto con IVA incluido (> 0), hasta 2 decimales; lo regalado va como descuento
+                         * @example 150.00
+                         */
+                        precio_unitario: string;
+                        /** @description Descuentos de la línea (IVA incluido; juntos, hasta su bruto) */
+                        descuentos?: {
+                            concepto: string;
+                            /**
+                             * @description Monto con hasta 2 decimales, como string
+                             * @example 150.00
+                             */
+                            monto: string;
+                        }[];
+                    }[];
+                    /** @description Solo con total Q0 (obligatorio entonces) y el permiso facturas.cargo_sin_costo (GET /motivos-sin-costo) */
+                    motivo_sin_costo_id?: number | null;
+                    /** @description Explicación del Q0 (obligatoria con motivo_sin_costo_id) */
+                    motivo_sin_costo_texto?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Factura emitida o, en Q0, bonificación registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CargoUnicoEmitido"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.emitir_cargo_unico; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -22604,6 +25552,562 @@ export interface operations {
             };
         };
     };
+    lealtadCanjes: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                cliente_id?: number;
+                servicio_id?: number;
+                estado?: "reservado" | "aplicado" | "revertido" | "rechazado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canjes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaCanjesLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCanjear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cliente_id: number;
+                    servicio_id: number;
+                    premio_id: number;
+                    /** @description Solo descuentos: aplicarlo a una factura ya emitida con nota de crédito (NCRE con FEL) */
+                    factura_id?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Canje */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.canjear; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerCanje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canje */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadRevertirCanje: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Canje revertido */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanjeLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.revertir_canje; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadPremios: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                programa_id?: number;
+                tipo?: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+                activo?: boolean;
+                en_portal?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Premios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaPremiosLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCrearPremio: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    programa_id: number;
+                    /**
+                     * @description descuento_factura (descuento_tipo y descuento_valor), mes_gratis, mejora_plan (plan_destino_id y dias), bien, boletos (sorteo_id y boletos)
+                     * @enum {string}
+                     */
+                    tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+                    nombre: string;
+                    costo_puntos: number;
+                    descuento_tipo?: ("monto" | "porcentaje") | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    descuento_valor?: string | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    tope?: string | null;
+                    plan_destino_id?: number | null;
+                    dias?: number | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    costo_unitario?: string | null;
+                    existencias?: number | null;
+                    /** @description Solo boletos: el sorteo (que admita canjes) */
+                    sorteo_id?: number | null;
+                    /** @description Solo boletos: cuántos da cada canje */
+                    boletos?: number | null;
+                    en_portal?: boolean;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Premio creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PremioLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerPremio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Premio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PremioLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadEditarPremio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    costo_puntos?: number;
+                    descuento_tipo?: ("monto" | "porcentaje") | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    descuento_valor?: string | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    tope?: string | null;
+                    plan_destino_id?: number | null;
+                    dias?: number | null;
+                    /**
+                     * @description Monto con hasta 2 decimales, como string
+                     * @example 150.00
+                     */
+                    costo_unitario?: string | null;
+                    existencias?: number | null;
+                    /** @description Solo boletos: el sorteo (que admita canjes) */
+                    sorteo_id?: number | null;
+                    /** @description Solo boletos: cuántos da cada canje */
+                    boletos?: number | null;
+                    en_portal?: boolean;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Premio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PremioLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso lealtad.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     lealtadPrograma: {
         parameters: {
             query?: never;
@@ -22816,6 +26320,10 @@ export interface operations {
                     minimo_canje?: number;
                     /** @description Términos publicados en el portal; deben decir el plazo de vencimiento (inv. F.4, art. 24) */
                     terminos?: string;
+                    /** @description El cliente ve sus puntos en el portal */
+                    visible_portal?: boolean;
+                    /** @description El cliente canjea desde el portal (necesita visible_portal) */
+                    canje_portal?: boolean;
                     /** Format: date */
                     vigente_desde?: string;
                     /** Format: date */
@@ -23513,6 +27021,1707 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadSorteos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaSorteosLealtad"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCrearSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    empresa_id?: number | null;
+                    nombre: string;
+                    descripcion?: string | null;
+                    /** @description Bases (§7.2); todas obligatorias para publicar salvo la resolución */
+                    bases?: {
+                        mecanica?: string;
+                        /** @description Cómo se ganan boletos; es lo que ve el cliente en el portal */
+                        regla_participacion?: string;
+                        plazo_reclamo_dias?: number;
+                        no_reclamados?: string;
+                        publicacion_resultados?: string;
+                        resolucion_gobernacion?: string | null;
+                        /** @description Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash */
+                        fuente_valor_publico?: string;
+                    };
+                    criterios?: {
+                        /** @description Boletos por servicio activo sin facturas vencidas al corte (por defecto 1) */
+                        boletos_por_servicio?: number;
+                        /** @description Admite boletos canjeados con puntos */
+                        admite_canje?: boolean;
+                    };
+                    /** Format: date */
+                    inscripcion_desde?: string | null;
+                    /** Format: date-time */
+                    corte_en?: string;
+                    /** Format: date-time */
+                    fecha_sorteo?: string;
+                    lugar?: string | null;
+                    suplentes?: number;
+                    premios?: {
+                        nombre: string;
+                        cantidad?: number;
+                        /** @description Solo null: la imagen se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen) */
+                        imagen_url?: string | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        valor: string;
+                        /**
+                         * @description efectivo (egreso de Caja o Bancos), bien (5.1.03 / 2.1.03 o una cuenta de activo) o servicio (canje sin puntos)
+                         * @enum {string}
+                         */
+                        tipo: "efectivo" | "bien" | "servicio";
+                        /** @description Solo servicio: descuento o mes gratis del catálogo de lealtad de la empresa */
+                        premio_id?: number | null;
+                        retiene_isr?: boolean;
+                        /** @description Porcentaje del ISR del premio (10 por defecto) */
+                        isr_pct?: string | null;
+                    }[];
+                    /** @description Se anuncia en el portal (false por defecto) */
+                    aviso_portal?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadEditarSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    descripcion?: string | null;
+                    /** @description Bases (§7.2); todas obligatorias para publicar salvo la resolución */
+                    bases?: {
+                        mecanica?: string;
+                        /** @description Cómo se ganan boletos; es lo que ve el cliente en el portal */
+                        regla_participacion?: string;
+                        plazo_reclamo_dias?: number;
+                        no_reclamados?: string;
+                        publicacion_resultados?: string;
+                        resolucion_gobernacion?: string | null;
+                        /** @description Fuente pública del valor del acto (p. ej. «números del sorteo X de la Lotería Santa Lucía del día D»); congelada con bases_hash */
+                        fuente_valor_publico?: string;
+                    };
+                    criterios?: {
+                        /** @description Boletos por servicio activo sin facturas vencidas al corte (por defecto 1) */
+                        boletos_por_servicio?: number;
+                        /** @description Admite boletos canjeados con puntos */
+                        admite_canje?: boolean;
+                    };
+                    /** Format: date */
+                    inscripcion_desde?: string | null;
+                    /** Format: date-time */
+                    corte_en?: string;
+                    /** Format: date-time */
+                    fecha_sorteo?: string;
+                    lugar?: string | null;
+                    suplentes?: number;
+                    premios?: {
+                        nombre: string;
+                        cantidad?: number;
+                        /** @description Solo null: la imagen se sube (POST /lealtad/sorteos/:id/premios/:posicion/imagen) */
+                        imagen_url?: string | null;
+                        /**
+                         * @description Monto con hasta 2 decimales, como string
+                         * @example 150.00
+                         */
+                        valor: string;
+                        /**
+                         * @description efectivo (egreso de Caja o Bancos), bien (5.1.03 / 2.1.03 o una cuenta de activo) o servicio (canje sin puntos)
+                         * @enum {string}
+                         */
+                        tipo: "efectivo" | "bien" | "servicio";
+                        /** @description Solo servicio: descuento o mes gratis del catálogo de lealtad de la empresa */
+                        premio_id?: number | null;
+                        retiene_isr?: boolean;
+                        /** @description Porcentaje del ISR del premio (10 por defecto) */
+                        isr_pct?: string | null;
+                    }[];
+                    /** @description Se anuncia en el portal (false por defecto) */
+                    aviso_portal?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadAbrirSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadActaSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadSubirArchivoSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * @description evidencia del checklist o constancia firmada de una entrega
+                     * @enum {string}
+                     */
+                    uso: "evidencia" | "constancia";
+                    /**
+                     * Format: binary
+                     * @description PDF, JPEG, PNG o WebP, hasta 5 MB
+                     */
+                    archivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Archivo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivoSorteo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.marcar_requisito; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadArchivoSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                archivoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadAvisoPortalSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    aviso_portal: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadBasesSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bases */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BasesSorteoPublicas"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCancelarSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCerrarActaSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Firma o constancia del notario o del delegado */
+                    constancia: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ejecutar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadCerrarCorteSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadEjecutarSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description El valor de la fuente declarada en las bases (bases.fuente_valor_publico), conocido en el acto */
+                    valor_publico: string;
+                    /** @description Cómo se obtuvo el valor (acta del notario, enlace o número de la publicación oficial) */
+                    valor_publico_evidencia: string;
+                    asistentes?: {
+                        nombre: string;
+                        rol?: string | null;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ejecutar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadAnularEntregaSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                ganadorId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadEntregarPremioSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                ganadorId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Solo efectivo: de dónde sale el dinero (como POST /egresos) */
+                    metodo?: ("caja" | "banco" | "cuenta_bancaria") | null;
+                    caja_id?: number | null;
+                    banco_id?: number | null;
+                    cuenta_bancaria_id?: number | null;
+                    /** @description Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra) */
+                    contrapartida?: ("compra" | "proveedor" | "cuenta") | null;
+                    cuenta_codigo?: string | null;
+                    /** @description Constancia firmada de la entrega (POST /lealtad/sorteos/:id/archivos, uso constancia) */
+                    constancia_archivo_id?: number | null;
+                    /** @description Con contrapartida compra: línea (bien) de una compra registrada de la empresa */
+                    compra_linea_id?: number | null;
+                    /** @description Con contrapartida compra: unidades de la línea que se entregan (1 por defecto); sin pasar de su cantidad */
+                    unidades?: number | null;
+                    nota?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadNoReclamadoSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                ganadorId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadNotificarGanadoresSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.entregar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadParticipantesSorteo: {
+        parameters: {
+            query?: {
+                /** @description json (por defecto), csv o xlsx (descarga, con lista_hash al pie) */
+                formato?: "json" | "csv" | "xlsx";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Participantes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteParticipantesSorteo"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.exportar */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerImagenPremioSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                posicion: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadImagenPremioSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                posicion: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description PNG, JPEG o WebP, hasta 1 MB
+                     */
+                    imagen: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.gestionar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadPublicarBasesSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SorteoDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.publicar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadMarcarRequisitoSorteo: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+                clave: "bases_diaco" | "autorizacion_gobernacion" | "fianza" | "isr_premios" | "timbre_fiscal" | "delegado_o_notario" | "publicacion_resultados" | "lista_a_gobernacion";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    estado: "cumplido" | "no_aplica" | "pendiente";
+                    /** @description Número de resolución, monto de la fianza… */
+                    valor?: string | null;
+                    /** @description Obligatoria con cumplido o no_aplica: referencia o texto (archivos en la segunda PR) */
+                    evidencia?: string | null;
+                    /** @description Evidencia como archivo de este sorteo (POST /lealtad/sorteos/:id/archivos, uso evidencia) */
+                    archivo_id?: number | null;
+                    nota?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Checklist vigente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequisitoSorteo"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso sorteos.marcar_requisito; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    lealtadVerificacionSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verificación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificacionSorteo"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -24359,7 +29568,7 @@ export interface operations {
                 limit?: number;
                 desde?: string;
                 hasta?: string;
-                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad";
+                origen_tipo?: "factura" | "pago" | "mora" | "nota_credito" | "egreso" | "cierre_caja" | "ajuste" | "reclasificacion" | "liquidacion_cobro" | "deposito" | "traslado" | "banco" | "provision" | "castigo" | "diferencia_cobro" | "compra" | "pago_proveedor" | "depreciacion" | "baja_activo" | "diferido" | "alta_activo" | "lealtad" | "sorteo" | "bonificacion";
                 /** @description Asientos de este origen (con origen_tipo: la factura, el pago…) */
                 origen_id?: number;
             };
@@ -25081,6 +30290,239 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    motivosSinCostoListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Solo activos (true) o inactivos */
+                activo?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Motivos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoSinCosto"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    motivosSinCostoCrear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa del catálogo; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                    nombre: string;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Motivo creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoSinCosto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.configurar_motivos; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    motivosSinCostoVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Motivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoSinCosto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    motivosSinCostoEditar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    nombre?: string;
+                    activo?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Motivo actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoSinCosto"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso facturas.configurar_motivos; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -28406,6 +33848,195 @@ export interface operations {
             };
         };
     };
+    portalAnuncios: {
+        parameters: {
+            query: {
+                lugar: "portal_inicio" | "pagina_corte";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Anuncios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalAnuncio"][];
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalAnuncioEvento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    tipo: "vista" | "clic";
+                    /** Format: uuid */
+                    visitante: string;
+                    /** @enum {string} */
+                    lugar: "portal_inicio" | "pagina_corte";
+                };
+            };
+        };
+        responses: {
+            /** @description Contado (o ya estaba) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalAnuncioImagen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalAvisosSorteo: {
+        parameters: {
+            query: {
+                lugar: "portal_inicio" | "pagina_corte";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Avisos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalAvisoSorteo"][];
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalBancos: {
         parameters: {
             query?: never;
@@ -28422,6 +34053,182 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalBanco"][];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalBonificaciones: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de bonificaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalBonificacion"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCanjes: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de canjes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalCanje"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCanjear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    premio_id: number;
+                    servicio_id: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Canje hecho */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCanje"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
@@ -29349,6 +35156,46 @@ export interface operations {
             };
         };
     };
+    portalPremios: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Premios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPremio"][];
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalPromesas: {
         parameters: {
             query?: {
@@ -29509,6 +35356,46 @@ export interface operations {
             };
         };
     };
+    portalPuntos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Puntos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPuntosEmpresa"][];
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalQuienSoy: {
         parameters: {
             query?: never;
@@ -29556,6 +35443,181 @@ export interface operations {
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSorteos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSorteo"][];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalImagenPremioSorteo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                posicion: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            /** @description Sin cambios: el `If-None-Match` coincide con el `ETag` actual */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSorteoPublico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSorteoPublico"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSorteoVerificacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verificación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificacionSorteo"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -30659,6 +36721,67 @@ export interface operations {
             };
         };
     };
+    reportesBonificaciones: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description json (por defecto), csv o xlsx (descarga con Content-Disposition) */
+                formato?: "json" | "csv" | "xlsx";
+                /** @description Por defecto: el día 1 del mes de hace 11 meses */
+                desde?: string;
+                /** @description Por defecto: hoy (Guatemala) */
+                hasta?: string;
+                /** @description Solo un motivo (GET /motivos-sin-costo) */
+                motivo_id?: number;
+                cliente_id?: number;
+                /** @description mes_gratis, descuento_100, cargo_sin_costo o canje */
+                origen?: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteBonificaciones"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso reportes.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     reportesCarteraVencida: {
         parameters: {
             query?: {
@@ -30950,7 +37073,7 @@ export interface operations {
                 desde?: string;
                 /** @description Por defecto: hoy (Guatemala) */
                 hasta?: string;
-                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros";
+                categoria?: "energia" | "transito" | "nomina" | "vehiculos" | "alquileres" | "otros" | "premios";
                 metodo?: "caja" | "banco" | "cuenta_bancaria";
             };
             header?: never;
@@ -31341,7 +37464,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -31399,7 +37522,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -34530,7 +40653,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

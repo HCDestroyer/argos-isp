@@ -317,6 +317,21 @@ export interface CatalogoEventos {
         facturas: number[]
         monto: Dinero
     }
+    /**
+     * Decisión del PM (19 oct): lo que sería una factura de Q0 (mes gratis, descuento del 100 %, cargo
+     * sin costo, canje) es una bonificación interna; sin CxC ni documento para el cliente
+     */
+    'bonificacion.registrada': {
+        bonificacion_id: number
+        empresa_id: number
+        cliente_id: number
+        servicio_id: number | null
+        /** YYYY-MM-DD */
+        periodo: string
+        origen: 'mes_gratis' | 'descuento_100' | 'cargo_sin_costo' | 'canje'
+        /** valor con IVA de lo bonificado */
+        bruto: Dinero
+    }
     /** nota de crédito sobre el saldo de una factura; el servicio ya se re-evaluó en la acción */
     'nota_credito.emitida': PayloadNotaCredito
     /** la NCRE de la nota la rechazó la SAT en definitivo y la nota se anuló con su reverso (fase 3) */
@@ -586,6 +601,79 @@ export interface CatalogoEventos {
         cliente_id: number
         puntos: number
     }
+    /** canje de puntos (fase 2): reservado para la próxima factura, aplicado (nota o plan temporal) o revertido */
+    'lealtad.canje_reservado': PayloadCanjeLealtad
+    'lealtad.canje_aplicado': PayloadCanjeLealtad
+    'lealtad.canje_revertido': PayloadCanjeLealtad
+    // sorteos (lealtad fase 3, `contratos/lealtad.md` §7 y §13)
+    /** bases congeladas y compromiso de la semilla publicados */
+    'sorteo.bases_publicadas': {
+        sorteo_id: number
+        empresa_id: number
+        bases_hash: string
+        compromiso: string
+        /** ISO 8601 */
+        fecha_sorteo: string
+    }
+    /** foto del corte: participantes, boletos y `lista_hash` */
+    'sorteo.corte_cerrado': {
+        sorteo_id: number
+        empresa_id: number
+        participantes: number
+        boletos: number
+        lista_hash: string
+    }
+    /** resultado calculado con `argos-sorteo-v1`; A6 avisa a los titulares */
+    'sorteo.ejecutado': {
+        sorteo_id: number
+        empresa_id: number
+        ganadores: Array<{ cliente_id: number; tipo: 'titular' | 'suplente'; posicion: number }>
+    }
+    'sorteo.premio_entregado': {
+        sorteo_id: number
+        empresa_id: number
+        cliente_id: number
+        posicion: number
+    }
+    'sorteo.cancelado': { sorteo_id: number; empresa_id: number; motivo: string }
+    /** §7.4: se avisó a un ganador (titular o suplente que tomó un premio); notify avisa al cliente */
+    'sorteo.ganador_notificado': {
+        sorteo_id: number
+        empresa_id: number
+        ganador_id: number
+        cliente_id: number
+        posicion: number
+        tipo: 'titular' | 'suplente'
+        /** código público (seudónimo) del participante */
+        codigo: string
+        premio: { posicion: number; nombre: string; valor: Dinero; tipo: string }
+        /** ISO 8601: fin del plazo para reclamar */
+        reclamar_antes: string
+        /** el ganador cuyo premio no reclamado toma (suplente), o null */
+        sustituye_a: number | null
+    }
+    /** §7.4: venció el plazo de reclamo; el premio pasó al siguiente suplente (o quedó sin reclamar) */
+    'sorteo.premio_no_reclamado': {
+        sorteo_id: number
+        empresa_id: number
+        ganador_id: number
+        cliente_id: number
+        posicion: number
+        premio_posicion: number
+        /** el suplente que lo toma, o null si no quedan */
+        suplente_id: number | null
+        motivo: string
+    }
+    /** §7.3 punto 6: se cerró el acta (PDF con su SHA-256) */
+    'sorteo.acta_cerrada': { sorteo_id: number; empresa_id: number; acta_hash: string }
+    /** H22: se deshizo la entrega de un premio (egreso, asiento o canje, e ISR) con `sorteos.anular_entrega` */
+    'sorteo.entrega_anulada': {
+        sorteo_id: number
+        empresa_id: number
+        cliente_id: number
+        posicion: number
+        motivo: string
+    }
     'lealtad.referido_calificado': {
         /** `lealtad.referidos.id` */
         referido_id: number
@@ -657,6 +745,22 @@ type PayloadHallazgoHorus = PayloadClienteHorus & {
     }
 }
 
+/** Canje de lealtad (`contratos/lealtad.md` §13). */
+interface PayloadCanjeLealtad {
+    canje_id: number
+    empresa_id: number
+    cliente_id: number
+    servicio_id: number
+    premio_id: number
+    /** tipo de premio: descuento_factura, mes_gratis, mejora_plan… */
+    tipo: string
+    puntos: number
+    /** factura con el descuento (nota de crédito o próxima factura); null si no aplica */
+    factura_id: number | null
+    /** aditivo (decisión del PM, 19 oct): la bonificación a la que se aplicó en lugar de una factura de Q0 */
+    bonificacion_id?: number | null
+}
+
 export type NombreEvento = keyof CatalogoEventos
 export type PayloadEvento<E extends NombreEvento> = CatalogoEventos[E]
 
@@ -687,6 +791,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'pago.diferencia_cerrada',
+    'bonificacion.registrada',
     'nota_credito.emitida',
     'nota_credito.anulada',
     'promesa.creada',
@@ -722,6 +827,18 @@ export const EVENTOS = [
     'lealtad.puntos_revertidos',
     'lealtad.puntos_por_vencer',
     'lealtad.puntos_vencidos',
+    'lealtad.canje_reservado',
+    'lealtad.canje_aplicado',
+    'lealtad.canje_revertido',
+    'sorteo.bases_publicadas',
+    'sorteo.corte_cerrado',
+    'sorteo.ejecutado',
+    'sorteo.premio_entregado',
+    'sorteo.cancelado',
+    'sorteo.entrega_anulada',
+    'sorteo.ganador_notificado',
+    'sorteo.premio_no_reclamado',
+    'sorteo.acta_cerrada',
     'lealtad.referido_calificado',
     'horus.config_cambiada',
     'horus.hallazgo_abierto',

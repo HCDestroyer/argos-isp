@@ -11,8 +11,13 @@ import { versionFixture } from './version/rutas'
 import type { LineaGuardada, MovimientoBancoFixture } from './cobros/datos'
 import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, lineasExtracto, liquidaciones, movimientosBanco, pagosProveedor, proveedoresCobro, provisiones, reglasConciliacion, traslados } from './cobros/datos'
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
+import { premiosLealtad, sorteos, sorteosPrivados, type SorteoPrivado } from './sorteos/datos'
+import { compras } from './compras/datos'
+import type { ImagenAnuncioFixture } from './anuncios/datos'
+import { anuncios, imagenesAnuncios, metricasAnuncios } from './anuncios/datos'
 import type { PlanAdicionalFixture } from './adicionales/datos'
-import { adicionales, adicionalesServicio, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
+import { adicionales, adicionalesServicio, bloqueosAdicionales, credencialesAdicionales, motivosCortesia, planesAdicionales } from './adicionales/datos'
+import { asientosBonificaciones, bonificaciones, conceptosCargo, motivosSinCosto } from './bonificaciones/datos'
 import { cierres, egresos } from './egresos/datos'
 import { bloqueosLibro, excepcionesBloqueo, pendientesPorBloqueo, type PendientePorBloqueo } from './libro/bloqueos'
 import { acciones } from './bitacora/datos'
@@ -164,7 +169,17 @@ interface BaseFixtures {
     /** Diferencias de cobro cerradas como gasto (`billing.diferencias_cobro`, decisión B). */
     diferenciasCerradas: DiferenciaCobroFixture[]
     /* Lealtad, fase 1 (A3, `contratos/lealtad.md` §15.1). */
+    /* Cargo único y bonificaciones (A3, decisión del PM: nunca una factura de Q0). */
+    conceptosCargo: Schema<'ConceptoCargo'>[]
+    motivosSinCosto: Schema<'MotivoSinCosto'>[]
+    bonificaciones: Schema<'Bonificacion'>[]
+    /** Líneas de las facturas de cargo único (el detalle de las demás se arma del plan). */
+    lineasCargoUnico: Record<number, Schema<'FacturaLinea'>[]>
     programasLealtad: Schema<'ProgramaLealtad'>[]
+    /* Anuncios del portal (A5, `contratos/anuncios.md`). */
+    anuncios: Schema<'Anuncio'>[]
+    imagenesAnuncios: Record<number, ImagenAnuncioFixture>
+    metricasAnuncios: Record<number, Schema<'MetricasAnuncio'>>
     /* Servicios adicionales (A1, `contratos/adicionales.md`). */
     adicionales: Schema<'Adicional'>[]
     motivosCortesia: Schema<'MotivoCortesia'>[]
@@ -172,10 +187,22 @@ interface BaseFixtures {
     /** Credencial en claro por asignación (la API la guarda cifrada y nunca la lista). */
     credencialesAdicionales: Record<number, string>
     planesAdicionales: PlanAdicionalFixture[]
+    /** Bloqueos y desbloqueos de los adicionales por el estado del servicio (A1). */
+    bloqueosAdicionales: Schema<'BloqueoAdicional'>[]
     reglasLealtad: Schema<'ReglaLealtad'>[]
     movimientosPuntos: Schema<'MovimientoPuntos'>[]
     lotesPuntos: (Schema<'LotePuntos'> & { cliente_id: number, empresa_id: number })[]
     referidosLealtad: Schema<'ReferidoLealtad'>[]
+    /* Lealtad, fases 2 y 3: catálogo de premios y sorteos (A3, `contratos/lealtad.md` §7 y §15.3). */
+    premiosLealtad: Schema<'PremioLealtad'>[]
+    sorteos: Schema<'SorteoDetalle'>[]
+    sorteosPrivados: SorteoPrivado[]
+    /** Imágenes de premios subidas en la sesión (`imagen_archivo_id` → bytes); las sembradas, en `sorteos/imagenes.ts`. */
+    imagenesSorteos: Record<number, { bytes: Uint8Array, tipo: string }>
+    /** Archivos de sorteo subidos (evidencias, constancias y actas): `ArchivoSorteo.id` → bytes. */
+    archivosSorteos: Record<number, Uint8Array>
+    /* Fase 5 (A3): compras; el panel las lee para entregar el bien de un premio de sorteo. */
+    compras: Schema<'Compra'>[]
     /** Saldo de 2.1.10 por empresa cuando no es el de los lotes (para probar el aviso de `cuadra: false`). */
     pasivoLibroLealtad: Record<number, string>
     /** Localización fiscal por empresa (A3, fase 2). */
@@ -250,17 +277,31 @@ function inicial(): BaseFixtures {
         fiscal: fiscalInicial(),
         fel: felInicial(),
         horus: horusInicial(),
+        conceptosCargo,
+        motivosSinCosto,
+        bonificaciones,
+        lineasCargoUnico: {},
         programasLealtad,
+        anuncios,
+        imagenesAnuncios,
+        metricasAnuncios,
         adicionales,
         motivosCortesia,
         adicionalesServicio,
         credencialesAdicionales,
         planesAdicionales,
+        bloqueosAdicionales,
         reglasLealtad,
         movimientosPuntos,
         lotesPuntos,
         referidosLealtad,
         pasivoLibroLealtad: {},
+        premiosLealtad,
+        sorteos,
+        sorteosPrivados,
+        imagenesSorteos: {},
+        archivosSorteos: {},
+        compras,
     })
     sembrarNotasCredito(datos)
     sembrarFel(datos)
@@ -268,6 +309,7 @@ function inicial(): BaseFixtures {
     datos.pagos.push(...structuredClone(pagosProveedor))
     datos.asientos.push(...asientosFase4())
     datos.cuentas.push(...structuredClone(cuentasFase4))
+    datos.asientos.push(...asientosBonificaciones())
     return datos
 }
 

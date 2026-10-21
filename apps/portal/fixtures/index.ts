@@ -10,6 +10,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { ESCENARIOS_CORTE, ESTADO_REACTIVADO, estadoDe, type EscenarioCorte } from './corte'
 import {
+    BONIFICACIONES_FIXTURE,
     CODIGO_FIXTURE,
     CONTACTO_FIXTURE,
     CUENTA_DOS_EMPRESAS_FIXTURE,
@@ -25,6 +26,14 @@ import {
 import { EMPRESA_FIXTURE, EMPRESA_SUR_FIXTURE, MARCA_SUR_FIXTURE } from './empresa'
 import { BANCOS_FIXTURE, COMPROBANTES_FIXTURE, comprobanteFixture } from './comprobantes'
 import { PAGO_EN_LINEA_ID_FIXTURE, pagoEnLineaFixture } from './pagos'
+import { ANUNCIOS_FIXTURE } from './anuncios'
+import { CANJES_FIXTURE, PREMIOS_FIXTURE, PUNTOS_FIXTURE } from './puntos'
+import {
+    AVISO_SORTEO_FIXTURE,
+    SORTEO_ABIERTO_FIXTURE,
+    SORTEO_EJECUTADO_FIXTURE,
+    SORTEOS_PUBLICOS_FIXTURE,
+} from './sorteos'
 import {
     condicionesConPagoPrevioFixture,
     condicionesConPromesaFixture,
@@ -309,7 +318,233 @@ function conFallas(rutas: RutasFixture): RutasFixture {
     ]))
 }
 
+/**
+ * Anuncios: `fijarAnunciosFixture(lista)` en pruebas o `?anuncios=1|3` en la URL (desarrollo; se
+ * recuerda en la pestaña). Por defecto ninguno: el portal y `/corte` quedan como sin esta función.
+ * Los eventos (vistas y clics) se anotan para las pruebas.
+ */
+const CLAVE_ANUNCIOS = 'argos:fixture:anuncios'
+const anuncios: {
+    lista: Schema<'PortalAnuncio'>[] | null
+    eventos: Array<{ id: number, tipo: string, visitante: string, lugar: string }>
+} = { lista: null, eventos: [] }
+
+export function fijarAnunciosFixture(lista: Schema<'PortalAnuncio'>[] | null): void {
+    anuncios.lista = lista
+    anuncios.eventos = []
+}
+
+export function eventosAnunciosFixture() {
+    return anuncios.eventos
+}
+
+function anunciosDeLaUrl(): Schema<'PortalAnuncio'>[] {
+    if (typeof window === 'undefined') {
+        return []
+    }
+    let pedido = new URL(window.location.href).searchParams.get('anuncios')
+    try {
+        if (pedido) {
+            sessionStorage.setItem(CLAVE_ANUNCIOS, pedido)
+        }
+        else {
+            pedido = sessionStorage.getItem(CLAVE_ANUNCIOS)
+        }
+    }
+    catch {
+        // Sin almacenamiento: solo cuenta la URL.
+    }
+    const cuantos = Number(pedido)
+    return Number.isInteger(cuantos) && cuantos > 0 ? ANUNCIOS_FIXTURE.slice(0, cuantos) : []
+}
+
+/**
+ * Puntos de lealtad: `fijarPuntosFixture` en pruebas o `?puntos=visible|canje` en la URL (desarrollo;
+ * se recuerda en la pestaña). Por defecto el programa no está visible en el portal (así viene de
+ * fábrica): ni la sección ni la pestaña aparecen. `visible`: se ven los puntos pero el canje está
+ * apagado (403 `canje_portal_inactivo`); `canje`: también se canjea. Cada canje descuenta el saldo.
+ */
+type EscenarioPuntos = 'oculto' | 'visible' | 'canje'
+const CLAVE_PUNTOS = 'argos:fixture:puntos'
+const puntos: {
+    escenario: EscenarioPuntos | null
+    saldo: number
+    canjes: Schema<'PortalCanje'>[]
+    movimientos: Schema<'PortalPuntosEmpresa'>['movimientos']
+} = { escenario: null, saldo: PUNTOS_FIXTURE.saldo, canjes: [], movimientos: [] }
+
+export function fijarPuntosFixture(escenario: EscenarioPuntos | null, saldo = PUNTOS_FIXTURE.saldo): void {
+    puntos.escenario = escenario
+    puntos.saldo = saldo
+    puntos.canjes = []
+    puntos.movimientos = []
+}
+
+function escenarioPuntos(): EscenarioPuntos {
+    if (puntos.escenario) {
+        return puntos.escenario
+    }
+    if (typeof window === 'undefined') {
+        return 'oculto'
+    }
+    let pedido = new URL(window.location.href).searchParams.get('puntos')
+    try {
+        if (pedido) {
+            sessionStorage.setItem(CLAVE_PUNTOS, pedido)
+        }
+        else {
+            pedido = sessionStorage.getItem(CLAVE_PUNTOS)
+        }
+    }
+    catch {
+        // Sin almacenamiento: solo cuenta la URL.
+    }
+    return pedido === 'visible' || pedido === 'canje' ? pedido : 'oculto'
+}
+
+// Se lee al cargar: `/entrar?puntos=canje` debe recordarse aunque la primera consulta de puntos
+// llegue después de entrar con el código (ya sin la query).
+escenarioPuntos()
+
+function puntosActuales(): Schema<'PortalPuntosEmpresa'> {
+    return {
+        ...PUNTOS_FIXTURE,
+        saldo: puntos.saldo,
+        programa: { ...PUNTOS_FIXTURE.programa, canje_portal: escenarioPuntos() === 'canje' },
+        movimientos: [...puntos.movimientos, ...PUNTOS_FIXTURE.movimientos].slice(0, 20),
+    }
+}
+
+/** Lo mismo que calcula la API (`app/portal/puntos.ts`): cuánto falta y por qué no se canjea. */
+function premiosActuales(): Schema<'PortalPremio'>[] {
+    const canje = escenarioPuntos() === 'canje'
+    return PREMIOS_FIXTURE.map((p) => {
+        const faltan = Math.max(0, Math.max(p.costo_puntos, PUNTOS_FIXTURE.programa.minimo_canje) - puntos.saldo)
+        const motivo = !canje
+            ? 'canje_desactivado'
+            : p.motivo_no_canjeable === 'no_disponible_en_portal'
+                ? 'no_disponible_en_portal'
+                : p.agotado ? 'agotado' : faltan > 0 ? 'puntos_insuficientes' : null
+        return { ...p, faltan, canjeable: motivo === null, motivo_no_canjeable: motivo }
+    })
+}
+
+/**
+ * Sorteos: `fijarSorteosFixture(true)` en pruebas o `?sorteos=1` en la URL (desarrollo; se recuerda
+ * en la pestaña). Por defecto ninguno publicado: ni aviso en el carrusel ni sorteos en la cuenta.
+ * La página pública de un sorteo responde siempre (es pública, como en la API).
+ */
+const CLAVE_SORTEOS = 'argos:fixture:sorteos'
+const sorteos: { activos: boolean | null } = { activos: null }
+
+export function fijarSorteosFixture(activos: boolean | null): void {
+    sorteos.activos = activos
+}
+
+function sorteosActivos(): boolean {
+    if (sorteos.activos !== null) {
+        return sorteos.activos
+    }
+    if (typeof window === 'undefined') {
+        return false
+    }
+    let pedido = new URL(window.location.href).searchParams.get('sorteos')
+    try {
+        if (pedido) {
+            sessionStorage.setItem(CLAVE_SORTEOS, pedido)
+        }
+        else {
+            pedido = sessionStorage.getItem(CLAVE_SORTEOS)
+        }
+    }
+    catch {
+        // Sin almacenamiento: solo cuenta la URL.
+    }
+    return pedido === '1'
+}
+
+// Se lee al cargar, como `?puntos=`: debe recordarse aunque la consulta llegue después de entrar.
+sorteosActivos()
+
 const rutasBase: RutasFixture = {
+    'GET /api/v1/portal/anuncios': () => ({
+        status: 200,
+        cuerpo: { data: anuncios.lista ?? anunciosDeLaUrl() },
+    }),
+    'POST /api/v1/portal/anuncios/:id/eventos': ({ params, cuerpo }) => {
+        const evento = cuerpo as { tipo: string, visitante: string, lugar: string }
+        anuncios.eventos.push({ id: Number(params.id), ...evento })
+        return { status: 204 }
+    },
+    'GET /api/v1/portal/puntos': conSesion(() => ({
+        status: 200,
+        cuerpo: { data: escenarioPuntos() === 'oculto' ? [] : [puntosActuales()] },
+    })),
+    'GET /api/v1/portal/premios': conSesion(() => ({
+        status: 200,
+        cuerpo: { data: escenarioPuntos() === 'oculto' ? [] : premiosActuales() },
+    })),
+    'GET /api/v1/portal/canjes': conSesion(() => pagina([...puntos.canjes, ...CANJES_FIXTURE])),
+    'POST /api/v1/portal/canjes': ({ cuerpo }) => {
+        if (!sesion.abierta) {
+            return SIN_SESION()
+        }
+        const pedido = cuerpo as { premio_id: number, servicio_id: number }
+        const premio = escenarioPuntos() === 'oculto' ? undefined : premiosActuales().find(p => p.id === pedido.premio_id)
+        if (!premio) {
+            return problema(404, 'no_encontrado', 'No encontrado', 'Ese premio no está disponible en el portal')
+        }
+        if (premio.motivo_no_canjeable === 'canje_desactivado') {
+            return problema(403, 'canje_portal_inactivo', 'Canje no disponible', 'El canje de puntos desde el portal no está activo.')
+        }
+        if (premio.motivo_no_canjeable === 'puntos_insuficientes') {
+            return problema(422, 'saldo_insuficiente', 'Saldo insuficiente', `Te faltan ${premio.faltan} puntos para este premio.`)
+        }
+        if (premio.motivo_no_canjeable) {
+            return problema(422, 'recompensa_no_disponible', 'Premio no disponible', 'Este premio se canjea en nuestras oficinas.')
+        }
+        puntos.saldo -= premio.costo_puntos
+        const ahora = new Date().toISOString()
+        const reservado = premio.tipo === 'descuento_factura' || premio.tipo === 'mes_gratis'
+        const canje: Schema<'PortalCanje'> = {
+            id: 900 + puntos.canjes.length,
+            empresa_id: premio.empresa_id,
+            servicio_id: pedido.servicio_id,
+            premio_nombre: premio.nombre,
+            tipo: premio.tipo,
+            puntos: premio.costo_puntos,
+            estado: reservado ? 'reservado' : 'aplicado',
+            descuento: null,
+            aplicado_en: reservado ? null : ahora,
+            created_at: ahora,
+        }
+        puntos.canjes.unshift(canje)
+        puntos.movimientos.unshift({
+            id: 9900 + puntos.movimientos.length,
+            tipo: 'canje',
+            origen_tipo: 'canje',
+            puntos: -premio.costo_puntos,
+            servicio_id: pedido.servicio_id,
+            vence_en: null,
+            created_at: ahora,
+        })
+        return { status: 201, cuerpo: canje }
+    },
+    'GET /api/v1/portal/avisos-sorteo': ({ query }) => {
+        // en el inicio hace falta la sesión; en la página de corte basta la IP
+        const identificado = query.get('lugar') === 'pagina_corte' || sesion.abierta
+        return { status: 200, cuerpo: { data: sorteosActivos() && identificado ? [AVISO_SORTEO_FIXTURE] : [] } }
+    },
+    'GET /api/v1/portal/sorteos': conSesion(() => ({
+        status: 200,
+        cuerpo: sorteosActivos() ? [SORTEO_ABIERTO_FIXTURE, SORTEO_EJECUTADO_FIXTURE] : [],
+    })),
+    'GET /api/v1/portal/sorteos/:id/publico': ({ params }) => {
+        const sorteo = SORTEOS_PUBLICOS_FIXTURE[Number(params.id)]
+        return sorteo
+            ? { status: 200, cuerpo: sorteo }
+            : problema(404, 'no_encontrado', 'No encontrado', 'El sorteo no existe o aún no publica sus bases')
+    },
     'GET /api/v1/portal/quien-soy': () => {
         consultasEstado = 0
         return { status: 200, cuerpo: ESCENARIOS_CORTE[escenarioCorte()] }
@@ -380,11 +615,12 @@ const rutasBase: RutasFixture = {
                     ...CUENTA_FIXTURE,
                     cliente: sesion.contacto,
                     servicios: CUENTA_FIXTURE.servicios.map(servicio => promesa.aprobada
-                        ? { ...servicio, estado: 'activo' as const, promesa_activa: true }
+                        ? { ...servicio, estado: 'activo' as const, promesa_activa: true, adicionales: servicio.adicionales.map(a => ({ ...a, bloqueado: false })) }
                         : servicio),
                 } satisfies Schema<'PortalCuenta'>,
             }),
     'GET /api/v1/portal/facturas': conSesion(() => pagina(FACTURAS_FIXTURE)),
+    'GET /api/v1/portal/bonificaciones': conSesion(() => pagina(BONIFICACIONES_FIXTURE)),
     'GET /api/v1/portal/notas-credito': conSesion(() => pagina(NOTAS_CREDITO_FIXTURE)),
     'GET /api/v1/portal/pagos': conSesion(() => pagina(PAGOS_FIXTURE)),
     'GET /api/v1/portal/promesas': conSesion(() => pagina(PROMESAS_FIXTURE)),

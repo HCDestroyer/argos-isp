@@ -433,6 +433,7 @@ export async function insertarCompra(
                 iva: aTexto(l.iva),
                 clase_activo: l.clase_activo,
                 diferir_meses: l.diferir_meses,
+                cantidad: l.cantidad,
             })),
         )
     if (compra.retenciones.length > 0) {

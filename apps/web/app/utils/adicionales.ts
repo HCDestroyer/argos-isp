@@ -12,6 +12,8 @@ type DatosAsignacionApi = paths['/api/v1/servicios/{id}/adicionales']['post']['r
 type CambiosAsignacionApi = paths['/api/v1/servicios/{id}/adicionales/{asignacionId}']['put']['requestBody']['content']['application/json']
 
 export type ModalidadAdicional = AsignacionApi['modalidad']
+export type PrimerPeriodoAdicional = NonNullable<AsignacionApi['primer_periodo']>
+export type BloqueoAdicionalServicio = NonNullable<AsignacionApi['bloqueo']>
 
 const MONTO = /^\d{1,12}(\.\d{1,2})?$/
 /** Como el validador de A1: letras, dígitos, guion y guion bajo; se guarda en mayúsculas. */
@@ -25,6 +27,33 @@ export const MODALIDADES_ADICIONAL: Record<ModalidadAdicional, { etiqueta: strin
     incluido: { etiqueta: 'Incluido', icono: 'i-lucide-package-check', color: 'info', ayuda: 'Viene con el plan, sin cobro aparte.' },
     cortesia: { etiqueta: 'Cortesía', icono: 'i-lucide-gift', color: 'warning', ayuda: 'Se regala con un motivo (queda en la bitácora).' },
     cobrado: { etiqueta: 'Cobrado', icono: 'i-lucide-receipt', color: 'success', ayuda: 'Se cobra aparte cada mes con su precio.' },
+}
+
+/**
+ * Cómo se cobra el periodo en curso de un adicional `cobrado` (A1, `contratos/adicionales.md`): A3
+ * agrega en la siguiente factura la parte proporcional desde `cobrado_desde`, o nada.
+ */
+export const PRIMEROS_PERIODOS_ADICIONAL: Record<PrimerPeriodoAdicional, { etiqueta: string, ayuda: string, corto: string }> = {
+    prorrateado: { etiqueta: 'Cobrar proporcional este mes', ayuda: 'La siguiente factura cobra los días desde hoy hasta el fin del periodo.', corto: 'proporcional este mes' },
+    sin_costo: { etiqueta: 'Sin costo este mes', ayuda: 'El periodo en curso no se cobra; se cobra completo desde el siguiente.', corto: 'sin costo este mes' },
+}
+
+/** «Desde 19/10/2026 · proporcional este mes» para un cobrado (o null si no aplica). */
+export function resumenCobroAdicional(asignacion: Pick<AsignacionApi, 'modalidad' | 'primer_periodo' | 'cobrado_desde'>): string | null {
+    if (asignacion.modalidad !== 'cobrado') {
+        return null
+    }
+    const partes = [
+        asignacion.cobrado_desde ? `Desde ${formatearFecha(asignacion.cobrado_desde)}` : null,
+        asignacion.primer_periodo ? PRIMEROS_PERIODOS_ADICIONAL[asignacion.primer_periodo].corto : null,
+    ].filter(Boolean)
+    return partes.length ? partes.join(' · ') : null
+}
+
+/** Historial de bloqueos (A1): los pone y los quita el estado del servicio, nunca una persona. */
+export const ACCIONES_BLOQUEO_ADICIONAL: Record<Schema<'BloqueoAdicional'>['accion'], { etiqueta: string, icono: string, color: NonNullable<BadgeProps['color']> }> = {
+    bloqueado: { etiqueta: 'Bloqueado', icono: 'i-lucide-lock', color: 'error' },
+    desbloqueado: { etiqueta: 'Desbloqueado', icono: 'i-lucide-lock-open', color: 'success' },
 }
 
 /** Por qué se dio de baja: texto del usuario o uno de los motivos del sistema. */
@@ -107,6 +136,8 @@ export const esquemaAsignacion = z.object({
     precio: z.string().trim(),
     motivo_id: z.number().int().positive().nullable(),
     motivo_detalle: z.string().trim().max(500, 'Máximo 500 caracteres'),
+    /** Solo se envía con `cobrado`. */
+    primer_periodo: z.enum(['prorrateado', 'sin_costo']),
 }).superRefine((datos, ctx) => {
     if (datos.modalidad === 'cobrado') {
         if (!MONTO.test(datos.precio)) {
@@ -132,6 +163,7 @@ export function entradaAsignacion(asignacion: AsignacionApi | null): EntradaAsig
         precio: asignacion?.precio ?? '',
         motivo_id: asignacion?.motivo_id ?? null,
         motivo_detalle: asignacion?.motivo_detalle ?? '',
+        primer_periodo: asignacion?.primer_periodo ?? 'prorrateado',
     }
 }
 
@@ -144,7 +176,7 @@ function porModalidad(datos: SalidaAsignacion): Pick<DatosAsignacionApi, 'precio
     }
 }
 
-/** Cuerpo de `POST /servicios/:id/adicionales`. */
+/** Cuerpo de `POST /servicios/:id/adicionales`; `primer_periodo` solo con `cobrado` (422 si no). */
 export function cuerpoAsignacion(datos: SalidaAsignacion, credencial: string): DatosAsignacionApi {
     return {
         adicional_id: datos.adicional_id ?? 0,
@@ -152,6 +184,7 @@ export function cuerpoAsignacion(datos: SalidaAsignacion, credencial: string): D
         identificador: datos.identificador || null,
         credencial: credencial || null,
         ...porModalidad(datos),
+        primer_periodo: datos.modalidad === 'cobrado' ? datos.primer_periodo : null,
     }
 }
 
@@ -177,6 +210,11 @@ export function cambiosAsignacion(antes: AsignacionApi, datos: SalidaAsignacion,
     }
     if (datos.modalidad === 'cortesia' && (nuevos.motivo_detalle ?? null) !== antes.motivo_detalle) {
         cambios.motivo_detalle = nuevos.motivo_detalle ?? null
+    }
+    // Pasar a cobrado lo cobra desde ahora con el primer periodo elegido; seguir cobrado solo lo
+    // manda si cambió. Dejar de ser cobrado lo borra la API (no se manda).
+    if (datos.modalidad === 'cobrado' && (antes.modalidad !== 'cobrado' || datos.primer_periodo !== (antes.primer_periodo ?? 'prorrateado'))) {
+        cambios.primer_periodo = datos.primer_periodo
     }
     if (credencial.accion === 'reemplazar' && credencial.valor) {
         cambios.credencial = credencial.valor
