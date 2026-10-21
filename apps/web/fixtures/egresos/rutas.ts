@@ -264,6 +264,11 @@ export const rutasEgresos: RutasFixture = {
         if (!cierre) {
             return problemaCodigo(409, 'periodo_abierto', 'Periodo abierto', `El periodo ${periodo} no está cerrado`)
         }
+        // Fase 6 (A3): bajo el bloqueo duro ningún mes se reabre.
+        const duro = bd.bloqueosLibro.filter(b => b.empresa_id === (cierre.empresa_id ?? 1) && b.tipo === 'duro').sort((x, y) => y.id - x.id)[0]?.hasta ?? null
+        if (duro && `${periodo}-01` <= duro) {
+            return problemaCodigo(409, 'bloqueo_duro', 'Bloqueo duro', `El libro tiene bloqueo duro hasta ${duro}: el periodo ${periodo} no se reabre`)
+        }
         const quien = usuario(solicitud)
         Object.assign(cierre, { estado: 'reabierto', reabierto_en: ahora(), reabierto_por: quien?.id ?? null, reabierto_por_nombre: quien?.nombre ?? null, motivo_reapertura: motivo })
         registrarAccion(solicitud, 'libro.reabrir_periodo', { tipo: 'cierre_mensual', id: cierre.id }, { anio, mes, motivo })
