@@ -124,6 +124,8 @@ function rutasDePaginas(): Map<string, string> {
  * ficha del plan solo edita: siempre le pasa el plan, así que nunca crea).
  */
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exentos?: Record<string, string[]> }> = {
+    'CargoUnicoModal.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id].vue', 'pages/clientes/[id]/index.vue'] },
+    'PeriodosBonificados.vue': { permisos: ['facturas.ver'], desde: ['components/ClienteEstadoCuenta.vue', 'pages/servicios/[id].vue'] },
     'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
     'DteDocumento.vue': { permisos: ['fel.ver'], desde: ['pages/facturas/[id].vue', 'pages/notas-credito/[id].vue'] },
     'DteFicha.vue': { permisos: ['fel.ver'], desde: ['components/DteDocumento.vue', 'pages/dte/[id].vue'] },

@@ -33,7 +33,8 @@ test('registrar la liquidación de la pasarela', async ({ page }) => {
     await expect(pasarela.locator('[data-prueba="saldo-puente"]')).toContainText('Q 0.00')
     await page.getByRole('link', { name: 'LIQ-2026-10-15' }).click()
     await expect(page).toHaveURL(/\/cobros\/liquidaciones\/2$/)
-    await expect(page.getByText('Q 211.78', { exact: true })).toBeVisible()
+    // El neto en la ficha; el mismo monto sale también en su asiento (origen liquidacion_cobro).
+    await expect(page.getByRole('definition').filter({ hasText: /^Q 211\.78$/ })).toBeVisible()
 })
 
 test('depositar desde la caja y conciliarlo con el extracto', async ({ page }) => {

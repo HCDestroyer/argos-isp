@@ -28,6 +28,7 @@ const SOLO_SESION = [
     // lealtad fase 3 (A3): sorteos de las empresas del cliente
     'portalSorteos',
     'portalImagenPremioSorteo',
+    'portalBonificaciones',
 ]
 
 type Operacion = {

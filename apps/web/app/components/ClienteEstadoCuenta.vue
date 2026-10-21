@@ -383,5 +383,11 @@ onMounted(cargar)
                 </template>
             </UTable>
         </section>
+
+        <!-- Decisión del PM (A3): un periodo regalado ya no es una factura de Q 0.00 ni un movimiento. -->
+        <PeriodosBonificados
+            v-if="puede('facturas.ver')"
+            :cliente-id="clienteId"
+        />
     </div>
 </template>

@@ -61,6 +61,8 @@ function filtrosDeQuery(query: LocationQuery): FiltrosReporte {
         agrupar_cartera: opcion(AGRUPAR_CARTERA, query.agrupar_cartera),
         agrupar_ingresos: opcion(AGRUPAR_INGRESOS, query.agrupar_ingresos),
         origen: opcion(ORIGENES_REPORTE, query.origen),
+        origen_bonificacion: opcion(ETIQUETAS_ORIGEN_BONIFICACION, query.origen_bonificacion),
+        motivo_id: id(query.motivo_id),
     }
 }
 
@@ -114,6 +116,15 @@ const agruparIngresos = selectorEnum(AGRUPAR_INGRESOS, () => filtros.agrupar_ing
 const origen = selectorEnum(ORIGENES_REPORTE, () => filtros.origen, (v) => {
     filtros.origen = v
 })
+const origenBonificacion = selectorEnum(ETIQUETAS_ORIGEN_BONIFICACION, () => filtros.origen_bonificacion, (v) => {
+    filtros.origen_bonificacion = v
+})
+const motivo = computed<string>({
+    get: () => (filtros.motivo_id ? String(filtros.motivo_id) : TODOS),
+    set: (valor) => {
+        filtros.motivo_id = valor === TODOS ? undefined : Number(valor)
+    },
+})
 const zona = selectorId('zona_id')
 const routerSel = selectorId('router_id')
 const plan = selectorId('plan_id')
@@ -137,10 +148,12 @@ const zonas = shallowRef<Zona[]>([])
 const routers = shallowRef<RouterNas[]>([])
 const planes = shallowRef<Plan[]>([])
 const cajas = shallowRef<Caja[]>([])
+const motivos = shallowRef<MotivoSinCosto[]>([])
 
 const itemsZona = computed<SelectItem[]>(() => [{ label: 'Todas las zonas', value: TODOS }, ...zonas.value.map(z => ({ label: z.nombre, value: String(z.id) }))])
 const itemsRouter = computed<SelectItem[]>(() => [{ label: 'Todos los routers', value: TODOS }, ...routers.value.map(r => ({ label: r.nombre, value: String(r.id) }))])
 const itemsPlan = computed<SelectItem[]>(() => [{ label: 'Todos los planes', value: TODOS }, ...planes.value.map(p => ({ label: p.nombre, value: String(p.id) }))])
+const itemsMotivo = computed<SelectItem[]>(() => [{ label: 'Todos los motivos', value: TODOS }, ...motivos.value.map(m => ({ label: m.nombre, value: String(m.id) }))])
 const itemsCaja = computed<SelectItem[]>(() => [{ label: 'Todas las cajas', value: TODOS }, ...cajas.value.map(c => ({ label: c.nombre, value: String(c.id) }))])
 
 /* Los catálogos piden su propio permiso: sin él, el filtro no aparece. */
@@ -149,14 +162,17 @@ const conRouters = computed(() => usa('router') && puede('routers.ver'))
 const conPlanes = computed(() => usa('plan') && puede('planes.ver'))
 const conCajas = computed(() => usa('caja') && puede('cajas.ver'))
 const conCliente = computed(() => usa('cliente') && puede('clientes.ver'))
+const conMotivos = computed(() => usa('motivo') && puede('facturas.ver'))
 
 async function cargarCatalogos() {
-    const [rZonas, rRouters, rPlanes, rCajas] = await Promise.all([
+    const [rZonas, rRouters, rPlanes, rCajas, rMotivos] = await Promise.all([
         conZonas.value ? useZonas().listar() : null,
         conRouters.value ? useRouters().listar({ limit: 100 }) : null,
         conPlanes.value ? usePlanes().listar({ limit: 100 }) : null,
         conCajas.value ? useCajas().listar() : null,
+        conMotivos.value ? useCargoUnico().motivos(useUsuarioActual().value?.alcance_global === true) : null,
     ])
+    motivos.value = rMotivos?.ok ? rMotivos.data : []
     zonas.value = rZonas?.ok ? rZonas.data : []
     routers.value = rRouters?.ok ? rRouters.data.data : []
     planes.value = rPlanes?.ok ? rPlanes.data.data : []
@@ -188,6 +204,8 @@ function filtrosAplicables(): FiltrosReporte {
         ['agrupar_cartera', ['agrupar_cartera']],
         ['agrupar_ingresos', ['agrupar_ingresos']],
         ['origen', ['origen']],
+        ['origen_bonificacion', ['origen_bonificacion']],
+        ['motivo', ['motivo_id']],
     ]
     for (const [filtro, claves] of campos) {
         if (usa(filtro)) {
@@ -420,6 +438,30 @@ onMounted(async () => {
                         :items="items(ORIGENES_REPORTE, 'Todos (sistema e importados)')"
                         class="w-full"
                         data-prueba="filtro-origen"
+                    />
+                </UFormField>
+                <UFormField
+                    v-if="usa('origen_bonificacion')"
+                    label="Origen"
+                    size="sm"
+                >
+                    <USelect
+                        v-model="origenBonificacion"
+                        :items="items(ETIQUETAS_ORIGEN_BONIFICACION, 'Todos los orígenes')"
+                        class="w-full"
+                        data-prueba="filtro-origen-bonificacion"
+                    />
+                </UFormField>
+                <UFormField
+                    v-if="conMotivos"
+                    label="Motivo"
+                    size="sm"
+                >
+                    <USelect
+                        v-model="motivo"
+                        :items="itemsMotivo"
+                        class="w-full"
+                        data-prueba="filtro-motivo"
                     />
                 </UFormField>
                 <UFormField

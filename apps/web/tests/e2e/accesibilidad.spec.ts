@@ -53,6 +53,9 @@ const PANTALLAS = [
     ['adicionales', '/adicionales'],
     ['motivos de cortesía', '/adicionales/motivos'],
     ['ficha de plan', '/planes/3'],
+    ['bonificaciones', '/bonificaciones'],
+    ['ficha de bonificación', '/bonificaciones/3'],
+    ['reporte de bonificaciones', '/reportes/bonificaciones'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
@@ -89,7 +92,8 @@ for (const tema of ['light', 'dark'] as const) {
         })
 
         test('pantallas principales sin violaciones de axe', async ({ page }) => {
-            test.setTimeout(240_000)
+            // ~40 pantallas; en frío la primera compilación de cada página se lleva varios segundos.
+            test.setTimeout(300_000)
             await entrar(page, 'admin@argos.test')
             for (const [nombre, ruta] of PANTALLAS) {
                 // Un paso por pantalla y esperas acotadas: si una no llega a estar lista, falla
