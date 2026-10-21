@@ -9,6 +9,9 @@ export type SustitucionFactura = Schema<'SustitucionFactura'>
 export type DatosSustituir = paths['/api/v1/facturas/{id}/sustituir']['post']['requestBody']['content']['application/json']
 export type FiltrosFacturas = Omit<NonNullable<paths['/api/v1/facturas']['get']['parameters']['query']>, 'cursor'>
 
+export type ResultadoGeneracion = Schema<'ResultadoGeneracion'>
+export type ResultadoVencimiento = Schema<'ResultadoVencimiento'>
+
 export const LIMITE_FACTURAS = 25
 
 /** Facturas (avisos de cobro): lista con filtros, detalle con líneas y anulación con motivo. */
@@ -64,5 +67,24 @@ export function useFacturas() {
         }))
     }
 
-    return { listar, ver, anular, notaCredito, sustituir }
+    /**
+     * `POST /facturas/generar` (`facturas.generar`): todo lo pendiente hasta hoy. Lo que cae bajo un
+     * bloqueo del libro no se contabiliza: va en `bloqueados` y `bloqueos[]` y se reintenta después.
+     */
+    function generar(claveIdempotencia: string): Promise<Resultado<ResultadoGeneracion>> {
+        return resolver(api.POST('/api/v1/facturas/generar', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: {},
+        }))
+    }
+
+    /** `POST /facturas/vencer` (`facturas.generar`): vence lo vencido y crea las moras; igual con los bloqueos. */
+    function vencer(claveIdempotencia: string): Promise<Resultado<ResultadoVencimiento>> {
+        return resolver(api.POST('/api/v1/facturas/vencer', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: {},
+        }))
+    }
+
+    return { listar, ver, anular, notaCredito, sustituir, generar, vencer }
 }
