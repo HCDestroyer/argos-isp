@@ -111,7 +111,8 @@ export default class AmortizarDiferidos extends DomainAction<EntradaAmortizar, R
                 const asiento = await new RegistrarAsiento().execute(
                     {
                         empresa_id: empresaId,
-                        fecha: await fechaDeCuota(t.trx, mes, empresaId),
+                        fecha: fechaDeCuota(mes),
+                        trasladar_si_bloqueado: true,
                         descripcion: `Diferido ${d.id} · ${mes.slice(0, 7)} (${numero}/${d.meses}) · ${d.descripcion}`,
                         origen_tipo: 'diferido',
                         origen_id: Number(d.id),

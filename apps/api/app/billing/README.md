@@ -359,9 +359,13 @@ Correr solo las del módulo: `DB_DATABASE=argosisp_test_a3 PORT=343 node ace tes
 | GET/POST | `/api/v1/pasarela/falsa/:cobro[/pagar]`           | público, solo laboratorio  |
 | GET      | `/api/v1/reportes/*`, `/api/v1/dashboard/resumen` | `reportes.ver`             |
 
+## Crons bajo un bloqueo del libro (fase 6)
+
+`generarFacturas` y `vencerFacturas` no se detienen cuando un asiento cae bajo un bloqueo (`#ledger/bloqueos`): la factura de un servicio cuyo asiento queda bloqueado no se emite y la mora de una factura vencida no se crea (la factura igual pasa a `vencida`; `VencerFactura` devuelve `mora_bloqueada`). La corrida los cuenta en `bloqueados` (no en `errores`), los detalla en `bloqueos[] { empresa_id, tipo, hasta, fecha, documentos, ejemplos }` y `RegistrarCorrida` emite un `libro.proceso_bloqueado` por empresa y tipo para avisar al equipo. Como los crons procesan todo lo pendiente, la siguiente corrida sin bloqueo los registra: nada se pierde. Para la mora se considera que el asiento lleva impuesto (aplica el bloqueo de impuestos aunque la mora no tenga IVA).
+
 ## Eventos
 
-Emite: `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `nota_credito.emitida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `factura.sustituida`. Todos con `empresa_id` (multiempresa); `pago.*` además con `cobro_id`. Con FEL obligatoria y `certificar_al = emitir`, `factura.emitida` sale al certificarse la factura (contrato de localización fiscal §11.3).
+Emite: `libro.proceso_bloqueado` (crons bajo un bloqueo, arriba), `factura.emitida`, `factura.vencida`, `pago.registrado`, `pago.anulado`, `promesa.creada`, `promesa.cumplida`, `promesa.incumplida`, `factura.anulada`, `nota_credito.emitida`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado`, `factura.sustituida`. Todos con `empresa_id` (multiempresa); `pago.*` además con `cobro_id`. Con FEL obligatoria y `certificar_al = emitir`, `factura.emitida` sale al certificarse la factura (contrato de localización fiscal §11.3).
 
 Consume (grupo `billing`, `node ace billing:worker`): `pago.registrado` (cumplir promesas; y pedir la certificación FEL de los avisos cubiertos, `ConsumidorFel`); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar los resúmenes del dashboard). Lee de A1 en solo lectura `core.servicios`, `core.servicios_excepciones` y `network.planes`.
 - **Fase 4, H16–H17** (contrato §18): estado `acreditada` (aviso cubierto entero por notas internas sin cobro; no se certifica); la recuperación de un castigo se parte en base `4.2.03` e IVA `2.1.11` (`ledger.recuperaciones_castigo`). El cargo interno H18 (`tipo = 'cargo'`) desapareció con la decisión B (diferencia como gasto).

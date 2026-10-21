@@ -2863,6 +2863,95 @@ async function verificarLibroCon(
     )
 
     /*
+    | 17 · Bloqueos del libro (fase 6 PR A; contrato de localización fiscal §9.2, §10.4 y §20): ningún
+    | asiento con fecha bajo un bloqueo que le aplicaba cuando se registró, salvo con su excepción
+    | vigente (nunca bajo el duro); el duro solo avanza y nada queda antes de él; ningún mes bajo el
+    | duro se reabre; un automático trasladado guarda su fecha real en fecha_documento.
+    */
+    /** el bloqueo de un tipo vigente para la empresa `e` en el instante `t` (el último creado antes) */
+    const bloqueoEn = (tipo: string, e: string, t: string) => `(SELECT b.hasta FROM ledger.bloqueos b
+          WHERE b.empresa_id = ${e} AND b.tipo = '${tipo}' AND b.created_at < ${t} ORDER BY b.id DESC LIMIT 1)`
+    await revisar(
+        '17.asiento_bajo_bloqueo (al registrarse: fecha ≤ duro → nunca; fecha ≤ global, ventas (diario de ventas), compras (diario de compras, compra o pago a proveedor) o impuestos (cuenta con impuesto o etiqueta) → solo con una excepción de ese tipo, de su empresa y su usuario, vigente en ese instante)',
+        `WITH a AS (
+             SELECT a.id, a.empresa_id, a.fecha, a.origen_tipo, a.created_at, a.created_by, a.excepcion_id,
+                    d.tipo AS diario, ledger.asiento_con_impuesto(a.id) AS con_impuesto,
+                    ${bloqueoEn('duro', 'a.empresa_id', 'a.created_at')} AS duro,
+                    ${bloqueoEn('global', 'a.empresa_id', 'a.created_at')} AS global,
+                    ${bloqueoEn('ventas', 'a.empresa_id', 'a.created_at')} AS ventas,
+                    ${bloqueoEn('compras', 'a.empresa_id', 'a.created_at')} AS compras,
+                    ${bloqueoEn('impuestos', 'a.empresa_id', 'a.created_at')} AS impuestos
+               FROM ledger.asientos a
+               LEFT JOIN ledger.asientos_numeros n ON n.asiento_id = a.id
+               LEFT JOIN ledger.diarios d ON d.id = n.diario_id
+              WHERE ${E('a.empresa_id')}
+                AND EXISTS (SELECT 1 FROM ledger.bloqueos b WHERE b.empresa_id = a.empresa_id AND b.created_at < a.created_at)
+         ), t AS (
+             SELECT a.*, x.tipo
+               FROM a CROSS JOIN LATERAL (VALUES
+                    ('global', a.global IS NOT NULL AND a.fecha <= a.global),
+                    ('ventas', a.diario = 'ventas' AND a.ventas IS NOT NULL AND a.fecha <= a.ventas),
+                    ('compras', (a.diario = 'compras' OR a.origen_tipo IN ('compra', 'pago_proveedor'))
+                                AND a.compras IS NOT NULL AND a.fecha <= a.compras),
+                    ('impuestos', a.con_impuesto AND a.impuestos IS NOT NULL AND a.fecha <= a.impuestos)
+               ) AS x(tipo, aplica)
+              WHERE x.aplica
+         )
+         SELECT id, empresa_id, fecha, origen_tipo, 'duro' AS tipo, duro AS hasta, excepcion_id FROM a
+          WHERE duro IS NOT NULL AND fecha <= duro
+         UNION ALL
+         SELECT t.id, t.empresa_id, t.fecha, t.origen_tipo, t.tipo,
+                CASE t.tipo WHEN 'global' THEN t.global WHEN 'ventas' THEN t.ventas WHEN 'compras' THEN t.compras
+                            ELSE t.impuestos END, t.excepcion_id
+           FROM t
+          WHERE NOT EXISTS (
+                    SELECT 1 FROM ledger.bloqueos_excepciones x
+                     WHERE x.id = t.excepcion_id AND x.empresa_id = t.empresa_id AND x.tipo = t.tipo
+                       AND x.created_at <= t.created_at AND x.hasta_en > t.created_at
+                       AND (x.usuario_id IS NULL OR x.usuario_id = t.created_by)
+                       AND NOT EXISTS (SELECT 1 FROM ledger.bloqueos_excepciones_revocaciones r
+                                        WHERE r.excepcion_id = x.id AND r.created_at <= t.created_at))`,
+    )
+    await revisar(
+        '17.bloqueo_regresivo (por empresa: cada duro posterior a otro avanza; ningún bloqueo de otro tipo queda antes del duro vigente al crearse (ni se quita); impuestos no retrocede; anterior = el hasta previo de su tipo)',
+        `WITH b AS (
+             SELECT b.*,
+                    (SELECT p.hasta FROM ledger.bloqueos p WHERE p.empresa_id = b.empresa_id AND p.tipo = 'duro' AND p.id < b.id
+                      ORDER BY p.id DESC LIMIT 1) AS duro_previo,
+                    (SELECT p.hasta FROM ledger.bloqueos p WHERE p.empresa_id = b.empresa_id AND p.tipo = b.tipo AND p.id < b.id
+                      ORDER BY p.id DESC LIMIT 1) AS previo,
+                    EXISTS (SELECT 1 FROM ledger.bloqueos p WHERE p.empresa_id = b.empresa_id AND p.tipo = b.tipo AND p.id < b.id) AS hay_previo
+               FROM ledger.bloqueos b WHERE ${E('b.empresa_id')}
+         )
+         SELECT id, empresa_id, tipo, hasta, anterior, previo, duro_previo FROM b
+          WHERE (tipo = 'duro' AND (hasta IS NULL OR (duro_previo IS NOT NULL AND hasta <= duro_previo)))
+             OR (tipo <> 'duro' AND duro_previo IS NOT NULL AND (hasta IS NULL OR hasta < duro_previo))
+             OR (tipo = 'impuestos' AND previo IS NOT NULL AND (hasta IS NULL OR hasta < previo))
+             OR (hay_previo AND anterior IS DISTINCT FROM previo) OR (NOT hay_previo AND anterior IS NOT NULL)`,
+    )
+    await revisar(
+        '17.reapertura_bajo_duro (ningún mes con fecha ≤ el duro vigente se reabre después de fijarlo)',
+        `SELECT r.id, c.empresa_id, to_char(c.periodo, 'YYYY-MM') AS periodo, r.reabierto_en
+           FROM ledger.reaperturas_mensuales r JOIN ledger.cierres_mensuales c ON c.id = r.cierre_id
+          WHERE ${E('c.empresa_id')}
+            AND EXISTS (SELECT 1 FROM ledger.bloqueos b WHERE b.empresa_id = c.empresa_id AND b.tipo = 'duro'
+                         AND b.created_at < r.reabierto_en AND c.periodo <= b.hasta)`,
+    )
+    await revisar(
+        '17.fecha_documento_mal_trasladada (un asiento trasladado va después de su fecha real, y su fecha real estaba bajo un bloqueo o en un mes cerrado al registrarse)',
+        `SELECT a.id, a.empresa_id, a.fecha, a.fecha_documento, a.origen_tipo
+           FROM ledger.asientos a
+          WHERE ${E('a.empresa_id')} AND a.fecha_documento IS NOT NULL AND a.fecha_documento <> a.fecha
+            AND (a.fecha_documento > a.fecha
+                 OR NOT (EXISTS (SELECT 1 FROM ledger.bloqueos b WHERE b.empresa_id = a.empresa_id AND b.created_at < a.created_at
+                                  AND b.hasta >= a.fecha_documento
+                                  AND b.id = (SELECT max(p.id) FROM ledger.bloqueos p WHERE p.empresa_id = b.empresa_id
+                                                AND p.tipo = b.tipo AND p.created_at < a.created_at))
+                         OR EXISTS (SELECT 1 FROM ledger.cierres_mensuales c WHERE c.empresa_id = a.empresa_id
+                                     AND c.periodo = date_trunc('month', a.fecha_documento)::date AND c.created_at < a.created_at)))`,
+    )
+
+    /*
     | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica
     */
     for (const empresa of empresas) {

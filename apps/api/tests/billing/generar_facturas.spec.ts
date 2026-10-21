@@ -138,6 +138,8 @@ test.group('billing · generarFacturas', () => {
             bonificadas: 0,
             bonificaciones: [],
             errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
         })
         assert.lengthOf(await facturasDe(servicioId), 2)
         assert.equal(await saldoTexto(clienteId), '225.00')

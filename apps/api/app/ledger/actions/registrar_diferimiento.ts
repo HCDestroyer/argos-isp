@@ -3,8 +3,7 @@ import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { aTexto, dec, type Dec } from '#ledger/dinero'
-import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
-import { periodoCerrado } from '#ledger/cierres'
+import { fechaValida, inicioDeMes } from '#ledger/fechas'
 import { CUENTAS, PAIS_PLAN } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { verDiferimiento, type DiferimientoVista } from '#ledger/diferidos'
@@ -73,9 +72,8 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
             .select('id')
             .firstOrFail()) as { id: number }
         const inicio = inicioDeMes(input.inicio ? fechaValida(input.inicio, 'inicio') : datos.fecha)
-        const fecha = (await periodoCerrado(t.trx, datos.fecha, datos.empresaId))
-            ? hoyGuatemala()
-            : datos.fecha
+        // cerrado o bloqueado: primer día abierto, con la fecha real en fecha_documento (§10.4)
+        const fecha = datos.fecha
 
         const [fila] = (await t.trx
             .insertQuery()
@@ -107,6 +105,7 @@ export default class RegistrarDiferimiento extends DomainAction<EntradaDiferimie
                 descripcion: `Diferimiento ${id} en ${input.meses} meses · ${datos.descripcion}`,
                 origen_tipo: 'diferido',
                 origen_id: id,
+                trasladar_si_bloqueado: true,
                 movimientos:
                     input.origen === 'factura'
                         ? [
