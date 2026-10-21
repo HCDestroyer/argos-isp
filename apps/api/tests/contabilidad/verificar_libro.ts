@@ -59,7 +59,10 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {
+    '9.nota_sobre_importada_con_iva_residual':
+        'H27: una nota de crédito por el total de una factura importada con IVA se guarda con IVA 0 (el asiento de la importada es CxC / 2.9.01 sin IVA); decisión pendiente del PM',
+}
 
 type Fila = Record<string, unknown>
 
@@ -763,6 +766,16 @@ async function verificarLibroCon(
                 count(n.id)::int AS cantidad_notas
            FROM billing.facturas f JOIN billing.notas_credito n ON n.factura_id = f.id AND NOT ${anulada('n')}
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+            AND coalesce(f.reglas_snapshot ->> 'importada', '') <> 'true'
+          GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
+    )
+    await revisar(
+        '9.nota_sobre_importada_con_iva_residual (H27: el mismo criterio sobre una factura importada; su asiento es CxC / 2.9.01 sin IVA y la nota se guarda con IVA 0, pendiente de la decisión del PM)',
+        `SELECT f.id, f.total::text, f.iva::text, sum(n.monto)::text AS notas, sum(n.iva)::text AS iva_notas,
+                count(n.id)::int AS cantidad_notas
+           FROM billing.facturas f JOIN billing.notas_credito n ON n.factura_id = f.id AND NOT ${anulada('n')}
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+            AND coalesce(f.reglas_snapshot ->> 'importada', '') = 'true'
           GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
     )
     /*
