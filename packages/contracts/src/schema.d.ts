@@ -4966,6 +4966,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/avisos-sorteo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sorteos próximos ya abiertos al público, para el carrusel del portal
+         * @description Con bases publicadas o participación abierta y fecha de sorteo futura (los activa el panel al publicar sus bases). `lugar=pagina_corte`: los de la empresa del servicio de la IP (o, sin él, los del cliente de la sesión); `lugar=portal_inicio`: los de las empresas del cliente de la sesión. Sin cliente identificado, lista vacía. Sin imágenes ni datos de nadie. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalAvisosSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/bancos": {
         parameters: {
             query?: never;
@@ -5000,6 +5020,30 @@ export interface paths {
         get: operations["portalBonificaciones"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/canjes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Canjes del cliente de la sesión y su estado
+         * @description Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalCanjes"];
+        put?: never;
+        /**
+         * El cliente canjea sus puntos por un premio
+         * @description Llama `lealtad.canjear` (A3) con actor `cliente` y canal `portal`. 404 si el premio no está en el portal (inactivo, sin `en_portal` o de un programa no visible). Errores de la acción: 403 `canje_portal_inactivo`, 422 `saldo_insuficiente`, `servicio_no_valido`, `premio_inactivo`, `recompensa_no_disponible`, `parametro_sin_confirmar`; 409 `sin_existencias`, `canje_pendiente`. Un descuento queda `reservado` para la próxima factura del servicio. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        post: operations["portalCanjear"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5350,6 +5394,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/premios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Premios canjeables desde el portal, con lo que le falta al cliente para cada uno
+         * @description Activos y con `en_portal`, del más barato al más caro. Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalPremios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/promesas": {
         parameters: {
             query?: never;
@@ -5386,6 +5450,26 @@ export interface paths {
          * @description Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalPromesaCondiciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/puntos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Puntos del cliente por empresa: saldo, lo que vence pronto, movimientos y términos
+         * @description Solo de las empresas cuyo programa activo tiene `visible_portal` (se enciende en el panel); sin ninguna, lista vacía. Requiere la sesión del portal: cookie httpOnly `argos_portal` que pone `POST /portal/verificar` (sin ella o vencida responde 401). Solo devuelve datos del cliente de la sesión. Con límite de peticiones por IP como las rutas sin sesión (429).
+         */
+        get: operations["portalPuntos"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5466,6 +5550,46 @@ export interface paths {
          * @description Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.
          */
         get: operations["portalImagenPremioSorteo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos/{id}/publico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Página pública de un sorteo: bases, premios, compromiso y ganadores por seudónimo
+         * @description Sin sesión, desde que publica sus bases (antes o inexistente, 404). Los ganadores salen por seudónimo después de ejecutar. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalSorteoPublico"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/sorteos/{id}/verificacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datos para recalcular el resultado de un sorteo (los de `GET /lealtad/sorteos/:id/verificacion`)
+         * @description Sin sesión, después de ejecutar (antes, 404). Lista por seudónimo. La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         */
+        get: operations["portalSorteoVerificacion"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10171,6 +10295,27 @@ export interface components {
                 url: string;
             } | null;
         };
+        PortalAvisoSorteo: {
+            id: number;
+            empresa_id: number;
+            nombre: string;
+            /**
+             * @description Abierto al público
+             * @enum {string}
+             */
+            estado: "bases_publicadas" | "participacion_abierta";
+            /**
+             * Format: date-time
+             * @description Hasta cuándo se ganan boletos
+             */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            /** @description Nombre del primer premio */
+            premio_principal: string | null;
+            /** @description Cuántos premios en total (suma de cantidades) */
+            premios: number;
+        };
         PortalBanco: {
             id: number;
             nombre: string;
@@ -10189,6 +10334,26 @@ export interface components {
             concepto: string;
             /** @enum {string} */
             origen: "mes_gratis" | "descuento_100" | "cargo_sin_costo" | "canje";
+            /** Format: date-time */
+            created_at: string;
+        };
+        PortalCanje: {
+            id: number;
+            empresa_id: number;
+            servicio_id: number;
+            premio_nombre: string;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            puntos: number;
+            /**
+             * @description `reservado`: para la próxima factura; `aplicado`; `revertido`; `rechazado`
+             * @enum {string}
+             */
+            estado: "reservado" | "aplicado" | "revertido" | "rechazado";
+            /** @description Q descontados; null mientras está reservado */
+            descuento: components["schemas"]["Dinero"] | null;
+            /** Format: date-time */
+            aplicado_en: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -10462,6 +10627,29 @@ export interface components {
             /** Format: date-time */
             pagado_en: string | null;
         };
+        PortalPremio: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            tipo: "descuento_factura" | "mes_gratis" | "mejora_plan" | "bien" | "boletos";
+            nombre: string;
+            costo_puntos: number;
+            /** @enum {string|null} */
+            descuento_tipo: "monto" | "porcentaje" | null;
+            descuento_valor: components["schemas"]["Dinero"] | null;
+            tope: components["schemas"]["Dinero"] | null;
+            /** @description Días de la mejora de plan */
+            dias: number | null;
+            /** @description Nombre del plan de la mejora */
+            plan_destino: string | null;
+            agotado: boolean;
+            /** @description Para la tarjeta; la acción `lealtad.canjear` decide */
+            canjeable: boolean;
+            /** @enum {string|null} */
+            motivo_no_canjeable: "canje_desactivado" | "puntos_insuficientes" | "agotado" | "no_disponible_en_portal" | null;
+            /** @description Puntos que faltan (el mayor entre costo y mínimo, menos el saldo) */
+            faltan: number;
+        };
         PortalPromesa: {
             id: number;
             servicio_id: number;
@@ -10488,6 +10676,48 @@ export interface components {
             corregible: boolean;
             /** @description Estado del servicio tras la promesa (solo si quedó aprobada) */
             servicio_estado: components["schemas"]["EstadoServicio"] | null;
+        };
+        PortalPuntosEmpresa: {
+            /** @description Empresa del programa (los puntos son por NIT) */
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            programa: {
+                nombre: string;
+                /** @description Términos publicados del programa (texto plano) */
+                terminos: string;
+                /** @description Saldo mínimo para canjear */
+                minimo_canje: number;
+                /** @description null = los puntos no vencen */
+                vencimiento_meses: number | null;
+                aviso_vencimiento_dias: number;
+                /** @description El cliente puede canjear desde el portal */
+                canje_portal: boolean;
+            };
+            /** @description Puede ser negativo tras un reverso; entonces no canjea */
+            saldo: number;
+            /** @description Puntos que vencen dentro del aviso del programa */
+            por_vencer: number;
+            /** Format: date */
+            proximo_vencimiento: string | null;
+            vencen_pronto: {
+                puntos: number;
+                /** Format: date */
+                vence_en: string;
+            }[];
+            /** @description Los últimos 20, del más reciente; sin motivos internos ni valores contables */
+            movimientos: {
+                id: number;
+                /** @enum {string} */
+                tipo: "acumulacion" | "canje" | "vencimiento" | "reverso" | "ajuste";
+                /** @enum {string} */
+                origen_tipo: "factura" | "pago" | "servicio" | "referido" | "canje" | "sorteo" | "ajuste" | "nota_credito" | "lote";
+                /** @description Con signo: positivo gana, negativo sale */
+                puntos: number;
+                servicio_id: number | null;
+                /** Format: date */
+                vence_en: string | null;
+                /** Format: date-time */
+                created_at: string;
+            }[];
         };
         PortalServicio: {
             id: number;
@@ -10566,6 +10796,54 @@ export interface components {
                 /** @enum {string} */
                 tipo: "titular" | "suplente";
                 /** @description Seudónimo del participante */
+                codigo: string;
+                premio_posicion: number | null;
+            }[] | null;
+        };
+        PortalSorteoPublico: {
+            id: number;
+            empresa: components["schemas"]["PortalMarcaEmpresa"];
+            nombre: string;
+            descripcion: string | null;
+            /** @enum {string} */
+            estado: "borrador" | "bases_publicadas" | "participacion_abierta" | "corte_cerrado" | "ejecutado" | "acta_cerrada" | "premios_entregados" | "cancelado";
+            /** Format: date */
+            inscripcion_desde: string | null;
+            /** Format: date-time */
+            corte_en: string | null;
+            /** Format: date-time */
+            fecha_sorteo: string | null;
+            lugar: string | null;
+            premios: {
+                posicion: number;
+                nombre: string;
+                cantidad: number;
+                valor: components["schemas"]["Dinero"];
+                imagen_url: string | null;
+            }[];
+            bases: {
+                mecanica: string | null;
+                regla_participacion: string | null;
+                plazo_reclamo_dias: number | null;
+                no_reclamados: string | null;
+                publicacion_resultados: string | null;
+                /** @description De dónde sale el valor público del acto (p. ej. un número de la lotería) */
+                fuente_valor_publico: string | null;
+                resolucion_gobernacion: string | null;
+            };
+            /** @description SHA-256 del JSON canónico de las bases y los premios */
+            bases_hash: string;
+            /** @description SHA-256 de la semilla, publicado con las bases */
+            compromiso: string | null;
+            motivo_cancelacion: string | null;
+            /** @description Ya se ejecutó: hay datos para recalcular el resultado */
+            verificable: boolean;
+            /** @description Solo después de ejecutar */
+            ganadores: {
+                posicion: number;
+                /** @enum {string} */
+                tipo: "titular" | "suplente";
+                /** @description Seudónimo del participante, nunca su nombre */
                 codigo: string;
                 premio_posicion: number | null;
             }[] | null;
@@ -32922,6 +33200,48 @@ export interface operations {
             };
         };
     };
+    portalAvisosSorteo: {
+        parameters: {
+            query: {
+                lugar: "portal_inicio" | "pagina_corte";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Avisos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalAvisoSorteo"][];
+                    };
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalBancos: {
         parameters: {
             query?: never;
@@ -32979,6 +33299,127 @@ export interface operations {
             };
             /** @description Sin sesión del portal (cookie vencida o ausente) */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCanjes: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de canjes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalCanje"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalCanjear: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    premio_id: number;
+                    servicio_id: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Canje hecho */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCanje"];
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -33920,6 +34361,46 @@ export interface operations {
             };
         };
     };
+    portalPremios: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Premios */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPremio"][];
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalPromesas: {
         parameters: {
             query?: {
@@ -34080,6 +34561,46 @@ export interface operations {
             };
         };
     };
+    portalPuntos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Puntos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PortalPuntosEmpresa"][];
+                    };
+                };
+            };
+            /** @description Sin sesión del portal (cookie vencida o ausente) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     portalQuienSoy: {
         parameters: {
             query?: never;
@@ -34218,6 +34739,86 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSorteoPublico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sorteo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSorteoPublico"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Demasiadas peticiones; reintentar después de `Retry-After` segundos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    portalSorteoVerificacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verificación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificacionSorteo"];
                 };
             };
             /** @description No encontrado */

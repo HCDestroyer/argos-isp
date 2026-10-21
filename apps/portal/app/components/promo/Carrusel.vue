@@ -1,19 +1,23 @@
 <script setup lang="ts">
 import type { Anuncio } from '~/composables/useAnuncios'
+import type { ItemPromocion } from '~/components/promo/Promociones.vue'
 
 /**
- * Carrusel de anuncios (`UCarousel`): deslizar en el teléfono (la siguiente tarjeta asoma por el
+ * Carrusel de anuncios y avisos de sorteo (`UCarousel`): deslizar en el teléfono (la siguiente tarjeta asoma por el
  * borde), flechas y puntos desde `sm`. Avanza solo, despacio (8 s), y se detiene mientras se toca,
  * tiene el foco o el ratón encima; el botón de pausa lo detiene del todo (WCAG 2.2.2). Con
  * `prefers-reduced-motion` no avanza solo ni ofrece pausa. Teclado: flechas con el carrusel
  * enfocado (lo da `UCarousel`) y Tab por los botones de cada tarjeta.
  *
  * Emite `vista` con el anuncio a la vista cada vez que cambia, solo mientras el carrusel está en
- * pantalla (`visible`), y `clic` al tocar su botón.
+ * pantalla (`visible`), y `clic` al tocar su botón. Los avisos de sorteo no cuentan métricas.
  */
 const props = defineProps<{
-    anuncios: Anuncio[]
+    items: ItemPromocion[]
     visible: boolean
+    conSesion?: boolean
+    /** Nombre del carrusel para lectores de pantalla (el mismo título de la sección). */
+    titulo?: string
 }>()
 
 const emit = defineEmits<{
@@ -35,10 +39,10 @@ function alSeleccionar(indice: number) {
     actual.value = indice
 }
 
-watch([actual, () => props.visible, () => props.anuncios], () => {
-    const anuncio = props.anuncios[actual.value]
-    if (props.visible && anuncio) {
-        emit('vista', anuncio)
+watch([actual, () => props.visible, () => props.items], () => {
+    const item = props.items[actual.value]
+    if (props.visible && item?.tipo === 'anuncio') {
+        emit('vista', item.anuncio)
     }
 }, { immediate: true })
 </script>
@@ -50,7 +54,7 @@ watch([actual, () => props.visible, () => props.anuncios], () => {
     >
         <UCarousel
             v-slot="{ item, index }"
-            :items="anuncios"
+            :items="items"
             :autoplay="autoplay"
             arrows
             dots
@@ -58,7 +62,7 @@ watch([actual, () => props.visible, () => props.anuncios], () => {
             align="start"
             :prev="{ color: 'neutral', variant: 'soft' }"
             :next="{ color: 'neutral', variant: 'soft' }"
-            aria-label="Promociones"
+            :aria-label="titulo ?? 'Promociones'"
             :ui="{
                 root: 'rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
                 // teléfono: la siguiente tarjeta asoma (invita a deslizar); escritorio: una a la vez, sin bordes cortados
@@ -73,10 +77,17 @@ watch([actual, () => props.visible, () => props.anuncios], () => {
             data-testid="promo-carrusel-ucarousel"
             @select="alSeleccionar"
         >
+            <SorteoAviso
+                v-if="item.tipo === 'sorteo'"
+                :aviso="item.aviso"
+                :posicion="`${index + 1} de ${items.length}`"
+                :con-sesion="conSesion"
+            />
             <PromoTarjeta
-                :anuncio="item"
-                :posicion="`${index + 1} de ${anuncios.length}`"
-                @clic="emit('clic', item)"
+                v-else
+                :anuncio="item.anuncio"
+                :posicion="`${index + 1} de ${items.length}`"
+                @clic="emit('clic', item.anuncio)"
             />
         </UCarousel>
 
@@ -85,7 +96,7 @@ watch([actual, () => props.visible, () => props.anuncios], () => {
                 class="text-xs text-muted tabular-nums sm:hidden"
                 aria-hidden="true"
             >
-                {{ actual + 1 }} / {{ anuncios.length }}
+                {{ actual + 1 }} / {{ items.length }}
             </p>
             <UButton
                 v-if="!reducido"
