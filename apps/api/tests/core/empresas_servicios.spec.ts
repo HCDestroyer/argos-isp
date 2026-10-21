@@ -14,6 +14,7 @@ import CambiarEmpresaServicio from '#core/actions/cambiar_empresa_servicio'
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import type { ContextoAccion } from '#shared/contexto'
 import { construirVariables } from '#notify/variables'
+import { crearPlantillaFila, generar } from '#tests/billing/ayudas_billing'
 import { leerEmpresa } from '#portal/empresa'
 
 /**
@@ -267,17 +268,14 @@ test.group('Multiempresa: servicios.cambiar_empresa', (group) => {
 
         // con una factura pendiente: 422 servicio_con_saldo
         const actual = await db.from('core.servicios').where('id', servicio.id).firstOrFail()
-        await db.table('billing.facturas').insert({
-            cliente_id: e.clienteId,
-            servicio_id: servicio.id,
-            periodo: '2026-09-01',
-            clave_unica: `${servicio.id}-2026-09-01-prueba`,
-            vence_en: '2026-09-15',
-            estado: 'emitida',
-            subtotal: '100.00',
-            iva: '12.00',
-            total: '112.00',
-        })
+        // emitida por billing (con su asiento de CxC en la empresa del servicio), no un INSERT directo
+        await db
+            .from('core.servicios')
+            .where('id', servicio.id)
+            .update({ plantilla_facturacion_id: await crearPlantillaFila(), fecha_instalacion: '2026-09-01' })
+        await generar(servicio.id, '2026-09-01')
+        const pendiente = await db.from('billing.facturas').where('servicio_id', servicio.id).firstOrFail()
+        assert.equal(pendiente.estado, 'emitida')
         const conSaldo = await estado(
             client
                 .post(`/api/v1/servicios/${servicio.id}/cambiar-empresa`)
