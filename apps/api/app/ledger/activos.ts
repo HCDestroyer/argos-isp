@@ -6,7 +6,6 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
-import { periodoCerrado } from '#ledger/cierres'
 import { valorParametro } from '#fiscal/parametros'
 import { CLASES_ACTIVO, CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
@@ -53,15 +52,13 @@ export function mesCerradoAnterior(): string {
     return sumarMeses(inicioDeMes(hoyGuatemala()), -1)
 }
 
-/** Fecha del asiento de una cuota del mes: su último día, o hoy si ese mes ya está cerrado. */
-export async function fechaDeCuota(
-    cliente: QueryClientContract,
-    mes: string,
-    empresaId: number,
-): Promise<string> {
-    const fin = finDeMes(mes)
-    if (await periodoCerrado(cliente, fin, empresaId)) return hoyGuatemala()
-    return fin
+/**
+ * Fecha del asiento de una cuota del mes: su último día. Si está cerrado o bloqueado, el asiento
+ * se registra con `trasladar_si_bloqueado` y va al primer día abierto con esta fecha en
+ * `fecha_documento` (§10.4).
+ */
+export function fechaDeCuota(mes: string): string {
+    return finDeMes(mes)
 }
 
 export interface CuentasClase {

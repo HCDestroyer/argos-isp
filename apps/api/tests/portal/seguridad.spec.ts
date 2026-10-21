@@ -165,6 +165,13 @@ const CUERPOS: Record<string, () => Record<string, unknown> | undefined> = {
     portalAnuncios: () => undefined,
     portalAnuncioImagen: () => undefined,
     portalAnuncioEvento: () => ({ tipo: 'vista', visitante: randomUUID(), lugar: 'pagina_corte' }),
+    portalPuntos: () => undefined,
+    portalPremios: () => undefined,
+    portalCanjes: () => undefined,
+    portalCanjear: () => ({ premio_id: 1, servicio_id: 1 }),
+    portalAvisosSorteo: () => undefined,
+    portalSorteoPublico: () => undefined,
+    portalSorteoVerificacion: () => undefined,
 }
 
 test.group('Portal seguridad: límite de peticiones en todas las rutas', (group) => {

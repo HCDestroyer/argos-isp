@@ -1,4 +1,4 @@
-import { CLAVES_CATEGORIA_EGRESO } from '#ledger/plan_cuentas'
+import { CLAVES_CATEGORIA_EGRESO, CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
 import {
     Dinero,
     auditable,
@@ -130,6 +130,7 @@ export const Asiento = definirEsquema(
                 'diferido',
                 'alta_activo',
                 'lealtad',
+                'sorteo',
                 'bonificacion',
             ]),
             origen_id: nulable(id),
@@ -138,6 +139,16 @@ export const Asiento = definirEsquema(
                 description: 'Asiento que este revierte (correcciones por reverso)',
             },
             revertido_por: { ...nulable(id), description: 'Asiento de reverso de este, si ya se revirtió' },
+            fecha_documento: {
+                ...nulable(fecha),
+                description:
+                    'Fecha real de un asiento automático que se registró en el primer día abierto porque la suya estaba cerrada o bloqueada (§10.4); null si no se trasladó',
+            },
+            excepcion_id: {
+                ...nulable(id),
+                description:
+                    'Excepción de bloqueo por la que entró el asiento (§10.4); null si no hizo falta',
+            },
             diario: {
                 ...nulable(texto),
                 description: 'Código del diario (VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta>)',
@@ -164,7 +175,17 @@ export const Asiento = definirEsquema(
             created_at: instante,
             movimientos: lista(Movimiento),
         },
-        ['revertido_por', 'revertible', 'motivo_no_revertible', 'empresa_id', 'diario', 'numero', 'partida'],
+        [
+            'revertido_por',
+            'revertible',
+            'motivo_no_revertible',
+            'empresa_id',
+            'diario',
+            'numero',
+            'partida',
+            'fecha_documento',
+            'excepcion_id',
+        ],
     ),
 )
 
@@ -319,7 +340,11 @@ export const Egreso = definirEsquema(
             },
             id,
             fecha,
-            categoria: enumerado(CLAVES_CATEGORIA_EGRESO),
+            categoria: {
+                ...enumerado(CLAVES_CATEGORIA_EGRESO_CONSULTA),
+                description:
+                    'Categoría del egreso; premios es interna (la crea la entrega de un premio de sorteo en efectivo, 5.1.03) y no se usa en POST /egresos',
+            },
             categoria_nombre: texto,
             cuenta_codigo: { ...texto, description: 'Cuenta de gasto del plan' },
             proveedor: nulable(texto),

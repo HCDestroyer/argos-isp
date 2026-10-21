@@ -175,6 +175,8 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
 | `fiscal.config_cambiada` | fiscal | empresa_id, campos[] (regimen, fel_modo, proveedor, credenciales, establecimientos, frases); nunca valores secretos |
 | `libro.integridad_rota` | ledger (sellador) | empresa_id, sello, asiento_id, esperado, obtenido |
+| `libro.bloqueo_cambiado` | ledger | empresa_id, tipo, hasta, anterior |
+| `libro.proceso_bloqueado` | billing (crons) | empresa_id, proceso, tipo, hasta, fecha, documentos, ejemplos[] |
 | `dte.certificado` / `dte.rechazado` / `dte.anulado` | fiscal (FEL) | dte_id, empresa_id, documento_tipo, documento_id; certificado: tipo_dte, autorizacion, serie, numero, contingencia; rechazado: error, definitivo; anulado: motivo |
 | `fel.contingencia_cambiada` | fiscal (FEL) | empresa_id, activa, motivo |
 | `factura.sustituida` | billing | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo |
@@ -190,6 +192,15 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `lealtad.puntos_por_vencer` / `lealtad.puntos_vencidos` | lealtad (cron) | empresa_id, cliente_id, puntos; por vencer: vence_en, lote_id; vencidos: movimiento_id |
 | `lealtad.referido_calificado` | lealtad | referido_id, empresa_id, referidor_id, cliente_id |
 | `lealtad.canje_reservado` / `lealtad.canje_aplicado` / `lealtad.canje_revertido` | lealtad | canje_id, empresa_id, cliente_id, servicio_id, premio_id, tipo, puntos, factura_id |
+| `sorteo.bases_publicadas` | lealtad (sorteos) | sorteo_id, empresa_id, bases_hash, compromiso, fecha_sorteo |
+| `sorteo.corte_cerrado` | lealtad (sorteos) | sorteo_id, empresa_id, participantes, boletos, lista_hash |
+| `sorteo.ejecutado` | lealtad (sorteos) | sorteo_id, empresa_id, ganadores[] (cliente_id, tipo, posicion) |
+| `sorteo.premio_entregado` | lealtad (sorteos) | sorteo_id, empresa_id, cliente_id, posicion |
+| `sorteo.cancelado` | lealtad (sorteos) | sorteo_id, empresa_id, motivo |
+| `sorteo.entrega_anulada` | lealtad (sorteos) | sorteo_id, empresa_id, cliente_id, posicion, motivo |
+| `sorteo.ganador_notificado` | lealtad (sorteos) | sorteo_id, empresa_id, ganador_id, cliente_id, posicion, tipo, codigo, premio, reclamar_antes, sustituye_a |
+| `sorteo.premio_no_reclamado` | lealtad (sorteos) | sorteo_id, empresa_id, ganador_id, cliente_id, posicion, premio_posicion, suplente_id, motivo |
+| `sorteo.acta_cerrada` | lealtad (sorteos) | sorteo_id, empresa_id, acta_hash |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |
