@@ -6,6 +6,7 @@ import { configuracionDeServicio } from '#billing/configuracion'
 import { claveFactura, periodosHasta } from '#billing/periodos'
 import EmitirFactura from '#billing/actions/emitir_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
+import { BloqueosDeCorrida, type BloqueoCorrida } from '#billing/bloqueos_corrida'
 
 /**
  * `facturas.generar` (cron y `POST /facturas/generar`): emite **todo lo pendiente hasta `hasta`**
@@ -16,6 +17,10 @@ import RegistrarCorrida from '#billing/actions/registrar_corrida'
  * auditada por factura) para cada periodo ya iniciado que no tenga factura con su `clave_unica`.
  * Correrla dos veces no duplica nada. Un servicio que falla no detiene la corrida: se cuenta en
  * `errores` y se registra en el log.
+ *
+ * Bloqueos del libro (fase 6): un servicio cuya factura cae bajo un bloqueo (422/409) no se
+ * factura; se cuenta en `bloqueados` (no en `errores`), la corrida lo detalla en `bloqueos` y
+ * avisa con `libro.proceso_bloqueado`. Sigue pendiente: la siguiente corrida lo vuelve a intentar.
  */
 
 export const TAMANO_LOTE = 500
@@ -37,6 +42,9 @@ export interface ResultadoGeneracion {
     bonificadas: number
     bonificaciones: number[]
     errores: number
+    /** servicios que no se facturaron por un bloqueo del libro (se reintentan) */
+    bloqueados: number
+    bloqueos: BloqueoCorrida[]
 }
 
 interface FilaCandidato {
@@ -58,7 +66,10 @@ export default class GenerarFacturas {
             bonificadas: 0,
             bonificaciones: [],
             errores: 0,
+            bloqueados: 0,
+            bloqueos: [],
         }
+        const bloqueos = new BloqueosDeCorrida()
 
         let cursor = 0
         for (;;) {
@@ -84,6 +95,13 @@ export default class GenerarFacturas {
                 try {
                     await this.generarServicio(servicio, hasta, existentes, resultado, ctx)
                 } catch (error) {
+                    if (bloqueos.registrarError(error, servicio.id)) {
+                        logger.warn(
+                            { err: error, servicioId: servicio.id, requestId: ctx.requestId },
+                            'Factura bajo un bloqueo del libro: queda pendiente',
+                        )
+                        continue
+                    }
                     resultado.errores += 1
                     logger.error(
                         { err: error, servicioId: servicio.id, requestId: ctx.requestId },
@@ -94,8 +112,14 @@ export default class GenerarFacturas {
             if (lote.length < TAMANO_LOTE) break
         }
 
+        resultado.bloqueados = bloqueos.total
+        resultado.bloqueos = bloqueos.lista()
         await new RegistrarCorrida(this.nombre).execute(
-            { parametros: { hasta, servicio_id: input.servicio_id ?? null }, resultado: { ...resultado } },
+            {
+                parametros: { hasta, servicio_id: input.servicio_id ?? null },
+                resultado: { ...resultado },
+                bloqueos: resultado.bloqueos,
+            },
             ctx,
         )
         return resultado

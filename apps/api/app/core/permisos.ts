@@ -173,9 +173,10 @@ export const PERMISOS = {
     'libros.habilitar': 'Registrar habilitaciones de folios de libros',
     'libro.cerrar_ejercicio': 'Cerrar el ejercicio anual (resultados a cero y reserva legal)',
     'libro.reabrir_ejercicio': 'Reabrir un ejercicio cerrado (con motivo); solo admin',
-    'libro.bloquear': 'Bloquear el libro hasta una fecha (bloqueo normal)',
+    'libro.bloquear': 'Bloquear el libro hasta una fecha (global, ventas, compras o impuestos); solo avanza',
     'libro.bloquear_duro': 'Bloqueo duro del libro (no retrocede); solo admin',
-    'libro.desbloquear': 'Quitar el bloqueo normal del libro (con motivo)',
+    'libro.desbloquear': 'Mover hacia atrás o quitar un bloqueo global, de ventas o de compras (con motivo)',
+    'libro.excepcion_bloqueo': 'Crear y revocar excepciones de bloqueo con fecha de fin; solo admin',
     'declaraciones.ver': 'Ver obligaciones fiscales y borradores de declaraciones',
     'declaraciones.calcular': 'Calcular borradores de declaraciones',
     'declaraciones.revisar': 'Marcar como revisado un borrador de declaración',
@@ -245,13 +246,16 @@ const PERMISOS_FISCALES = NOMBRES_PERMISOS.filter(
     (p) =>
         p === 'empresas.cambiar_pais' ||
         /^(fiscal|fel|proveedores|compras|libros|declaraciones|activos)\./.test(p) ||
-        /^libro\.(cerrar_ejercicio|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear)$/.test(p),
+        /^libro\.(cerrar_ejercicio|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear|excepcion_bloqueo)$/.test(
+            p,
+        ),
 )
 const SOLO_ADMIN_FISCAL: readonly Permiso[] = [
     'fiscal.instalar',
     'fel.configurar',
     'libro.bloquear_duro',
     'libro.reabrir_ejercicio',
+    'libro.excepcion_bloqueo',
     'empresas.cambiar_pais',
 ]
 export const PERMISOS_FISCALES_CONTABILIDAD = PERMISOS_FISCALES.filter((p) => !SOLO_ADMIN_FISCAL.includes(p))

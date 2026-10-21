@@ -5,7 +5,7 @@ import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { cuentaIngresoDeLinea, totalesDe, type LineaCalculada } from '#billing/facturas'
 import { aplicarAnticipos } from '#billing/cobros'
-import { cuentaIva, fechaContableAbierta } from '#billing/fel_facturas'
+import { cuentaIva } from '#billing/fel_facturas'
 import { configuracionFel, modoEmision, type CertificarAl, type ModoEmision } from '#fiscal/fel/configuracion'
 import {
     ERROR_RECEPTOR,
@@ -264,7 +264,10 @@ export async function contabilizarFactura(t: Transaccion, f: FacturaParaContabil
     await new RegistrarAsiento().execute(
         {
             empresa_id: f.empresa_id,
-            fecha: f.fecha ? await fechaContableAbierta(t.trx, f.fecha, f.empresa_id) : undefined,
+            // confirmación de una por_certificar: la fecha de certificación o, si está cerrada o
+            // bloqueada, el primer día abierto (con la real en fecha_documento, §10.1 y §10.4)
+            fecha: f.fecha,
+            trasladar_si_bloqueado: f.fecha !== undefined,
             descripcion: `Factura ${f.id} · ${f.descripcion}`,
             origen_tipo: 'factura',
             origen_id: f.id,

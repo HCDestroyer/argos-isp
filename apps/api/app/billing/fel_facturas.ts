@@ -1,9 +1,7 @@
-import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { DateTime } from 'luxon'
+import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
-import { periodoCerrado } from '#ledger/cierres'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import type { DteFila } from '#fiscal/fel/dte'
@@ -45,23 +43,6 @@ export async function ivaPorCertificarDe(cliente: QueryClientContract, facturaId
 }
 
 /**
- * Fecha contable de un asiento automático (reclasificación, confirmación de emisión): la del
- * hecho, o el primer día del primer mes abierto si su mes ya está cerrado (contrato §10.1: la
- * fecha real queda en el DTE).
- */
-export async function fechaContableAbierta(
-    cliente: TransactionClientContract,
-    fecha: string,
-    empresaId: number,
-): Promise<string> {
-    let actual = fecha
-    for (let i = 0; i < 36 && (await periodoCerrado(cliente, actual, empresaId)); i++) {
-        actual = DateTime.fromISO(actual, { zone: 'utc' }).plus({ months: 1 }).startOf('month').toISODate()!
-    }
-    return actual
-}
-
-/**
  * Al certificarse el DTE de un aviso: `2.1.11 / 2.1.02` por lo que el aviso tenía por certificar.
  * Idempotente por DTE (si ya hay una reclasificación viva de ese DTE no hace nada). Devuelve el
  * monto reclasificado.
@@ -85,7 +66,8 @@ export async function reclasificarIva(
     await new RegistrarAsiento().execute(
         {
             empresa_id: factura.empresa_id,
-            fecha: await fechaContableAbierta(t.trx, fecha, factura.empresa_id),
+            fecha,
+            trasladar_si_bloqueado: true,
             descripcion: `Reclasificación del IVA del aviso ${factura.id} al certificar el DTE ${dte.id} (${dte.serie ?? ''}-${dte.numero ?? ''})`,
             origen_tipo: 'reclasificacion',
             origen_id: dte.id,

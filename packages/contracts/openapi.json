@@ -28893,6 +28893,1007 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/bloqueos": {
+      "get": {
+        "operationId": "libroBloqueos",
+        "summary": "Bloqueos vigentes por tipo de cada empresa",
+        "description": "Por empresa: el hasta vigente de global, ventas, compras, impuestos y duro (null = sin bloqueo) y la última fila de cada tipo. Un asiento con fecha ≤ hasta de un bloqueo que le aplica responde 422 periodo_bloqueado (409 bloqueo_duro), salvo con una excepción vigente.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bloqueos por empresa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BloqueosEmpresa"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "libroBloquear",
+        "summary": "Bloquear el libro hasta una fecha (global, ventas, compras o impuestos)",
+        "description": "Solo avanza (422 bloqueo_regresivo: para retroceder, /libro/bloqueos/desbloquear); no futuro (422 bloqueo_futuro); nunca antes del duro (422 bloqueo_bajo_duro). Ventas: diario de ventas; compras: diario de compras y pagos a proveedores; impuestos: asientos con una cuenta de impuesto; global: todo. Emite libro.bloqueo_cambiado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "ventas",
+                      "compras",
+                      "impuestos"
+                    ],
+                    "description": "global, ventas, compras o impuestos"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "hasta",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bloqueo fijado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BloqueoLibro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.bloquear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.bloquear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/bloqueos/desbloquear": {
+      "post": {
+        "operationId": "libroDesbloquear",
+        "summary": "Mover hacia atrás o quitar un bloqueo global, de ventas o de compras (con motivo)",
+        "description": "hasta anterior al vigente o null (sin bloqueo). Impuestos no retrocede (422 bloqueo_regresivo: usar una excepción); el duro nunca (409 bloqueo_duro). 409 sin_bloqueo si el tipo no tiene. Emite libro.bloqueo_cambiado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "ventas",
+                      "compras"
+                    ],
+                    "description": "Por defecto global; impuestos y duro no retroceden"
+                  },
+                  "hasta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Nuevo bloqueo, anterior al vigente; null = sin bloqueo de ese tipo"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bloqueo movido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BloqueoLibro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.desbloquear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.desbloquear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/bloqueos/duro": {
+      "post": {
+        "operationId": "libroBloquearDuro",
+        "summary": "Bloqueo duro del libro (irreversible; solo admin)",
+        "description": "confirmacion = «BLOQUEO DURO hasta AAAA-MM-DD» (422 confirmacion_invalida). Solo avanza (422 bloqueo_regresivo). Exige meses cerrados, ningún DTE sin certificar y ninguna línea de extracto sin conciliar hasta esa fecha (422 bloqueo_duro_requisitos, errors[].rule = meses_abiertos, dte_pendientes, extractos_sin_conciliar). Después: nada con fecha ≤ hasta, ni con excepción (409 bloqueo_duro), y ningún mes se reabre. Emite libro.bloqueo_cambiado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "confirmacion": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "description": "Exactamente «BLOQUEO DURO hasta AAAA-MM-DD», con la misma fecha"
+                  }
+                },
+                "required": [
+                  "hasta",
+                  "motivo",
+                  "confirmacion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bloqueo duro fijado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BloqueoLibro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.bloquear_duro; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.bloquear_duro",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/bloqueos/excepciones": {
+      "get": {
+        "operationId": "libroExcepcionesBloqueo",
+        "summary": "Excepciones de bloqueo (la más reciente primero)",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "global",
+                "ventas",
+                "compras",
+                "impuestos"
+              ]
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vigente",
+                "vencida",
+                "revocada"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de excepciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ExcepcionBloqueo"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "libroCrearExcepcionBloqueo",
+        "summary": "Excepción de bloqueo con fecha de fin (solo admin)",
+        "description": "Permite a usuario_id (null = todos) registrar bajo el bloqueo tipo hasta hasta_en. Sin hasta_en o con tipo duro: 422 excepcion_sin_fin. Cubre solo su tipo; cada asiento que entra por ella guarda excepcion_id.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo libro se bloquea; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "ventas",
+                      "compras",
+                      "impuestos",
+                      "duro"
+                    ],
+                    "description": "Tipo de bloqueo que cubre; duro → 422 excepcion_sin_fin"
+                  },
+                  "usuario_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "null = todos los usuarios"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "hasta_en": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time",
+                    "description": "Fin de la excepción, futuro; sin él → 422 excepcion_sin_fin"
+                  }
+                },
+                "required": [
+                  "tipo",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Excepción creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcepcionBloqueo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.excepcion_bloqueo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.excepcion_bloqueo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/bloqueos/excepciones/{id}/revocar": {
+      "post": {
+        "operationId": "libroRevocarExcepcionBloqueo",
+        "summary": "Revocar una excepción de bloqueo (con motivo)",
+        "description": "No cubre asientos nuevos desde ahora. 409 excepcion_revocada si ya lo estaba.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Excepción revocada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcepcionBloqueo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.excepcion_bloqueo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.excepcion_bloqueo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/bloqueos/historial": {
+      "get": {
+        "operationId": "libroBloqueosHistorial",
+        "summary": "Historia de bloqueos (el más reciente primero)",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "global",
+                "ventas",
+                "compras",
+                "impuestos",
+                "duro"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de bloqueos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BloqueoLibro"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/cuentas": {
       "get": {
         "operationId": "libroCuentas",
@@ -43866,6 +44867,7 @@
                         "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
                         "libro.desbloquear",
+                        "libro.excepcion_bloqueo",
                         "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
                         "libro.registrar_asiento",
@@ -44157,6 +45159,7 @@
                         "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
                         "libro.desbloquear",
+                        "libro.excepcion_bloqueo",
                         "libro.reabrir_ejercicio",
                         "libro.reabrir_periodo",
                         "libro.registrar_asiento",
@@ -50221,6 +51224,7 @@
                             "libro.cerrar_ejercicio",
                             "libro.cerrar_periodo",
                             "libro.desbloquear",
+                            "libro.excepcion_bloqueo",
                             "libro.reabrir_ejercicio",
                             "libro.reabrir_periodo",
                             "libro.registrar_asiento",
@@ -52719,6 +53723,22 @@
             "minimum": 1,
             "description": "Asiento de reverso de este, si ya se revirtió"
           },
+          "fecha_documento": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Fecha real de un asiento automático que se registró en el primer día abierto porque la suya estaba cerrada o bloqueada (§10.4); null si no se trasladó"
+          },
+          "excepcion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Excepción de bloqueo por la que entró el asiento (§10.4); null si no hizo falta"
+          },
           "diario": {
             "type": [
               "string",
@@ -53233,6 +54253,150 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "BloqueoLibro": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "tipo",
+          "hasta",
+          "anterior",
+          "motivo",
+          "creado_por",
+          "creado_por_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "global",
+              "ventas",
+              "compras",
+              "impuestos",
+              "duro"
+            ]
+          },
+          "hasta": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Nada se registra con fecha ≤ hasta bajo este tipo; null = sin bloqueo de ese tipo"
+          },
+          "anterior": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Bloqueo vigente de ese tipo antes de esta fila"
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "creado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BloqueosEmpresa": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "vigentes",
+          "ultimos"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "vigentes": {
+            "type": "object",
+            "required": [
+              "global",
+              "ventas",
+              "compras",
+              "impuestos",
+              "duro"
+            ],
+            "properties": {
+              "global": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "Bloqueo global vigente"
+              },
+              "ventas": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "Bloqueo ventas vigente"
+              },
+              "compras": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "Bloqueo compras vigente"
+              },
+              "impuestos": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "Bloqueo impuestos vigente"
+              },
+              "duro": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "Bloqueo duro vigente"
+              }
+            },
+            "description": "hasta vigente de cada tipo (null = sin bloqueo)"
+          },
+          "ultimos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BloqueoLibro"
+            },
+            "description": "Última fila de cada tipo que tiene alguna"
           }
         }
       },
@@ -59365,6 +60529,115 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ExcepcionBloqueo": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "tipo",
+          "usuario_id",
+          "usuario_nombre",
+          "motivo",
+          "hasta_en",
+          "estado",
+          "creada_por",
+          "creada_por_nombre",
+          "created_at",
+          "revocada_en",
+          "revocada_por",
+          "motivo_revocacion",
+          "asientos"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "global",
+              "ventas",
+              "compras",
+              "impuestos"
+            ]
+          },
+          "usuario_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "null = todos los usuarios"
+          },
+          "usuario_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "hasta_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "vencida",
+              "revocada"
+            ]
+          },
+          "creada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "creada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revocada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revocada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "motivo_revocacion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asientos": {
+            "type": "integer",
+            "description": "Asientos que entraron por esta excepción"
           }
         }
       },
@@ -71389,6 +72662,66 @@
           "errores": {
             "type": "integer",
             "description": "Servicios que no se pudieron facturar (ver log)"
+          },
+          "bloqueados": {
+            "type": "integer",
+            "description": "Documentos que no se contabilizaron por un bloqueo del libro; se reintentan en la siguiente corrida"
+          },
+          "bloqueos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "tipo",
+                "hasta",
+                "fecha",
+                "documentos",
+                "ejemplos"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "global",
+                    "ventas",
+                    "compras",
+                    "impuestos",
+                    "duro"
+                  ]
+                },
+                "hasta": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date",
+                  "description": "Bloqueo vigente de ese tipo"
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "Fecha contable que quedó bajo el bloqueo"
+                },
+                "documentos": {
+                  "type": "integer",
+                  "description": "Servicios o facturas que no se contabilizaron"
+                },
+                "ejemplos": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "description": "Los primeros 20 ids"
+                }
+              }
+            },
+            "description": "Detalle por empresa y tipo de bloqueo (también va en libro.proceso_bloqueado)"
           }
         }
       },
@@ -71750,7 +73083,9 @@
         "required": [
           "vencidas",
           "moras",
-          "errores"
+          "errores",
+          "bloqueados",
+          "bloqueos"
         ],
         "properties": {
           "vencidas": {
@@ -71764,6 +73099,66 @@
           "errores": {
             "type": "integer",
             "description": "Facturas que no se pudieron procesar (ver log)"
+          },
+          "bloqueados": {
+            "type": "integer",
+            "description": "Documentos que no se contabilizaron por un bloqueo del libro; se reintentan en la siguiente corrida"
+          },
+          "bloqueos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "tipo",
+                "hasta",
+                "fecha",
+                "documentos",
+                "ejemplos"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "global",
+                    "ventas",
+                    "compras",
+                    "impuestos",
+                    "duro"
+                  ]
+                },
+                "hasta": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date",
+                  "description": "Bloqueo vigente de ese tipo"
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "Fecha contable que quedó bajo el bloqueo"
+                },
+                "documentos": {
+                  "type": "integer",
+                  "description": "Servicios o facturas que no se contabilizaron"
+                },
+                "ejemplos": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "description": "Los primeros 20 ids"
+                }
+              }
+            },
+            "description": "Detalle por empresa y tipo de bloqueo (también va en libro.proceso_bloqueado)"
           }
         }
       },
