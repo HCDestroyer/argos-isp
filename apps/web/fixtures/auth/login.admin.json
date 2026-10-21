@@ -177,6 +177,7 @@
       "libro.bloquear",
       "libro.bloquear_duro",
       "libro.desbloquear",
+      "libro.excepcion_bloqueo",
       "declaraciones.ver",
       "declaraciones.calcular",
       "declaraciones.revisar",

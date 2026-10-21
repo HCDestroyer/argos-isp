@@ -8,6 +8,7 @@ import { entrar } from './ayudas'
  * en modo fixtures.
  */
 const PANTALLAS = [
+    ['bloqueos del libro', '/libro/bloqueos'],
     ['inicio', '/'],
     ['clientes', '/clientes'],
     ['ficha de cliente', '/clientes/1'],
