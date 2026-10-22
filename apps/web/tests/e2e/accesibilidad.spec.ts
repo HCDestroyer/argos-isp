@@ -61,6 +61,11 @@ const PANTALLAS = [
     ['libros legales', '/libros'],
     ['emisiones de libros', '/libros/emisiones?emision=3'],
     ['habilitaciones de folios', '/libros/habilitaciones'],
+    // Calendario fiscal y feriados (fase 7 PR A).
+    ['calendario fiscal', '/fiscal/calendario'],
+    ['calendario fiscal en lista', '/fiscal/calendario?vista=lista'],
+    ['obligación fiscal', '/fiscal/calendario?obligacion=8'],
+    ['feriados', '/configuracion/fiscal?pestana=feriados'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
