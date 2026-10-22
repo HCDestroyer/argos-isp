@@ -2464,6 +2464,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fiscal/feriados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feriados (días inhábiles para los plazos) de un año
+         * @description Globales. vigentes = fechas inhábiles del año (la última fila de cada fecha, activa); historial = todas las altas y retiros. Sin filas solo son inhábiles sábados y domingos (confirmar con contador).
+         */
+        get: operations["fiscalFeriados"];
+        put?: never;
+        /**
+         * Agregar o retirar un feriado
+         * @description Global: requiere alcance global (403 alcance_global_requerido). Solo inserción; activo = false lo retira. En la misma transacción recalcula el calendario de todas las empresas (vencimientos sin presentar). Emite fiscal.parametros_cambiados (claves [feriados]). 409 feriado_duplicado; 422 feriado_inexistente.
+         */
+        post: operations["fiscalAgregarFeriado"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fiscal/frases": {
         parameters: {
             query?: never;
@@ -2551,6 +2575,43 @@ export interface paths {
         };
         /** Paquetes de localización publicados */
         get: operations["fiscalLocalizaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/obligaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calendario fiscal: obligaciones por vencimiento
+         * @description De la empresa activa (o empresas=todas con alcance global), por vence_en ascendente. Las genera el cron fiscal:calendario para todo lo pendiente hasta el periodo en curso, según el régimen y las banderas vigentes en cada periodo; un vencimiento en día inhábil (sábado, domingo o fiscal.feriados) corre al siguiente hábil. dias_restantes y vencida se calculan con la fecha de hoy en Guatemala.
+         */
+        get: operations["fiscalObligaciones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/obligaciones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver una obligación del calendario fiscal */
+        get: operations["fiscalObligacion"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9963,6 +10024,42 @@ export interface components {
             /** @description Saldo pendiente de las facturas vencidas */
             total: components["schemas"]["Dinero"];
         };
+        FeriadoAgregado: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            nombre: string;
+            activo: boolean;
+            /** @enum {string} */
+            origen: "paquete" | "usuario";
+            motivo: string;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @description Recalculo del calendario de todas las empresas */
+            calendario: components["schemas"]["ResultadoCalendarioFiscal"];
+        };
+        FeriadoFiscal: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            nombre: string;
+            /** @description false = retiro del feriado de esa fecha */
+            activo: boolean;
+            /** @enum {string} */
+            origen: "paquete" | "usuario";
+            motivo: string;
+            creado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        FeriadosFiscales: {
+            anio: number;
+            /** @description Fechas inhábiles vigentes del año */
+            vigentes: components["schemas"]["FeriadoFiscal"][];
+            /** @description Todas las filas del año (altas y retiros) */
+            historial: components["schemas"]["FeriadoFiscal"][];
+        };
         FoliosLibro: {
             empresa_id: number;
             /** @enum {string} */
@@ -10697,6 +10794,46 @@ export interface components {
             factura: components["schemas"]["FacturaDetalle"];
             /** @description Cómo quedó el servicio de la factura (reactivación inmediata) */
             servicios: components["schemas"]["ServicioEvaluado"][];
+        };
+        ObligacionFiscal: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            impuesto: "iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr";
+            /** @description Nombre de la obligación para mostrar */
+            nombre: string;
+            /** @enum {string} */
+            periodicidad: "mensual" | "trimestral" | "anual";
+            /** Format: date */
+            periodo_desde: string;
+            /** Format: date */
+            periodo_hasta: string;
+            /** @description SAT-2237…; null = por confirmar con contador */
+            formulario: string | null;
+            /**
+             * Format: date
+             * @description Vencimiento ya corrido al día hábil si caía en inhábil
+             */
+            vence_en: string;
+            /** @description Días calendario de hoy (Guatemala) al vencimiento; negativo si venció */
+            dias_restantes: number;
+            /** @description Venció sin presentarse (pendiente o borrador) */
+            vencida: boolean;
+            /** @enum {string} */
+            estado: "pendiente" | "borrador" | "presentada" | "no_aplica";
+            /** @description Por qué no aplica: regimen_<régimen>, no_es_agente_retencion_iva, sin_retenciones_isr, cuarto_trimestre_con_la_anual, antes_de_inicio_libros */
+            motivo_estado: string | null;
+            /** @description Borrador de la declaración (fase 7 PR B) */
+            declaracion_id: number | null;
+            /** @description Cómo se calculó el vencimiento: parametro, valor, vigente_desde, nivel, vence_base y corrido_a_habil */
+            regla: {
+                [key: string]: unknown;
+            };
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         PaginaCanjesLealtad: {
             data: components["schemas"]["CanjeLealtad"][];
@@ -12926,6 +13063,21 @@ export interface components {
             /** @description Líneas con regla cliente sin un pago único que coincida */
             sin_pago: number[];
             sin_regla: number[];
+        };
+        ResultadoCalendarioFiscal: {
+            /** Format: date */
+            hoy: string;
+            empresas: number;
+            creadas: number;
+            actualizadas: number;
+            /** @description Obligaciones que pasaron a no_aplica */
+            sin_aplicar: number;
+            errores: {
+                empresa_id: number;
+                impuesto: string | null;
+                codigo: string;
+                detalle: string;
+            }[];
         };
         ResultadoCorte: {
             /** @description Horas de corte procesadas (HH:MM; * = corte manual) */
@@ -24405,6 +24557,127 @@ export interface operations {
             };
         };
     };
+    fiscalFeriados: {
+        parameters: {
+            query?: {
+                /** @description Año; por defecto el año en curso (Guatemala) */
+                anio?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Feriados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeriadosFiscales"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalAgregarFeriado: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date */
+                    fecha: string;
+                    /** @description Obligatorio al agregar; al retirar (activo = false) se toma el vigente */
+                    nombre?: string | null;
+                    /** @description false = la fecha deja de ser feriado (fila nueva; nada se borra) */
+                    activo?: boolean;
+                    motivo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Feriado y recalculo del calendario */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeriadoAgregado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     fiscalFrases: {
         parameters: {
             query?: {
@@ -24772,6 +25045,120 @@ export interface operations {
             };
             /** @description Sin el permiso fiscal.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalObligaciones: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                /** @description Uno o varios impuestos (se repite el parámetro) */
+                impuesto?: ("iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr")[];
+                /** @description Uno o varios estados (se repite el parámetro); por defecto todos */
+                estado?: ("pendiente" | "borrador" | "presentada" | "no_aplica")[];
+                /** @description Vence desde (inclusive) */
+                desde?: string;
+                /** @description Vence hasta (inclusive) */
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de obligaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ObligacionFiscal"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalObligacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Obligación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObligacionFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

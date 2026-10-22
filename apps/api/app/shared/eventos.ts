@@ -483,6 +483,33 @@ export interface CatalogoEventos {
         empresa_id: number
         campos: Array<'regimen' | 'fel_modo' | 'proveedor' | 'credenciales' | 'establecimientos' | 'frases'>
     }
+    /**
+     * Calendario fiscal (fase 7 PR A, §11.3 y §21): una obligación sin presentar alcanzó un umbral
+     * (`umbral` 7, 3, 1 o 0 días). Una vez por obligación y umbral; `dias` = días calendario que
+     * faltan (igual al umbral salvo que el cron haya estado detenido). Lo emite el cron.
+     */
+    'fiscal.vencimiento_proximo': {
+        obligacion_id: number
+        empresa_id: number
+        impuesto: string
+        periodo_desde: string
+        periodo_hasta: string
+        formulario: string | null
+        vence_en: string
+        dias: number
+        umbral: number
+    }
+    /**
+     * Pequeño contribuyente: lo facturado del año (libro de ventas) alcanzó `umbral_pct` del
+     * `pc_limite_anual`. Una vez por umbral y año. Montos con 2 decimales.
+     */
+    'fiscal.limite_pc': {
+        empresa_id: number
+        umbral_pct: string
+        acumulado: string
+        limite: string
+        anio: number
+    }
     // FEL (A3, `contratos/localizacion-fiscal.md` §11.3)
     'dte.certificado': {
         dte_id: number
@@ -859,6 +886,8 @@ export const EVENTOS = [
     'fiscal.localizacion_instalada',
     'fiscal.parametros_cambiados',
     'fiscal.config_cambiada',
+    'fiscal.vencimiento_proximo',
+    'fiscal.limite_pc',
     'dte.certificado',
     'dte.rechazado',
     'dte.anulado',

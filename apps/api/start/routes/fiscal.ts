@@ -64,6 +64,7 @@ import CambiarContingenciaFel from '#fiscal/actions/cambiar_contingencia_fel'
 import ReintentarDte from '#fiscal/actions/reintentar_dte'
 import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import CertificarLote from '#fiscal/actions/certificar_lote'
+import calendario from '#start/routes/calendario'
 
 /** Empresa de una consulta: `empresa_id` (con acceso) o la activa (o la única activa). */
 async function empresaConsulta(ctx: HttpContext, empresaId?: number | null): Promise<number> {
@@ -344,6 +345,7 @@ const fiscal: Ruta[] = [
         handler: (ctx, { cuerpo }) => new AgregarFrase().execute(cuerpo, ctx.contextoAccion()),
     }),
     ...fel(),
+    ...calendario,
 ]
 
 /*

@@ -77,12 +77,28 @@ Lecturas (`fel.ver`): `GET /fel/proveedores` (catálogo de certificadores: campo
 
 Lecturas (`libros.ver`): `GET /libros/diario`, `/libros/mayor`, `/libros/ventas`, `/libros/compras` (`formato` `json`, `csv`, `xlsx`, `pdf`), `GET /libros/folios`, `GET /libros/habilitaciones`, `GET /libros/emisiones[/:id]`, `GET /libros/emisiones/:id/archivo`.
 
+## Calendario fiscal y alertas (fase 7 PR A, contrato §3.7, §9.3 y §21)
+
+- `l10n/gt/obligaciones.ts`: qué presenta cada régimen (`iva_mensual`, `pc_mensual`, `isr_opcional_mensual`, `isr_trimestral`, `iso_trimestral`, `isr_anual`, `retenciones_iva`, `retenciones_isr`), con su periodicidad, su condición (bandera `agente_retencion_iva` o retención de ISR en el libro) y el parámetro que fija plazo y formulario (leído con vigencia al fin del periodo).
+- `calendario.ts`: días hábiles (lunes a viernes sin `fiscal.feriados`), vencimientos (`mes_siguiente`, n días hábiles o calendario del mes siguiente, fecha fija del año siguiente; inhábil → siguiente hábil), periodos y lecturas.
+- `fiscal.obligaciones` es el calendario: una fila por (empresa, impuesto, periodo); la generación la concilia (vencimiento nuevo, `no_aplica` con motivo y de vuelta) con `version` y `audit.cambios` (`obligacion_fiscal`); nada se borra. `fiscal.feriados` (global) y `fiscal.alertas` son de solo inserción.
+- Cron `fiscal:calendario` (job `calendario` del `fiscal:worker`, cada hora y al arrancar, con lock): `fiscal.generar_calendario` y `fiscal.emitir_alertas`, todo lo pendiente hasta hoy. `ConsumidorCalendario` (billing-worker) regenera la empresa al recibir `fiscal.parametros_cambiados` de régimen, banderas, `inicio_libros` o plazos.
+
+| Acción (permiso)                               | Ruta                    | Qué hace                                                                                                        |
+| ---------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `fiscal.generar_calendario` (sistema)          | cron, consumidor        | Genera y concilia las obligaciones de todo lo pendiente hasta el periodo en curso                               |
+| `fiscal.emitir_alertas` (sistema)              | cron                    | `fiscal.vencimiento_proximo` (umbrales 7, 3, 1, 0) y `fiscal.limite_pc` (umbrales de `pc_alertas`), sin repetir |
+| `fiscal.agregar_feriado` (`fiscal.configurar`) | `POST /fiscal/feriados` | Agrega o retira un feriado (global) y recalcula el calendario de todas las empresas                             |
+
+Lecturas: `GET /fiscal/obligaciones` y `/fiscal/obligaciones/:id` (`declaraciones.ver`), `GET /fiscal/feriados?anio=` (`fiscal.ver`).
+
 ## Eventos
 
 - Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`).
 - Libros: `libro.emitido` (emisión oficial con folio).
+- Calendario: `fiscal.vencimiento_proximo` y `fiscal.limite_pc` (cron); `fiscal.parametros_cambiados` con `claves: ['feriados']` al cambiar un feriado.
 - FEL: `dte.certificado`, `dte.rechazado` (`definitivo`), `dte.anulado`, `fel.contingencia_cambiada` y `factura.sustituida`. En `obligatoria` con `emitir`, `factura.emitida` sale al certificarse.
-- Consume `fiscal.parametros_cambiados` (grupo `billing`) para invalidar la caché y `pago.registrado` (`ConsumidorFel`) para pedir la certificación de los avisos cubiertos.
+- Consume `fiscal.parametros_cambiados` (grupo `billing`) para regenerar el calendario (`ConsumidorCalendario`) y para invalidar la caché y `pago.registrado` (`ConsumidorFel`) para pedir la certificación de los avisos cubiertos.
 
 ## Libro (`ledger`) en esta fase
 

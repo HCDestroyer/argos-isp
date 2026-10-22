@@ -245,3 +245,66 @@ export const loteFelValidator = vine.compile(
         hasta: fechaIso().optional(),
     }),
 )
+
+// ---------------------------------------------------------------------------------------------
+// Calendario fiscal (fase 7 PR A)
+// ---------------------------------------------------------------------------------------------
+
+/** `?x=a` (uno) o `?x=a&x=b` (varios) → lista. */
+const repetible = (valor: unknown) =>
+    valor === undefined || valor === null || Array.isArray(valor) ? valor : [valor]
+
+export const listarObligacionesValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        impuesto: vine
+            .array(
+                vine.enum([
+                    'iva_mensual',
+                    'pc_mensual',
+                    'isr_opcional_mensual',
+                    'isr_trimestral',
+                    'iso_trimestral',
+                    'isr_anual',
+                    'retenciones_iva',
+                    'retenciones_isr',
+                ] as const),
+            )
+            .parse(repetible)
+            .optional()
+            .meta({ description: 'Uno o varios impuestos (se repite el parámetro)' }),
+        estado: vine
+            .array(vine.enum(['pendiente', 'borrador', 'presentada', 'no_aplica'] as const))
+            .parse(repetible)
+            .optional()
+            .meta({ description: 'Uno o varios estados (se repite el parámetro); por defecto todos' }),
+        desde: fechaIso().optional().meta({ description: 'Vence desde (inclusive)' }),
+        hasta: fechaIso().optional().meta({ description: 'Vence hasta (inclusive)' }),
+    }),
+)
+
+export const consultaFeriadosValidator = vine.compile(
+    vine.object({
+        anio: vine
+            .number()
+            .withoutDecimals()
+            .range([2000, 2100])
+            .optional()
+            .meta({ description: 'Año; por defecto el año en curso (Guatemala)' }),
+    }),
+)
+
+export const agregarFeriadoValidator = vine.compile(
+    vine.object({
+        fecha: fechaIso(),
+        nombre: vine.string().trim().maxLength(120).nullable().optional().meta({
+            description: 'Obligatorio al agregar; al retirar (activo = false) se toma el vigente',
+        }),
+        activo: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'false = la fecha deja de ser feriado (fila nueva; nada se borra)' }),
+        motivo: motivo(),
+    }),
+)
