@@ -3577,7 +3577,7 @@ async function verificarLibroCon(
                  OR (r.impuesto = 'pc_mensual' AND (q.ret <> ${t('r', 'retenciones')} OR ${delMes('r', IVA)} <> 0))`,
         )
         await revisar(
-            '22.pago_de_declaracion_mal_contabilizado (pago_impuesto de una declaración revisada de su empresa: 2.1.06 (o 2.1.09) debe = impuesto, 5.4.02 debe = mora + multa, caja o banco haber = total; uno por versión y Σ impuesto del periodo ≤ a pagar)',
+            '22.pago_de_declaracion_mal_contabilizado (pago_impuesto de una declaración revisada de su empresa: 2.1.06 (o 2.1.09) debe = impuesto, 5.4.02 debe = mora + multa, caja o banco haber = total; impuesto = a pagar de su versión − lo pagado antes en el periodo)',
             `SELECT 'pago' AS que, dp.id, dp.empresa_id, dp.declaracion_id, dp.total::text,
                     (SELECT json_agg(json_build_object('cuenta', cu.codigo, 'debe', m.debe, 'haber', m.haber))
                        FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id WHERE m.asiento_id = dp.asiento_id) AS partidas
@@ -3594,10 +3594,12 @@ async function verificarLibroCon(
                      OR (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
                           WHERE m.asiento_id = a.id AND ${CAJA_O_BANCO('cu.codigo')}) <> dp.total
                      OR (SELECT count(*) FROM ledger.movimientos m WHERE m.asiento_id = a.id) > 3
-                     OR (SELECT sum(x.impuesto) FROM fiscal.declaraciones_pagos x JOIN fiscal.declaraciones y ON y.id = x.declaracion_id
-                          WHERE y.empresa_id = d.empresa_id AND y.impuesto = d.impuesto AND y.periodo_desde = d.periodo_desde)
-                        > (SELECT ${t('z', 'a_pagar')} FROM fiscal.declaraciones z WHERE z.empresa_id = d.empresa_id AND z.impuesto = d.impuesto
-                             AND z.periodo_desde = d.periodo_desde AND z.revisada_en IS NOT NULL ORDER BY z.version DESC LIMIT 1))
+                     -- el pago es lo que su versión dejó por pagar menos lo pagado antes en el periodo; una
+                     -- sustitutiva posterior (cascada H34) puede dejar saldo a favor en 2.1.06 sin tocar el pago
+                     OR dp.impuesto <> ${t('d', 'a_pagar')} - coalesce((SELECT sum(x.impuesto) FROM fiscal.declaraciones_pagos x
+                          JOIN fiscal.declaraciones y ON y.id = x.declaracion_id
+                         WHERE y.empresa_id = d.empresa_id AND y.impuesto = d.impuesto AND y.periodo_desde = d.periodo_desde
+                           AND x.id < dp.id), 0))
              UNION ALL
              SELECT 'asiento_sin_pago', a.id, a.empresa_id, a.origen_id, NULL, NULL
                FROM ledger.asientos a

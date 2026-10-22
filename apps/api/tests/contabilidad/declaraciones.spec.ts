@@ -13,6 +13,9 @@ import EditarParametro from '#fiscal/actions/editar_parametro'
 import CalcularDeclaracion from '#fiscal/actions/calcular_declaracion'
 import RevisarDeclaracion from '#fiscal/actions/revisar_declaracion'
 import RegistrarPagoDeclaracion from '#fiscal/actions/registrar_pago_declaracion'
+import MarcarDeclaracionPresentada from '#fiscal/actions/marcar_declaracion_presentada'
+import RegistrarAsiento from '#ledger/actions/registrar_asiento'
+import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import CrearExcepcionBloqueo from '#ledger/actions/crear_excepcion_bloqueo'
 import AnularFactura from '#billing/actions/anular_factura'
@@ -345,7 +348,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H34: una sustitutiva de un mes cuyo siguiente ya está liquidado cambia el remanente que ese siguiente arrastró', async ({
+    test('H34 (arreglado en 655001f): la sustitutiva de un mes rehace en cascada el siguiente ya liquidado con el remanente nuevo', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -373,13 +376,147 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         await compra(e, e.B, '56.00') // crédito 6
         const v2 = await declarar(e, e.B, 'iva_mensual', MES, { sustitutiva: true })
         await new RevisarDeclaracion().execute({ declaracion_id: v2.id }, e.ctx)
-        // el siguiente quedó revisado con el remanente viejo: el crédito de 6 no lo arrastra nadie
+        // la cascada rehízo el siguiente con el remanente 30
+        const siguienteAhora = (await db
+            .from('fiscal.declaraciones')
+            .where({ empresa_id: e.B, impuesto: 'iva_mensual', periodo_desde: `${SIGUIENTE}-01` })
+            .orderBy('version', 'desc')
+            .firstOrFail()) as { version: number; estado: string; totales: Record<string, string> }
+        assert.deepEqual(
+            [
+                siguienteAhora.version,
+                siguienteAhora.estado,
+                siguienteAhora.totales.remanente_credito_anterior,
+            ],
+            [2, 'revisada', '30.00'],
+        )
         const violaciones = await verificarLibro([e.B, e.C])
         assert.deepEqual(
             violaciones.map((x) => x.invariante.split(' ')[0]),
             [],
         )
-    }).fails(
-        'H34: revisar la sustitutiva de un mes no exige recalcular el siguiente ya liquidado (remanente desfasado)',
-    )
+    })
+
+    test('cascada con el mes siguiente ya pagado y presentado: saldo a favor en 2.1.06, obligación por rectificar; cascada_bloqueada no guarda nada', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        await new EditarParametro().execute(
+            {
+                empresa_id: e.B,
+                clave: 'inicio_libros',
+                valor: '2026-01-01',
+                vigente_desde: '2014-01-01',
+                motivo: 'Libros en ArgosIsp (auditor)',
+            },
+            e.ctx,
+        )
+        const compraEn = async (fecha: string, total: string) => {
+            const proveedor = await proveedorEn(e.B, e.ctx)
+            return new RegistrarCompra().execute(
+                {
+                    proveedor_id: proveedor.id,
+                    tipo_documento: 'FACT',
+                    numero: unico('D'),
+                    fecha_documento: fecha,
+                    periodo_iva: `${fecha.slice(0, 7)}-01`,
+                    condicion: 'credito',
+                    lineas: [{ descripcion: 'Enlace de tránsito', total }],
+                },
+                e.ctx,
+            )
+        }
+        // mes anterior: crédito 36; este mes: débito 48 → usa 36, paga 12
+        await compraEn(`${ANTERIOR}-10`, '336.00')
+        const anterior = await declarar(e, e.B, 'iva_mensual', ANTERIOR)
+        await new RevisarDeclaracion().execute({ declaracion_id: anterior.id }, e.ctx)
+        await venta(e.B, '448.00')
+        relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
+        const mes = await declarar(e, e.B, 'iva_mensual')
+        assert.include(mes.totales, { credito_usado: '36.00', a_pagar: '12.00' })
+        await new RevisarDeclaracion().execute({ declaracion_id: mes.id }, e.ctx)
+        await new MarcarDeclaracionPresentada().execute(
+            { declaracion_id: mes.id, numero_formulario: '2237-1', fecha_presentacion: `${SIGUIENTE}-05` },
+            e.ctx,
+        )
+        await new RegistrarPagoDeclaracion().execute(
+            {
+                declaracion_id: mes.id,
+                metodo: 'cuenta_bancaria',
+                cuenta_bancaria_id: e.cuentas.get(e.B)!,
+                fecha: HOY,
+            },
+            e.ctx,
+        )
+        assert.equal(await saldoCuenta(e.B, '2.1.06'), '0.00')
+
+        // un ajuste manual a 2.1.02 sin etiqueta en el mes liquidado (el bloqueo de impuestos no lo alcanza)
+        const ajuste = await new RegistrarAsiento().execute(
+            {
+                empresa_id: e.B,
+                fecha: HOY,
+                descripcion: 'Ajuste manual al IVA (auditor)',
+                origen_tipo: 'ajuste',
+                movimientos: [
+                    { cuenta: '1.1.02.01', debe: '5.00' },
+                    { cuenta: '2.1.02', haber: '5.00' },
+                ],
+            },
+            e.ctx,
+        )
+        // compra tardía del mes anterior (con excepción): su sustitutiva cambia el remanente de 36 a 42
+        await new CrearExcepcionBloqueo().execute(
+            {
+                empresa_id: e.B,
+                tipo: 'impuestos',
+                motivo: 'Factura recibida tarde',
+                hasta_en: new Date(Date.now() + 3_600_000).toISOString(),
+            },
+            e.ctx,
+        )
+        await compraEn(`${ANTERIOR}-20`, '56.00')
+        const sustitutiva = await declarar(e, e.B, 'iva_mensual', ANTERIOR, { sustitutiva: true })
+        const foto = async () => {
+            const { rows } = await db.rawQuery(
+                `SELECT (SELECT count(*) FROM fiscal.declaraciones WHERE empresa_id = ?)::int AS declaraciones,
+                        (SELECT string_agg(id || ':' || estado, ',' ORDER BY id) FROM fiscal.declaraciones WHERE empresa_id = ?) AS estados,
+                        (SELECT count(*) FROM ledger.asientos WHERE empresa_id = ?)::int AS asientos,
+                        (SELECT count(*) FROM ledger.bloqueos WHERE empresa_id = ?)::int AS bloqueos,
+                        (SELECT coalesce(sum(version), 0) FROM fiscal.obligaciones WHERE empresa_id = ?)::int AS obligaciones,
+                        (SELECT count(*) FROM audit.outbox WHERE (payload ->> 'empresa_id')::bigint = ?)::int AS eventos`,
+                [e.B, e.B, e.B, e.B, e.B, e.B],
+            )
+            return rows[0]
+        }
+        const antes = await foto()
+        const bloqueada = await errorDe(
+            new RevisarDeclaracion().execute({ declaracion_id: sustitutiva.id }, e.ctx),
+        )
+        assert.deepEqual([bloqueada.status, bloqueada.codigo], [409, 'cascada_bloqueada'])
+        assert.deepEqual(
+            await foto(),
+            antes,
+            'nada se guardó: ni versiones, ni asientos, ni bloqueos, ni eventos',
+        )
+
+        // se corrige el ajuste y la cascada pasa: el mes ya pagado queda con 6 a favor en 2.1.06
+        await new RevertirAsiento().execute({ asiento_id: ajuste.id, motivo: 'Ajuste indebido' }, e.ctx)
+        const revisada = await new RevisarDeclaracion().execute({ declaracion_id: sustitutiva.id }, e.ctx)
+        assert.lengthOf(revisada.cascada, 1)
+        assert.include(revisada.cascada[0]!, {
+            estaba_presentada: true,
+            remanente_credito_anterior: '42.00',
+            a_pagar: '6.00',
+        })
+        assert.equal(await saldoCuenta(e.B, '2.1.06'), '6.00')
+        const obligacion = await db
+            .from('fiscal.obligaciones')
+            .where({ empresa_id: e.B, impuesto: 'iva_mensual', periodo_desde: `${MES}-01` })
+            .firstOrFail()
+        assert.deepEqual([obligacion.estado, obligacion.motivo_estado], ['borrador', 'rectificativa'])
+        const sustituidaMes = await db.from('fiscal.declaraciones').where('id', mes.id).firstOrFail()
+        assert.deepEqual([sustituidaMes.estado, sustituidaMes.numero_formulario], ['sustituida', '2237-1'])
+        assert.lengthOf(await db.from('fiscal.declaraciones_pagos').where('empresa_id', e.B), 1)
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 })
