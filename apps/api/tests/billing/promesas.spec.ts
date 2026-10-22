@@ -395,7 +395,15 @@ test.group('billing · promesas: aprobación y endpoints', () => {
         client,
         assert,
     }) => {
-        const { servicioId } = await servicioCortado()
+        // Solo se prueba el plazo por canal: sin la regla de la siguiente facturación, que
+        // rechazaría la promesa los días en que hoy + 10 cae en o después del 1 del mes.
+        const { servicioId } = await servicioCortado({
+            plantilla: {
+                reglas_promesa: JSON.stringify(
+                    normalizarReglasPromesa({ no_exceder_siguiente_facturacion: false }),
+                ),
+            },
+        })
         const { token } = await usuarioConRoles(['admin'])
         const vence = new Date(Date.now() + 10 * 86_400_000).toISOString()
 
