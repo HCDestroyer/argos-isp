@@ -12,9 +12,15 @@ import EmitirLibro from '#fiscal/actions/emitir_libro'
 import { construirLibro, finDeMes } from '#fiscal/libros_legales'
 import { CERO, aTexto } from '#ledger/dinero'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
-import { empresasSinFel, habilitar, mesConMovimiento, neto } from '#tests/contabilidad/ayudas_libros'
+import {
+    cerrarYBloquear,
+    empresasSinFel,
+    habilitar,
+    mesConMovimiento,
+    neto,
+} from '#tests/contabilidad/ayudas_libros'
 import { haceMeses } from '#tests/ledger/ayudas_compras'
-import { cola, configurarModo, datosNit } from '#tests/fiscal/ayudas_fel'
+import { cola, configurarModo, datosNit, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
 import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import EditarParametro from '#fiscal/actions/editar_parametro'
 import VencerFactura from '#billing/actions/vencer_factura'
@@ -38,7 +44,12 @@ import { crearClienteFila } from '#tests/core/fabricas'
  * y se certifica en un mes posterior volvía a sumar como DTE en el libro del mes de la certificación.
  * Ahora el DTE sale como fila informativa sin montos (`certificado_posterior`).
  *
- * H32 (abierto): la mora con IVA sin FEL (asiento `mora`, IVA a 2.1.02) no sale en el libro de ventas.
+ * H32 (arreglado por A3 en 0c5f602): la mora con IVA sin FEL (asiento `mora`, IVA a 2.1.02) no salía en el
+ * libro de ventas; ahora es la fila interna `MORA`.
+ *
+ * H33 (abierto): el DTE de un aviso de cobro lleva sus montos en el mes de su `fecha_emision`, pero la
+ * reclasificación 2.1.11 → 2.1.02 se fecha con la certificación: si la certificación cae en el mes
+ * siguiente, el libro de ventas emitido de un mes no cuadra con 2.1.02 (inv. 20).
  */
 
 test.group('Auditor contable · hallazgos de la fase 6', (group) => {
@@ -219,7 +230,7 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H32: la mora con IVA de una empresa sin FEL no sale en el libro de ventas (su IVA está en 2.1.02)', async ({
+    test('H32 (arreglado en 0c5f602): la mora con IVA de una empresa sin FEL sale en el libro de ventas (su IVA está en 2.1.02)', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -248,5 +259,55 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
             ventas.reporte.totales.iva,
             aTexto(CERO.minus(await neto(e.B, '2.1.02', mes.desde, mes.hasta))),
         )
-    }).fails('H32: el libro de ventas solo toma asientos factura y nota_credito; la mora va con origen mora')
+        // la mora sin IVA (empresa C, sin mora_con_iva) no es documento fiscal ni mueve 2.1.02: no sale
+        const c = await servicioFacturado(e.C, inicioDeMes(hoy), {
+            precio: '150.00',
+            instalacion: inicioDeMes(hoy),
+            plantilla: { certificar_al: 'nunca', mora_tipo: 'fija', mora_valor: '20.00', dias_gracia: 0 },
+        })
+        const sinIva = await new VencerFactura().execute({ factura_id: c.facturas[0]!.id, hoy }, e.ctx)
+        assert.lengthOf(sinIva.moras, 1)
+        const ventasC = await construirLibro('ventas', e.C, mes)
+        assert.deepEqual(
+            ventasC.reporte.filas.map((f) => f.tipo),
+            ['FACTURA'],
+        )
+    })
+
+    test('H33: aviso cuyo DTE nace a fin de mes y se certifica en el mes siguiente: el libro de ventas emitido del primer mes no cuadra con 2.1.02', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'pagar', '112.00', await crearClienteFila(datosNit()))
+        await new RegistrarPago().execute(
+            { cliente_id: s.clienteId, metodo: 'caja', monto: '112.00', empresa_id: e.B },
+            e.ctx,
+        )
+        await cola(e)
+        const dte = await db
+            .from('fiscal.dte')
+            .where({ documento_tipo: 'factura', documento_id: s.facturas[0]!.id })
+            .whereNotNull('autorizacion')
+            .firstOrFail()
+        // el DTE se pidió (pago del 30) el mes anterior y el certificador lo devolvió hoy: la
+        // reclasificación queda con la fecha de la certificación
+        await db.rawQuery(
+            `UPDATE fiscal.dte SET fecha_emision = fecha_emision - interval '1 month' WHERE id = ?`,
+            [dte.id],
+        )
+        const desde = haceMeses(1)
+        await cerrarYBloquear(e, e.B, desde)
+        await habilitar(e, e.B, 'ventas', 1, 50)
+        const emision = await new EmitirLibro().execute({ empresa_id: e.B, libro: 'ventas', desde }, e.ctx)
+        assert.deepEqual(
+            {
+                iva_libro: emision.totales.iva,
+                iva_debito: aTexto(CERO.minus(await neto(e.B, '2.1.02', desde, finDeMes(desde)))),
+            },
+            { iva_libro: '0.00', iva_debito: '0.00' },
+        )
+        await afirmarLibro(assert, [e.B, e.C])
+    }).fails(
+        'H33: el DTE de un aviso suma en el mes de su fecha de emisión y la reclasificación en el de su certificación',
+    )
 })

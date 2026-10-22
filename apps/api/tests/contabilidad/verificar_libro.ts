@@ -3283,6 +3283,8 @@ async function verificarLibroCon(
               WHERE debe IS NULL OR haber IS NULL OR debe::numeric <> debe_libro OR haber::numeric <> haber_libro
                  OR debe_libro <> haber_libro OR (libro = 'diario' AND filas <> filas_diario)`,
         )
+        // fase 7: la liquidación mensual del IVA moverá 2.1.02 sin ser venta; ese asiento (origen de la
+        // declaración) se excluye de este cuadre cuando exista. Un ajuste manual a 2.1.02 lo rompe a propósito.
         await revisar(
             '20.libro_ventas_distinto_del_iva_debito (libro de ventas emitido, con sus meses aún cerrados: Σ IVA = movimiento de 2.1.02 de la empresa en el rango; cada venta suma una sola vez y en el mes en que se movió el débito)',
             `SELECT e.id AS emision_id, e.empresa_id, to_char(e.desde, 'YYYY-MM') AS desde, to_char(e.hasta, 'YYYY-MM') AS hasta,
