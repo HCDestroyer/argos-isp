@@ -225,6 +225,7 @@ defineExpose({ cargar })
                                 color="warning"
                                 variant="outline"
                                 size="xs"
+                                :data-prueba="`supervisar-${row.original.clave}`"
                                 @click="aRevisar = { check: row.original, estado: 'supervisado' }"
                             />
                             <UButton
@@ -234,6 +235,7 @@ defineExpose({ cargar })
                                 color="neutral"
                                 variant="ghost"
                                 size="xs"
+                                :data-prueba="`retirar-${row.original.clave}`"
                                 @click="aRevisar = { check: row.original, estado: 'anomalia' }"
                             />
                         </div>
