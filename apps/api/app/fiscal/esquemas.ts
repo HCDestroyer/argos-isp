@@ -748,3 +748,30 @@ export const DeclaracionDetalle = definirEsquema(
         },
     }),
 )
+
+export const DeclaracionRevisada = definirEsquema(
+    'DeclaracionRevisada',
+    objeto({
+        ...camposDeclaracion,
+        cascada: {
+            ...lista(
+                objeto({
+                    periodo: { ...texto, description: 'AAAA-MM' },
+                    declaracion_id: id,
+                    version: entero,
+                    sustituye_a: id,
+                    estaba_presentada: {
+                        ...booleano,
+                        description:
+                            'La versión sustituida estaba presentada: la obligación vuelve a «por presentar» (rectificativa)',
+                    },
+                    remanente_credito_anterior: dinero,
+                    remanente_credito: dinero,
+                    a_pagar: dinero,
+                }),
+            ),
+            description:
+                'Meses posteriores ya revisados que se rectificaron en la misma transacción porque cambió el remanente que arrastran (H34)',
+        },
+    }),
+)
