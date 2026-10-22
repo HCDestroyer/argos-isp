@@ -116,6 +116,8 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
     const avisoCobro = modo === 'aviso'
     const tipoDte = modo === 'sin_fel' ? null : await tipoFacturaDte(datos.empresa_id, hoyGuatemala(), t.trx)
 
+    // receptor al emitir (H29): el libro de ventas no cambia si después se edita el cliente
+    const receptorFactura = await receptorDe(t.trx, datos.cliente_id, datos.receptor)
     const insertadas = (await t.trx
         .knexQuery()
         .table('billing.facturas')
@@ -137,6 +139,11 @@ export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Prom
             aviso_cobro: avisoCobro,
             certificar_al: datos.certificar_al,
             tipo_dte: tipoDte,
+            receptor: JSON.stringify({
+                tipo: receptorFactura.tipo,
+                id: receptorFactura.id,
+                nombre: receptorFactura.nombre,
+            }),
         })
         .onConflict('clave_unica')
         .ignore()
