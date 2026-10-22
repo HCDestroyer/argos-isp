@@ -13,6 +13,7 @@ import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { saldoSegunNaturaleza } from '#ledger/consultas'
 import { ValidacionFallida } from '#shared/errores'
+import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { COLUMNAS_LIBRO_COMPRAS, filasLibroCompras, mesesDelRango } from '#fiscal/libros'
 
@@ -471,7 +472,7 @@ const DINERO_VENTAS = COLUMNAS_LIBRO_VENTAS.filter((c) => c.tipo === 'dinero').m
 
 interface DocumentoVenta {
     origen: 'dte' | 'interno'
-    clase: 'factura' | 'nota_credito' | 'nota_debito'
+    clase: 'factura' | 'mora' | 'nota_credito' | 'nota_debito'
     id: number
     factura_id: number | null
     fecha: string
@@ -530,15 +531,17 @@ export async function libroVentasLegal(
              SELECT x.origen_tipo AS clase, x.origen_id AS id, min(x.fecha) AS fecha,
                     (SELECT min(r.fecha) FROM ledger.asientos r WHERE r.reversa_de = min(x.id)) AS reverso,
                     EXISTS (SELECT 1 FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                             WHERE m.asiento_id = min(x.id) AND c.codigo = :cuenta_aviso) AS aviso
+                             WHERE m.asiento_id = min(x.id) AND c.codigo = :cuenta_aviso) AS aviso,
+                    EXISTS (SELECT 1 FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                             WHERE m.asiento_id = min(x.id) AND c.codigo = :cuenta_debito) AS debito_iva
                FROM ledger.asientos x
-              WHERE x.empresa_id = :empresa AND x.origen_tipo IN ('factura', 'nota_credito') AND x.reversa_de IS NULL
+              WHERE x.empresa_id = :empresa AND x.origen_tipo IN ('factura', 'nota_credito', 'mora') AND x.reversa_de IS NULL
               GROUP BY x.origen_tipo, x.origen_id
          ), debito AS (
              SELECT * FROM orig WHERE NOT aviso
          ), dte AS (
              SELECT 'dte' AS origen, d.documento_tipo AS clase, d.id,
-                    CASE WHEN d.documento_tipo = 'factura' THEN d.documento_id END AS factura_id,
+                    CASE WHEN d.documento_tipo IN ('factura', 'nota_debito') THEN d.documento_id END AS factura_id,
                     (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date AS fecha_doc,
                     CASE WHEN d.estado = 'anulado' AND NOT (o.id IS NOT NULL
                               AND date_trunc('month', o.fecha) <> date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date))
@@ -552,23 +555,31 @@ export async function libroVentasLegal(
                          THEN CASE WHEN o.fecha < (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date
                                    THEN 'certificado_posterior' ELSE 'certificado_previo' END END AS informativo,
                     CASE WHEN o.id IS NOT NULL
-                         THEN (CASE WHEN d.documento_tipo = 'factura' THEN 'Factura ' ELSE 'Nota ' END)
+                         THEN (CASE d.documento_tipo WHEN 'factura' THEN 'Factura ' WHEN 'nota_debito' THEN 'Mora '
+                                    ELSE 'Nota ' END)
                               || d.documento_id || ' del ' || to_char(o.fecha, 'YYYY-MM-DD') END AS referencia
                FROM fiscal.dte d
-               LEFT JOIN debito o ON o.clase = d.documento_tipo AND o.id = d.documento_id
+               LEFT JOIN debito o ON o.id = d.documento_id
+                    AND o.clase = CASE d.documento_tipo WHEN 'nota_debito' THEN 'mora' ELSE d.documento_tipo END
               WHERE d.empresa_id = :empresa AND d.autorizacion IS NOT NULL
                 AND d.estado IN ('certificado', 'anulacion_pendiente', 'anulado')
          ), facturas AS (
              -- sin FEL (o certificada en otro mes): la fila interna en el mes de su asiento
-             SELECT 'interno' AS origen, 'factura' AS clase, f.id, f.id AS factura_id, o.fecha AS fecha_doc,
+             SELECT 'interno' AS origen, CASE WHEN f.tipo = 'mora' THEN 'mora' ELSE 'factura' END AS clase,
+                    f.id, f.id AS factura_id, o.fecha AS fecha_doc,
                     CASE WHEN f.estado = 'anulada' THEN coalesce(o.reverso,
                         (f.anulada_en AT TIME ZONE 'America/Guatemala')::date) END AS fecha_anul,
-                    'FACTURA' AS tipo, NULL::text AS serie, f.id::text AS numero, NULL::text AS autorizacion,
+                    CASE WHEN f.tipo = 'mora' THEN 'MORA' ELSE 'FACTURA' END AS tipo, NULL::text AS serie,
+                    f.id::text AS numero, NULL::text AS autorizacion,
                     coalesce(f.receptor->>'id', 'CF') AS nit, coalesce(f.receptor->>'nombre', '') AS cliente,
                     f.total::text AS total, f.iva::text AS iva, NULL::text AS informativo, NULL::text AS referencia
-               FROM billing.facturas f JOIN debito o ON o.clase = 'factura' AND o.id = f.id
+               FROM billing.facturas f
+               JOIN debito o ON o.id = f.id AND o.clase = CASE WHEN f.tipo = 'mora' THEN 'mora' ELSE 'factura' END
               WHERE f.empresa_id = :empresa AND f.clave_externa IS NULL
-                AND NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura'
+                -- la mora sin IVA y sin DTE no es documento fiscal (no mueve 2.1.02)
+                AND (f.tipo <> 'mora' OR o.debito_iva)
+                AND NOT EXISTS (SELECT 1 FROM fiscal.dte d
+                                 WHERE d.documento_tipo = CASE WHEN f.tipo = 'mora' THEN 'nota_debito' ELSE 'factura' END
                                    AND d.documento_id = f.id AND d.autorizacion IS NOT NULL
                                    AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta
                                    AND date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
@@ -612,6 +623,7 @@ export async function libroVentasLegal(
             desde: rango.desde,
             hasta: rango.hasta,
             cuenta_aviso: CUENTAS_GT.IVA_POR_CERTIFICAR,
+            cuenta_debito: CUENTAS.IVA_DEBITO,
         },
     )) as { rows: DocumentoVenta[] }
 
@@ -652,7 +664,14 @@ export async function libroVentasLegal(
             sinMontos || anulacion || r.factura_id === null
                 ? CERO
                 : (retenciones.get(Number(r.factura_id)) ?? CERO)
-        const nombre = r.origen === 'dte' ? 'DTE' : r.clase === 'factura' ? 'Factura' : 'Nota'
+        const nombre =
+            r.origen === 'dte'
+                ? 'DTE'
+                : r.clase === 'factura'
+                  ? 'Factura'
+                  : r.clase === 'mora'
+                    ? 'Mora'
+                    : 'Nota'
         return {
             fecha: r.fecha,
             origen: r.origen,
