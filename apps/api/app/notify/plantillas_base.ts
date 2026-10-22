@@ -169,6 +169,21 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
             '{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
             '\nSu asiento se revirtió y el monto volvió al saldo de la factura. Si el crédito sigue siendo válido, emite una nota nueva con los datos corregidos.',
     ),
+    // Calendario fiscal (fase 7 PR A, contrato §14 y §21): la empresa y su NIT en el texto.
+    ...alertaFiscal(
+        'alerta.fiscal.vencimiento_proximo',
+        '{{#alerta.hoy}}HOY · {{/alerta.hoy}}Declaración por vencer: {{alerta.impuesto}}, {{alerta.periodo}} ({{empresa.nombre}})',
+        'La declaración {{alerta.impuesto}} del periodo {{alerta.periodo}} de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}} {{alerta.cuando}}: {{alerta.vence}}.' +
+            '\nFormulario: {{#alerta.formulario}}{{alerta.formulario}}{{/alerta.formulario}}{{^alerta.formulario}}por confirmar con el contador{{/alerta.formulario}}' +
+            '\nPresenta la declaración ante la SAT antes de esa fecha. {{^alerta.hoy}}Mientras siga pendiente en el calendario fiscal, se vuelve a avisar al acercarse el vencimiento (7, 3 y 1 días antes y el mismo día).{{/alerta.hoy}}{{#alerta.hoy}}Hoy es el último día: después del vencimiento corren multa e intereses.{{/alerta.hoy}}',
+    ),
+    ...alertaFiscal(
+        'alerta.fiscal.limite_pc',
+        '{{#alerta.supera}}Límite del pequeño contribuyente superado: debe pasar al régimen general{{/alerta.supera}}{{^alerta.supera}}Pequeño contribuyente al {{alerta.umbral_texto}} del límite anual{{/alerta.supera}} ({{empresa.nombre}})',
+        'Lo facturado por {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}} en {{alerta.anio}} suma {{alerta.acumulado_q}}{{#alerta.porcentaje}}, el {{alerta.porcentaje}}{{/alerta.porcentaje}} del límite anual del pequeño contribuyente ({{alerta.limite_q}}).' +
+            '{{#alerta.supera}}\nLa empresa superó el límite: {{empresa.nombre}} debe pasar al régimen general del IVA. Coordina con el contador la actualización ante la SAT y, ya hecha, cambia el régimen en la configuración fiscal del panel. ArgosIsp no cambia el régimen por su cuenta.{{/alerta.supera}}' +
+            '{{^alerta.supera}}{{#alerta.disponible_q}}\nQuedan {{alerta.disponible_q}} antes del límite.{{/alerta.disponible_q}} Al llegar al 100 % la empresa debe pasar al régimen general del IVA: revisa con el contador desde cuándo hacer el cambio.{{/alerta.supera}}',
+    ),
     // Horus Flow (contratos/horus.md §3.4): avisos, nunca cortes.
     {
         evento: 'alerta.horus.hallazgo',
