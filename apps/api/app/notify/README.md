@@ -157,7 +157,7 @@ Avisos por Telegram al chat del equipo (`TELEGRAM_CHAT_EQUIPO`), no a clientes. 
 
 ## Avisos fiscales (FEL, fase 3)
 
-Contrato de localización fiscal §14. Los procesa `RegistrarAlerta` (mismo consumidor, mismos incidentes que las alertas internas), pero con la **configuración de canales de la empresa del evento** (`empresa_id`: la suya si tiene `hereda = false`, si no la global) y por **dos canales**: Telegram al chat del equipo y correo a `correo.contabilidad`. Un envío por canal con origen `alerta:<incidente>:<fase>` y `empresa_id` de la empresa (sale con su remitente y su bot).
+Contrato de localización fiscal §14. Los procesa `RegistrarAlerta` (mismo consumidor, mismos incidentes que las alertas internas), pero con la **configuración de canales de la empresa del evento** (`empresa_id`: la suya si tiene `hereda = false`, si no la global) y por **dos canales**: Telegram al chat del equipo y correo a `correo.contabilidad` (respaldo: usuarios con rol `contabilidad` de la empresa). Un envío por canal con origen `alerta:<incidente>:<fase>` y `empresa_id` de la empresa (sale con su remitente y su bot).
 
 | Evento | Incidente (`clave`) | Aviso | Plantilla |
 | --- | --- | --- | --- |
@@ -170,10 +170,10 @@ Contrato de localización fiscal §14. Los procesa `RegistrarAlerta` (mismo cons
 | `fiscal.limite_pc` (calendario, fase 7) | `fiscal-pc:<empresa>:<anio>:<umbral_pct>` (umbral normalizado a 2 decimales), puntual, una vez por umbral y año | siempre: acumulado, límite, porcentaje real y lo que queda (decimal.js); con `umbral_pct ≥ 100` dice que la empresa «debe pasar al régimen general» (el sistema nunca cambia el régimen) | `alerta.fiscal.limite_pc` |
 
 - **Idempotencia.** Como las demás alertas: `notify.alertas_eventos` por `outbox:<id>` y unicidad de `notify.envios`; además, los puntuales "una vez por clave" (`unico`) no avisan de nuevo si llega otro evento con la misma clave.
-- **Interruptores.** Telegram respeta `telegram_alertas_activo` y el correo `correo_activo` de esa configuración (`omitido` con motivo). Sin chat o sin `correo.contabilidad`, el envío queda `fallido` con el motivo. Una plantilla desactivada silencia solo su canal.
+- **Interruptores.** Telegram respeta `telegram_alertas_activo` y el correo `correo_activo` de esa configuración (`omitido` con motivo). Sin chat, o sin `correo.contabilidad` ni usuarios con rol `contabilidad` de la empresa, el envío queda `fallido` con el motivo. Una plantilla desactivada silencia solo su canal.
 - **Plantillas** (telegram y correo, en español, texto plano): las siembra el seeder; si se borran, se usa el texto de `PLANTILLAS_ALERTA`.
 - **Marca.** Los del calendario fiscal nombran la empresa y su NIT (`empresa.nombre`, `empresa.nit`) en el cuerpo; el correo sale con el remitente de la configuración de esa empresa. Variables `alerta.*` en `calendario_fiscal.ts`.
-- **Destinatarios.** Los de siempre: chat del equipo y `correo.contabilidad` de la configuración de canales de la empresa (o la global si hereda). No se resuelven usuarios con rol `contabilidad`: hoy no hay correo por usuario ligado a una empresa para avisos; si se quiere, va en `a6.md`.
+- **Destinatarios del correo** (todos los avisos fiscales). `correo.contabilidad` de la configuración de canales de la empresa (o la global si hereda). Si no está configurado, los usuarios activos con rol `contabilidad` y acceso a la empresa (`alcance_global` o fila en `core.usuarios_empresas`), en una sola dirección separada por comas (`correosRolContabilidad` en `alertas.ts`). Sin ninguno, el envío queda `fallido` con el motivo.
 - **Auditoría.** `notificaciones.alertar` se audita con la empresa del evento (`empresa_id` del payload, también en la reentrega) y la entidad `incidente`.
 
 ## Particiones de auditoría (cron mensual)

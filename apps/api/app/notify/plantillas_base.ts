@@ -175,7 +175,7 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
         '{{#alerta.hoy}}HOY · {{/alerta.hoy}}Declaración por vencer: {{alerta.impuesto}}, {{alerta.periodo}} ({{empresa.nombre}})',
         'La declaración {{alerta.impuesto}} del periodo {{alerta.periodo}} de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}} {{alerta.cuando}}: {{alerta.vence}}.' +
             '\nFormulario: {{#alerta.formulario}}{{alerta.formulario}}{{/alerta.formulario}}{{^alerta.formulario}}por confirmar con el contador{{/alerta.formulario}}' +
-            '\nPresenta la declaración ante la SAT antes de esa fecha. {{^alerta.hoy}}Mientras siga pendiente en el calendario fiscal, se vuelve a avisar al acercarse el vencimiento (7, 3 y 1 días antes y el mismo día).{{/alerta.hoy}}{{#alerta.hoy}}Hoy es el último día: después del vencimiento corren multa e intereses.{{/alerta.hoy}}',
+            '\nPresenta la declaración ante la SAT antes de esa fecha. {{^alerta.hoy}}Mientras siga pendiente en el calendario fiscal, se vuelve a avisar al acercarse el vencimiento (7, 3 y 1 días antes y el mismo día).{{/alerta.hoy}}{{#alerta.hoy}}Hoy es el último día para presentar.{{/alerta.hoy}}',
     ),
     ...alertaFiscal(
         'alerta.fiscal.limite_pc',

@@ -10,7 +10,12 @@ import { ConsumidorAlertas } from '#notify/consumidor_alertas'
 import { periodoLegible } from '#notify/calendario_fiscal'
 import ConfigurarNotificaciones, { type EntradaConfigurar } from '#notify/actions/configurar_notificaciones'
 import EnviarNotificacion from '#notify/actions/enviar_notificacion'
-import { CanalFalso, ColaFalsa } from '#tests/notify/ayudas_notify'
+import {
+    apartarUsuariosContabilidad,
+    CanalFalso,
+    ColaFalsa,
+    crearUsuarioContabilidad,
+} from '#tests/notify/ayudas_notify'
 
 /**
  * Avisos del calendario fiscal (fase 7 PR A; contrato de localización fiscal §14 y §21):
@@ -87,6 +92,9 @@ function porCanal(envios: Envio[], canal: string): Envio {
     return envio
 }
 
+/** Usuarios de contabilidad apartados por una prueba; el teardown los reactiva. */
+let reactivar: (() => Promise<void>) | null = null
+
 async function empresaConMarca() {
     const nombre = unico('Fibra Norte')
     const nit = `${randomInt(1_000_000, 9_999_999)}K`
@@ -109,6 +117,8 @@ test.group('notify · calendario fiscal (vencimientos y límite del pequeño con
             telegram: { token: TOKEN, chat_equipo: CHAT_GLOBAL },
         })
         return async () => {
+            await reactivar?.()
+            reactivar = null
             reiniciarCanales()
             await db.from('notify.configuracion_canales').delete()
             await recargarConfiguracion()
@@ -295,5 +305,69 @@ test.group('notify · calendario fiscal (vencimientos y límite del pequeño con
         // Otro año, mismo umbral: avisa de nuevo
         await consumidor.procesar(evento('fiscal.limite_pc', { ...ochenta, anio: 2027 }))
         assert.lengthOf(await enviosDe((await incidente(`fiscal-pc:${empresa.id}:2027:80.00`))!.id), 2)
+    })
+
+    test('correo a contabilidad: la configuración manda; sin ella, usuarios con rol contabilidad de la empresa; sin ninguno, fallido', async ({
+        assert,
+    }) => {
+        const empresa = await empresaConMarca()
+        const otra = await empresaConMarca()
+        reactivar = await apartarUsuariosContabilidad()
+        const global = await crearUsuarioContabilidad({ alcanceGlobal: true })
+        const deLaEmpresa = await crearUsuarioContabilidad({ empresas: [empresa.id] })
+        await crearUsuarioContabilidad({ empresas: [otra.id] }) // otra empresa: no
+        await crearUsuarioContabilidad({ empresas: [empresa.id], activo: false }) // inactivo: no
+
+        const consumidor = new ConsumidorAlertas(new ColaFalsa())
+        const correoDe = async (empresaId: number) => {
+            const obligacionId = randomInt(1_000_000, 9_000_000)
+            await consumidor.procesar(
+                evento('fiscal.vencimiento_proximo', {
+                    obligacion_id: obligacionId,
+                    empresa_id: empresaId,
+                    impuesto: 'pc_mensual',
+                    periodo_desde: '2026-09-01',
+                    periodo_hasta: '2026-09-30',
+                    formulario: 'SAT-2046',
+                    vence_en: '2026-10-30',
+                    dias: 3,
+                    umbral: 3,
+                }),
+            )
+            const envios = await enviosDe((await incidente(`fiscal-vence:${obligacionId}:3`))!.id)
+            return (await db.from('notify.envios').where('id', porCanal(envios, 'correo').id).first()) as {
+                destino: string
+                estado: string
+                error: string | null
+            }
+        }
+
+        // 1. Con correo de contabilidad configurado (global heredada), va ahí aunque haya usuarios
+        assert.include(await correoDe(empresa.id), { destino: CONTA_GLOBAL, estado: 'encolado' })
+
+        // 2. Sin él: los usuarios activos con rol contabilidad y acceso a la empresa (global incluido)
+        await configurar({ correo: { contabilidad: null } })
+        assert.include(await correoDe(empresa.id), {
+            destino: `${global.email}, ${deLaEmpresa.email}`,
+            estado: 'encolado',
+        })
+        // La empresa con configuración propia sin contabilidad también usa el respaldo
+        await configurar({
+            empresa_id: otra.id,
+            hereda: false,
+            correo: { host: 'smtp.otra.gt', remitente: 'no-responder@otra.gt', contabilidad: null },
+            telegram: { token: TOKEN, chat_equipo: '-1008880202' },
+        })
+        const deOtra = await correoDe(otra.id)
+        assert.include(deOtra.destino, global.email)
+        assert.notInclude(deOtra.destino, deLaEmpresa.email)
+
+        // 3. Sin correo ni usuarios: fallido con el motivo
+        await db.from('core.usuarios').whereIn('id', [global.id, deLaEmpresa.id]).update({ activo: false })
+        assert.include(await correoDe(empresa.id), {
+            destino: '-',
+            estado: 'fallido',
+            error: 'Correo de contabilidad no configurado en la configuración global y sin usuarios activos con rol contabilidad en la empresa',
+        })
     })
 })
