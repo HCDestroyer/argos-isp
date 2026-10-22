@@ -13,6 +13,7 @@ import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { saldoSegunNaturaleza } from '#ledger/consultas'
 import { ValidacionFallida } from '#shared/errores'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { COLUMNAS_LIBRO_COMPRAS, filasLibroCompras, mesesDelRango } from '#fiscal/libros'
 
 /**
@@ -484,6 +485,9 @@ interface DocumentoVenta {
     total: string
     iva: string
     anulado: boolean
+    /** DTE de un documento cuyo IVA fue a 2.1.02 en otro mes (H31): fila sin montos */
+    informativo: 'certificado_posterior' | 'certificado_previo' | null
+    referencia: string | null
 }
 
 /**
@@ -501,6 +505,13 @@ interface DocumentoVenta {
  *   reverso del asiento o, sin él, de la anulación) va una fila `anulacion` con los valores en
  *   negativo. Así el IVA de cada mes cuadra con el movimiento de 2.1.02.
  *
+ * - H31 · los montos van al mes en que se movió 2.1.02: si el asiento original de una factura o nota
+ *   (no aviso de cobro) es de otro mes que su DTE, la fila interna lleva los montos en el mes del
+ *   asiento y el DTE sale como fila informativa sin montos (`certificado_posterior` o
+ *   `certificado_previo`), con la referencia al documento. Las facturas y notas sin DTE (o con DTE
+ *   de otro mes) son las de ese asiento; el DTE del mismo mes las reemplaza si se certificó hasta
+ *   `hasta`. Los avisos de cobro siguen con el DTE (su IVA pasa de 2.1.11 a 2.1.02 al certificarse).
+ *
  * Los avisos de cobro sin DTE no son venta fiscal (su IVA va a 2.1.11 hasta certificarse). La NCRE
  * y la nota sin DTE restan. Base = total − IVA a servicios (los planes y cargos son servicios); con
  * IVA cero, todo a exento. Retenciones recibidas: las constancias con fecha hasta `hasta` de los
@@ -513,54 +524,72 @@ export async function libroVentasLegal(
     cliente: QueryClientContract = db.connection(),
 ): Promise<LibroLegal> {
     const { rows } = (await cliente.rawQuery(
-        `WITH dte AS (
+        `WITH orig AS (
+             -- asiento original de cada factura y nota (el del IVA): fecha, reverso y si su IVA fue a
+             -- 2.1.11 (aviso de cobro sin DTE) en lugar de 2.1.02
+             SELECT x.origen_tipo AS clase, x.origen_id AS id, min(x.fecha) AS fecha,
+                    (SELECT min(r.fecha) FROM ledger.asientos r WHERE r.reversa_de = min(x.id)) AS reverso,
+                    EXISTS (SELECT 1 FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                             WHERE m.asiento_id = min(x.id) AND c.codigo = :cuenta_aviso) AS aviso
+               FROM ledger.asientos x
+              WHERE x.empresa_id = :empresa AND x.origen_tipo IN ('factura', 'nota_credito') AND x.reversa_de IS NULL
+              GROUP BY x.origen_tipo, x.origen_id
+         ), debito AS (
+             SELECT * FROM orig WHERE NOT aviso
+         ), dte AS (
              SELECT 'dte' AS origen, d.documento_tipo AS clase, d.id,
                     CASE WHEN d.documento_tipo = 'factura' THEN d.documento_id END AS factura_id,
                     (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date AS fecha_doc,
-                    CASE WHEN d.estado = 'anulado' THEN coalesce(
-                        (SELECT min(r.fecha) FROM ledger.asientos o JOIN ledger.asientos r ON r.reversa_de = o.id
-                          WHERE o.empresa_id = d.empresa_id AND o.origen_tipo = d.documento_tipo
-                            AND o.origen_id = d.documento_id AND o.reversa_de IS NULL),
-                        (d.anulado_en AT TIME ZONE 'America/Guatemala')::date) END AS fecha_anul,
+                    CASE WHEN d.estado = 'anulado' AND NOT (o.id IS NOT NULL
+                              AND date_trunc('month', o.fecha) <> date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date))
+                         THEN coalesce(o.reverso, (d.anulado_en AT TIME ZONE 'America/Guatemala')::date) END AS fecha_anul,
                     d.tipo_dte AS tipo, d.serie, d.numero, d.autorizacion,
                     coalesce(d.receptor->>'id', 'CF') AS nit, coalesce(d.receptor->>'nombre', '') AS cliente,
-                    d.total::text AS total, d.iva::text AS iva
+                    d.total::text AS total, d.iva::text AS iva,
+                    -- H31: el IVA del documento ya fue a 2.1.02 en el mes de su asiento, que es otro
+                    CASE WHEN o.id IS NOT NULL
+                          AND date_trunc('month', o.fecha) <> date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
+                         THEN CASE WHEN o.fecha < (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date
+                                   THEN 'certificado_posterior' ELSE 'certificado_previo' END END AS informativo,
+                    CASE WHEN o.id IS NOT NULL
+                         THEN (CASE WHEN d.documento_tipo = 'factura' THEN 'Factura ' ELSE 'Nota ' END)
+                              || d.documento_id || ' del ' || to_char(o.fecha, 'YYYY-MM-DD') END AS referencia
                FROM fiscal.dte d
+               LEFT JOIN debito o ON o.clase = d.documento_tipo AND o.id = d.documento_id
               WHERE d.empresa_id = :empresa AND d.autorizacion IS NOT NULL
                 AND d.estado IN ('certificado', 'anulacion_pendiente', 'anulado')
-         ), sin_dte AS (
-             SELECT f.* FROM billing.facturas f
-              WHERE f.empresa_id = :empresa AND NOT f.aviso_cobro AND f.clave_externa IS NULL
-                AND NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura'
-                                   AND d.documento_id = f.id AND d.autorizacion IS NOT NULL
-                                   AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta)
          ), facturas AS (
-             SELECT 'interno' AS origen, 'factura' AS clase, f.id, f.id AS factura_id, a.fecha AS fecha_doc,
-                    CASE WHEN f.estado = 'anulada' THEN coalesce(a.reverso,
+             -- sin FEL (o certificada en otro mes): la fila interna en el mes de su asiento
+             SELECT 'interno' AS origen, 'factura' AS clase, f.id, f.id AS factura_id, o.fecha AS fecha_doc,
+                    CASE WHEN f.estado = 'anulada' THEN coalesce(o.reverso,
                         (f.anulada_en AT TIME ZONE 'America/Guatemala')::date) END AS fecha_anul,
                     'FACTURA' AS tipo, NULL::text AS serie, f.id::text AS numero, NULL::text AS autorizacion,
                     coalesce(f.receptor->>'id', 'CF') AS nit, coalesce(f.receptor->>'nombre', '') AS cliente,
-                    f.total::text AS total, f.iva::text AS iva
-               FROM sin_dte f
-               JOIN LATERAL (SELECT min(x.fecha) AS fecha,
-                                    (SELECT min(r.fecha) FROM ledger.asientos r
-                                      WHERE r.reversa_de = min(x.id)) AS reverso
-                               FROM ledger.asientos x
-                              WHERE x.empresa_id = f.empresa_id AND x.origen_tipo = 'factura'
-                                AND x.origen_id = f.id AND x.reversa_de IS NULL) a ON a.fecha IS NOT NULL
+                    f.total::text AS total, f.iva::text AS iva, NULL::text AS informativo, NULL::text AS referencia
+               FROM billing.facturas f JOIN debito o ON o.clase = 'factura' AND o.id = f.id
+              WHERE f.empresa_id = :empresa AND f.clave_externa IS NULL
+                AND NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'factura'
+                                   AND d.documento_id = f.id AND d.autorizacion IS NOT NULL
+                                   AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta
+                                   AND date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
+                                       = date_trunc('month', o.fecha))
          ), notas AS (
-             SELECT 'interno' AS origen, 'nota_credito' AS clase, n.id, NULL::bigint AS factura_id, n.fecha AS fecha_doc,
+             SELECT 'interno' AS origen, 'nota_credito' AS clase, n.id, NULL::bigint AS factura_id, o.fecha AS fecha_doc,
                     (SELECT coalesce(a.fecha, (x.anulado_en AT TIME ZONE 'America/Guatemala')::date)
                        FROM billing.notas_credito_anulaciones x LEFT JOIN ledger.asientos a ON a.id = x.asiento_id
                       WHERE x.nota_id = n.id ORDER BY x.id LIMIT 1) AS fecha_anul,
                     'NOTA' AS tipo, NULL::text AS serie, n.id::text AS numero, NULL::text AS autorizacion,
                     coalesce(n.receptor->>'id', 'CF') AS nit, coalesce(n.receptor->>'nombre', '') AS cliente,
-                    n.monto::text AS total, n.iva::text AS iva
-               FROM billing.notas_credito n JOIN sin_dte f ON f.id = n.factura_id
+                    n.monto::text AS total, n.iva::text AS iva, NULL::text AS informativo, NULL::text AS referencia
+               FROM billing.notas_credito n
+               JOIN debito o ON o.clase = 'nota_credito' AND o.id = n.id
+               JOIN billing.facturas f ON f.id = n.factura_id AND f.clave_externa IS NULL
               WHERE n.empresa_id = :empresa
                 AND NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'nota_credito'
                                    AND d.documento_id = n.id AND d.autorizacion IS NOT NULL
-                                   AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta)
+                                   AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta
+                                   AND date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
+                                       = date_trunc('month', o.fecha))
          ), docs AS (
              SELECT * FROM dte UNION ALL SELECT * FROM facturas UNION ALL SELECT * FROM notas
          ), filas AS (
@@ -575,16 +604,21 @@ export async function libroVentasLegal(
                 AND date_trunc('month', d.fecha_anul) <> date_trunc('month', d.fecha_doc)
          )
          SELECT origen, clase, id, factura_id, to_char(fecha_fila, 'YYYY-MM-DD') AS fecha, movimiento, tipo, serie,
-                numero, autorizacion, nit, cliente, total, iva, anulado
+                numero, autorizacion, nit, cliente, total, iva, anulado, informativo, referencia
            FROM filas
           ORDER BY fecha_fila, origen, clase, id, movimiento DESC`,
-        { empresa: empresaId, desde: rango.desde, hasta: rango.hasta },
+        {
+            empresa: empresaId,
+            desde: rango.desde,
+            hasta: rango.hasta,
+            cuenta_aviso: CUENTAS_GT.IVA_POR_CERTIFICAR,
+        },
     )) as { rows: DocumentoVenta[] }
 
     const facturas = [
         ...new Set(
             rows
-                .filter((r) => r.factura_id !== null && r.movimiento === 'original')
+                .filter((r) => r.factura_id !== null && r.movimiento === 'original' && !r.informativo)
                 .map((r) => Number(r.factura_id)),
         ),
     ]
@@ -609,19 +643,22 @@ export async function libroVentasLegal(
     const filas: Fila[] = rows.map((r) => {
         const anulacion = r.movimiento === 'anulacion'
         const signo = (r.clase === 'nota_credito' ? -1 : 1) * (anulacion ? -1 : 1)
-        const total = r.anulado ? CERO : dec(r.total).times(signo)
-        const iva = r.anulado ? CERO : dec(r.iva).times(signo)
+        const sinMontos = r.anulado || r.informativo !== null
+        const total = sinMontos ? CERO : dec(r.total).times(signo)
+        const iva = sinMontos ? CERO : dec(r.iva).times(signo)
         const exento = iva.isZero() ? total : CERO
         const servicios = iva.isZero() ? CERO : total.minus(iva)
         const retenido =
-            r.anulado || anulacion || r.factura_id === null
+            sinMontos || anulacion || r.factura_id === null
                 ? CERO
                 : (retenciones.get(Number(r.factura_id)) ?? CERO)
         const nombre = r.origen === 'dte' ? 'DTE' : r.clase === 'factura' ? 'Factura' : 'Nota'
         return {
             fecha: r.fecha,
             origen: r.origen,
-            documento: `${nombre} ${r.id}${anulacion ? ' (anulación)' : ''}`,
+            documento: `${nombre} ${r.id}${anulacion ? ' (anulación)' : ''}${
+                r.referencia && r.informativo ? ` · IVA en ${r.referencia}` : ''
+            }`,
             tipo: r.tipo,
             serie: r.serie,
             numero: r.numero,
@@ -634,7 +671,7 @@ export async function libroVentasLegal(
             exento: aTexto(exento),
             iva: aTexto(iva),
             total: aTexto(total),
-            estado: anulacion ? 'anulacion' : r.anulado ? 'anulado' : 'vigente',
+            estado: anulacion ? 'anulacion' : (r.informativo ?? (r.anulado ? 'anulado' : 'vigente')),
             retenciones: aTexto(retenido),
         }
     })
