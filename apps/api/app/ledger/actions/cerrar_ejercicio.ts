@@ -16,7 +16,10 @@ import {
     type CierreAnualVista,
 } from '#ledger/ejercicios'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
-import CerrarPeriodo, { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
+import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
+import VerificarCierre from '#ledger/actions/verificar_cierre'
+import { LOCK_CIERRES } from '#ledger/cierres'
+import { exigirChecks } from '#ledger/checks'
 
 /**
  * `libro.cerrar_ejercicio` (`POST /libro/ejercicios/cerrar`, contrato de localización fiscal §9.1):
@@ -40,7 +43,9 @@ import CerrarPeriodo, { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
  *  3. Traslado `3.3.03 → 3.3.02` y 4. `3.3.02 → 3.3.01` (si el resultado no es cero).
  *  5. Reserva legal si hubo utilidad: `reserva_legal_pct` × la base (`reserva_legal_base`: el
  *     resultado antes o después del ISR), `3.3.01 / 3.2.01`.
- *  6. Cierra diciembre (`cerrar_periodo` anidada) y guarda `ledger.cierres_anuales`.
+ *  6. Cierra diciembre (`cerrar_periodo` anidada, que exige los checks mensuales de diciembre).
+ *  7. Verifica y exige los checks anuales (§10.5: `incobrables`, `resultados_cero`,
+ *     `comprobacion_cuadra`; 422 `checks_pendientes`), ya con los asientos del cierre.
  *
  * `resultado_antes_isr` es el resultado contable del año antes de la provisión del cierre (incluye
  * el ISR que ya estuviera en `5.5.01`); `resultado` = `resultado_antes_isr − isr`.
@@ -252,6 +257,16 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
                 trx: t.trx,
             },
         )
+
+        // 7. lista de verificación anual (§10.5): con los asientos del cierre adentro
+        await new VerificarCierre().execute(
+            { empresa_id: empresaId, tipo: 'anual', periodo: String(anio) },
+            t.ctx,
+            {
+                trx: t.trx,
+            },
+        )
+        await exigirChecks(t.trx, empresaId, 'anual', `${anio}-01-01`)
 
         await t.emit('ejercicio.cerrado', {
             empresa_id: empresaId,

@@ -78,42 +78,46 @@ async function saldosPorCuenta(
     tipos?: Array<FilaSaldo['tipo']>,
     sinCierreAnual = false,
 ): Promise<FilaSaldo[]> {
-    return (await db
-        .from('ledger.movimientos as m')
-        .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
-        .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
-        .where('a.fecha', '<=', rango.hasta)
-        .if(rango.desde, (q) => q.where('a.fecha', '>=', rango.desde!))
-        // la partida de cierre (y su reverso): los asientos `cierre_anual` que tocan 3.3.03; la
-        // provisión del ISR, que también es del cierre, sí es gasto del año
-        .if(sinCierreAnual, (q) =>
-            q.whereNot((w) =>
-                w.where('a.origen_tipo', 'cierre_anual').whereExists((x) =>
-                    x
-                        .from('ledger.movimientos as mx')
-                        .join('ledger.cuentas as cx', 'cx.id', 'mx.cuenta_id')
-                        .whereRaw('mx.asiento_id = a.id')
-                        .where('cx.codigo', CUENTAS_GT.PERDIDAS_GANANCIAS),
+    return (
+        (await db
+            .from('ledger.movimientos as m')
+            .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
+            .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+            .where('a.fecha', '<=', rango.hasta)
+            .if(rango.desde, (q) => q.where('a.fecha', '>=', rango.desde!))
+            // la partida de cierre (y su reverso): los asientos `cierre_anual` que tocan 3.3.03; la
+            // provisión del ISR, que también es del cierre, sí es gasto del año
+            .if(sinCierreAnual, (q) =>
+                q.whereNot((w) =>
+                    w
+                        .where('a.origen_tipo', 'cierre_anual')
+                        .whereExists((x) =>
+                            x
+                                .from('ledger.movimientos as mx')
+                                .join('ledger.cuentas as cx', 'cx.id', 'mx.cuenta_id')
+                                .whereRaw('mx.asiento_id = a.id')
+                                .where('cx.codigo', CUENTAS_GT.PERDIDAS_GANANCIAS),
+                        ),
                 ),
-            ),
-        )
-        .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
-        .if(tipos, (q) => q.whereIn('c.tipo', tipos!))
-        .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo', 'c.naturaleza')
-        .orderBy([
-            { column: 'a.empresa_id', order: 'asc' },
-            { column: 'c.codigo', order: 'asc' },
-        ])
-        .select(
-            'a.empresa_id',
-            'c.id as cuenta_id',
-            'c.codigo',
-            'c.nombre',
-            'c.tipo',
-            'c.naturaleza',
-            db.raw('sum(m.debe)::text as debe'),
-            db.raw('sum(m.haber)::text as haber'),
-        )) as FilaSaldo[]
+            )
+            .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
+            .if(tipos, (q) => q.whereIn('c.tipo', tipos!))
+            .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo', 'c.naturaleza')
+            .orderBy([
+                { column: 'a.empresa_id', order: 'asc' },
+                { column: 'c.codigo', order: 'asc' },
+            ])
+            .select(
+                'a.empresa_id',
+                'c.id as cuenta_id',
+                'c.codigo',
+                'c.nombre',
+                'c.tipo',
+                'c.naturaleza',
+                db.raw('sum(m.debe)::text as debe'),
+                db.raw('sum(m.haber)::text as haber'),
+            )) as FilaSaldo[]
+    )
 }
 
 function lineas(filas: FilaSaldo[]): LineaEstado[] {

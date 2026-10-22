@@ -13,6 +13,7 @@ import { resumenFondosEnTransito } from '#ledger/transitos'
 import { resumenCobrosPorLiquidar } from '#ledger/cobros_liquidar'
 import { verificarCadena } from '#ledger/sellos'
 import { ivaPorCertificarDe } from '#billing/fel_facturas'
+import { balanceComprobacion } from '#ledger/comprobacion'
 
 /**
  * Lista de verificación de cierre (contrato de localización fiscal §10.5). Cada check automático
@@ -23,9 +24,11 @@ import { ivaPorCertificarDe } from '#billing/fel_facturas'
  *   apertura_cero, iva_por_certificar, turnos_cerrados, fondos_transito, cobros_por_liquidar,
  *   extractos_conciliados, dte_pendientes, por_certificar (aviso: nunca bloquea),
  *   compras_sin_periodo, secuencias_sin_huecos, hash_verificado, depreciacion_al_dia.
- * - Anuales (`periodo` = 1 de enero): incobrables. `resultados_cero` y `comprobacion_cuadra`
- *   llegan con el cierre anual (PR C); los de `impuestos` (iva_cuadrado, iva_liquidado), con las
- *   declaraciones (fase 7).
+ * - Anuales (`periodo` = 1 de enero): incobrables, resultados_cero (ingresos, gastos, 3.3.03 y
+ *   3.3.02 en cero al 31-dic: pasa solo con el ejercicio cerrado) y comprobacion_cuadra (balance de
+ *   comprobación del año cuadrado antes y después del cierre). `libro.cerrar_ejercicio` los verifica
+ *   y exige después de sus asientos; el duro que cruza un fin de año, también. Los de `impuestos`
+ *   (iva_cuadrado, iva_liquidado) llegan con las declaraciones (fase 7).
  * - Los que comparan saldos con documentos (cartera, proveedores, 2.1.11, tránsito, cobros por
  *   liquidar) miran el estado al verificar, como los reportes que comparan; los demás, el periodo.
  */
@@ -89,6 +92,16 @@ export const CHECKS: readonly DefinicionCheck[] = [
         titulo: 'Cuotas de activos y diferidos del periodo contabilizadas',
     },
     { clave: 'incobrables', tipo: 'anual', titulo: 'Estimación de incobrables (1.1.12) dentro del tope' },
+    {
+        clave: 'resultados_cero',
+        tipo: 'anual',
+        titulo: 'Ingresos, gastos, 3.3.03 y 3.3.02 en cero al 31-dic (ejercicio cerrado)',
+    },
+    {
+        clave: 'comprobacion_cuadra',
+        tipo: 'anual',
+        titulo: 'Balance de comprobación del año cuadrado antes y después del cierre',
+    },
 ]
 
 export function checksDelTipo(tipo: TipoCheck): readonly DefinicionCheck[] {
@@ -422,6 +435,55 @@ const CALCULOS: Record<string, Calculo> = {
             obtenido: String(activos + diferidos),
             resultado: activos + diferidos === 0 ? 'ok' : 'anomalia',
             detalle: { activos_sin_cuota: activos, diferidos_sin_cuota: diferidos },
+        }
+    },
+
+    async resultados_cero(c, empresaId, inicio, fin) {
+        const { rows } = (await c.rawQuery(
+            `SELECT cu.codigo, sum(m.debe - m.haber)::text AS saldo
+               FROM ledger.movimientos m
+               JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+              WHERE a.empresa_id = ?
+                AND ((cu.reinicia_anual AND a.fecha BETWEEN ?::date AND ?::date)
+                     OR (cu.codigo IN (?, ?) AND a.fecha <= ?::date))
+              GROUP BY cu.codigo
+             HAVING sum(m.debe - m.haber) <> 0
+              ORDER BY cu.codigo`,
+            [empresaId, inicio, fin, CUENTAS_GT.PERDIDAS_GANANCIAS, CUENTAS_GT.RESULTADO_EJERCICIO, fin],
+        )) as { rows: Array<{ codigo: string; saldo: string }> }
+        return {
+            clave: 'resultados_cero',
+            esperado: '0',
+            obtenido: String(rows.length),
+            resultado: rows.length === 0 ? 'ok' : 'anomalia',
+            detalle:
+                rows.length > 0
+                    ? {
+                          cuentas: rows
+                              .slice(0, 20)
+                              .map((r) => ({ codigo: r.codigo, saldo: aTexto(r.saldo) })),
+                      }
+                    : null,
+        }
+    },
+
+    async comprobacion_cuadra(c, empresaId, inicio, fin) {
+        const antes = await balanceComprobacion(
+            { desde: inicio, hasta: fin, sin_cierre_anual: true },
+            [empresaId],
+            c,
+        )
+        const despues = await balanceComprobacion({ desde: inicio, hasta: fin }, [empresaId], c)
+        const cuadra = (r: typeof antes) => r.empresas.every((e) => e.totales.cuadra)
+        const descuadres = [...(cuadra(antes) ? [] : ['antes']), ...(cuadra(despues) ? [] : ['despues'])]
+        return {
+            clave: 'comprobacion_cuadra',
+            esperado: 'cuadra',
+            obtenido: descuadres.length === 0 ? 'cuadra' : `descuadra ${descuadres.join(' y ')}`,
+            resultado: descuadres.length === 0 ? 'ok' : 'anomalia',
+            detalle:
+                descuadres.length > 0 ? { antes: antes.total.totales, despues: despues.total.totales } : null,
         }
     },
 

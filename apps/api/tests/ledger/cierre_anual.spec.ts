@@ -14,6 +14,7 @@ import BloquearDuro from '#ledger/actions/bloquear_duro'
 import EditarParametro from '#fiscal/actions/editar_parametro'
 import { balanceSaldos, estadoResultados } from '#ledger/estados_financieros'
 import { balanceComprobacion } from '#ledger/comprobacion'
+import { checksVigentes } from '#ledger/checks'
 import type { ContextoAccion } from '#shared/contexto'
 
 /**
@@ -137,6 +138,17 @@ test.group('Fase 6 · cierre anual', (group) => {
         await assert.rejects(
             () => asiento(e.ctx, e.B, '2024-12-15', '5.2.99', '1.1.02.01', '1.00'),
             /cerrado/,
+        )
+
+        // checks anuales verificados con los asientos del cierre (§10.5)
+        const checks = await checksVigentes(db.connection(), e.B, 'anual', `${ANIO}-01-01`)
+        assert.deepEqual(
+            checks.map((c) => [c.clave, c.estado]),
+            [
+                ['incobrables', 'revisado'],
+                ['resultados_cero', 'revisado'],
+                ['comprobacion_cuadra', 'revisado'],
+            ],
         )
 
         // el estado de resultados del año no muestra el asiento de cierre

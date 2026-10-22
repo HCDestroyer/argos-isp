@@ -1,4 +1,5 @@
 import db from '@adonisjs/lucid/services/db'
+import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { ValidacionFallida } from '#shared/errores'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { hoyGuatemala } from '#ledger/fechas'
@@ -146,14 +147,18 @@ function armar(
     }
 }
 
-export async function balanceComprobacion(filtros: FiltrosComprobacion, empresas: number[] | null) {
+export async function balanceComprobacion(
+    filtros: FiltrosComprobacion,
+    empresas: number[] | null,
+    cliente: QueryClientContract = db.connection(),
+) {
     const hasta = filtros.hasta ?? hoyGuatemala()
     const desde = filtros.desde ?? `${hasta.slice(0, 4)}-01-01`
     if (desde > hasta) {
         throw new ValidacionFallida([{ field: 'desde', message: 'desde debe ser ≤ hasta', rule: 'rango' }])
     }
     const sinCierre = filtros.sin_cierre_anual === true
-    const filas = (await db
+    const filas = (await cliente
         .from('ledger.movimientos as m')
         .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
         .where('a.fecha', '<=', hasta)
@@ -163,13 +168,15 @@ export async function balanceComprobacion(filtros: FiltrosComprobacion, empresas
         .select(
             'a.empresa_id',
             'm.cuenta_id',
-            db.raw('coalesce(sum(m.debe - m.haber) FILTER (WHERE a.fecha < ?), 0)::text as inicial', [desde]),
-            db.raw('coalesce(sum(m.debe) FILTER (WHERE a.fecha >= ?), 0)::text as debe', [desde]),
-            db.raw('coalesce(sum(m.haber) FILTER (WHERE a.fecha >= ?), 0)::text as haber', [desde]),
+            cliente.raw('coalesce(sum(m.debe - m.haber) FILTER (WHERE a.fecha < ?), 0)::text as inicial', [
+                desde,
+            ]),
+            cliente.raw('coalesce(sum(m.debe) FILTER (WHERE a.fecha >= ?), 0)::text as debe', [desde]),
+            cliente.raw('coalesce(sum(m.haber) FILTER (WHERE a.fecha >= ?), 0)::text as haber', [desde]),
         )) as Array<{ empresa_id: number; cuenta_id: number; inicial: string; debe: string; haber: string }>
 
     const catalogo = new Map<number, FilaCuenta>()
-    for (const c of (await db
+    for (const c of (await cliente
         .from('ledger.cuentas')
         .select('id', 'codigo', 'nombre', 'tipo', 'padre_id', 'imputable')) as FilaCuenta[]) {
         catalogo.set(Number(c.id), {
