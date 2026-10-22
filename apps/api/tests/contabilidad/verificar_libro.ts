@@ -1044,7 +1044,7 @@ async function verificarLibroCon(
                                       'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
                                       'provision', 'castigo', 'compra', 'pago_proveedor', 'depreciacion',
                                       'baja_activo', 'diferido', 'alta_activo', 'lealtad', 'diferencia_cobro',
-                                      'sorteo', 'bonificacion')`,
+                                      'sorteo', 'bonificacion', 'cierre_anual')`,
     )
 
     /*
@@ -3072,6 +3072,116 @@ async function verificarLibroCon(
                                        OR p.valor_obtenido IS DISTINCT FROM k.valor_obtenido
                                        OR p.estado = k.estado OR k.revisado_por IS NULL
                                        OR length(btrim(coalesce(k.nota, ''))) < 3))`,
+    )
+
+    /*
+    | 19 · Cierre anual (fase 6 PR C; contrato de localización fiscal §9.1, §10.8 y §20, desvíos (o) y
+    | (p)): un cierre vigente por empresa y año, sus asientos del 31-dic cancelan ingresos y gastos
+    | contra 3.3.03 y dejan el resultado en 3.3.01 (menos la reserva legal); el ISR tecleado cuadra con
+    | sus cuentas; una reapertura revierte cada asiento del cierre con fecha 31-dic; los años se
+    | cierran en orden y el duro que cruza un fin de año lo exige cerrado.
+    */
+    /** neto (debe − haber) de las cuentas `codigos` en los asientos cierre_anual originales del cierre `c` */
+    const netoCierre = (c: string, codigos: string) =>
+        `(SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+            JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+           WHERE a.origen_tipo = 'cierre_anual' AND a.origen_id = ${c}.id AND a.reversa_de IS NULL AND cu.codigo IN (${codigos}))`
+    const vigenteAnual = (c: string) =>
+        `NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales r WHERE r.cierre_id = ${c}.id)`
+    await revisar(
+        '19.cierre_anual_mal_contabilizado (vigente: uno por empresa y año; sus asientos del 31-dic sin reverso; ingresos, gastos, 3.3.03 y 3.3.02 del año en cero; resultado antes del ISR = el de las cuentas de resultados sin el cierre; ISR 5.5.01 / 1.1.07 (trimestral) + 1.1.08 (ISO) + 2.1.07 (el resto); 3.2.01 = reserva y 3.3.01 = resultado − reserva; diciembre cerrado)',
+        `WITH c AS (
+             SELECT c.* FROM ledger.cierres_anuales c WHERE ${E('c.empresa_id')} AND ${vigenteAnual('c')}
+         ), x AS (
+             SELECT c.id, c.empresa_id, c.anio, c.isr, c.isr_acreditado_trimestral AS trimestral, c.isr_acreditado_iso AS iso,
+                    c.resultado_antes_isr, c.resultado, c.reserva_legal,
+                    (SELECT count(*) FROM ledger.cierres_anuales o WHERE o.empresa_id = c.empresa_id AND o.anio = c.anio
+                       AND ${vigenteAnual('o')}) AS vigentes,
+                    (SELECT count(*) FROM ledger.asientos a WHERE a.origen_tipo = 'cierre_anual' AND a.origen_id = c.id
+                       AND a.reversa_de IS NULL
+                       AND (a.fecha <> make_date(c.anio, 12, 31) OR a.empresa_id <> c.empresa_id
+                            OR EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))) AS asientos_mal,
+                    (SELECT count(*) FROM (
+                        SELECT m.cuenta_id FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                          JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                         WHERE a.empresa_id = c.empresa_id AND a.fecha BETWEEN make_date(c.anio, 1, 1) AND make_date(c.anio, 12, 31)
+                           AND (cu.reinicia_anual OR cu.codigo IN ('${CUENTAS_GT.PERDIDAS_GANANCIAS}', '${CUENTAS_GT.RESULTADO_EJERCICIO}'))
+                         GROUP BY m.cuenta_id HAVING sum(m.debe - m.haber) <> 0) s) AS cuentas_sin_cancelar,
+                    (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                      WHERE a.empresa_id = c.empresa_id AND a.fecha BETWEEN make_date(c.anio, 1, 1) AND make_date(c.anio, 12, 31)
+                        AND a.origen_tipo <> 'cierre_anual' AND cu.reinicia_anual) AS resultado_libro,
+                    ${netoCierre('c', `'${CUENTAS_GT.ISR_PAGOS_TRIMESTRALES}'`)} AS trimestral_libro,
+                    ${netoCierre('c', `'${CUENTAS_GT.ISO_POR_ACREDITAR}'`)} AS iso_libro,
+                    ${netoCierre('c', `'${CUENTAS_GT.ISR_POR_PAGAR}'`)} AS por_pagar_libro,
+                    ${netoCierre('c', `'${CUENTAS_GT.RESERVA_LEGAL}'`)} AS reserva_libro,
+                    ${netoCierre('c', `'${CUENTAS_GT.UTILIDADES_ACUMULADAS}'`)} AS acumuladas_libro,
+                    (SELECT coalesce(sum(m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                      WHERE a.origen_tipo = 'cierre_anual' AND a.origen_id = c.id AND a.reversa_de IS NULL
+                        AND cu.codigo = '${CUENTAS_GT.IMPUESTO_SOBRE_RENTA}'
+                        AND NOT EXISTS (SELECT 1 FROM ledger.movimientos m2 JOIN ledger.cuentas c2 ON c2.id = m2.cuenta_id
+                                         WHERE m2.asiento_id = a.id AND c2.codigo = '${CUENTAS_GT.PERDIDAS_GANANCIAS}')) AS isr_libro,
+                    EXISTS (SELECT 1 FROM ledger.cierres_mensuales cm WHERE cm.empresa_id = c.empresa_id
+                             AND cm.periodo = make_date(c.anio, 12, 1)
+                             AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_mensuales rm WHERE rm.cierre_id = cm.id)) AS diciembre_cerrado
+               FROM c
+         )
+         SELECT id, empresa_id, anio, vigentes::int, asientos_mal::int, cuentas_sin_cancelar::int, isr::text, isr_libro::text,
+                trimestral::text, trimestral_libro::text, iso::text, iso_libro::text, por_pagar_libro::text,
+                resultado_antes_isr::text, resultado_libro::text, resultado::text, reserva_legal::text, reserva_libro::text,
+                acumuladas_libro::text, diciembre_cerrado
+           FROM x
+          WHERE vigentes <> 1 OR asientos_mal <> 0 OR cuentas_sin_cancelar <> 0 OR NOT diciembre_cerrado
+             OR isr_libro <> isr OR -trimestral_libro <> trimestral OR -iso_libro <> iso
+             OR -por_pagar_libro <> isr - trimestral - iso
+             OR resultado_libro <> resultado_antes_isr
+             OR -reserva_libro <> reserva_legal
+             OR -acumuladas_libro <> resultado - reserva_legal`,
+    )
+    await revisar(
+        '19.cierre_anual_reabierto_mal (un cierre reabierto tiene cada asiento revertido una vez, con fecha 31-dic (desvío p), y ningún año siguiente cerrado al reabrirse; todo asiento cierre_anual es de un cierre de su empresa)',
+        `SELECT 'reapertura' AS que, c.id, c.empresa_id, c.anio,
+                (SELECT count(*) FROM ledger.asientos a WHERE a.origen_tipo = 'cierre_anual' AND a.origen_id = c.id AND a.reversa_de IS NULL
+                   AND (SELECT count(*) FROM ledger.asientos rv WHERE rv.reversa_de = a.id AND rv.fecha = make_date(c.anio, 12, 31)) <> 1)::int AS sin_reverso
+           FROM ledger.cierres_anuales c JOIN ledger.reaperturas_anuales r ON r.cierre_id = c.id
+          WHERE ${E('c.empresa_id')}
+            AND ((SELECT count(*) FROM ledger.asientos a WHERE a.origen_tipo = 'cierre_anual' AND a.origen_id = c.id AND a.reversa_de IS NULL
+                   AND (SELECT count(*) FROM ledger.asientos rv WHERE rv.reversa_de = a.id AND rv.fecha = make_date(c.anio, 12, 31)) <> 1) > 0
+                 OR EXISTS (SELECT 1 FROM ledger.cierres_anuales s WHERE s.empresa_id = c.empresa_id AND s.anio = c.anio + 1
+                             AND s.created_at < r.reabierto_en
+                             AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales rs WHERE rs.cierre_id = s.id
+                                              AND rs.reabierto_en < r.reabierto_en)))
+         UNION ALL
+         SELECT 'asiento_sin_cierre', a.id, a.empresa_id, extract(year FROM a.fecha)::int, NULL
+           FROM ledger.asientos a
+          WHERE ${E('a.empresa_id')} AND a.origen_tipo = 'cierre_anual' AND a.reversa_de IS NULL
+            AND NOT EXISTS (SELECT 1 FROM ledger.cierres_anuales c WHERE c.id = a.origen_id AND c.empresa_id = a.empresa_id)`,
+    )
+    await revisar(
+        '19.ejercicios_fuera_de_orden (desvío o: al cerrarse un año, ningún año anterior con ingresos o gastos quedaba sin cierre vigente; el duro que cubre un 31-dic exige ese año cerrado)',
+        `WITH anios AS (
+             SELECT a.empresa_id, extract(year FROM a.fecha)::int AS anio
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+              WHERE ${E('a.empresa_id')} AND cu.reinicia_anual
+              GROUP BY 1, 2
+         )
+         SELECT 'cierre' AS que, c.id, c.empresa_id, c.anio, y.anio AS anio_abierto
+           FROM ledger.cierres_anuales c JOIN anios y ON y.empresa_id = c.empresa_id AND y.anio < c.anio
+          WHERE ${E('c.empresa_id')}
+            AND NOT EXISTS (SELECT 1 FROM ledger.cierres_anuales p WHERE p.empresa_id = c.empresa_id AND p.anio = y.anio
+                             AND p.created_at <= c.created_at
+                             AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales rp WHERE rp.cierre_id = p.id
+                                              AND rp.reabierto_en <= c.created_at))
+         UNION ALL
+         SELECT 'duro', b.id, b.empresa_id, extract(year FROM b.hasta)::int, y.anio
+           FROM ledger.bloqueos b JOIN anios y ON y.empresa_id = b.empresa_id AND make_date(y.anio, 12, 31) <= b.hasta
+          WHERE ${E('b.empresa_id')} AND b.tipo = 'duro'
+            AND b.created_at >= (SELECT coalesce(min(created_at), 'infinity') FROM ledger.cierres_anuales)
+            AND NOT EXISTS (SELECT 1 FROM ledger.cierres_anuales p WHERE p.empresa_id = b.empresa_id AND p.anio = y.anio
+                             AND p.created_at <= b.created_at
+                             AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales rp WHERE rp.cierre_id = p.id
+                                              AND rp.reabierto_en <= b.created_at))`,
     )
 
     /*

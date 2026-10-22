@@ -6,6 +6,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { periodoDe, verCierre, type CierreVista } from '#ledger/cierres'
 import { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
+import { ejercicioCerrado } from '#ledger/ejercicios'
 
 /**
  * `libro.reabrir_periodo` (`POST /libro/periodos/reabrir`, permiso aparte de cerrar): reabre un
@@ -20,7 +21,8 @@ import { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
  * 409 `reapertura_fuera_de_orden` (se reabren primero los posteriores, del más reciente hacia
  * atrás).
  *
- * Bajo el bloqueo duro (§9.2) ningún mes se reabre: 409 `bloqueo_duro`.
+ * Bajo el bloqueo duro (§9.2) ningún mes se reabre: 409 `bloqueo_duro`. Con el ejercicio del año
+ * cerrado (§9.1), tampoco: 409 `ejercicio_cerrado` (se reabre el ejercicio).
  */
 
 export interface EntradaReabrirPeriodo {
@@ -49,6 +51,14 @@ export default class ReabrirPeriodo extends DomainAction<EntradaReabrirPeriodo, 
         const duro = await bloqueoVigente(t.trx, empresaId, 'duro')
         if (duro !== null && periodo <= duro) {
             throw new PeriodoBloqueado('duro', periodo, duro, empresaId)
+        }
+        // con el ejercicio cerrado (§9.1) ningún mes del año se reabre: se reabre el ejercicio
+        if (await ejercicioCerrado(t.trx, periodo, empresaId)) {
+            throw new Conflicto(
+                `El ejercicio ${input.anio} está cerrado: reabre el ejercicio (libro.reabrir_ejercicio) para reabrir ${periodo.slice(0, 7)}`,
+                'ejercicio_cerrado',
+                'Ejercicio cerrado',
+            )
         }
         const cierre = await t.trx
             .from('ledger.cierres_mensuales as c')

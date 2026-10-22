@@ -190,7 +190,9 @@
       "facturas.emitir_cargo_unico",
       "facturas.cargo_sin_costo",
       "facturas.configurar_motivos",
-      "facturas.configurar_conceptos"
+      "facturas.configurar_conceptos",
+      "cierres.revisar_check",
+      "cierres.verificar"
     ],
     "alcance_global": true,
     "empresas": [

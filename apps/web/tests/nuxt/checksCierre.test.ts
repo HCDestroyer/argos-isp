@@ -13,7 +13,8 @@ import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
  * Lista de verificación de cierre y últimas corridas (A3, fase 6 PR B). En los fixtures, julio de
  * ArgosNet está verificado con un turno de caja abierto (anomalía), fondos en tránsito supervisados
  * con nota y la depreciación sin verificar; los demás meses cuadran. La corrida del cron del 15/10
- * dejó tres facturas de septiembre bajo el bloqueo de ventas y dos moras de agosto bajo el global.
+ * dejó tres facturas de septiembre bajo el bloqueo de ventas y dos moras de agosto bajo el global; sus
+ * contadores van por empresa (`resultado.por_empresa`, fase 6 PR C).
  */
 describe('lista de verificación de cierre', () => {
     beforeEach(async () => {
@@ -68,6 +69,7 @@ describe('lista de verificación de cierre', () => {
 
         expect(resumenCorrida({ proceso: 'facturas.generar', resultado: { generadas: 4, omitidas: 9, errores: 1 } })).toBe('4 generadas · 9 ya tenían factura · 1 con error')
         expect(resumenCorrida({ proceso: 'facturas.vencer_pendientes', resultado: { vencidas: 6, moras: 2, errores: 0 } })).toBe('6 vencidas · 2 moras')
+        expect(resumenCorrida({ proceso: 'facturas.generar', resultado: { generadas: 2, omitidas: 0, bonificadas: 1, errores: 0 } })).toBe('2 generadas · 0 ya tenían factura · 1 bonificadas')
         expect(resumenCorrida({ proceso: 'facturas.generar', resultado: null })).toBeNull()
         expect(origenCorrida({ actor_tipo: 'sistema', canal: 'cron' })).toBe('Automática')
         expect(origenCorrida({ actor_tipo: 'usuario', canal: 'panel' })).toBe('A mano desde el panel')
@@ -146,8 +148,11 @@ describe('lista de verificación de cierre', () => {
         const facturar = argos?.procesos.find(p => p.proceso === 'facturas.generar')
         expect([facturar?.actor_tipo, facturar?.canal, facturar?.bloqueados, facturar?.bloqueos[0]?.tipo]).toEqual(['sistema', 'cron', 3, 'ventas'])
         expect(argos?.procesos.find(p => p.proceso === 'facturas.vencer_pendientes')?.bloqueados).toBe(2)
-        // Fibra del Sur no tiene bloqueos: la misma corrida no le dejó nada.
-        expect(antes.data.find(e => e.empresa_id === 2)?.procesos.map(p => p.bloqueados)).toEqual([0, 0])
+        // Los contadores son solo de la empresa: la misma corrida facturó 3 en ArgosNet y 1 en Fibra del Sur.
+        expect(facturar?.resultado?.generadas).toBe(3)
+        const sur = antes.data.find(e => e.empresa_id === 2)
+        expect(sur?.procesos.map(p => p.bloqueados)).toEqual([0, 0])
+        expect(sur?.procesos.map(p => resumenCorrida(p))).toEqual(['1 generadas · 3 ya tenían factura', '2 vencidas · 0 moras'])
 
         await useBloqueosLibro().desbloquear({ tipo: 'ventas', hasta: null, motivo: 'Abrir ventas de septiembre' }, nuevaClaveIdempotencia())
         const corrida = await useFacturas().generar(nuevaClaveIdempotencia())
@@ -171,6 +176,34 @@ describe('lista de verificación de cierre', () => {
         await esperar(() => expect(vista.find('[data-empresa="1"] [data-proceso="facturar"] [data-prueba="proceso-ultima"]').text()).toContain('A mano'))
         expect(vista.find('[data-empresa="1"] [data-proceso="facturar"] [data-prueba="proceso-bloqueados"]').text()).toBe('3 documentos siguen pendientes por un bloqueo')
         vista.unmount()
+    })
+
+    it('corrida vieja sin conteos por empresa: de varias empresas es null; de una sola, sus conteos', async () => {
+        const vieja = (id: number, empresas: number[] | null) => ({
+            ...structuredClone(bd.acciones.find(a => a.accion === 'facturas.vencer_pendientes')!),
+            id,
+            created_at: '2026-10-16T06:10:00.000Z',
+            entrada: { parametros: { hasta: '2026-10-16', servicio_id: null, empresas }, resultado: { vencidas: 9, moras: 3, errores: 0, bloqueados: 2 }, bloqueos: [{ empresa_id: 1, tipo: 'global', hasta: '2026-08-31', fecha: '2026-08-25', documentos: 2, ejemplos: [3, 5] }] },
+        })
+        bd.acciones.push(vieja(99001, null))
+        const varias = await useFacturas().corridas()
+        const vencerDe = (empresaId: number) => (varias.ok ? varias.data.find(e => e.empresa_id === empresaId)?.procesos.find(p => p.proceso === 'facturas.vencer_pendientes') : undefined)
+        expect([vencerDe(1)?.resultado, vencerDe(1)?.bloqueados]).toEqual([null, 2])
+        expect([vencerDe(2)?.resultado, vencerDe(2)?.bloqueados]).toEqual([null, 0])
+
+        const vista = await mountSuspended(PaginaBloqueos, { route: '/libro/bloqueos' })
+        await esperar(() => expect(vista.find('[data-empresa="2"] [data-proceso="vencer"] [data-prueba="proceso-sin-detalle"]').exists()).toBe(true))
+        // Sin conteos de la empresa no se muestra ni «0 vencidas» ni «Nada quedó detenido».
+        expect(vista.find('[data-empresa="2"] [data-proceso="vencer"] [data-prueba="proceso-resumen"]').exists()).toBe(false)
+        expect(vista.find('[data-empresa="2"] [data-proceso="vencer"] [data-prueba="proceso-bloqueados"]').exists()).toBe(false)
+        // Lo detenido sí es de la empresa (cada bloqueo lleva la suya).
+        expect(vista.find('[data-empresa="1"] [data-proceso="vencer"] [data-prueba="proceso-bloqueados"]').text()).toBe('2 documentos siguen pendientes por un bloqueo')
+        vista.unmount()
+
+        bd.acciones.push({ ...vieja(99002, [1]), created_at: '2026-10-16T07:00:00.000Z' })
+        const una = await useFacturas().corridas()
+        const argos = una.ok ? una.data.find(e => e.empresa_id === 1)?.procesos.find(p => p.proceso === 'facturas.vencer_pendientes') : undefined
+        expect([argos?.resultado?.vencidas, argos?.resultado?.moras, argos?.bloqueados]).toEqual([9, 3, 2])
     })
 
     it('si las corridas fallan: error con Reintentar y ningún «nada detenido»', async () => {
@@ -236,13 +269,25 @@ describe('lista de verificación de cierre', () => {
         vista.unmount()
     })
 
-    it('sin libro.cerrar_periodo la lista se lee, sin Verificar ni Supervisar', async () => {
-        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'libro.cerrar_periodo') }
-        const vista = await mountSuspended(LibroCierres, { route: '/libro?tab=cierres&mes=2026-07' })
-        await esperar(() => expect(vista.find('[data-prueba="checklist-resumen"]').text()).toBe('2 por resolver'))
-        expect(vista.find('[data-prueba="checklist-verificar"]').exists()).toBe(false)
-        expect(vista.find('[data-prueba="supervisar-turnos_cerrados"]').exists()).toBe(false)
-        expect(vista.find('[data-prueba="retirar-fondos_transito"]').exists()).toBe(false)
-        vista.unmount()
+    it('permisos: «Verificar» pide cierres.verificar; supervisar y retirar, cierres.revisar_check', async () => {
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'cierres.verificar') }
+        const sinVerificar = await mountSuspended(LibroCierres, { route: '/libro?tab=cierres&mes=2026-07' })
+        await esperar(() => expect(sinVerificar.find('[data-prueba="checklist-resumen"]').text()).toBe('2 por resolver'))
+        expect(sinVerificar.find('[data-prueba="checklist-verificar"]').exists()).toBe(false)
+        expect(sinVerificar.find('[data-prueba="supervisar-turnos_cerrados"]').exists()).toBe(true)
+        sinVerificar.unmount()
+
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'cierres.revisar_check') }
+        const sinRevisar = await mountSuspended(LibroCierres, { route: '/libro?tab=cierres&mes=2026-07' })
+        await esperar(() => expect(sinRevisar.find('[data-prueba="checklist-resumen"]').text()).toBe('2 por resolver'))
+        expect(sinRevisar.find('[data-prueba="checklist-verificar"]').exists()).toBe(true)
+        expect(sinRevisar.find('[data-prueba="supervisar-turnos_cerrados"]').exists()).toBe(false)
+        expect(sinRevisar.find('[data-prueba="retirar-fondos_transito"]').exists()).toBe(false)
+        sinRevisar.unmount()
+
+        // La API pide lo mismo: el cajero no tiene cierres.revisar_check (403).
+        sesionFixture('fixture-cajero')
+        const cajero = await useChecksCierre().revisar(idDe('turnos_cerrados'), 'supervisado', 'Sin permiso', nuevaClaveIdempotencia())
+        expect(!cajero.ok && cajero.problema.status).toBe(403)
     })
 })

@@ -30176,7 +30176,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso cierres.verificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30216,7 +30216,7 @@
             }
           }
         },
-        "x-permiso": "libro.cerrar_periodo",
+        "x-permiso": "cierres.verificar",
         "x-implementado": true
       }
     },
@@ -30310,7 +30310,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso cierres.revisar_check; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30350,7 +30350,114 @@
             }
           }
         },
-        "x-permiso": "libro.cerrar_periodo",
+        "x-permiso": "cierres.revisar_check",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/comprobacion": {
+      "get": {
+        "operationId": "libroComprobacion",
+        "summary": "Balance de comprobación por cuenta y por grupo (antes o después del cierre anual)",
+        "description": "Por empresa (y total del grupo en el consolidado): saldo inicial antes de desde, debe y haber del rango y saldo final, cada saldo en su columna deudora o acreedora; las cuentas de agrupación suman a sus hijas. cuadra = Σ debe = Σ haber y Σ deudor = Σ acreedor al inicio y al final. sin_cierre_anual=true lo da antes del cierre anual.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el 1 de enero del año de hasta",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto hoy (Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "sin_cierre_anual",
+            "in": "query",
+            "required": false,
+            "description": "Sin los asientos del cierre anual: el balance antes del cierre",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance de comprobación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceComprobacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
         "x-implementado": true
       }
     },
@@ -30759,6 +30866,497 @@
           }
         },
         "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/ejercicios": {
+      "get": {
+        "operationId": "libroEjercicios",
+        "summary": "Cierres anuales y reaperturas (el más reciente primero)",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cerrado",
+                "reabierto"
+              ]
+            }
+          },
+          {
+            "name": "anio",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de cierres anuales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CierreAnual"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/ejercicios/{id}": {
+      "get": {
+        "operationId": "libroEjercicio",
+        "summary": "Un cierre anual con sus asientos",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cierre anual",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreAnual"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/ejercicios/cerrar": {
+      "post": {
+        "operationId": "libroCerrarEjercicio",
+        "summary": "Cerrar el ejercicio anual (ISR, resultados a cero, traslado y reserva legal)",
+        "description": "Con fecha 31-dic y diario CIE: provisión del ISR (5.5.01 / 1.1.07 + 1.1.08 + 2.1.07), cancelación de ingresos y gastos contra 3.3.03, traslado 3.3.03 → 3.3.02 → 3.3.01 y reserva legal (reserva_legal_pct × la base de reserva_legal_base) si hubo utilidad; después cierra diciembre. El ISR lo escribe el usuario (obligatorio, 0.00 si no hay). 422 ejercicio_requisitos (rule: meses_abiertos, diciembre_cerrado, dte_pendientes, ejercicio_anterior_abierto), 422 isr_acreditable, 409 ejercicio_cerrado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo ejercicio se cierra o reabre; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "anio": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "isr": {
+                    "type": "object",
+                    "properties": {
+                      "monto": {
+                        "type": "string",
+                        "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                        "description": "Monto con hasta 2 decimales, como string",
+                        "examples": [
+                          "150.00"
+                        ]
+                      },
+                      "acreditado_trimestral": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                        "description": "Pagos trimestrales que se acreditan (1.1.07), ≤ su saldo al 31-dic",
+                        "examples": [
+                          "150.00"
+                        ]
+                      },
+                      "acreditado_iso": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                        "description": "ISO que se acredita (1.1.08), ≤ su saldo al 31-dic",
+                        "examples": [
+                          "150.00"
+                        ]
+                      },
+                      "nota": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 500,
+                        "description": "De dónde sale el monto (formulario, cálculo del contador…)"
+                      }
+                    },
+                    "required": [
+                      "monto"
+                    ],
+                    "additionalProperties": false,
+                    "description": "ISR del cierre: monto obligatorio (0.00 si no hay); lo escribe el usuario hasta que existan las declaraciones. Queda en el cierre y en la auditoría"
+                  }
+                },
+                "required": [
+                  "anio",
+                  "isr"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ejercicio cerrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreAnual"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.cerrar_ejercicio; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.cerrar_ejercicio",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/ejercicios/reabrir": {
+      "post": {
+        "operationId": "libroReabrirEjercicio",
+        "summary": "Reabrir un ejercicio cerrado (con motivo; solo admin)",
+        "description": "Reabre diciembre y revierte los asientos del cierre con fecha 31-dic (el cierre queda en la historia). 409 ejercicio_abierto, 409 bloqueo_duro bajo el duro, 409 reapertura_fuera_de_orden si el año siguiente está cerrado.",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo ejercicio se cierra o reabre; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "anio": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "anio",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ejercicio reabierto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreAnual"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.reabrir_ejercicio; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.reabrir_ejercicio",
         "x-implementado": true
       }
     },
@@ -45250,6 +45848,8 @@
                         "cajas.ver",
                         "cartera.castigar",
                         "cartera.provisionar",
+                        "cierres.revisar_check",
+                        "cierres.verificar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -45542,6 +46142,8 @@
                         "cajas.ver",
                         "cartera.castigar",
                         "cartera.provisionar",
+                        "cierres.revisar_check",
+                        "cierres.verificar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -51607,6 +52209,8 @@
                             "cajas.ver",
                             "cartera.castigar",
                             "cartera.provisionar",
+                            "cierres.revisar_check",
+                            "cierres.verificar",
                             "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
@@ -54286,6 +54890,453 @@
           }
         }
       },
+      "BalanceComprobacion": {
+        "type": "object",
+        "required": [
+          "desde",
+          "hasta",
+          "sin_cierre_anual",
+          "consolidado",
+          "empresas",
+          "total"
+        ],
+        "properties": {
+          "desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "sin_cierre_anual": {
+            "type": "boolean",
+            "description": "true = sin los asientos del cierre anual (antes del cierre)"
+          },
+          "consolidado": {
+            "type": "boolean"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "nombre_comercial",
+                "nit",
+                "cuentas",
+                "grupos",
+                "totales"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre_comercial": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cuentas": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "cuenta_id",
+                      "codigo",
+                      "nombre",
+                      "tipo",
+                      "nivel",
+                      "padre_id",
+                      "imputable",
+                      "saldo_inicial_deudor",
+                      "saldo_inicial_acreedor",
+                      "debe",
+                      "haber",
+                      "saldo_final_deudor",
+                      "saldo_final_acreedor"
+                    ],
+                    "properties": {
+                      "cuenta_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "codigo": {
+                        "type": "string"
+                      },
+                      "nombre": {
+                        "type": "string"
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "activo",
+                          "pasivo",
+                          "patrimonio",
+                          "ingreso",
+                          "gasto"
+                        ]
+                      },
+                      "nivel": {
+                        "type": "integer",
+                        "description": "1 = grupo raíz"
+                      },
+                      "padre_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1
+                      },
+                      "imputable": {
+                        "type": "boolean"
+                      },
+                      "saldo_inicial_deudor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo_inicial_acreedor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "debe": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "haber": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo_final_deudor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo_final_acreedor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      }
+                    }
+                  },
+                  "description": "Cuentas imputables con saldo o movimiento"
+                },
+                "grupos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "cuenta_id",
+                      "codigo",
+                      "nombre",
+                      "tipo",
+                      "nivel",
+                      "padre_id",
+                      "imputable",
+                      "saldo_inicial_deudor",
+                      "saldo_inicial_acreedor",
+                      "debe",
+                      "haber",
+                      "saldo_final_deudor",
+                      "saldo_final_acreedor"
+                    ],
+                    "properties": {
+                      "cuenta_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "codigo": {
+                        "type": "string"
+                      },
+                      "nombre": {
+                        "type": "string"
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "activo",
+                          "pasivo",
+                          "patrimonio",
+                          "ingreso",
+                          "gasto"
+                        ]
+                      },
+                      "nivel": {
+                        "type": "integer",
+                        "description": "1 = grupo raíz"
+                      },
+                      "padre_id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1
+                      },
+                      "imputable": {
+                        "type": "boolean"
+                      },
+                      "saldo_inicial_deudor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo_inicial_acreedor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "debe": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "haber": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo_final_deudor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      },
+                      "saldo_final_acreedor": {
+                        "$ref": "#/components/schemas/Dinero"
+                      }
+                    }
+                  },
+                  "description": "Cuentas de agrupación: suma de sus hijas"
+                },
+                "totales": {
+                  "type": "object",
+                  "required": [
+                    "saldo_inicial_deudor",
+                    "saldo_inicial_acreedor",
+                    "debe",
+                    "haber",
+                    "saldo_final_deudor",
+                    "saldo_final_acreedor",
+                    "cuadra"
+                  ],
+                  "properties": {
+                    "saldo_inicial_deudor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_inicial_acreedor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "debe": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "haber": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_final_deudor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_final_acreedor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "cuadra": {
+                      "type": "boolean",
+                      "description": "Σ debe = Σ haber y Σ deudor = Σ acreedor al inicio y al final"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "object",
+            "required": [
+              "cuentas",
+              "grupos",
+              "totales"
+            ],
+            "properties": {
+              "cuentas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "cuenta_id",
+                    "codigo",
+                    "nombre",
+                    "tipo",
+                    "nivel",
+                    "padre_id",
+                    "imputable",
+                    "saldo_inicial_deudor",
+                    "saldo_inicial_acreedor",
+                    "debe",
+                    "haber",
+                    "saldo_final_deudor",
+                    "saldo_final_acreedor"
+                  ],
+                  "properties": {
+                    "cuenta_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "codigo": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    },
+                    "tipo": {
+                      "type": "string",
+                      "enum": [
+                        "activo",
+                        "pasivo",
+                        "patrimonio",
+                        "ingreso",
+                        "gasto"
+                      ]
+                    },
+                    "nivel": {
+                      "type": "integer",
+                      "description": "1 = grupo raíz"
+                    },
+                    "padre_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    },
+                    "imputable": {
+                      "type": "boolean"
+                    },
+                    "saldo_inicial_deudor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_inicial_acreedor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "debe": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "haber": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_final_deudor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_final_acreedor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    }
+                  }
+                },
+                "description": "Cuentas imputables con saldo o movimiento"
+              },
+              "grupos": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "cuenta_id",
+                    "codigo",
+                    "nombre",
+                    "tipo",
+                    "nivel",
+                    "padre_id",
+                    "imputable",
+                    "saldo_inicial_deudor",
+                    "saldo_inicial_acreedor",
+                    "debe",
+                    "haber",
+                    "saldo_final_deudor",
+                    "saldo_final_acreedor"
+                  ],
+                  "properties": {
+                    "cuenta_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "codigo": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    },
+                    "tipo": {
+                      "type": "string",
+                      "enum": [
+                        "activo",
+                        "pasivo",
+                        "patrimonio",
+                        "ingreso",
+                        "gasto"
+                      ]
+                    },
+                    "nivel": {
+                      "type": "integer",
+                      "description": "1 = grupo raíz"
+                    },
+                    "padre_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    },
+                    "imputable": {
+                      "type": "boolean"
+                    },
+                    "saldo_inicial_deudor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_inicial_acreedor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "debe": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "haber": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_final_deudor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    "saldo_final_acreedor": {
+                      "$ref": "#/components/schemas/Dinero"
+                    }
+                  }
+                },
+                "description": "Cuentas de agrupación: suma de sus hijas"
+              },
+              "totales": {
+                "type": "object",
+                "required": [
+                  "saldo_inicial_deudor",
+                  "saldo_inicial_acreedor",
+                  "debe",
+                  "haber",
+                  "saldo_final_deudor",
+                  "saldo_final_acreedor",
+                  "cuadra"
+                ],
+                "properties": {
+                  "saldo_inicial_deudor": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "saldo_inicial_acreedor": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "debe": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "haber": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "saldo_final_deudor": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "saldo_final_acreedor": {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  "cuadra": {
+                    "type": "boolean",
+                    "description": "Σ debe = Σ haber y Σ deudor = Σ acreedor al inicio y al final"
+                  }
+                }
+              }
+            },
+            "description": "Total del grupo"
+          }
+        }
+      },
       "BalanceSaldos": {
         "type": "object",
         "required": [
@@ -54430,6 +55481,14 @@
                     "cuadra": {
                       "type": "boolean",
                       "description": "debe = haber y activo = pasivo + patrimonio + resultado"
+                    },
+                    "resultado_ejercicios_sin_cerrar": {
+                      "$ref": "#/components/schemas/Dinero",
+                      "description": "Parte de resultado de años anteriores al de hasta sin cierre anual («Resultado de ejercicios sin cerrar», §10.8)"
+                    },
+                    "resultado_ejercicio": {
+                      "$ref": "#/components/schemas/Dinero",
+                      "description": "resultado del año de hasta"
                     }
                   }
                 }
@@ -54540,6 +55599,14 @@
                   "cuadra": {
                     "type": "boolean",
                     "description": "debe = haber y activo = pasivo + patrimonio + resultado"
+                  },
+                  "resultado_ejercicios_sin_cerrar": {
+                    "$ref": "#/components/schemas/Dinero",
+                    "description": "Parte de resultado de años anteriores al de hasta sin cierre anual («Resultado de ejercicios sin cerrar», §10.8)"
+                  },
+                  "resultado_ejercicio": {
+                    "$ref": "#/components/schemas/Dinero",
+                    "description": "resultado del año de hasta"
                   }
                 }
               }
@@ -55924,6 +56991,137 @@
               "$ref": "#/components/schemas/CheckCierre"
             },
             "description": "Con historial=true: todas las filas, la más reciente primero"
+          }
+        }
+      },
+      "CierreAnual": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "anio",
+          "estado",
+          "isr",
+          "isr_acreditado_trimestral",
+          "isr_acreditado_iso",
+          "isr_nota",
+          "resultado_antes_isr",
+          "resultado",
+          "reserva_legal",
+          "resumen",
+          "asientos",
+          "cerrado_en",
+          "cerrado_por",
+          "cerrado_por_nombre",
+          "reabierto_en",
+          "reabierto_por",
+          "reabierto_por_nombre",
+          "motivo_reapertura"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "anio": {
+            "type": "integer"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "cerrado",
+              "reabierto"
+            ]
+          },
+          "isr": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "ISR del ejercicio que escribió el usuario (provisión 5.5.01)"
+          },
+          "isr_acreditado_trimestral": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Acreditado de 1.1.07 (pagos trimestrales)"
+          },
+          "isr_acreditado_iso": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Acreditado de 1.1.08 (ISO)"
+          },
+          "isr_nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resultado_antes_isr": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Resultado contable del año antes de la provisión del cierre (negativo = pérdida)"
+          },
+          "resultado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "resultado_antes_isr − isr: lo que pasa a 3.3.01"
+          },
+          "reserva_legal": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "3.3.01 → 3.2.01 (0.00 sin utilidad)"
+          },
+          "resumen": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "desde, hasta, cuentas[] (codigo, nombre, tipo, neto debe − haber cancelado), isr_por_pagar, reserva_legal_pct, reserva_legal_base, base_reserva"
+          },
+          "asientos": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Asientos del cierre (y de sus reversos al reabrir), en orden"
+          },
+          "cerrado_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cerrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reabierto_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reabierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "reabierto_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "motivo_reapertura": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -58473,7 +59671,7 @@
                     "null"
                   ],
                   "additionalProperties": true,
-                  "description": "Resultado completo de la corrida (generadas, vencidas, moras, errores…)"
+                  "description": "Solo de la empresa: facturas.generar → generadas, omitidas, bonificadas, errores, bloqueados, bloqueos; facturas.vencer_pendientes → vencidas, moras, errores, bloqueados, bloqueos. null si una corrida anterior de varias empresas no lo separaba"
                 }
               }
             }

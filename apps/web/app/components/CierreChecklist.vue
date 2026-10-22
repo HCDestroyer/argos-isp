@@ -3,9 +3,10 @@ import type { Problem } from '@argosisp/contracts'
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 
 /**
- * Lista de verificación de cierre de un mes (A3, fase 6 PR B): cada check con su estado, esperado y
- * obtenido; «Verificar» los corre (`libro.cerrar_periodo`) y una anomalía se supervisa con nota
- * (acción `cierres.revisar_check`, permiso `libro.cerrar_periodo`) para que el mes se pueda cerrar.
+ * Lista de verificación de cierre de un mes (A3, fase 6 PR B y C): cada check con su estado, esperado
+ * y obtenido; «Verificar» los corre (`cierres.verificar`) y una anomalía se supervisa con nota, o se
+ * retira la supervisión (`cierres.revisar_check`), para que el mes se pueda cerrar. Leerla pide
+ * `libro.ver`.
  * Cerrar el mes y el bloqueo duro exigen que todos pasen. Si la lista no se puede leer, se ve el error
  * con «Reintentar» y nada de «en orden».
  */
@@ -141,7 +142,7 @@ defineExpose({ cargar })
                 data-prueba="checklist-resumen"
             />
             <UButton
-                v-if="puede('libro.cerrar_periodo')"
+                v-if="puede('cierres.verificar')"
                 label="Verificar"
                 icon="i-lucide-list-checks"
                 color="neutral"
@@ -219,7 +220,7 @@ defineExpose({ cargar })
                         </span>
                         <div class="mt-1 flex flex-wrap gap-2 sm:hidden">
                             <UButton
-                                v-if="puede('libro.cerrar_periodo') && puedeSupervisarse(row.original)"
+                                v-if="puede('cierres.revisar_check') && puedeSupervisarse(row.original)"
                                 label="Supervisar"
                                 icon="i-lucide-eye"
                                 color="warning"
@@ -229,7 +230,7 @@ defineExpose({ cargar })
                                 @click="aRevisar = { check: row.original, estado: 'supervisado' }"
                             />
                             <UButton
-                                v-if="puede('libro.cerrar_periodo') && puedeRetirarse(row.original)"
+                                v-if="puede('cierres.revisar_check') && puedeRetirarse(row.original)"
                                 label="Retirar supervisión"
                                 icon="i-lucide-eye-off"
                                 color="neutral"
@@ -271,7 +272,7 @@ defineExpose({ cargar })
                 </template>
                 <template #acciones-cell="{ row }">
                     <UButton
-                        v-if="puede('libro.cerrar_periodo') && puedeSupervisarse(row.original)"
+                        v-if="puede('cierres.revisar_check') && puedeSupervisarse(row.original)"
                         label="Supervisar"
                         icon="i-lucide-eye"
                         color="warning"
@@ -281,7 +282,7 @@ defineExpose({ cargar })
                         @click="aRevisar = { check: row.original, estado: 'supervisado' }"
                     />
                     <UButton
-                        v-else-if="puede('libro.cerrar_periodo') && puedeRetirarse(row.original)"
+                        v-else-if="puede('cierres.revisar_check') && puedeRetirarse(row.original)"
                         label="Retirar supervisión"
                         icon="i-lucide-eye-off"
                         color="neutral"
@@ -295,7 +296,7 @@ defineExpose({ cargar })
                     <UEmpty
                         icon="i-lucide-list-checks"
                         :title="mes ? `${etiquetaPeriodo(mes)} sin verificar` : 'Elige un mes'"
-                        :description="puede('libro.cerrar_periodo') ? 'Pulsa «Verificar» para correr los checks.' : undefined"
+                        :description="puede('cierres.verificar') ? 'Pulsa «Verificar» para correr los checks.' : undefined"
                         variant="naked"
                     />
                 </template>

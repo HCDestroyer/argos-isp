@@ -47,3 +47,39 @@ export class BloqueosDeCorrida {
         return [...this.porClave.values()]
     }
 }
+
+/**
+ * Contadores de una corrida por empresa (pedido de A4, fase 6): la corrida guarda en su resultado
+ * `por_empresa { <empresa_id>: { …contadores } }` para que `GET /facturas/corridas` muestre lo de
+ * cada empresa y no el total de todas.
+ */
+export class ContadoresPorEmpresa<C extends string> {
+    private readonly porEmpresa = new Map<number, Record<C, number>>()
+
+    constructor(private readonly campos: readonly C[]) {}
+
+    sumar(empresaId: number, campo: C, n = 1): void {
+        const actual =
+            this.porEmpresa.get(empresaId) ??
+            (Object.fromEntries(this.campos.map((c) => [c, 0])) as Record<C, number>)
+        actual[campo] += n
+        this.porEmpresa.set(empresaId, actual)
+    }
+
+    /** `{ <empresa_id>: { …contadores, bloqueados } }`, con las empresas que solo tuvieron bloqueos. */
+    json(bloqueos: BloqueoCorrida[]): Record<string, Record<string, number>> {
+        for (const b of bloqueos) {
+            if (!this.porEmpresa.has(Number(b.empresa_id))) {
+                this.sumar(Number(b.empresa_id), this.campos[0]!, 0)
+            }
+        }
+        const salida: Record<string, Record<string, number>> = {}
+        for (const [empresaId, contadores] of [...this.porEmpresa].sort((a, b) => a[0] - b[0])) {
+            const bloqueados = bloqueos
+                .filter((b) => Number(b.empresa_id) === empresaId)
+                .reduce((s, b) => s + Number(b.documentos), 0)
+            salida[String(empresaId)] = { ...contadores, bloqueados }
+        }
+        return salida
+    }
+}

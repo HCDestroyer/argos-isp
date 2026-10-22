@@ -178,6 +178,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `libro.bloqueo_cambiado` | ledger | empresa_id, tipo, hasta, anterior |
 | `libro.checks_verificados` | ledger | empresa_id, tipo, periodo, anomalias[] |
 | `libro.proceso_bloqueado` | billing (crons) | empresa_id, proceso, tipo, hasta, fecha, documentos, ejemplos[] |
+| `ejercicio.cerrado` / `ejercicio.reabierto` | ledger | empresa_id, cierre_id, anio; cerrado: resultado, isr, reserva_legal; reabierto: motivo |
 | `dte.certificado` / `dte.rechazado` / `dte.anulado` | fiscal (FEL) | dte_id, empresa_id, documento_tipo, documento_id; certificado: tipo_dte, autorizacion, serie, numero, contingencia; rechazado: error, definitivo; anulado: motivo |
 | `fel.contingencia_cambiada` | fiscal (FEL) | empresa_id, activa, motivo |
 | `factura.sustituida` | billing | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo |

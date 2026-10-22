@@ -13,7 +13,7 @@ export function useChecksCierre() {
         }))
     }
 
-    /** `POST …/verificar` (`libro.cerrar_periodo`): corre los checks; fila nueva solo si el cálculo cambió. */
+    /** `POST …/verificar` (`cierres.verificar`): corre los checks; fila nueva solo si el cálculo cambió. */
     function verificar(tipo: TipoCheck, periodo: string, claveIdempotencia: string): Promise<Resultado<VerificacionCierre>> {
         return resolver(api.POST('/api/v1/libro/cierres/{tipo}/{periodo}/verificar', {
             params: { path: { tipo, periodo }, header: { 'Idempotency-Key': claveIdempotencia } },
@@ -22,8 +22,7 @@ export function useChecksCierre() {
     }
 
     /**
-     * `POST /libro/cierres/checks/:id/revisar` (acción `cierres.revisar_check`, permiso
-     * `libro.cerrar_periodo`): `supervisado` deja pasar el cierre con esa anomalía; `anomalia` retira la
+     * `POST /libro/cierres/checks/:id/revisar` (`cierres.revisar_check`): `supervisado` deja pasar el cierre con esa anomalía; `anomalia` retira la
      * supervisión. 409 `check_desactualizado`, 422 `check_en_orden`, 409 `check_sin_cambio`.
      */
     function revisar(id: number, estado: 'supervisado' | 'anomalia', nota: string, claveIdempotencia: string): Promise<Resultado<CheckCierre>> {

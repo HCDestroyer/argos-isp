@@ -7,7 +7,7 @@ import VencerFactura from '#billing/actions/vencer_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { TAMANO_LOTE } from '#billing/actions/generar_facturas'
 import { empresasDelProceso } from '#billing/empresa'
-import { BloqueosDeCorrida, type BloqueoCorrida } from '#billing/bloqueos_corrida'
+import { BloqueosDeCorrida, ContadoresPorEmpresa, type BloqueoCorrida } from '#billing/bloqueos_corrida'
 
 /**
  * `facturas.vencer_pendientes` (cron y `POST /facturas/vencer`): todo lo pendiente hasta `hasta`
@@ -43,6 +43,7 @@ export interface ResultadoVencimiento {
 
 interface Candidata {
     id: number
+    empresa_id: number
     vence_en: string
     reglas_snapshot: Partial<ReglaMora> | null
     moras: number
@@ -61,13 +62,14 @@ export default class VencerFacturas {
             bloqueos: [],
         }
         const bloqueos = new BloqueosDeCorrida()
+        const porEmpresa = new ContadoresPorEmpresa(['vencidas', 'moras', 'errores'] as const)
         const empresas = empresasDelProceso(ctx)
 
         // 1. por vencer
         await this.recorrer(
             (q) => q.whereIn('f.estado', ['emitida', 'parcial']).where('f.vence_en', '<', hoy),
             { ...input, empresas },
-            async (factura) => this.vencer(factura.id, hoy, resultado, bloqueos, ctx),
+            async (factura) => this.vencer(factura, hoy, resultado, bloqueos, porEmpresa, ctx),
         )
         // 2. vencidas con recargos de mora pendientes
         await this.recorrer(
@@ -78,7 +80,9 @@ export default class VencerFacturas {
             { ...input, empresas },
             async (factura) => {
                 const debidas = morasDebidas(reglaMora(factura.reglas_snapshot), factura.vence_en, hoy)
-                if (debidas > factura.moras) await this.vencer(factura.id, hoy, resultado, bloqueos, ctx)
+                if (debidas > factura.moras) {
+                    await this.vencer(factura, hoy, resultado, bloqueos, porEmpresa, ctx)
+                }
             },
         )
 
@@ -87,7 +91,7 @@ export default class VencerFacturas {
         await new RegistrarCorrida(this.nombre).execute(
             {
                 parametros: { hasta: hoy, servicio_id: input.servicio_id ?? null, empresas },
-                resultado: { ...resultado },
+                resultado: { ...resultado, por_empresa: porEmpresa.json(resultado.bloqueos) },
                 bloqueos: resultado.bloqueos,
             },
             ctx,
@@ -96,22 +100,30 @@ export default class VencerFacturas {
     }
 
     private async vencer(
-        facturaId: number,
+        factura: Candidata,
         hoy: string,
         resultado: ResultadoVencimiento,
         bloqueos: BloqueosDeCorrida,
+        porEmpresa: ContadoresPorEmpresa<'vencidas' | 'moras' | 'errores'>,
         ctx: ContextoAccion,
     ) {
+        const facturaId = factura.id
+        const empresaId = Number(factura.empresa_id)
         try {
             const r = await new VencerFactura().execute({ factura_id: facturaId, hoy }, ctx)
-            if (r.vencida) resultado.vencidas += 1
+            if (r.vencida) {
+                resultado.vencidas += 1
+                porEmpresa.sumar(empresaId, 'vencidas')
+            }
             resultado.moras += r.moras.length
+            porEmpresa.sumar(empresaId, 'moras', r.moras.length)
             if (r.mora_bloqueada) {
                 bloqueos.registrar({ empresa_id: r.empresa_id, ...r.mora_bloqueada }, facturaId)
             }
         } catch (error) {
             if (bloqueos.registrarError(error, facturaId)) return
             resultado.errores += 1
+            porEmpresa.sumar(empresaId, 'errores')
             logger.error({ err: error, facturaId, requestId: ctx.requestId }, 'No se pudo vencer la factura')
         }
     }
@@ -142,6 +154,7 @@ function consultaBase() {
         .where('f.tipo', 'servicio')
         .select(
             'f.id',
+            'f.empresa_id',
             db.raw(`to_char(f.vence_en, 'YYYY-MM-DD') as vence_en`),
             'f.reglas_snapshot',
             db.raw(

@@ -460,7 +460,8 @@ export const CorridasFacturacion = definirEsquema(
                 bloqueos: { ...lista(BloqueoCorrida), description: 'Solo los de la empresa' },
                 resultado: {
                     ...nulable(jsonLibre),
-                    description: 'Resultado completo de la corrida (generadas, vencidas, moras, errores…)',
+                    description:
+                        'Solo de la empresa: facturas.generar → generadas, omitidas, bonificadas, errores, bloqueados, bloqueos; facturas.vencer_pendientes → vencidas, moras, errores, bloqueados, bloqueos. null si una corrida anterior de varias empresas no lo separaba',
                 },
             }),
         ),

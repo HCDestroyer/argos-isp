@@ -73,6 +73,11 @@ const POR_DOCUMENTO: Record<string, { accion: string; documento: string }> = {
         accion: 'pagos.anular',
         documento: 'el pago aplicado a la factura (POST /pagos/:id/anular): revierte sus diferencias',
     },
+    // fase 6 PR C (§9.1): los asientos del cierre anual se revierten al reabrir el ejercicio
+    cierre_anual: {
+        accion: 'libro.reabrir_ejercicio',
+        documento: 'el ejercicio (POST /libro/ejercicios/reabrir)',
+    },
     // decisiones del PM (19 oct): la bonificación (lo que era una factura de Q0) es de solo inserción
     bonificacion: {
         accion: 'libro.registrar_asiento',

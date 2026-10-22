@@ -301,7 +301,11 @@ test.group('Fase 6 · lista de verificación de cierre', (group) => {
             { empresa_id: e.B, tipo: 'ventas', hasta: hoy(), motivo: 'Ventas de hoy' },
             e.ctx,
         )
-        await new GenerarFacturas().execute({ servicio_id: servicioId }, contextoPrueba())
+        // C: un servicio que sí se factura en la misma corrida (de las dos empresas)
+        const deEmpresaC = await servicioEn(e.C, {
+            instalacion: DateTime.fromISO(hoy(), { zone: 'utc' }).startOf('month').toISODate()!,
+        })
+        await new GenerarFacturas().execute({}, { ...contextoPrueba(), empresasPermitidas: [e.B, e.C] })
         const { token } = await usuarioConRoles(['lectura'])
 
         const r = await estado(
@@ -317,6 +321,14 @@ test.group('Fase 6 · lista de verificación de cierre', (group) => {
             generar.bloqueos.map((b: { tipo: string; ejemplos: number[] }) => [b.tipo, b.ejemplos]),
             [['ventas', [servicioId]]],
         )
+        // el resultado es solo de B: nada generado (lo de C no se le suma)
+        assert.deepInclude(generar.resultado, {
+            generadas: 0,
+            omitidas: 0,
+            bonificadas: 0,
+            errores: 0,
+            bloqueados: 1,
+        })
         // la empresa C no tiene nada bloqueado en esa corrida
         const deC = await estado(
             client.get('/api/v1/facturas/corridas').bearerToken(token).header('X-Empresa-Id', String(e.C)),
@@ -327,6 +339,12 @@ test.group('Fase 6 · lista de verificación de cierre', (group) => {
             .procesos.find((p: { proceso: string }) => p.proceso === 'facturas.generar')
         assert.equal(generarC.bloqueados, 0)
         assert.deepEqual(generarC.bloqueos, [])
+        assert.deepInclude(generarC.resultado, { generadas: 1, errores: 0, bloqueados: 0 })
+        const facturasC = await db
+            .from('billing.facturas')
+            .where('servicio_id', deEmpresaC.servicioId)
+            .count('* as n')
+        assert.equal(Number(facturasC[0]!.n), 1)
         await afirmarLibro(assert, [e.B, e.C])
     })
 })

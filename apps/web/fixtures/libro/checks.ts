@@ -10,7 +10,7 @@ import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaE
  * - `ledger.cierres_checks` es de solo inserción: el vigente de cada clave es su última fila.
  * - `verificar` calcula cada check y solo agrega fila si cambió esperado, obtenido o resultado (así una
  *   supervisión sigue vigente mientras la anomalía sea la misma).
- * - `revisar` agrega una fila a mano (`automatico: false`): `supervisado` (con nota) deja pasar el
+ * - `verificar` pide `cierres.verificar`; `revisar` (`cierres.revisar_check`) agrega una fila a mano (`automatico: false`): `supervisado` (con nota) deja pasar el
  *   cierre; `anomalia` retira la supervisión. 409 `check_desactualizado`, 422 `check_en_orden`,
  *   409 `check_sin_cambio`.
  * - Cerrar un mes y el bloqueo duro verifican y exigen los checks (422 `checks_pendientes`); si fallan,
@@ -269,7 +269,7 @@ export const rutasChecksCierre: RutasFixture = {
         return { status: 200, cuerpo }
     }),
 
-    'POST /api/v1/libro/cierres/:tipo/:periodo/verificar': conPermiso('libro.cerrar_periodo', conIdempotencia((solicitud) => {
+    'POST /api/v1/libro/cierres/:tipo/:periodo/verificar': conPermiso('cierres.verificar', conIdempotencia((solicitud) => {
         const cierre = cierreDeRuta(solicitud)
         if ('status' in cierre) {
             return cierre
@@ -284,7 +284,7 @@ export const rutasChecksCierre: RutasFixture = {
         return { status: 200, cuerpo }
     })),
 
-    'POST /api/v1/libro/cierres/checks/:id/revisar': conPermiso('libro.cerrar_periodo', conIdempotencia((solicitud) => {
+    'POST /api/v1/libro/cierres/checks/:id/revisar': conPermiso('cierres.revisar_check', conIdempotencia((solicitud) => {
         const cuerpo = cuerpoObjeto(solicitud)
         const estado = cuerpo.estado
         const nota = typeof cuerpo.nota === 'string' ? cuerpo.nota.trim() : ''
@@ -334,15 +334,22 @@ export function tituloCheck(clave: string): string {
 /*
  * Última corrida de facturar y vencer por empresa (`GET /facturas/corridas`, pedido de A4): como la API,
  * sale de la fila de la corrida en `audit.acciones` (su `entrada`: parámetros, resultado y bloqueos).
- * Cuenta para una empresa si recorrió todas (`parametros.empresas` null) o si la incluyó.
+ * Cuenta para una empresa si recorrió todas (`parametros.empresas` null) o si la incluyó. `resultado`,
+ * `bloqueos[]` y `bloqueados` son solo de la empresa: los contadores salen de `resultado.por_empresa`
+ * (fase 6 PR C). Una corrida anterior sin `por_empresa` solo da resultado si fue de esa sola empresa;
+ * si recorrió varias, `resultado` es null.
  */
 export const PROCESOS_CORRIDA = ['facturas.generar', 'facturas.vencer_pendientes'] as const
 export type ProcesoCorrida = (typeof PROCESOS_CORRIDA)[number]
 type BloqueoCorrida = Schema<'ResultadoVencimiento'>['bloqueos'][number]
 
+/** Contadores de una empresa en la corrida (`ContadoresPorEmpresa.json` de la API). */
+export type ContadoresCorrida = Record<string, number>
+
 export interface EntradaCorrida {
     parametros: { hasta: string, servicio_id: number | null, empresas: number[] | null }
-    resultado: Record<string, unknown>
+    /** Totales de la corrida y, desde la fase 6 PR C, `por_empresa` (clave = id de la empresa). */
+    resultado: Record<string, unknown> & { por_empresa?: Record<string, ContadoresCorrida> }
     bloqueos: BloqueoCorrida[]
 }
 
@@ -373,6 +380,21 @@ function esEntradaCorrida(entrada: unknown): entrada is EntradaCorrida {
     return typeof entrada === 'object' && entrada !== null && 'parametros' in entrada && 'bloqueos' in entrada
 }
 
+/** Como `resultadoDeEmpresa` de la API: los contadores de la empresa, o null si no se pueden separar. */
+function resultadoDeEmpresa(proceso: ProcesoCorrida, entrada: EntradaCorrida, empresaId: number, bloqueos: BloqueoCorrida[], bloqueados: number): Record<string, unknown> | null {
+    const porEmpresa = entrada.resultado.por_empresa
+    if (porEmpresa) {
+        const ceros = proceso === 'facturas.generar' ? { generadas: 0, omitidas: 0, bonificadas: 0, errores: 0 } : { vencidas: 0, moras: 0, errores: 0 }
+        return { ...ceros, ...(porEmpresa[String(empresaId)] ?? {}), bloqueados, bloqueos }
+    }
+    const empresas = entrada.parametros.empresas
+    if (Array.isArray(empresas) && empresas.length === 1 && empresas[0] === empresaId) {
+        const contadores = Object.fromEntries(Object.entries(entrada.resultado).filter(([clave]) => !['facturas', 'bonificaciones'].includes(clave)))
+        return { ...contadores, bloqueados, bloqueos }
+    }
+    return null
+}
+
 function corridaDe(empresaId: number, proceso: ProcesoCorrida): Schema<'CorridasFacturacion'>['procesos'][number] {
     const fila = bd.acciones
         .filter(a => a.accion === proceso && a.resultado === 'ok' && esEntradaCorrida(a.entrada))
@@ -383,15 +405,16 @@ function corridaDe(empresaId: number, proceso: ProcesoCorrida): Schema<'Corridas
         .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)[0]
     const entrada = fila && esEntradaCorrida(fila.entrada) ? fila.entrada : null
     const bloqueos = (entrada?.bloqueos ?? []).filter(b => b.empresa_id === empresaId)
+    const bloqueados = bloqueos.reduce((s, b) => s + b.documentos, 0)
     return {
         proceso,
         corrida_en: fila?.created_at ?? null,
         actor_tipo: fila?.actor_tipo ?? null,
         canal: fila?.canal ?? null,
         hasta: entrada?.parametros.hasta ?? null,
-        bloqueados: bloqueos.reduce((s, b) => s + b.documentos, 0),
+        bloqueados,
         bloqueos,
-        resultado: entrada?.resultado ?? null,
+        resultado: entrada ? resultadoDeEmpresa(proceso, entrada, empresaId, bloqueos, bloqueados) : null,
     }
 }
 
@@ -417,7 +440,19 @@ export const accionesCorridas: Schema<'AccionAuditoria'>[] = [
         entidad_id: null,
         entrada: {
             parametros: { hasta: '2026-10-15', servicio_id: null, empresas: null },
-            resultado: { generadas: 4, omitidas: 9, errores: 0, bloqueados: 3 },
+            resultado: {
+                generadas: 4,
+                omitidas: 9,
+                facturas: [],
+                bonificadas: 0,
+                bonificaciones: [],
+                errores: 0,
+                bloqueados: 3,
+                por_empresa: {
+                    1: { generadas: 3, omitidas: 6, bonificadas: 0, errores: 0, bloqueados: 3 },
+                    2: { generadas: 1, omitidas: 3, bonificadas: 0, errores: 0, bloqueados: 0 },
+                },
+            },
             bloqueos: [{ empresa_id: 1, tipo: 'ventas', hasta: '2026-09-30', fecha: '2026-09-01', documentos: 3, ejemplos: [2, 4, 6] }],
         } satisfies EntradaCorrida,
         resultado: 'ok',
@@ -438,7 +473,16 @@ export const accionesCorridas: Schema<'AccionAuditoria'>[] = [
         entidad_id: null,
         entrada: {
             parametros: { hasta: '2026-10-15', servicio_id: null, empresas: null },
-            resultado: { vencidas: 6, moras: 2, errores: 0, bloqueados: 2 },
+            resultado: {
+                vencidas: 6,
+                moras: 2,
+                errores: 0,
+                bloqueados: 2,
+                por_empresa: {
+                    1: { vencidas: 4, moras: 2, errores: 0, bloqueados: 2 },
+                    2: { vencidas: 2, moras: 0, errores: 0, bloqueados: 0 },
+                },
+            },
             bloqueos: [{ empresa_id: 1, tipo: 'global', hasta: '2026-08-31', fecha: '2026-08-25', documentos: 2, ejemplos: [3, 5] }],
         } satisfies EntradaCorrida,
         resultado: 'ok',
