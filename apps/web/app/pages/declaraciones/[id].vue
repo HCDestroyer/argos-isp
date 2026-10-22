@@ -484,7 +484,7 @@ function verChecklist() {
                             <ULink
                                 v-if="puede('libros.ver')"
                                 to="/libros"
-                                class="text-primary"
+                                class="text-primary underline underline-offset-2"
                             >
                                 Libros legales
                             </ULink>
