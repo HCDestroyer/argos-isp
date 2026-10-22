@@ -4,7 +4,13 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { CERO, aTexto, dec, tieneCentavosExactos, type Dec, type Monto } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
-import { PeriodoBloqueado, bloqueoVigente, impedimentoConExcepcion, primerDiaAbierto } from '#ledger/bloqueos'
+import {
+    PeriodoBloqueado,
+    bloqueoVigente,
+    impedimentoConExcepcion,
+    primerDiaAbierto,
+    tocaCuentaDeImpuesto,
+} from '#ledger/bloqueos'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { PAIS_PLAN } from '#ledger/plan_cuentas'
@@ -578,7 +584,14 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
     ): Promise<{ fecha: string; fechaDocumento: string | null; excepcionId: number | null }> {
         const usuarioId = usuarioDelActor(t.ctx.actor)
         // §10.4 (fase 7 PR B): el bloqueo de impuestos alcanza a todo asiento con alguna partida etiquetada
-        const conImpuesto = d.lineas.some((l) => l.impuesto_codigo !== null)
+        // y, salvo la liquidación y su pago, con una partida sin etiqueta en una cuenta de impuesto (un ajuste manual)
+        const conImpuesto =
+            d.lineas.some((l) => l.impuesto_codigo !== null) ||
+            (!['liquidacion_impuesto', 'pago_impuesto'].includes(d.origen) &&
+                (await tocaCuentaDeImpuesto(
+                    t.trx,
+                    d.lineas.map((l) => l.cuenta.id),
+                )))
         const consulta = {
             fecha: d.fecha,
             empresaId: d.empresaId,

@@ -201,12 +201,13 @@ test.group('Fase 6 · bloqueos del libro', (group) => {
         const compras = await errorDe(ajuste(e.ctx, e.B, hasta, { diario: 'COM' }))
         assert.deepEqual([compras.codigo, compras.reglas], ['periodo_bloqueado', ['compras']])
         // fase 7 PR B (§10.4): el bloqueo de impuestos alcanza a los asientos con alguna partida
-        // etiquetada; tocar una cuenta de impuesto sin etiqueta (un ajuste) ya no basta
+        // etiquetada y a los que tocan una cuenta de impuesto sin etiqueta (un ajuste manual)
         const impuestos = await errorDe(
             ajuste(e.ctx, e.B, hasta, { cuentas: ['5.2.99', '2.1.06'], etiqueta: ['IVA12', '+V_IVA'] }),
         )
         assert.deepEqual([impuestos.codigo, impuestos.reglas], ['periodo_bloqueado', ['impuestos']])
-        await ajuste(e.ctx, e.B, hasta, { cuentas: ['5.2.99', '2.1.06'] })
+        const sinEtiqueta = await errorDe(ajuste(e.ctx, e.B, hasta, { cuentas: ['5.2.99', '2.1.06'] }))
+        assert.deepEqual([sinEtiqueta.codigo, sinEtiqueta.reglas], ['periodo_bloqueado', ['impuestos']])
 
         // impuestos no retrocede (ni por desbloquear ni por trigger)
         const atras = await errorDe(

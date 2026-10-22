@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
+import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { errorDe, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
@@ -189,6 +190,32 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
             ),
         )
         assert.deepEqual([bajoBloqueo.codigo, bajoBloqueo.reglas], ['periodo_bloqueado', ['impuestos']])
+        // también sin etiqueta: un ajuste manual a 2.1.02 en el mes liquidado no entra…
+        const ajusteManual = (fecha: string, trx?: TransactionClientContract) =>
+            new RegistrarAsiento().execute(
+                {
+                    empresa_id: e.B,
+                    fecha,
+                    descripcion: 'Ajuste manual del IVA',
+                    origen_tipo: 'ajuste',
+                    movimientos: [
+                        { cuenta: '1.1.02.01', debe: '5.00' },
+                        { cuenta: '2.1.02', haber: '5.00' },
+                    ],
+                },
+                e.ctx,
+                trx ? { trx } : {},
+            )
+        const sinEtiqueta = await errorDe(ajusteManual(HOY))
+        assert.deepEqual([sinEtiqueta.codigo, sinEtiqueta.reglas], ['periodo_bloqueado', ['impuestos']])
+        // …y en un mes abierto sí (se deshace para no dejarlo en el libro)
+        const trx = await db.transaction()
+        try {
+            const abierto = await ajusteManual(`${SIGUIENTE}-02`, trx)
+            assert.equal(abierto.fecha, `${SIGUIENTE}-02`)
+        } finally {
+            await trx.rollback()
+        }
 
         // presentada 15 días y pagada 20 días después del vencimiento: multa y mora
         const vence = DateTime.fromISO(borrador.vence_en)
