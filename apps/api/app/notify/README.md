@@ -32,7 +32,7 @@ audit.outbox ──relay (A1)──▶ ConsumidorNotify.procesar({ id, evento, p
 
 ## Eventos
 
-**Consume** (si hay plantilla activa para el evento): `factura.emitida`, `factura.vencida`, `servicio.estado_cambiado`, `pago.registrado` (también a los dueños de las facturas, ver abajo), `promesa.*`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` y, de lealtad, `lealtad.puntos_acumulados`, `lealtad.puntos_por_vencer` y `lealtad.referido_calificado` (ver "Avisos de lealtad"). Para alertas internas: `aaa.caido`, `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada` y los fiscales `libro.integridad_rota`, `dte.rechazado`, `fel.contingencia_cambiada`, `nota_credito.anulada` (ver "Avisos fiscales").
+**Consume** (si hay plantilla activa para el evento): `factura.emitida`, `factura.vencida`, `servicio.estado_cambiado`, `pago.registrado` (también a los dueños de las facturas, ver abajo), `promesa.*`, `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` y, de lealtad, `lealtad.puntos_acumulados`, `lealtad.puntos_por_vencer` y `lealtad.referido_calificado` (ver "Avisos de lealtad"). Para alertas internas: `aaa.caido`, `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada` y los fiscales `libro.integridad_rota`, `dte.rechazado`, `fel.contingencia_cambiada`, `nota_credito.anulada` y, del calendario fiscal, `fiscal.vencimiento_proximo` y `fiscal.limite_pc` (ver "Avisos fiscales").
 
 **Emite**: `notificacion.enviada { cliente_id, canal, evento_origen, estado }` cuando un envío termina `enviado` o `fallido` (también cuando el cliente no tiene destino). Las alertas internas sin cliente y los envíos `omitido` no lo emiten. `notificaciones.config_cambiada { configuracion_id, empresa_id, campos }` al guardar o sembrar la configuración de canales; lo consume el propio `notify:worker` (`ConsumidorConfigNotify`).
 
@@ -157,7 +157,7 @@ Avisos por Telegram al chat del equipo (`TELEGRAM_CHAT_EQUIPO`), no a clientes. 
 
 ## Avisos fiscales (FEL, fase 3)
 
-Contrato de localización fiscal §14. Los procesa `RegistrarAlerta` (mismo consumidor, mismos incidentes que las alertas internas), pero con la **configuración de canales de la empresa del evento** (`empresa_id`: la suya si tiene `hereda = false`, si no la global) y por **dos canales**: Telegram al chat del equipo y correo a `correo.contabilidad`. Un envío por canal con origen `alerta:<incidente>:<fase>` y `empresa_id` de la empresa (sale con su remitente y su bot).
+Contrato de localización fiscal §14. Los procesa `RegistrarAlerta` (mismo consumidor, mismos incidentes que las alertas internas), pero con la **configuración de canales de la empresa del evento** (`empresa_id`: la suya si tiene `hereda = false`, si no la global) y por **dos canales**: Telegram al chat del equipo y correo a `correo.contabilidad` (respaldo: usuarios con rol `contabilidad` de la empresa). Un envío por canal con origen `alerta:<incidente>:<fase>` y `empresa_id` de la empresa (sale con su remitente y su bot).
 
 | Evento | Incidente (`clave`) | Aviso | Plantilla |
 | --- | --- | --- | --- |
@@ -166,10 +166,15 @@ Contrato de localización fiscal §14. Los procesa `RegistrarAlerta` (mismo cons
 | `fel.contingencia_cambiada` con `activa` | `fel-contingencia:<empresa>`, abierto hasta desactivarla | al abrir | `alerta.fel.contingencia_activada` |
 | `fel.contingencia_cambiada` sin `activa` | cierra el anterior (o uno puntual si no había) | siempre, con la duración si la conoce | `alerta.fel.contingencia_desactivada` |
 | `nota_credito.anulada` | `nota-credito:<id>`, puntual, una vez por nota | siempre | `alerta.nota_credito.anulada` |
+| `fiscal.vencimiento_proximo` (calendario, fase 7) | `fiscal-vence:<obligacion>:<umbral>`, puntual, una vez por obligación y umbral (7, 3, 1, 0) | siempre: impuesto (nombre del catálogo `#fiscal/l10n/gt/obligaciones`), periodo legible («septiembre 2026», «3.er trimestre 2026»), formulario o «por confirmar con el contador», vencimiento en `America/Guatemala` y «vence en n días / mañana / hoy» (`dias` del evento); con umbral 0 el asunto empieza con «HOY» | `alerta.fiscal.vencimiento_proximo` |
+| `fiscal.limite_pc` (calendario, fase 7) | `fiscal-pc:<empresa>:<anio>:<umbral_pct>` (umbral normalizado a 2 decimales), puntual, una vez por umbral y año | siempre: acumulado, límite, porcentaje real y lo que queda (decimal.js); con `umbral_pct ≥ 100` dice que la empresa «debe pasar al régimen general» (el sistema nunca cambia el régimen) | `alerta.fiscal.limite_pc` |
 
 - **Idempotencia.** Como las demás alertas: `notify.alertas_eventos` por `outbox:<id>` y unicidad de `notify.envios`; además, los puntuales "una vez por clave" (`unico`) no avisan de nuevo si llega otro evento con la misma clave.
-- **Interruptores.** Telegram respeta `telegram_alertas_activo` y el correo `correo_activo` de esa configuración (`omitido` con motivo). Sin chat o sin `correo.contabilidad`, el envío queda `fallido` con el motivo. Una plantilla desactivada silencia solo su canal.
+- **Interruptores.** Telegram respeta `telegram_alertas_activo` y el correo `correo_activo` de esa configuración (`omitido` con motivo). Sin chat, o sin `correo.contabilidad` ni usuarios con rol `contabilidad` de la empresa, el envío queda `fallido` con el motivo. Una plantilla desactivada silencia solo su canal.
 - **Plantillas** (telegram y correo, en español, texto plano): las siembra el seeder; si se borran, se usa el texto de `PLANTILLAS_ALERTA`.
+- **Marca.** Los del calendario fiscal nombran la empresa y su NIT (`empresa.nombre`, `empresa.nit`) en el cuerpo; el correo sale con el remitente de la configuración de esa empresa. Variables `alerta.*` en `calendario_fiscal.ts`.
+- **Destinatarios del correo** (todos los avisos fiscales). `correo.contabilidad` de la configuración de canales de la empresa (o la global si hereda). Si no está configurado, los usuarios activos con rol `contabilidad` y acceso a la empresa (`alcance_global` o fila en `core.usuarios_empresas`), en una sola dirección separada por comas (`correosRolContabilidad` en `alertas.ts`). Sin ninguno, el envío queda `fallido` con el motivo.
+- **Auditoría.** `notificaciones.alertar` se audita con la empresa del evento (`empresa_id` del payload, también en la reentrega) y la entidad `incidente`.
 
 ## Particiones de auditoría (cron mensual)
 

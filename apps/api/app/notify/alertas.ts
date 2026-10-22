@@ -5,6 +5,7 @@ import { crearEnvio, type EnvioCreado } from '#notify/envios'
 import { PLANTILLAS_ALERTA } from '#notify/plantillas_base'
 import { variablesEmpresa, type Variables } from '#notify/variables'
 import { ZONA } from '#notify/formato'
+import { EMPRESA_PRINCIPAL } from '#core/empresas'
 
 /**
  * Alertas internas al chat del equipo (tarea 7). Piezas compartidas por las acciones
@@ -233,7 +234,8 @@ export async function crearAlerta(
 /**
  * Alerta por uno o varios canales con la configuración de canales de `empresaId` (la de la
  * empresa si tiene la suya con `hereda = false`; si no, la global): Telegram al chat del equipo de
- * esa configuración y correo a su `correo.contabilidad`. Un envío por canal con el mismo origen
+ * esa configuración y correo a su `correo.contabilidad` (sin él, a los usuarios con rol
+ * `contabilidad` de la empresa: `correosRolContabilidad`). Un envío por canal con el mismo origen
  * `alerta:<incidente>:<fase>` (único por canal). Por canal: plantilla desactivada → sin envío;
  * canal apagado → `omitido`; sin destino o sin canal configurado → `fallido` con el motivo.
  * `notify.envios.empresa_id` guarda la empresa: el envío sale con su configuración y su marca.
@@ -264,13 +266,16 @@ export async function crearAlertas(
             enBase ?? PLANTILLAS_ALERTA.find((p) => p.evento === datos.evento && p.canal === canal)
         if (!plantilla) throw new Error(`Alerta sin plantilla: ${datos.evento} (${canal})`)
 
-        const destino = canal === 'telegram' ? chatDelEquipo(config) : config.correo.contabilidad
+        const destino =
+            canal === 'telegram'
+                ? chatDelEquipo(config)
+                : config.correo.contabilidad?.trim() || (await correosRolContabilidad(trx, empresaId))
         const uso = disponibilidad(config, canal, 'alertas')
         const omitido = uso.apagado ? uso.motivo : null
         const sinDestino =
             canal === 'telegram'
                 ? 'Chat del equipo de Telegram no configurado'
-                : `Correo de contabilidad no configurado en ${ambito(config)}`
+                : `Correo de contabilidad no configurado en ${ambito(config)} y sin usuarios activos con rol contabilidad en la empresa`
         const error = omitido ? undefined : !destino ? sinDestino : (uso.motivo ?? undefined)
 
         envios.push(
@@ -290,6 +295,46 @@ export async function crearAlertas(
         )
     }
     return envios
+}
+
+/**
+ * Respaldo del correo a contabilidad (decisión del líder, fase 7): sin `correo.contabilidad` en la
+ * configuración que aplica, los usuarios activos con rol `contabilidad` y acceso a la empresa
+ * (`alcance_global` o fila en `core.usuarios_empresas`). Sin empresa, la principal. Direcciones
+ * únicas (sin distinguir mayúsculas), en orden, separadas por coma; `null` si no hay ninguno.
+ */
+export async function correosRolContabilidad(
+    trx: TransactionClientContract,
+    empresaId: number | null,
+): Promise<string | null> {
+    const empresa = empresaId ?? EMPRESA_PRINCIPAL
+    const filas = (await trx
+        .from('core.usuarios as u')
+        .join('core.usuarios_roles as ur', 'ur.usuario_id', 'u.id')
+        .join('core.roles as r', 'r.id', 'ur.role_id')
+        .where('r.nombre', 'contabilidad')
+        .where('u.activo', true)
+        .where((q) =>
+            q
+                .where('u.alcance_global', true)
+                .orWhereExists((e) =>
+                    e
+                        .from('core.usuarios_empresas as ue')
+                        .whereRaw('ue.usuario_id = u.id')
+                        .where('ue.empresa_id', empresa),
+                ),
+        )
+        .orderBy('u.id', 'asc')
+        .select('u.email')) as Array<{ email: string | null }>
+    const vistos = new Set<string>()
+    const correos: string[] = []
+    for (const { email } of filas) {
+        const correo = email?.trim()
+        if (!correo || vistos.has(correo.toLowerCase())) continue
+        vistos.add(correo.toLowerCase())
+        correos.push(correo)
+    }
+    return correos.length > 0 ? correos.join(', ') : null
 }
 
 /** Instante en Guatemala para mostrar: `16/10/2026 08:05`. */

@@ -166,3 +166,49 @@ export function respuestaTelegramOk(cuerpo: Record<string, unknown>) {
         },
     }
 }
+
+/** Usuario con rol `contabilidad` (respaldo del correo de los avisos fiscales). Devuelve su correo. */
+export async function crearUsuarioContabilidad(
+    datos: { alcanceGlobal?: boolean; empresas?: number[]; activo?: boolean } = {},
+): Promise<{ id: number; email: string }> {
+    const email = `${unico('conta')
+        .replace(/[^a-z0-9]/gi, '')
+        .toLowerCase()}@argos.gt`
+    const [usuario] = (await db
+        .table('core.usuarios')
+        .insert({
+            nombre: unico('Contador'),
+            email,
+            password_hash: 'x',
+            activo: datos.activo ?? true,
+            alcance_global: datos.alcanceGlobal ?? false,
+        })
+        .returning('id')) as Array<{ id: number }>
+    const rol = (await db.from('core.roles').where('nombre', 'contabilidad').select('id').first()) as {
+        id: number
+    }
+    await db.table('core.usuarios_roles').insert({ usuario_id: usuario!.id, role_id: rol.id })
+    for (const empresaId of datos.empresas ?? []) {
+        await db.table('core.usuarios_empresas').insert({ usuario_id: usuario!.id, empresa_id: empresaId })
+    }
+    return { id: Number(usuario!.id), email }
+}
+
+/**
+ * Desactiva los usuarios activos con rol `contabilidad` que dejaron otras pruebas (para probar el
+ * caso "sin destinatario"). Devuelve la función que los reactiva.
+ */
+export async function apartarUsuariosContabilidad(): Promise<() => Promise<void>> {
+    const filas = (await db
+        .from('core.usuarios as u')
+        .join('core.usuarios_roles as ur', 'ur.usuario_id', 'u.id')
+        .join('core.roles as r', 'r.id', 'ur.role_id')
+        .where('r.nombre', 'contabilidad')
+        .where('u.activo', true)
+        .distinct('u.id')) as Array<{ id: number }>
+    const ids = filas.map((f) => f.id)
+    if (ids.length > 0) await db.from('core.usuarios').whereIn('id', ids).update({ activo: false })
+    return async () => {
+        if (ids.length > 0) await db.from('core.usuarios').whereIn('id', ids).update({ activo: true })
+    }
+}
