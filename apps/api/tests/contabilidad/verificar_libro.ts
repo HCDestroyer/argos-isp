@@ -3283,6 +3283,20 @@ async function verificarLibroCon(
               WHERE debe IS NULL OR haber IS NULL OR debe::numeric <> debe_libro OR haber::numeric <> haber_libro
                  OR debe_libro <> haber_libro OR (libro = 'diario' AND filas <> filas_diario)`,
         )
+        await revisar(
+            '20.libro_ventas_distinto_del_iva_debito (libro de ventas emitido, con sus meses aún cerrados: Σ IVA = movimiento de 2.1.02 de la empresa en el rango; cada venta suma una sola vez y en el mes en que se movió el débito)',
+            `SELECT e.id AS emision_id, e.empresa_id, to_char(e.desde, 'YYYY-MM') AS desde, to_char(e.hasta, 'YYYY-MM') AS hasta,
+                    e.totales ->> 'iva' AS iva_libro,
+                    (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta)::text AS iva_debito
+               FROM fiscal.libros_emisiones e
+              WHERE ${E('e.empresa_id')} AND e.libro = 'ventas' AND ${sigueCerrada('e')}
+                AND (e.totales ->> 'iva')::numeric IS DISTINCT FROM
+                    (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta)`,
+        )
         if (!opciones.sinFuncionesProducto) {
             const emisiones = await filas(
                 `SELECT e.id, e.empresa_id, e.libro, to_char(e.desde, 'YYYY-MM-DD') AS desde,

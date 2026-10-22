@@ -21,6 +21,10 @@ import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import BloquearLibro from '#ledger/actions/bloquear_libro'
 import EmitirLibro from '#fiscal/actions/emitir_libro'
+import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import { cola, datosNit, dtesDe, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { crearClienteFila } from '#tests/core/fabricas'
+import { hoyGuatemala } from '#ledger/fechas'
 
 /**
  * Auditor contable · libros legales con folio (fase 6 PR D; contrato de localización fiscal §7 y
@@ -280,6 +284,64 @@ test.group('Auditor contable · libros legales con folio', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
+    test('ventas con FEL: factura certificada y su NCRE salen una vez; con el DTE en otro mes (posterior o previo) la fila interna lleva el IVA y el DTE va informativo; Σ IVA = 2.1.02', async ({
+        assert,
+    }) => {
+        const e = await empresasFel('obligatoria')
+        const s = await servicioFel(e, 'emitir', '112.00', await crearClienteFila(datosNit()))
+        await cola(e)
+        const facturaId = s.facturas[0]!.id
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: facturaId, monto: '56.00', motivo: 'auditoría: media nota' },
+            e.ctx,
+        )
+        await cola(e)
+        // un aviso de cobro sin cubrir (IVA en 2.1.11): no es venta fiscal todavía
+        const aviso = await servicioFel(e, 'pagar', '224.00')
+        assert.isTrue(Boolean(aviso.facturas[0]))
+        const [ncre] = await dtesDe('nota_credito', nota.id)
+        assert.equal(ncre?.estado, 'certificado')
+        const hoy = hoyGuatemala()
+        const anio = { desde: `${hoy.slice(0, 4)}-01-01`, hasta: `${hoy.slice(0, 4)}-12-31` }
+        const debito = async () => aTexto(CERO.minus(await neto(e.B, '2.1.02', anio.desde, anio.hasta)))
+        const resumen = async () => {
+            const l = await construirLibro('ventas', e.B, anio)
+            return {
+                filas: l.reporte.filas.map((f) => [f.origen, f.estado, f.iva]),
+                iva: l.reporte.totales.iva,
+            }
+        }
+        assert.deepEqual(await resumen(), {
+            filas: [
+                ['dte', 'vigente', '12.00'],
+                ['dte', 'vigente', '-6.00'],
+            ],
+            iva: await debito(),
+        })
+        // el DTE de la factura en el mes siguiente (posterior) y el de la nota en el anterior (previo)
+        const mover = (documentoTipo: string, documentoId: number, meses: number) =>
+            db.rawQuery(
+                `UPDATE fiscal.dte SET fecha_emision = fecha_emision + make_interval(months => ?)
+                  WHERE documento_tipo = ? AND documento_id = ?`,
+                [meses, documentoTipo, documentoId],
+            )
+        await mover('factura', facturaId, 1)
+        await mover('nota_credito', nota.id, -1)
+        const movido = await resumen()
+        assert.sameDeepMembers(movido.filas, [
+            ['interno', 'vigente', '12.00'],
+            ['dte', 'certificado_posterior', '0.00'],
+            ['interno', 'vigente', '-6.00'],
+            ['dte', 'certificado_previo', '0.00'],
+        ])
+        assert.equal(movido.iva, await debito())
+        await mover('factura', facturaId, -1)
+        await mover('nota_credito', nota.id, 1)
+        const devuelto = await resumen()
+        assert.equal(devuelto.iva, await debito())
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
     test('reabrir un mes emitido bajo el bloqueo global: el libro emitido ya no queda respaldado (decisión del contador)', async ({
         assert,
     }) => {
@@ -393,6 +455,22 @@ test.group('Auditor contable · libros legales con folio', (group) => {
             '20.libro_emitido_distinto_del_mayor',
             '20.libro_emitido_cambio',
         ])
+        // un libro de ventas con un IVA que no es el movimiento de 2.1.02 del rango
+        assert.include(
+            await fabricado(empresas, (trx) =>
+                insertar(
+                    trx,
+                    copia({
+                        libro: 'ventas',
+                        reimpresion_de: null,
+                        folio_inicial: 1,
+                        folio_final: 1,
+                        totales: JSON.stringify({ iva: '5.00' }),
+                    }),
+                ),
+            ),
+            '20.libro_ventas_distinto_del_iva_debito',
+        )
         // un asiento que aparece en enero después de la emisión (el mes sigue cerrado)
         const tardio = await fabricado(empresas, async (trx) => {
             await trx.rawQuery('ALTER TABLE ledger.asientos DISABLE TRIGGER USER')

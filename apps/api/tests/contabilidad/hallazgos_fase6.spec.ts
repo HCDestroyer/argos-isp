@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
-import { prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
+import { prepararEmpresas, servicioEn, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
@@ -16,6 +16,8 @@ import { empresasSinFel, habilitar, mesConMovimiento, neto } from '#tests/contab
 import { haceMeses } from '#tests/ledger/ayudas_compras'
 import { cola, configurarModo, datosNit } from '#tests/fiscal/ayudas_fel'
 import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
+import EditarParametro from '#fiscal/actions/editar_parametro'
+import VencerFactura from '#billing/actions/vencer_factura'
 import { crearClienteFila } from '#tests/core/fabricas'
 
 /**
@@ -32,9 +34,11 @@ import { crearClienteFila } from '#tests/core/fabricas'
  * emitido cambiaba con hechos posteriores (anulación, dato fiscal del cliente, retención recibida).
  * Arreglados por A3 en 8814035: quedan como pruebas normales (el inv. 20.libro_emitido_cambio los vigila).
  *
- * H31 (abierto): una factura sin FEL que sale como interna en el libro de su mes y se certifica en un
- * mes posterior vuelve a sumar como DTE en el libro del mes de la certificación (IVA dos veces en el
- * año; 2.1.02 no se movió al certificar).
+ * H31 (arreglado por A3 en b42c35d): una factura sin FEL que sale como interna en el libro de su mes
+ * y se certifica en un mes posterior volvía a sumar como DTE en el libro del mes de la certificación.
+ * Ahora el DTE sale como fila informativa sin montos (`certificado_posterior`).
+ *
+ * H32 (abierto): la mora con IVA sin FEL (asiento `mora`, IVA a 2.1.02) no sale en el libro de ventas.
  */
 
 test.group('Auditor contable · hallazgos de la fase 6', (group) => {
@@ -174,7 +178,7 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         assert.deepEqual(violaciones, [])
     })
 
-    test('H31: una factura sin FEL que se certifica en un mes posterior sale dos veces en los libros de ventas (IVA duplicado)', async ({
+    test('H31 (arreglado en b42c35d): una factura sin FEL que se certifica en un mes posterior suma su IVA una sola vez; el DTE sale informativo', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -207,6 +211,42 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
                 octubre: aTexto(CERO.minus(await neto(e.B, '2.1.02', mes.desde, mes.hasta))),
             },
         )
+        const informativo = octubre.reporte.filas.find((f) => f.origen === 'dte')
+        assert.include(informativo, { estado: 'certificado_posterior', iva: '0.00', total: '0.00' })
+        // el libro de los dos meses suma el IVA una sola vez
+        const dosMeses = await construirLibro('ventas', e.B, { desde, hasta: mes.hasta })
+        assert.equal(dosMeses.reporte.totales.iva, s.facturas[0]!.iva)
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails('H31: la venta interna de un mes emitido vuelve a sumar como DTE en el mes en que se certifica')
+    })
+
+    test('H32: la mora con IVA de una empresa sin FEL no sale en el libro de ventas (su IVA está en 2.1.02)', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        await new EditarParametro().execute(
+            {
+                clave: 'mora_con_iva',
+                valor: true,
+                vigente_desde: '2026-01-01',
+                motivo: 'contador',
+                empresa_id: e.B,
+            },
+            { ...e.ctx, empresaId: e.B },
+        )
+        const hoy = hoyGuatemala()
+        const d = await servicioFacturado(e.B, inicioDeMes(hoy), {
+            precio: '150.00',
+            instalacion: inicioDeMes(hoy),
+            plantilla: { certificar_al: 'nunca', mora_tipo: 'fija', mora_valor: '22.40', dias_gracia: 0 },
+        })
+        const vencida = await new VencerFactura().execute({ factura_id: d.facturas[0]!.id, hoy }, e.ctx)
+        const mora = await db.from('billing.facturas').where('id', vencida.moras[0]!).firstOrFail()
+        assert.containSubset(mora, { tipo: 'mora', aviso_cobro: false, iva: '2.40' })
+        const mes = { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) }
+        const ventas = await construirLibro('ventas', e.B, mes)
+        assert.equal(
+            ventas.reporte.totales.iva,
+            aTexto(CERO.minus(await neto(e.B, '2.1.02', mes.desde, mes.hasta))),
+        )
+    }).fails('H32: el libro de ventas solo toma asientos factura y nota_credito; la mora va con origen mora')
 })
