@@ -100,6 +100,7 @@ Borradores calculados: el sistema **nunca** presenta nada a la SAT.
 - `fiscal.declaraciones` (versiones: lo calculado no cambia, el estado avanza `borrador → revisada → presentada`, o `sustituida`) y `fiscal.declaraciones_pagos` (solo inserción). La obligación del calendario queda enlazada (`declaracion_id`) y pasa a `borrador` o `presentada`.
 - Las ventas llevan su etiqueta `V_IVA` (la pone `registrarAsiento` en la partida de `2.1.02` de facturas, mora, notas y reclasificaciones) y los reversos copian la etiqueta con el signo contrario. El bloqueo de impuestos alcanza a todo asiento con alguna partida etiquetada.
 - Checks de impuestos (`#ledger/checks`): `iva_cuadrado` e `iva_liquidado`.
+- Cascada de remanentes (H34): revisar una versión que cambia el remanente que deja rectifica, en la misma transacción, cada mes posterior ya revisado (sustitutiva revisada por la diferencia; un presentado vuelve a «por presentar» como rectificativa); 409 `cascada_bloqueada` si uno no se puede.
 
 | Acción (permiso)          | Ruta                                        | Qué hace                                                                                                                         |
 | ------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |

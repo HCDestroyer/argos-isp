@@ -1,6 +1,7 @@
+import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, ReglaNegocio } from '#shared/errores'
+import { Conflicto, Problema, ReglaNegocio } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { exigirChecks } from '#ledger/checks'
 import { bloqueoVigente, bloquearBloqueos, guardarBloqueo } from '#ledger/bloqueos'
@@ -8,7 +9,9 @@ import { exigirNcreCertificadas } from '#ledger/ncre_pendientes'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
 import { hoyFiscal } from '#fiscal/comun'
-import { payloadDeclaracion } from '#fiscal/actions/calcular_declaracion'
+import CalcularDeclaracion, { payloadDeclaracion } from '#fiscal/actions/calcular_declaracion'
+import { actualizarObligacion } from '#fiscal/actions/generar_calendario'
+import { COLUMNAS_OBLIGACION, normalizarObligacion } from '#fiscal/calendario'
 import {
     LOCK_DECLARACIONES,
     hashActual,
@@ -43,12 +46,31 @@ import {
 
 export interface EntradaRevisarDeclaracion {
     declaracion_id: number
+    /** @internal la revisa la cascada de otra revisión (H34): no vuelve a encadenar */
+    cascada_de?: number | null
 }
 
-export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDeclaracion, DeclaracionFila> {
+/** Un mes recalculado y revisado por la cascada (H34, decisión del líder). */
+export interface MesCascada {
+    periodo: string
+    declaracion_id: number
+    version: number
+    sustituye_a: number
+    /** la versión sustituida estaba presentada: la obligación vuelve a «por presentar» (rectificativa) */
+    estaba_presentada: boolean
+    remanente_credito_anterior: string
+    remanente_credito: string
+    a_pagar: string
+}
+
+export interface DeclaracionRevisada extends DeclaracionFila {
+    cascada: MesCascada[]
+}
+
+export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDeclaracion, DeclaracionRevisada> {
     readonly nombre = 'declaraciones.revisar'
 
-    protected async handle(input: EntradaRevisarDeclaracion, t: Transaccion): Promise<DeclaracionFila> {
+    protected async handle(input: EntradaRevisarDeclaracion, t: Transaccion): Promise<DeclaracionRevisada> {
         const previa = await verDeclaracion(input.declaracion_id, t.trx)
         exigirAccesoEmpresa(t.ctx, previa.empresa_id)
         t.fijarEmpresa(previa.empresa_id)
@@ -126,9 +148,103 @@ export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDecla
         await exigirChecks(t.trx, d.empresa_id, 'impuestos', d.periodo_desde)
 
         const revisada = await verDeclaracion(d.id, t.trx)
-        await t.emit('declaracion.revisada', payloadDeclaracion(revisada))
-        return revisada
+        await t.emit('declaracion.revisada', {
+            ...payloadDeclaracion(revisada),
+            ...(input.cascada_de ? { motivo: 'cascada' as const, cascada_de: input.cascada_de } : {}),
+        })
+        const cascada = input.cascada_de ? [] : await cascadaDeRemanentes(t, revisada)
+        if (cascada.length > 0) t.anotarAuditoria({ cascada })
+        t.fijarEntidad('declaracion', d.id)
+        return { ...revisada, cascada }
     }
+}
+
+const remanentes = (totales: Record<string, string>, sufijo = '') => [
+    totales[`remanente_credito${sufijo}`] ?? '0.00',
+    totales[`remanente_retenciones${sufijo}`] ?? '0.00',
+]
+
+/**
+ * H34 (decisión del líder): revisar un mes que cambia el remanente que deja obliga a rectificar, en la
+ * misma transacción y en orden, cada mes posterior que ya tenga versión revisada: una sustitutiva con
+ * el remanente nuevo, revisada y liquidando solo la diferencia (fecha de hoy). Se detiene en el primer
+ * mes cuyo remanente arrastrado no cambia (o sin versión revisada). Si la versión sustituida estaba
+ * presentada, la obligación vuelve a «por presentar» con `motivo_estado = 'rectificativa'`; los pagos no
+ * se tocan (la diferencia queda en `2.1.06`). Un mes que no se puede revisar: 409 `cascada_bloqueada`.
+ */
+async function cascadaDeRemanentes(t: Transaccion, origen: DeclaracionFila): Promise<MesCascada[]> {
+    const salida: MesCascada[] = []
+    let actual = origen
+    for (;;) {
+        const periodo = DateTime.fromISO(actual.periodo_desde, { zone: 'utc' }).plus({ months: 1 })
+        const desde = periodo.toISODate()!
+        const siguiente = (await t.trx
+            .from('fiscal.declaraciones')
+            .where({ empresa_id: actual.empresa_id, impuesto: actual.impuesto, periodo_desde: desde })
+            .whereNotNull('revisada_en')
+            .orderBy('version', 'desc')
+            .select('id', 'estado', 'totales')
+            .first()) as { id: number; estado: string; totales: Record<string, string> } | null
+        if (!siguiente) break
+        const deja = remanentes(actual.totales)
+        const arrastro = remanentes(siguiente.totales, '_anterior')
+        if (deja[0] === arrastro[0] && deja[1] === arrastro[1]) break
+
+        const texto = periodo.toFormat('yyyy-MM')
+        let revisada: DeclaracionRevisada
+        try {
+            const nueva = await new CalcularDeclaracion().execute(
+                {
+                    empresa_id: actual.empresa_id,
+                    impuesto: actual.impuesto as ImpuestoDeclarable,
+                    periodo: texto,
+                    sustitutiva: true,
+                },
+                t.ctx,
+                { trx: t.trx },
+            )
+            revisada = await new RevisarDeclaracion().execute(
+                { declaracion_id: nueva.id, cascada_de: origen.id },
+                t.ctx,
+                { trx: t.trx },
+            )
+        } catch (error) {
+            if (!(error instanceof Problema)) throw error
+            const causa = error.tipo.split(':').pop() ?? 'error'
+            throw new Problema(
+                409,
+                'cascada_bloqueada',
+                'Cascada de remanentes bloqueada',
+                `Revisar ${origen.impuesto} ${origen.periodo_desde.slice(0, 7)} cambia el remanente que arrastra ${texto}, ya revisado, y ese mes no se puede rectificar (${causa}: ${error.detalle ?? error.message}). Nada se guardó`,
+                [
+                    ...salida.map((m) => ({ field: m.periodo, message: 'rectificable', rule: 'ok' })),
+                    { field: texto, message: error.detalle ?? error.message, rule: causa },
+                ],
+            )
+        }
+        const estabaPresentada = siguiente.estado === 'presentada'
+        if (estabaPresentada) {
+            const fila = (await t.trx
+                .from('fiscal.obligaciones as o')
+                .where('o.id', revisada.obligacion_id)
+                .forUpdate()
+                .select(COLUMNAS_OBLIGACION)
+                .first()) as Record<string, unknown>
+            await actualizarObligacion(t, normalizarObligacion(fila), { motivo_estado: 'rectificativa' })
+        }
+        salida.push({
+            periodo: texto,
+            declaracion_id: revisada.id,
+            version: revisada.version,
+            sustituye_a: Number(siguiente.id),
+            estaba_presentada: estabaPresentada,
+            remanente_credito_anterior: revisada.totales.remanente_credito_anterior ?? '0.00',
+            remanente_credito: revisada.totales.remanente_credito ?? '0.00',
+            a_pagar: revisada.totales.a_pagar ?? '0.00',
+        })
+        actual = revisada
+    }
+    return salida
 }
 
 /** La versión es la última de su periodo y sigue en borrador. */

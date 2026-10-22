@@ -851,6 +851,9 @@ export interface PayloadDeclaracion {
     vence_en: string
     monto: string
     version: number
+    /** solo `declaracion.revisada` de una rectificación en cascada (H34): la revisión que la causó */
+    motivo?: 'cascada'
+    cascada_de?: number
 }
 
 export type NombreEvento = keyof CatalogoEventos

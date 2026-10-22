@@ -1617,7 +1617,7 @@ export interface paths {
         put?: never;
         /**
          * Revisar el borrador: liquidación obligatoria y bloqueo de impuestos
-         * @description Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Emite declaracion.revisada y libro.bloqueo_cambiado.
+         * @description Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Si cambia el remanente que deja, rectifica en la misma transacción cada mes posterior ya revisado (cascada[]; 409 cascada_bloqueada si uno no se puede). Emite declaracion.revisada (motivo cascada en los rectificados) y libro.bloqueo_cambiado.
          */
         post: operations["declaracionRevisar"];
         delete?: never;
@@ -9454,6 +9454,79 @@ export interface components {
             updated_at: string;
             /** @description Los datos cambiaron desde que se calculó (otro datos_hash): revisar o presentar responde 409 */
             desactualizada: boolean;
+        };
+        DeclaracionRevisada: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            impuesto: "iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr";
+            /** Format: date */
+            periodo_desde: string;
+            /** Format: date */
+            periodo_hasta: string;
+            version: number;
+            sustitutiva: boolean;
+            sustituye_a: number | null;
+            obligacion_id: number;
+            formulario: string | null;
+            /** Format: date */
+            vence_en: string;
+            parametros: {
+                clave: string;
+                /** @description JSON según el tipo del parámetro (string, número, booleano, objeto o lista) */
+                valor: unknown;
+                /** Format: date */
+                vigente_desde: string | null;
+                nivel: string;
+            }[];
+            detalle: {
+                renglones: components["schemas"]["RenglonDeclaracion"][];
+                /** @description Libros de ventas y compras emitidos con folio que cubren el mes */
+                libros: components["schemas"]["LibroEnlazado"][];
+                /** @description Declaración del mes anterior de la que salen los remanentes */
+                anterior_id: number | null;
+            };
+            /** @description IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas */
+            totales: {
+                [key: string]: string;
+            };
+            /** @description sha256 de lo leído (renglones, totales, parámetros y el mes anterior) */
+            datos_hash: string;
+            calculada_por: number | null;
+            /** Format: date-time */
+            calculada_en: string;
+            /** @enum {string} */
+            estado: "borrador" | "revisada" | "presentada" | "sustituida";
+            revisada_por: number | null;
+            /** Format: date-time */
+            revisada_en: string | null;
+            /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
+            asiento_id: number | null;
+            numero_formulario: string | null;
+            /** Format: date */
+            fecha_presentacion: string | null;
+            boleta: string | null;
+            presentada_por: number | null;
+            /** Format: date-time */
+            presentada_en: string | null;
+            pago: components["schemas"]["PagoDeclaracion"] | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description Meses posteriores ya revisados que se rectificaron en la misma transacción porque cambió el remanente que arrastran (H34) */
+            cascada: {
+                /** @description AAAA-MM */
+                periodo: string;
+                declaracion_id: number;
+                version: number;
+                sustituye_a: number;
+                /** @description La versión sustituida estaba presentada: la obligación vuelve a «por presentar» (rectificativa) */
+                estaba_presentada: boolean;
+                remanente_credito_anterior: string;
+                remanente_credito: string;
+                a_pagar: string;
+            }[];
         };
         DependientePago: {
             id: number;
@@ -21538,13 +21611,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Declaración revisada */
+            /** @description Declaración revisada y los meses rectificados en cascada */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Declaracion"];
+                    "application/json": components["schemas"]["DeclaracionRevisada"];
                 };
             };
             /** @description No autenticado */
