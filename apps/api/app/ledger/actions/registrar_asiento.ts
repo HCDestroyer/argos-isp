@@ -70,6 +70,8 @@ export const ORIGENES_ASIENTO = [
     'sorteo',
     // decisiones del PM (19 oct): lo que era una factura de Q0; origen_id = `billing.bonificaciones.id`
     'bonificacion',
+    // fase 6 PR C (§9.1): asientos del cierre anual; origen_id = `ledger.cierres_anuales.id`
+    'cierre_anual',
 ] as const
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 

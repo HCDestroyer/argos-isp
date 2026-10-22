@@ -144,6 +144,8 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     sorteo: 'VAR',
     // decisiones del PM (19 oct): bonificación interna (5.1.01 / ingreso), no es venta
     bonificacion: 'VAR',
+    // fase 6 PR C: el cierre anual va al diario de cierre
+    cierre_anual: 'CIE',
 }
 
 export interface DiarioAsiento {
