@@ -3341,6 +3341,87 @@ async function verificarLibroCon(
     }
 
     /*
+    | 21 · Calendario fiscal (fase 7 PR A; contrato de localización fiscal §3.7, §9.3, §11.3 y §21):
+    | obligaciones de empresas con localización, con el periodo de su periodicidad, un vencimiento
+    | posterior al periodo y hábil mientras siga abierta, el 4.º trimestre del ISR fuera si va con la
+    | anual, estado coherente con su motivo y cada cambio con `audit.cambios`; alertas una por
+    | obligación (o año) y umbral, con su umbral bien elegido y exactamente un evento por alerta.
+    */
+    const [hayCalendario] = await filas(`SELECT to_regclass('fiscal.obligaciones') IS NOT NULL AS existe`)
+    if (hayCalendario?.existe) {
+        const MENSUALES = `('iva_mensual', 'pc_mensual', 'isr_opcional_mensual', 'retenciones_iva', 'retenciones_isr')`
+        const TRIMESTRALES = `('isr_trimestral', 'iso_trimestral')`
+        const unidad = (o: string) =>
+            `CASE WHEN ${o}.impuesto IN ${MENSUALES} THEN 'month' WHEN ${o}.impuesto IN ${TRIMESTRALES} THEN 'quarter' ELSE 'year' END`
+        const duracion = (o: string) =>
+            `CASE WHEN ${o}.impuesto IN ${MENSUALES} THEN interval '1 month' WHEN ${o}.impuesto IN ${TRIMESTRALES} THEN interval '3 months' ELSE interval '1 year' END`
+        await revisar(
+            '21.obligacion_mal_formada (empresa con localización; periodo = un mes, trimestre o año según el impuesto; vence después del periodo y, abierta en una empresa activa, en día hábil sin feriado vigente; ISR del 4.º trimestre abierto cuando va con la anual; no_aplica con motivo y pendiente sin él; version > 1 con audit.cambios)',
+            `WITH f AS (
+                 SELECT DISTINCT ON (fecha) fecha, activo FROM fiscal.feriados ORDER BY fecha, id DESC
+             )
+             SELECT o.id, o.empresa_id, o.impuesto, to_char(o.periodo_desde, 'YYYY-MM-DD') AS desde,
+                    to_char(o.periodo_hasta, 'YYYY-MM-DD') AS hasta, to_char(o.vence_en, 'YYYY-MM-DD') AS vence_en,
+                    o.estado, o.motivo_estado, o.version
+               FROM fiscal.obligaciones o JOIN core.empresas e ON e.id = o.empresa_id
+              WHERE ${E('o.empresa_id')}
+                AND (NOT EXISTS (SELECT 1 FROM fiscal.instalaciones i WHERE i.empresa_id = o.empresa_id)
+                     OR o.periodo_desde <> date_trunc(${unidad('o')}, o.periodo_desde)::date
+                     OR o.periodo_hasta <> (date_trunc(${unidad('o')}, o.periodo_desde)
+                                            + ${duracion('o')} - interval '1 day')::date
+                     OR o.vence_en <= o.periodo_hasta
+                     OR (o.estado IN ('pendiente', 'borrador') AND e.activa
+                         AND (extract(isodow FROM o.vence_en) > 5
+                              OR EXISTS (SELECT 1 FROM f WHERE f.fecha = o.vence_en AND f.activo)))
+                     OR (o.estado IN ('pendiente', 'borrador') AND o.impuesto = 'isr_trimestral'
+                         AND extract(quarter FROM o.periodo_desde) = 4
+                         AND o.regla -> 'valor' ->> 'cuarto_trimestre' = 'con_la_anual')
+                     OR (o.estado = 'no_aplica' AND coalesce(o.motivo_estado, '') = '')
+                     OR (o.estado = 'pendiente' AND o.motivo_estado IS NOT NULL)
+                     OR (o.version > 1 AND NOT EXISTS (SELECT 1 FROM audit.cambios c
+                                                         WHERE c.entidad_tipo = 'obligacion_fiscal' AND c.entidad_id = o.id)))`,
+        )
+        await revisar(
+            '21.alerta_fiscal_mal_formada (vencimiento_proximo: de una obligación de su empresa, clave obligación:umbral, umbral 7/3/1/0 = el menor alcanzado por los días; limite_pc: clave año:umbral; cada alerta con exactamente un evento y cada evento con su alerta)',
+            `WITH a AS (
+                 SELECT a.*, (a.datos ->> 'umbral')::int AS umbral, (a.datos ->> 'dias')::int AS dias
+                   FROM fiscal.alertas a WHERE ${E('a.empresa_id')}
+             ), ev AS (
+                 SELECT x.evento, x.payload FROM audit.outbox x
+                  WHERE x.evento IN ('fiscal.vencimiento_proximo', 'fiscal.limite_pc')
+                    AND ${E("(x.payload ->> 'empresa_id')::bigint")}
+             )
+             SELECT 'alerta' AS que, a.id, a.empresa_id, a.tipo, a.clave, a.umbral, a.dias,
+                    (SELECT count(*) FROM ev WHERE (a.tipo = 'vencimiento_proximo' AND ev.evento = 'fiscal.vencimiento_proximo'
+                                                     AND (ev.payload ->> 'obligacion_id')::bigint = a.obligacion_id
+                                                     AND (ev.payload ->> 'umbral')::int = a.umbral)
+                                                 OR (a.tipo = 'limite_pc' AND ev.evento = 'fiscal.limite_pc'
+                                                     AND (ev.payload ->> 'empresa_id')::bigint = a.empresa_id
+                                                     AND (ev.payload ->> 'anio') || ':' || (ev.payload ->> 'umbral_pct') = a.clave))::int AS eventos
+               FROM a LEFT JOIN fiscal.obligaciones o ON o.id = a.obligacion_id
+              WHERE (a.tipo = 'vencimiento_proximo'
+                     AND (o.id IS NULL OR o.empresa_id <> a.empresa_id OR a.clave <> o.id || ':' || a.umbral
+                          OR a.umbral NOT IN (7, 3, 1, 0) OR a.dias < 0 OR a.dias > a.umbral
+                          OR a.dias <= CASE a.umbral WHEN 7 THEN 3 WHEN 3 THEN 1 WHEN 1 THEN 0 ELSE -1 END))
+                 OR (a.tipo = 'limite_pc' AND a.clave !~ '^[0-9]{4}:[0-9]+\\.[0-9]{2}$')
+                 OR (SELECT count(*) FROM ev WHERE (a.tipo = 'vencimiento_proximo' AND ev.evento = 'fiscal.vencimiento_proximo'
+                                                     AND (ev.payload ->> 'obligacion_id')::bigint = a.obligacion_id
+                                                     AND (ev.payload ->> 'umbral')::int = a.umbral)
+                                                 OR (a.tipo = 'limite_pc' AND ev.evento = 'fiscal.limite_pc'
+                                                     AND (ev.payload ->> 'empresa_id')::bigint = a.empresa_id
+                                                     AND (ev.payload ->> 'anio') || ':' || (ev.payload ->> 'umbral_pct') = a.clave)) <> 1
+             UNION ALL
+             SELECT 'evento_sin_alerta', NULL, (ev.payload ->> 'empresa_id')::bigint, ev.evento, NULL, NULL, NULL, NULL
+               FROM ev
+              WHERE NOT EXISTS (SELECT 1 FROM a WHERE (ev.evento = 'fiscal.vencimiento_proximo' AND a.tipo = 'vencimiento_proximo'
+                                                        AND a.obligacion_id = (ev.payload ->> 'obligacion_id')::bigint
+                                                        AND a.umbral = (ev.payload ->> 'umbral')::int)
+                                                    OR (ev.evento = 'fiscal.limite_pc' AND a.tipo = 'limite_pc'
+                                                        AND a.clave = (ev.payload ->> 'anio') || ':' || (ev.payload ->> 'umbral_pct')))`,
+        )
+    }
+
+    /*
     | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica
     */
     for (const empresa of empresas) {
