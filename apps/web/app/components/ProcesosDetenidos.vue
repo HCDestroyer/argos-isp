@@ -4,7 +4,8 @@ import type { Problem } from '@argosisp/contracts'
 /**
  * Procesos detenidos por un bloqueo del libro (A3, fase 6 PR B): la última corrida de facturar y de
  * vencer de cada empresa (`GET /facturas/corridas`, `facturas.ver`), con lo que no se contabilizó por un
- * bloqueo y se reintenta en la siguiente. Leerla no corre nada; «Correr ahora» (`facturas.generar`) es
+ * bloqueo y se reintenta en la siguiente. Los contadores son solo de esa empresa; una corrida vieja de
+ * varias empresas no los separa (`resultado: null`) y se ve «Sin detalle por empresa», nunca ceros. Leerla no corre nada; «Correr ahora» (`facturas.generar`) es
  * una acción aparte, con confirmación, y después se vuelve a leer.
  */
 const { puede } = usePermisos()
@@ -146,10 +147,19 @@ onMounted(() => void cargar())
                             <p
                                 v-if="resumenCorrida(corrida)"
                                 class="text-sm"
+                                data-prueba="proceso-resumen"
                             >
                                 {{ resumenCorrida(corrida) }}
                             </p>
                             <p
+                                v-else
+                                class="text-sm text-muted"
+                                data-prueba="proceso-sin-detalle"
+                            >
+                                Sin detalle por empresa: esa corrida recorrió varias empresas y no guardó sus conteos por separado.
+                            </p>
+                            <p
+                                v-if="corrida.resultado !== null || corrida.bloqueados > 0"
                                 class="text-sm font-medium"
                                 :class="corrida.bloqueados ? 'text-warning' : 'text-success'"
                                 data-prueba="proceso-bloqueados"

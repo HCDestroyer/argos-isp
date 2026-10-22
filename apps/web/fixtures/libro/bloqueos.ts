@@ -3,7 +3,7 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, usuariosPorToken } from '../comun'
 import { fechaGuatemala } from './datos'
-import { registrarCorrida, verificarYExigir, type EntradaCorrida } from './checks'
+import { registrarCorrida, verificarYExigir, type ContadoresCorrida, type EntradaCorrida } from './checks'
 
 /**
  * Bloqueos del libro (A3, fase 6 PR A, contrato fiscal §11). Historial de solo inserción: el vigente de
@@ -350,7 +350,16 @@ function bloqueoQueAplica(p: PendientePorBloqueo, usuarioId: number | null): { t
 
 type DetalleBloqueo = Schema<'ResultadoVencimiento'>['bloqueos'][number]
 
-function corrida(solicitud: SolicitudFixture, proceso: 'facturar' | 'vencer'): { entraron: number, bloqueados: number, bloqueos: DetalleBloqueo[] } {
+interface Corrida {
+    entraron: number
+    bloqueados: number
+    bloqueos: DetalleBloqueo[]
+    /** Empresas que recorrió y lo que entró en cada una. */
+    empresas: number[]
+    entraronPorEmpresa: Map<number, number>
+}
+
+function corrida(solicitud: SolicitudFixture, proceso: 'facturar' | 'vencer'): Corrida {
     const usuarioId = solicitud.token ? usuariosPorToken[solicitud.token]?.id ?? null : null
     const empresas = deLaEmpresa(bd.empresas.map(e => ({ empresa_id: e.id })), solicitud).map(e => e.empresa_id)
     const propios = bd.pendientesPorBloqueo.filter(p => p.proceso === proceso && empresas.includes(p.empresa_id))
@@ -372,7 +381,16 @@ function corrida(solicitud: SolicitudFixture, proceso: 'facturar' | 'vencer'): {
     }
     bd.pendientesPorBloqueo = bd.pendientesPorBloqueo.filter(p => !entran.includes(p))
     const bloqueos = [...grupos.values()]
-    return { entraron: entran.length, bloqueados: bloqueos.reduce((s, b) => s + b.documentos, 0), bloqueos }
+    const entraronPorEmpresa = new Map(empresas.map(id => [id, entran.filter(p => p.empresa_id === id).length]))
+    return { entraron: entran.length, bloqueados: bloqueos.reduce((s, b) => s + b.documentos, 0), bloqueos, empresas, entraronPorEmpresa }
+}
+
+/** `resultado.por_empresa` de la corrida, como `ContadoresPorEmpresa.json` de la API. */
+function porEmpresa(r: Corrida, contadores: (empresaId: number, entraron: number, bloqueados: number) => ContadoresCorrida): Record<string, ContadoresCorrida> {
+    return Object.fromEntries(r.empresas.map((id) => {
+        const bloqueados = r.bloqueos.filter(b => b.empresa_id === id).reduce((s, b) => s + b.documentos, 0)
+        return [String(id), { ...contadores(id, r.entraronPorEmpresa.get(id) ?? 0, bloqueados), bloqueados }]
+    }))
 }
 
 /** Como `RegistrarCorrida`: `empresas` null cuando recorrió todas (sin empresa activa), o la activa. */
@@ -384,15 +402,18 @@ function parametrosCorrida(solicitud: SolicitudFixture): EntradaCorrida['paramet
 export const rutasCorridasConBloqueo: RutasFixture = {
     'POST /api/v1/facturas/generar': conPermiso('facturas.generar', conIdempotencia((solicitud) => {
         const r = corrida(solicitud, 'facturar')
-        const activos = bd.servicios.filter(s => s.estado !== 'retirado').length
-        const resultado: Schema<'ResultadoGeneracion'> = { generadas: r.entraron, omitidas: Math.max(0, activos - r.entraron - r.bloqueados), facturas: [], errores: 0, bloqueados: r.bloqueados, bloqueos: r.bloqueos }
-        registrarCorrida(solicitud, 'facturas.generar', { parametros: parametrosCorrida(solicitud), resultado: { ...resultado }, bloqueos: r.bloqueos })
+        const activos = (empresaId: number) => bd.servicios.filter(s => s.estado !== 'retirado' && (s.empresa_id ?? 1) === empresaId).length
+        const contadores = porEmpresa(r, (id, entraron, bloqueados) => ({ generadas: entraron, omitidas: Math.max(0, activos(id) - entraron - bloqueados), bonificadas: 0, errores: 0 }))
+        const omitidas = Object.values(contadores).reduce((s, c) => s + (c.omitidas ?? 0), 0)
+        const resultado: Schema<'ResultadoGeneracion'> = { generadas: r.entraron, omitidas, facturas: [], bonificadas: 0, bonificaciones: [], errores: 0, bloqueados: r.bloqueados, bloqueos: r.bloqueos }
+        registrarCorrida(solicitud, 'facturas.generar', { parametros: parametrosCorrida(solicitud), resultado: { ...resultado, por_empresa: contadores }, bloqueos: r.bloqueos })
         return { status: 200, cuerpo: resultado }
     })),
     'POST /api/v1/facturas/vencer': conPermiso('facturas.generar', conIdempotencia((solicitud) => {
         const r = corrida(solicitud, 'vencer')
         const resultado: Schema<'ResultadoVencimiento'> = { vencidas: 0, moras: r.entraron, errores: 0, bloqueados: r.bloqueados, bloqueos: r.bloqueos }
-        registrarCorrida(solicitud, 'facturas.vencer_pendientes', { parametros: parametrosCorrida(solicitud), resultado: { ...resultado }, bloqueos: r.bloqueos })
+        const contadores = porEmpresa(r, (_id, entraron) => ({ vencidas: 0, moras: entraron, errores: 0 }))
+        registrarCorrida(solicitud, 'facturas.vencer_pendientes', { parametros: parametrosCorrida(solicitud), resultado: { ...resultado, por_empresa: contadores }, bloqueos: r.bloqueos })
         return { status: 200, cuerpo: resultado }
     })),
 }

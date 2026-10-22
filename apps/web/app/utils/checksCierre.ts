@@ -111,7 +111,10 @@ function numero(resultado: Record<string, unknown> | null, clave: string): numbe
     return typeof valor === 'number' && Number.isFinite(valor) ? valor : null
 }
 
-/** Lo que hizo la corrida, desde su `resultado`; `null` si no trae los conteos. */
+/**
+ * Lo que hizo la corrida en esa empresa, desde su `resultado` (solo de la empresa desde la fase 6 PR C);
+ * `null` si no trae los conteos: una corrida vieja de varias empresas no los separa.
+ */
 export function resumenCorrida(corrida: Pick<CorridaProceso, 'proceso' | 'resultado'>): string | null {
     const r = corrida.resultado
     const errores = numero(r, 'errores')
@@ -119,7 +122,8 @@ export function resumenCorrida(corrida: Pick<CorridaProceso, 'proceso' | 'result
     if (corrida.proceso === 'facturas.generar') {
         const generadas = numero(r, 'generadas')
         const omitidas = numero(r, 'omitidas')
-        return generadas === null ? null : `${generadas} generadas${omitidas === null ? '' : ` · ${omitidas} ya tenían factura`}${conErrores}`
+        const bonificadas = numero(r, 'bonificadas')
+        return generadas === null ? null : `${generadas} generadas${omitidas === null ? '' : ` · ${omitidas} ya tenían factura`}${bonificadas ? ` · ${bonificadas} bonificadas` : ''}${conErrores}`
     }
     const vencidas = numero(r, 'vencidas')
     const moras = numero(r, 'moras')
