@@ -1031,7 +1031,7 @@ async function verificarLibroCon(
                                       'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
                                       'provision', 'castigo', 'compra', 'pago_proveedor', 'depreciacion',
                                       'baja_activo', 'diferido', 'alta_activo', 'lealtad', 'diferencia_cobro',
-                                      'sorteo', 'bonificacion')`,
+                                      'sorteo', 'bonificacion', 'cierre_anual')`,
     )
 
     /*
