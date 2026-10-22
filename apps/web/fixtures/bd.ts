@@ -23,6 +23,7 @@ import { bloqueosLibro, excepcionesBloqueo, pendientesPorBloqueo, type Pendiente
 import { acciones } from './bitacora/datos'
 import { emisionesLibros, habilitacionesLibros } from './libros/datos'
 import { obligacionesIniciales, type ObligacionFila } from './calendario/datos'
+import { datosIniciales, declaracionesIniciales, type DatosMes } from './declaraciones/datos'
 import { accionesCorridas, calculosChecks, checksCierre, type CalculoCheck } from './libro/checks'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
@@ -121,6 +122,9 @@ interface BaseFixtures {
     /** Calendario fiscal (A3, fase 7 PR A): filas de `fiscal.obligaciones` y feriados de solo inserción. */
     obligacionesFiscales: ObligacionFila[]
     feriadosFiscales: Schema<'FeriadoFiscal'>[]
+    /** Declaraciones de IVA y pequeño contribuyente (A3, fase 7 PR B) y lo que la API leería hoy de los libros de cada mes. */
+    declaraciones: Schema<'Declaracion'>[]
+    datosDeclaraciones: DatosMes[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
@@ -263,6 +267,8 @@ function inicial(): BaseFixtures {
         librosAlterados: [],
         obligacionesFiscales: obligacionesIniciales(),
         feriadosFiscales: [],
+        declaraciones: declaracionesIniciales(datosIniciales()),
+        datosDeclaraciones: datosIniciales(),
         bancos,
         cuentasBancarias,
         empresa,

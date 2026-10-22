@@ -7,7 +7,7 @@ import { CATALOGO_OBLIGACIONES, reglaDe, type ObligacionFila } from './datos'
 
 /**
  * Rutas del calendario fiscal y los feriados (A3, fase 7 PR A; `start/routes/calendario.ts`). Igual que
- * la API: lista por `vence_en` ascendente (y id) con filtros repetibles, `dias_restantes` y `vencida`
+ * la API: lista por `vence_en` ascendente (y id) con filtros repetibles y `vencida`; `dias_restantes` y `vencida`
  * contra hoy en Guatemala; feriados globales de solo inserción (la vigente de cada fecha es la última
  * fila) y el alta recalcula los vencimientos sin presentar de todas las empresas.
  */
@@ -92,9 +92,14 @@ export const rutasCalendario: RutasFixture = {
                 errores.push({ field: campo, message: 'Fecha YYYY-MM-DD', rule: 'date' })
             }
         }
+        const vencidaTexto = solicitud.query.get('vencida')
+        if (vencidaTexto !== null && vencidaTexto !== '' && vencidaTexto !== 'true' && vencidaTexto !== 'false') {
+            errores.push({ field: 'vencida', message: 'true o false', rule: 'boolean' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
+        const vencida = vencidaTexto === 'true' ? true : vencidaTexto === 'false' ? false : null
         const hoy = hoyGuatemala()
         const filas = deLaEmpresa(bd.obligacionesFiscales, solicitud)
             .filter(o => (!impuestos.length || impuestos.includes(o.impuesto))
@@ -103,6 +108,7 @@ export const rutasCalendario: RutasFixture = {
                 && (hasta === null || o.vence_en <= hasta))
             .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.id - b.id)
             .map(o => vistaObligacion(o, hoy))
+            .filter(o => vencida === null || o.vencida === vencida)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
     }),
 

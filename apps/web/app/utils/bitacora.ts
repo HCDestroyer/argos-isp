@@ -142,6 +142,10 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'fiscal.cambiar_regimen': 'Régimen fiscal cambiado',
     'fiscal.agregar_frase': 'Frase fiscal agregada',
     'fiscal.agregar_feriado': 'Feriado agregado o retirado',
+    'declaraciones.calcular': 'Declaración calculada',
+    'declaraciones.revisar': 'Declaración revisada y liquidada',
+    'declaraciones.presentar': 'Declaración marcada como presentada',
+    'declaraciones.pagar': 'Pago de la declaración registrado',
     'fiscal.generar_calendario': 'Calendario fiscal generado',
     'fiscal.emitir_alertas': 'Alertas de vencimientos fiscales revisadas',
     'fel.configurar': 'Configuración FEL cambiada',
@@ -399,6 +403,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     // Calendario fiscal y feriados (A3, fase 7 PR A).
     obligacion_fiscal: { etiqueta: 'Obligación fiscal', ruta: id => `/fiscal/calendario?obligacion=${id}` },
     feriado: { etiqueta: 'Feriado', ruta: () => '/configuracion/fiscal?pestana=feriados' },
+    // Declaraciones de IVA y pequeño contribuyente (A3, fase 7 PR B).
+    declaracion: { etiqueta: 'Declaración', ruta: id => `/declaraciones/${id}` },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */
