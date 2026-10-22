@@ -47,27 +47,32 @@ export interface HabilitacionVista {
     usados: number
     disponibles: number
     registrado_por: number | null
+    registrado_por_nombre: string | null
     created_at: Date
 }
 
 function consultaHabilitaciones(cliente: QueryClientContract) {
-    return cliente.from('fiscal.libros_habilitados as h').select(
-        'h.id',
-        'h.empresa_id',
-        'h.libro',
-        'h.tipo',
-        'h.autorizacion',
-        'h.folio_desde',
-        'h.folio_hasta',
-        cliente.raw(`to_char(h.fecha, 'YYYY-MM-DD') as fecha`),
-        'h.nota',
-        'h.registrado_por',
-        'h.created_at',
-        cliente.raw(
-            `greatest(0, least(h.folio_hasta, coalesce((select max(e.folio_final) from fiscal.libros_emisiones e
+    return cliente
+        .from('fiscal.libros_habilitados as h')
+        .leftJoin('core.usuarios as u', 'u.id', 'h.registrado_por')
+        .select(
+            'h.id',
+            'h.empresa_id',
+            'h.libro',
+            'h.tipo',
+            'h.autorizacion',
+            'h.folio_desde',
+            'h.folio_hasta',
+            cliente.raw(`to_char(h.fecha, 'YYYY-MM-DD') as fecha`),
+            'h.nota',
+            'h.registrado_por',
+            'u.nombre as registrado_por_nombre',
+            'h.created_at',
+            cliente.raw(
+                `greatest(0, least(h.folio_hasta, coalesce((select max(e.folio_final) from fiscal.libros_emisiones e
                   where e.empresa_id = h.empresa_id and e.libro = h.libro), 0)) - h.folio_desde + 1)::int as usados`,
-        ),
-    )
+            ),
+        )
 }
 
 function aHabilitacion(f: Record<string, unknown>): HabilitacionVista {

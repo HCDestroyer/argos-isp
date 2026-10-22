@@ -64617,6 +64617,7 @@
           "usados",
           "disponibles",
           "registrado_por",
+          "registrado_por_nombre",
           "created_at"
         ],
         "properties": {
@@ -64678,6 +64679,12 @@
               "null"
             ],
             "minimum": 1
+          },
+          "registrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "created_at": {
             "type": "string",
