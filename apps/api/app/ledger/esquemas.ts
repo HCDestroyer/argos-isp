@@ -443,8 +443,14 @@ const totalesBalance = objeto(
         gastos: Dinero,
         resultado: { ...Dinero, description: 'ingresos − gastos' },
         cuadra: { ...booleano, description: 'debe = haber y activo = pasivo + patrimonio + resultado' },
+        resultado_ejercicios_sin_cerrar: {
+            ...Dinero,
+            description:
+                'Parte de resultado de años anteriores al de hasta sin cierre anual («Resultado de ejercicios sin cerrar», §10.8)',
+        },
+        resultado_ejercicio: { ...Dinero, description: 'resultado del año de hasta' },
     },
-    ['patrimonio'],
+    ['patrimonio', 'resultado_ejercicios_sin_cerrar', 'resultado_ejercicio'],
 )
 
 const totalesResultados = objeto({ ingresos: Dinero, gastos: Dinero, resultado: Dinero })

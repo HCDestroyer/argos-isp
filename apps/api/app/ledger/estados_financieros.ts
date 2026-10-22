@@ -48,6 +48,13 @@ export interface TotalesBalance {
     resultado: string
     /** debe = haber y activo = pasivo + patrimonio + resultado */
     cuadra: boolean
+    /**
+     * Parte de `resultado` de años anteriores al de `hasta` sin cierre anual («Resultado de
+     * ejercicios sin cerrar», §10.8); desaparece al cerrar el ejercicio
+     */
+    resultado_ejercicios_sin_cerrar?: string
+    /** `resultado` del año de `hasta` (resultado − resultado_ejercicios_sin_cerrar) */
+    resultado_ejercicio?: string
 }
 
 export interface TotalesResultados {
@@ -68,6 +75,7 @@ async function saldosPorCuenta(
     empresas: number[] | null,
     rango: { desde?: string; hasta: string },
     tipos?: Array<FilaSaldo['tipo']>,
+    sinCierreAnual = false,
 ): Promise<FilaSaldo[]> {
     return (await db
         .from('ledger.movimientos as m')
@@ -75,6 +83,7 @@ async function saldosPorCuenta(
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
         .where('a.fecha', '<=', rango.hasta)
         .if(rango.desde, (q) => q.where('a.fecha', '>=', rango.desde!))
+        .if(sinCierreAnual, (q) => q.whereNot('a.origen_tipo', 'cierre_anual'))
         .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
         .if(tipos, (q) => q.whereIn('c.tipo', tipos!))
         .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo', 'c.naturaleza')
@@ -183,21 +192,53 @@ async function secciones<T>(
     return { empresas: porEmpresa, total: { cuentas, totales: totales(cuentas) } }
 }
 
-/** Balance de saldos al `hasta` (por defecto hoy): saldo de cada cuenta con movimiento. */
+/**
+ * Balance de saldos al `hasta` (por defecto hoy): saldo de cada cuenta con movimiento. Los totales
+ * separan el resultado de años anteriores sin cierre anual (§10.8) del resultado del año.
+ */
 export async function balanceSaldos(filtros: { hasta?: string }, empresas: number[] | null) {
     const hasta = filtros.hasta ?? hoyGuatemala()
     const filas = await saldosPorCuenta(empresas, { hasta })
-    return { hasta, consolidado: empresas === null, ...(await secciones(empresas, filas, totalesBalance)) }
+    const inicioAnio = `${hasta.slice(0, 4)}-01-01`
+    const previas = filas.length > 0 ? await saldosPorCuenta(empresas, { hasta: diaAnterior(inicioAnio) }, ['ingreso', 'gasto']) : []
+    const conSinCerrar = (cuentasPrevias: FilaSaldo[]) => (cuentas: LineaEstado[]) => {
+        const totales = totalesBalance(cuentas)
+        const anteriores = totalesResultados(lineas(cuentasPrevias)).resultado
+        return {
+            ...totales,
+            resultado_ejercicios_sin_cerrar: anteriores,
+            resultado_ejercicio: aTexto(dec(totales.resultado).minus(dec(anteriores))),
+        }
+    }
+    const armado = await secciones(empresas, filas, totalesBalance)
+    return {
+        hasta,
+        consolidado: empresas === null,
+        empresas: armado.empresas.map((e) => ({
+            ...e,
+            totales: conSinCerrar(previas.filter((f) => Number(f.empresa_id) === e.empresa_id))(e.cuentas),
+        })),
+        total: { ...armado.total, totales: conSinCerrar(previas)(armado.total.cuentas) },
+    }
 }
 
-/** Estado de resultados del rango: ingresos y gastos por cuenta y el resultado. */
+function diaAnterior(fecha: string): string {
+    const d = new Date(`${fecha}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() - 1)
+    return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Estado de resultados del rango: ingresos y gastos por cuenta y el resultado. Sin los asientos del
+ * cierre anual ni sus reversos (§10.8): el año cerrado muestra su resultado, no ceros.
+ */
 export async function estadoResultados(
     filtros: { desde?: string; hasta?: string },
     empresas: number[] | null,
 ) {
     const hasta = filtros.hasta ?? hoyGuatemala()
     const desde = filtros.desde ?? `${hasta.slice(0, 7)}-01`
-    const filas = await saldosPorCuenta(empresas, { desde, hasta }, ['ingreso', 'gasto'])
+    const filas = await saldosPorCuenta(empresas, { desde, hasta }, ['ingreso', 'gasto'], true)
     return {
         desde,
         hasta,
