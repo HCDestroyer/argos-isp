@@ -10,6 +10,7 @@ import { carteraVencida } from '#billing/reportes/reportes'
 import { verificarCadena } from '#ledger/sellos'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { construirLibro, esLibroEmitible } from '#fiscal/libros_legales'
+import { sinIvaPorRegimen } from '#billing/regimen'
 
 /**
  * Auditor contable · `verificarLibro(empresaId?)`.
@@ -1045,7 +1046,9 @@ async function verificarLibroCon(
                                       'reclasificacion', 'liquidacion_cobro', 'deposito', 'traslado', 'banco',
                                       'provision', 'castigo', 'compra', 'pago_proveedor', 'depreciacion',
                                       'baja_activo', 'diferido', 'alta_activo', 'lealtad', 'diferencia_cobro',
-                                      'sorteo', 'bonificacion', 'cierre_anual')`,
+                                      'sorteo', 'bonificacion', 'cierre_anual',
+                                      -- fase 7 PR B (§10.6): liquidación de una declaración y su pago
+                                      'liquidacion_impuesto', 'pago_impuesto')`,
     )
 
     /*
@@ -1093,7 +1096,7 @@ async function verificarLibroCon(
           WHERE t.cerrado_en IS NULL AND ${E('cj.empresa_id')} GROUP BY caja_id HAVING count(*) > 1`,
     )
     await revisar(
-        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos (sin lo retenido) − egresos ± diferencias de cierre + liquidaciones ± depósitos, traslados y partidas del extracto − pagos a proveedores + ventas de activos)',
+        '4.saldo_de_caja_o_banco_distinto_de_sus_documentos (mayor = pagos (sin lo retenido) − egresos ± diferencias de cierre + liquidaciones ± depósitos, traslados y partidas del extracto − pagos a proveedores + ventas de activos − pagos de declaraciones)',
         `WITH docs AS (
              SELECT empresa_id, cuenta_id, sum(monto) AS saldo FROM (
                  SELECT p.empresa_id, p.monto - p.comision - p.retenido AS monto,
@@ -1151,6 +1154,12 @@ async function verificarLibroCon(
                  SELECT pp.empresa_id, -pp.monto, pp.cuenta_id FROM ledger.pagos_proveedores pp
                   WHERE ${E('pp.empresa_id')}
                     AND NOT EXISTS (SELECT 1 FROM ledger.pagos_proveedores_anulaciones x WHERE x.pago_id = pp.id)
+                 UNION ALL
+                 -- fase 7 PR B: el pago de una declaración sale de su caja o banco por el total (impuesto, mora y multa)
+                 SELECT a.empresa_id, m.debe - m.haber, m.cuenta_id
+                   FROM fiscal.declaraciones_pagos dp JOIN ledger.asientos a ON a.id = dp.asiento_id
+                   JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE ${E('a.empresa_id')} AND ${CAJA_O_BANCO('c.codigo')}
                  UNION ALL
                  -- venta de un activo: su precio (sin IVA) a la cuenta bancaria de la baja
                  SELECT ac.empresa_id, b.precio_venta, b.cuenta_cobro_id
@@ -2315,7 +2324,7 @@ async function verificarLibroCon(
                  OR (pp.turno_id IS NOT NULL AND t.caja_id IS DISTINCT FROM pp.caja_id))`,
     )
     await revisar(
-        '15.retenciones_recibidas_distintas (1.1.05 y 1.1.06 = Σ constancias recibidas de pagos vigentes, por impuesto)',
+        '15.retenciones_recibidas_distintas (1.1.05 y 1.1.06 sin la liquidación del IVA = Σ constancias recibidas de pagos vigentes, por impuesto; lo que la liquidación usa lo revisa el inv. 22)',
         `WITH docs AS (
              SELECT k.empresa_id,
                     sum(CASE WHEN k.impuesto = 'iva' THEN k.monto ELSE 0 END) AS iva,
@@ -2329,7 +2338,7 @@ async function verificarLibroCon(
                     sum(CASE WHEN c.codigo = '${CUENTAS_GT.ISR_RETENIDO_CLIENTES}' THEN m.debe - m.haber ELSE 0 END) AS isr
                FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE ${E('a.empresa_id')}
+              WHERE ${E('a.empresa_id')} AND a.origen_tipo <> 'liquidacion_impuesto'
                 AND c.codigo IN ('${CUENTAS_GT.IVA_RETENIDO_CLIENTES}', '${CUENTAS_GT.ISR_RETENIDO_CLIENTES}')
               GROUP BY 1
          )
@@ -2339,7 +2348,7 @@ async function verificarLibroCon(
           WHERE coalesce(d.iva, 0) <> coalesce(l.iva, 0) OR coalesce(d.isr, 0) <> coalesce(l.isr, 0)`,
     )
     await revisar(
-        '15.libro_compras_distinto_de_1.1.04 (desvío c: por empresa y mes, Σ IVA con crédito de las compras por periodo_iva − anulaciones en el mes de su reverso = movimiento de 1.1.04; 1.1.04 solo lo mueven compras)',
+        '15.libro_compras_distinto_de_1.1.04 (desvío c: por empresa y mes, Σ IVA con crédito de las compras por periodo_iva − anulaciones en el mes de su reverso = movimiento de 1.1.04; 1.1.04 solo lo mueven compras y la liquidación del IVA, que revisa el inv. 22)',
         `WITH docs AS (
              SELECT empresa_id, mes, sum(monto) AS monto FROM (
                  SELECT c.empresa_id, to_char(c.periodo_iva, 'YYYY-MM') AS mes, c.iva * ${signoCompra('c')} AS monto
@@ -2365,7 +2374,7 @@ async function verificarLibroCon(
          SELECT a.empresa_id, to_char(a.fecha, 'YYYY-MM'), NULL, (m.debe - m.haber)::text, a.origen_tipo
            FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
            JOIN ledger.cuentas c ON c.id = m.cuenta_id
-          WHERE c.codigo = '${IVA_CREDITO}' AND a.origen_tipo <> 'compra' AND ${E('a.empresa_id')}`,
+          WHERE c.codigo = '${IVA_CREDITO}' AND a.origen_tipo NOT IN ('compra', 'liquidacion_impuesto') AND ${E('a.empresa_id')}`,
     )
     await revisar(
         '15.activo_depreciado_de_mas (inicial + Σ cuotas vigentes ≤ costo − residual; una cuota por activo y mes)',
@@ -3283,21 +3292,23 @@ async function verificarLibroCon(
               WHERE debe IS NULL OR haber IS NULL OR debe::numeric <> debe_libro OR haber::numeric <> haber_libro
                  OR debe_libro <> haber_libro OR (libro = 'diario' AND filas <> filas_diario)`,
         )
-        // fase 7: la liquidación mensual del IVA moverá 2.1.02 sin ser venta; ese asiento (origen de la
-        // declaración) se excluye de este cuadre cuando exista. Un ajuste manual a 2.1.02 lo rompe a propósito.
+        // fase 7 PR B: la liquidación del IVA (`liquidacion_impuesto`) mueve 2.1.02 sin ser venta: no cuenta.
+        // Un ajuste manual a 2.1.02 lo rompe a propósito.
         await revisar(
-            '20.libro_ventas_distinto_del_iva_debito (libro de ventas emitido, con sus meses aún cerrados: Σ IVA = movimiento de 2.1.02 de la empresa en el rango; cada venta suma una sola vez y en el mes en que se movió el débito)',
+            '20.libro_ventas_distinto_del_iva_debito (libro de ventas emitido, con sus meses aún cerrados: Σ IVA = movimiento de 2.1.02 de la empresa en el rango sin la liquidación del IVA (fase 7 PR B); cada venta suma una sola vez y en el mes en que se movió el débito)',
             `SELECT e.id AS emision_id, e.empresa_id, to_char(e.desde, 'YYYY-MM') AS desde, to_char(e.hasta, 'YYYY-MM') AS hasta,
                     e.totales ->> 'iva' AS iva_libro,
                     (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                        JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta)::text AS iva_debito
+                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta
+                        AND a.origen_tipo <> 'liquidacion_impuesto')::text AS iva_debito
                FROM fiscal.libros_emisiones e
               WHERE ${E('e.empresa_id')} AND e.libro = 'ventas' AND ${sigueCerrada('e')}
                 AND (e.totales ->> 'iva')::numeric IS DISTINCT FROM
                     (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                        JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta)`,
+                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta
+                        AND a.origen_tipo <> 'liquidacion_impuesto')`,
         )
         if (!opciones.sinFuncionesProducto) {
             const emisiones = await filas(
@@ -3418,6 +3429,235 @@ async function verificarLibroCon(
                                                         AND a.umbral = (ev.payload ->> 'umbral')::int)
                                                     OR (ev.evento = 'fiscal.limite_pc' AND a.tipo = 'limite_pc'
                                                         AND a.clave = (ev.payload ->> 'anio') || ':' || (ev.payload ->> 'umbral_pct')))`,
+        )
+    }
+
+    /*
+    | 22 · Declaraciones de IVA y de pequeño contribuyente (fase 7 PR B; contrato de localización
+    | fiscal §9.3, §10.2, §10.4–§10.6 y §21): aritmética del borrador; la liquidación del periodo =
+    | el neto de su última versión revisada y deja 2.1.02 (y 1.1.04 salvo el remanente) del mes en
+    | cero; el remanente pasa al mes siguiente; el pago a 2.1.06/2.1.09 y la mora y multa a 5.4.02 desde
+    | caja o banco de la misma empresa; el bloqueo de impuestos fijado; las etiquetas V_IVA en su
+    | partida y con su signo; las cuadrículas del mes = la declaración revisada.
+    */
+    const [hayDeclaraciones] = await filas(`SELECT to_regclass('fiscal.declaraciones') IS NOT NULL AS existe`)
+    if (hayDeclaraciones?.existe) {
+        const t = (d: string, k: string) => `coalesce((${d}.totales ->> '${k}')::numeric, 0)`
+        /** última versión revisada (liquidada) de cada (empresa, impuesto, periodo) */
+        const revisadas = `(SELECT DISTINCT ON (d.empresa_id, d.impuesto, d.periodo_desde) d.*
+                              FROM fiscal.declaraciones d WHERE d.revisada_en IS NOT NULL AND ${E('d.empresa_id')}
+                             ORDER BY d.empresa_id, d.impuesto, d.periodo_desde, d.version DESC)`
+        /** neto (debe − haber) de la cuenta en los asientos `liquidacion_impuesto` del periodo de `d` */
+        const liquidado = (d: string, cuenta: string) =>
+            `(SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+               WHERE a.origen_tipo = 'liquidacion_impuesto' AND a.empresa_id = ${d}.empresa_id AND cu.codigo = '${cuenta}'
+                 AND a.origen_id IN (SELECT x.id FROM fiscal.declaraciones x WHERE x.empresa_id = ${d}.empresa_id
+                                      AND x.impuesto = ${d}.impuesto AND x.periodo_desde = ${d}.periodo_desde))`
+        /** neto del mes de `d` en la cuenta sin las liquidaciones */
+        const delMes = (d: string, cuenta: string) =>
+            `(SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+               WHERE a.empresa_id = ${d}.empresa_id AND cu.codigo = '${cuenta}' AND a.origen_tipo <> 'liquidacion_impuesto'
+                 AND a.fecha BETWEEN ${d}.periodo_desde AND ${d}.periodo_hasta)`
+        await revisar(
+            '22.declaracion_mal_calculada (IVA: determinado = D − C − R; el crédito (C + remanente + venta neta negativa) se usa primero, luego las retenciones; a pagar y remanentes lo que queda; el remanente anterior es el de la declaración enlazada del mes anterior. PC: tasa sobre el total de ventas menos retenciones. Una obligación de la misma empresa e impuesto)',
+            `WITH d AS (
+                 SELECT d.*, ${t('d', 'debito')} AS dd, ${t('d', 'credito')} AS cc, ${t('d', 'retenciones')} AS rr,
+                        ${t('d', 'remanente_credito_anterior')} AS ac, ${t('d', 'remanente_retenciones_anterior')} AS ar,
+                        (d.detalle ->> 'anterior_id')::bigint AS anterior_id
+                   FROM fiscal.declaraciones d WHERE ${E('d.empresa_id')}
+             ), iva AS (
+                 SELECT d.*, greatest(d.dd, 0) AS deb, d.cc + d.ac + greatest(-d.dd, 0) AS cred FROM d WHERE d.impuesto = 'iva_mensual'
+             ), iva2 AS (
+                 SELECT iva.*, least(iva.deb, iva.cred) AS cu FROM iva
+             ), iva3 AS (
+                 SELECT iva2.*, least(iva2.deb - iva2.cu, greatest(iva2.rr + iva2.ar, 0)) AS ru FROM iva2
+             )
+             SELECT 'iva' AS que, i.id, i.empresa_id, to_char(i.periodo_desde, 'YYYY-MM') AS periodo, i.version, i.totales
+               FROM iva3 i LEFT JOIN fiscal.declaraciones p ON p.id = i.anterior_id
+               LEFT JOIN fiscal.obligaciones o ON o.id = i.obligacion_id
+              WHERE ${t('i', 'impuesto_determinado')} <> i.dd - i.cc - i.rr
+                 OR ${t('i', 'credito_usado')} <> i.cu OR ${t('i', 'retenciones_usadas')} <> i.ru
+                 OR ${t('i', 'a_pagar')} <> i.deb - i.cu - i.ru
+                 OR ${t('i', 'remanente_credito')} <> i.cred - i.cu
+                 OR ${t('i', 'remanente_retenciones')} <> i.rr + i.ar - i.ru
+                 OR (i.anterior_id IS NULL AND (i.ac <> 0 OR i.ar <> 0))
+                 OR (i.anterior_id IS NOT NULL AND (p.id IS NULL OR p.empresa_id <> i.empresa_id OR p.impuesto <> i.impuesto
+                     OR p.periodo_desde <> (i.periodo_desde - interval '1 month')::date OR p.revisada_en IS NULL
+                     OR i.ac <> ${t('p', 'remanente_credito')} OR i.ar <> ${t('p', 'remanente_retenciones')}))
+                 OR o.id IS NULL OR o.empresa_id <> i.empresa_id OR o.impuesto <> i.impuesto OR o.periodo_desde <> i.periodo_desde
+             UNION ALL
+             SELECT 'pc', d.id, d.empresa_id, to_char(d.periodo_desde, 'YYYY-MM'), d.version, d.totales
+               FROM d LEFT JOIN fiscal.obligaciones o ON o.id = d.obligacion_id,
+                    LATERAL (SELECT (x ->> 'valor')::numeric AS tasa FROM jsonb_array_elements(d.parametros) x
+                              WHERE x ->> 'clave' = 'impuesto:IVA_PC' LIMIT 1) tasa
+              WHERE d.impuesto = 'pc_mensual'
+                AND (${t('d', 'base')} <> greatest(${t('d', 'ventas')}, 0)
+                     OR ${t('d', 'impuesto')} <> round(${t('d', 'base')} * tasa.tasa / 100, 2)
+                     OR ${t('d', 'retenciones_usadas')} <> least(${t('d', 'impuesto')}, greatest(d.rr + d.ar, 0))
+                     OR ${t('d', 'a_pagar')} <> ${t('d', 'impuesto')} - ${t('d', 'retenciones_usadas')}
+                     OR ${t('d', 'remanente_retenciones')} <> d.rr + d.ar - ${t('d', 'retenciones_usadas')}
+                     OR o.id IS NULL OR o.empresa_id <> d.empresa_id OR o.impuesto <> d.impuesto)`,
+        )
+        await revisar(
+            '22.liquidacion_distinta_de_la_declaracion (por periodo, Σ asientos liquidacion_impuesto = el neto de la última versión revisada: IVA 2.1.02 = D, 1.1.04 = −crédito usado (+|D| si D < 0), 1.1.05 = −retenciones usadas, 2.1.06 = −a pagar; PC 5.3.04 = impuesto, 2.1.09 = −a pagar, 1.1.05 = −retenciones usadas; nada más; cada asiento de una declaración revisada de su empresa, el primero al último día del mes)',
+            `WITH r AS ${revisadas}
+             SELECT 'periodo' AS que, r.id, r.empresa_id, r.impuesto, to_char(r.periodo_desde, 'YYYY-MM') AS periodo
+               FROM r
+              WHERE (r.impuesto = 'iva_mensual' AND (
+                        ${liquidado('r', IVA)} <> ${t('r', 'debito')}
+                     OR ${liquidado('r', IVA_CREDITO)} <> greatest(-${t('r', 'debito')}, 0) - ${t('r', 'credito_usado')}
+                     OR ${liquidado('r', CUENTAS_GT.IVA_RETENIDO_CLIENTES)} <> -${t('r', 'retenciones_usadas')}
+                     OR ${liquidado('r', CUENTAS_GT.IVA_POR_PAGAR)} <> -${t('r', 'a_pagar')}))
+                 OR (r.impuesto = 'pc_mensual' AND (
+                        ${liquidado('r', CUENTAS_GT.IMPUESTO_PC)} <> ${t('r', 'impuesto')}
+                     OR ${liquidado('r', CUENTAS_GT.PC_POR_PAGAR)} <> -${t('r', 'a_pagar')}
+                     OR ${liquidado('r', CUENTAS_GT.IVA_RETENIDO_CLIENTES)} <> -${t('r', 'retenciones_usadas')}))
+             UNION ALL
+             SELECT 'asiento', a.id, a.empresa_id, cu.codigo, to_char(a.fecha, 'YYYY-MM-DD')
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+               LEFT JOIN fiscal.declaraciones d ON d.id = a.origen_id
+              WHERE a.origen_tipo = 'liquidacion_impuesto' AND ${E('a.empresa_id')}
+                AND (d.id IS NULL OR d.empresa_id <> a.empresa_id OR d.revisada_en IS NULL OR d.asiento_id IS DISTINCT FROM a.id
+                     OR a.reversa_de IS NOT NULL OR m.cuadricula IS NOT NULL
+                     OR cu.codigo NOT IN ('${IVA}', '${IVA_CREDITO}', '${CUENTAS_GT.IVA_RETENIDO_CLIENTES}',
+                                          '${CUENTAS_GT.IVA_POR_PAGAR}', '${CUENTAS_GT.IMPUESTO_PC}', '${CUENTAS_GT.PC_POR_PAGAR}')
+                     OR (a.fecha <> d.periodo_hasta AND NOT EXISTS (
+                            SELECT 1 FROM fiscal.declaraciones x JOIN ledger.asientos xa ON xa.id = x.asiento_id
+                             WHERE x.empresa_id = d.empresa_id AND x.impuesto = d.impuesto AND x.periodo_desde = d.periodo_desde
+                               AND x.version < d.version))
+                     OR a.fecha < d.periodo_hasta)`,
+        )
+        await revisar(
+            '22.iva_del_mes_sin_liquidar (IVA con su versión revisada: 2.1.02 del mes + sus liquidaciones = 0; 1.1.04 del mes + sus liquidaciones = remanente − remanente anterior; el remanente anterior de la última versión revisada de un mes = el remanente que dejó la última revisada del mes anterior)',
+            `WITH r AS ${revisadas}
+             SELECT r.id, r.empresa_id, to_char(r.periodo_desde, 'YYYY-MM') AS periodo, r.version,
+                    (${delMes('r', IVA)} + ${liquidado('r', IVA)})::text AS iva_debito,
+                    (${delMes('r', IVA_CREDITO)} + ${liquidado('r', IVA_CREDITO)})::text AS iva_credito,
+                    (${t('r', 'remanente_credito')} - ${t('r', 'remanente_credito_anterior')})::text AS remanente,
+                    ${t('r', 'remanente_credito_anterior')}::text AS anterior, ${t('p', 'remanente_credito')}::text AS dejo_el_anterior
+               FROM r LEFT JOIN r p ON p.empresa_id = r.empresa_id AND p.impuesto = r.impuesto
+                                   AND p.periodo_desde = (r.periodo_desde - interval '1 month')::date
+              WHERE r.impuesto = 'iva_mensual'
+                AND (${delMes('r', IVA)} + ${liquidado('r', IVA)} <> 0
+                     OR ${delMes('r', IVA_CREDITO)} + ${liquidado('r', IVA_CREDITO)}
+                        <> ${t('r', 'remanente_credito')} - ${t('r', 'remanente_credito_anterior')}
+                     OR (p.id IS NOT NULL AND (${t('r', 'remanente_credito_anterior')} <> ${t('p', 'remanente_credito')}
+                                             OR ${t('r', 'remanente_retenciones_anterior')} <> ${t('p', 'remanente_retenciones')})))`,
+        )
+        await revisar(
+            '22.cuadriculas_distintas_de_la_declaracion (IVA con su versión revisada: Σ V_IVA del mes (más el 2.1.02 de venta sin etiqueta) = débito, Σ C_IVA = crédito, Σ RET_IVA_REC = retenciones; PC: RET_IVA_REC = retenciones y 2.1.02 del mes en cero)',
+            `WITH r AS ${revisadas}, q AS (
+                 SELECT r.id,
+                        (SELECT coalesce(sum(CASE WHEN left(m.cuadricula, 1) = '+' THEN 1 ELSE -1 END * (m.debe + m.haber)), 0)
+                           FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                          WHERE a.empresa_id = r.empresa_id AND a.fecha BETWEEN r.periodo_desde AND r.periodo_hasta
+                            AND substr(m.cuadricula, 2) = 'V_IVA')
+                        + (SELECT coalesce(sum(m.haber - m.debe), 0)
+                             FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                            WHERE a.empresa_id = r.empresa_id AND a.fecha BETWEEN r.periodo_desde AND r.periodo_hasta
+                              AND cu.codigo = '${IVA}' AND m.cuadricula IS NULL
+                              AND a.origen_tipo IN ('factura', 'mora', 'nota_credito', 'reclasificacion')) AS v_iva,
+                        (SELECT coalesce(sum(CASE WHEN left(m.cuadricula, 1) = '+' THEN 1 ELSE -1 END * (m.debe + m.haber)), 0)
+                           FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                          WHERE a.empresa_id = r.empresa_id AND a.fecha BETWEEN r.periodo_desde AND r.periodo_hasta
+                            AND substr(m.cuadricula, 2) = 'C_IVA') AS c_iva,
+                        (SELECT coalesce(sum(CASE WHEN left(m.cuadricula, 1) = '+' THEN 1 ELSE -1 END * (m.debe + m.haber)), 0)
+                           FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+                          WHERE a.empresa_id = r.empresa_id AND a.fecha BETWEEN r.periodo_desde AND r.periodo_hasta
+                            AND substr(m.cuadricula, 2) = 'RET_IVA_REC') AS ret
+                   FROM r
+             )
+             SELECT r.id, r.empresa_id, r.impuesto, to_char(r.periodo_desde, 'YYYY-MM') AS periodo, q.v_iva::text,
+                    q.c_iva::text, q.ret::text, r.totales
+               FROM r JOIN q ON q.id = r.id
+              WHERE (r.impuesto = 'iva_mensual' AND (q.v_iva <> ${t('r', 'debito')} OR q.c_iva <> ${t('r', 'credito')}
+                                                     OR q.ret <> ${t('r', 'retenciones')}))
+                 OR (r.impuesto = 'pc_mensual' AND (q.ret <> ${t('r', 'retenciones')} OR ${delMes('r', IVA)} <> 0))`,
+        )
+        await revisar(
+            '22.pago_de_declaracion_mal_contabilizado (pago_impuesto de una declaración revisada de su empresa: 2.1.06 (o 2.1.09) debe = impuesto, 5.4.02 debe = mora + multa, caja o banco haber = total; uno por versión y Σ impuesto del periodo ≤ a pagar)',
+            `SELECT 'pago' AS que, dp.id, dp.empresa_id, dp.declaracion_id, dp.total::text,
+                    (SELECT json_agg(json_build_object('cuenta', cu.codigo, 'debe', m.debe, 'haber', m.haber))
+                       FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id WHERE m.asiento_id = dp.asiento_id) AS partidas
+               FROM fiscal.declaraciones_pagos dp JOIN fiscal.declaraciones d ON d.id = dp.declaracion_id
+               JOIN ledger.asientos a ON a.id = dp.asiento_id
+              WHERE ${E('dp.empresa_id')}
+                AND (d.empresa_id <> dp.empresa_id OR a.empresa_id <> dp.empresa_id OR a.origen_tipo <> 'pago_impuesto'
+                     OR a.origen_id <> d.id OR d.revisada_en IS NULL OR a.fecha <> dp.fecha
+                     OR (SELECT coalesce(sum(m.debe), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                          WHERE m.asiento_id = a.id
+                            AND cu.codigo = CASE WHEN d.impuesto = 'pc_mensual' THEN '${CUENTAS_GT.PC_POR_PAGAR}' ELSE '${CUENTAS_GT.IVA_POR_PAGAR}' END) <> dp.impuesto
+                     OR (SELECT coalesce(sum(m.debe), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                          WHERE m.asiento_id = a.id AND cu.codigo = '${CUENTAS_GT.MULTAS_TRIBUTARIAS}') <> dp.mora + dp.multa
+                     OR (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                          WHERE m.asiento_id = a.id AND ${CAJA_O_BANCO('cu.codigo')}) <> dp.total
+                     OR (SELECT count(*) FROM ledger.movimientos m WHERE m.asiento_id = a.id) > 3
+                     OR (SELECT sum(x.impuesto) FROM fiscal.declaraciones_pagos x JOIN fiscal.declaraciones y ON y.id = x.declaracion_id
+                          WHERE y.empresa_id = d.empresa_id AND y.impuesto = d.impuesto AND y.periodo_desde = d.periodo_desde)
+                        > (SELECT ${t('z', 'a_pagar')} FROM fiscal.declaraciones z WHERE z.empresa_id = d.empresa_id AND z.impuesto = d.impuesto
+                             AND z.periodo_desde = d.periodo_desde AND z.revisada_en IS NOT NULL ORDER BY z.version DESC LIMIT 1))
+             UNION ALL
+             SELECT 'asiento_sin_pago', a.id, a.empresa_id, a.origen_id, NULL, NULL
+               FROM ledger.asientos a
+              WHERE a.origen_tipo = 'pago_impuesto' AND ${E('a.empresa_id')}
+                AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos dp WHERE dp.asiento_id = a.id)`,
+        )
+        await revisar(
+            '22.revisada_sin_bloqueo_de_impuestos (al revisar una declaración el bloqueo de impuestos de su empresa llega al último día de su mes, y no retrocede)',
+            `SELECT d.id, d.empresa_id, to_char(d.periodo_hasta, 'YYYY-MM-DD') AS hasta,
+                    to_char(ledger.bloqueo_vigente(d.empresa_id, 'impuestos'), 'YYYY-MM-DD') AS bloqueo
+               FROM fiscal.declaraciones d
+              WHERE ${E('d.empresa_id')} AND d.revisada_en IS NOT NULL
+                AND coalesce(ledger.bloqueo_vigente(d.empresa_id, 'impuestos') < d.periodo_hasta, true)`,
+        )
+        const [migracion] = await filas(
+            `SELECT coalesce(min(migration_time), now()) AS desde FROM adonis_schema WHERE name LIKE '%create_fiscal_declaraciones_table'`,
+        )
+        const desdeEtiquetas =
+            migracion?.desde instanceof Date ? migracion.desde.toISOString() : String(migracion?.desde)
+        if (!opciones.sinFuncionesProducto) {
+            // desvío e: una empresa en pequeño contribuyente en la fecha del documento no separa IVA
+            const conIva = await filas(
+                `SELECT DISTINCT a.empresa_id, to_char(a.fecha, 'YYYY-MM-DD') AS fecha
+                   FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                  WHERE ${E('a.empresa_id')} AND a.reversa_de IS NULL AND a.origen_tipo IN ('factura', 'mora', 'nota_credito')
+                    AND cu.codigo IN ('${IVA}', '${IVA_TRANSICION}')
+                 UNION
+                 SELECT f.empresa_id, to_char((f.emitida_en AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD')
+                   FROM billing.facturas f WHERE ${E('f.empresa_id')} AND f.iva <> 0 AND f.clave_externa IS NULL AND f.emitida_en IS NOT NULL`,
+            )
+            for (const fila of conIva) {
+                if (
+                    await sinIvaPorRegimen(
+                        clienteLectura ?? db.connection(),
+                        Number(fila.empresa_id),
+                        String(fila.fecha),
+                    )
+                ) {
+                    violaciones.push({
+                        invariante:
+                            '22.pequeno_contribuyente_con_iva (desvío e: en régimen PC en la fecha del documento, la factura, la mora y la nota no separan IVA ni tocan 2.1.02 ni 2.1.11)',
+                        detalle: fila,
+                    })
+                }
+            }
+        }
+        await revisar(
+            '22.etiqueta_de_venta_mal_puesta (V_IVA solo en 2.1.02 de factura, mora, nota_credito o reclasificacion, + en el haber y − en el debe; desde la fase 7 toda partida de 2.1.02 de esos orígenes lleva su etiqueta, salvo el reverso de una partida sin ella; ninguna liquidación etiquetada)',
+            `SELECT m.id, m.asiento_id, a.origen_tipo, cu.codigo, m.cuadricula, m.debe::text, m.haber::text
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+              WHERE ${E('a.empresa_id')}
+                AND ((substr(m.cuadricula, 2) = 'V_IVA'
+                      AND (cu.codigo <> '${IVA}' OR a.origen_tipo NOT IN ('factura', 'mora', 'nota_credito', 'reclasificacion')
+                           OR (left(m.cuadricula, 1) = '+' AND m.haber = 0) OR (left(m.cuadricula, 1) = '-' AND m.debe = 0)
+                           OR m.impuesto_codigo IS DISTINCT FROM 'IVA12'))
+                     OR (cu.codigo = '${IVA}' AND m.cuadricula IS NULL
+                         AND a.origen_tipo IN ('factura', 'mora', 'nota_credito', 'reclasificacion')
+                         AND a.created_at > '${desdeEtiquetas}'::timestamptz
+                         AND NOT EXISTS (SELECT 1 FROM ledger.movimientos o WHERE o.asiento_id = a.reversa_de
+                                          AND o.cuenta_id = m.cuenta_id AND o.cuadricula IS NULL)))`,
         )
     }
 
