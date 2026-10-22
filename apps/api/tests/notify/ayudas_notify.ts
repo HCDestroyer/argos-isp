@@ -1,9 +1,10 @@
-import { randomInt, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import db from '@adonisjs/lucid/services/db'
 import type { CanalNotificacion } from '#shared/eventos'
 import { ErrorCanal, type Canal, type EstadoEntrega, type ResultadoEnvio } from '#notify/canales/canal'
 import type { ColaEnvios } from '#notify/cola'
 import { unico } from '#tests/ayudas'
+import { ipUnica } from '#tests/core/fabricas'
 
 /**
  * Datos y dobles de prueba de notify. Los datos de núcleo y facturación se insertan directo
@@ -39,7 +40,7 @@ export async function crearCliente(datos: DatosCliente = {}): Promise<number> {
 
 /** `empresaId` por defecto es la principal (1): con varias empresas activas el trigger exige una. */
 export async function crearServicio(clienteId: number, plan = unico('Plan'), empresaId = 1): Promise<number> {
-    const nasIp = `10.${randomInt(1, 255)}.${randomInt(1, 255)}.${randomInt(1, 255)}`
+    const nasIp = ipUnica()
     const [router] = (await db
         .table('network.routers')
         .insert({ nombre: unico('Router'), host: '10.0.0.1', nas_ip: nasIp })

@@ -9,6 +9,7 @@ import { ConsumidorAlertas } from '#notify/consumidor_alertas'
 import RegistrarAlerta from '#notify/actions/registrar_alerta'
 import { CanalFalso, ColaFalsa } from '#tests/notify/ayudas_notify'
 import { unico } from '#tests/ayudas'
+import { ipUnica } from '#tests/core/fabricas'
 
 /**
  * Semana 2, tarea 3: alerta al equipo de `routeros.fallido` (`contratos/routeros.md`:
@@ -29,7 +30,7 @@ async function crearRouter(nombre: string): Promise<number> {
         .insert({
             nombre,
             host: `10.${randomInt(1, 255)}.${randomInt(1, 255)}.1`,
-            nas_ip: `10.${randomInt(1, 255)}.${randomInt(1, 255)}.${randomInt(2, 254)}`,
+            nas_ip: ipUnica(),
         })
         .returning('id')) as Array<{ id: number }>
     return fila!.id
