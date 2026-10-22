@@ -5,14 +5,16 @@ import type { Problem } from '@argosisp/contracts'
  * Revisar una declaración (`POST /declaraciones/:id/revisar`, `declaraciones.revisar`). Pide una
  * confirmación escrita porque revisar **registra la liquidación** (asiento en el diario de impuestos) y
  * **bloquea los impuestos del mes**. Los errores dicen qué hacer: NCRE sin certificar, checks de
- * impuestos en anomalía, datos que cambiaron o el mes en curso.
+ * impuestos en anomalía, datos que cambiaron, el mes en curso o un mes posterior que no se puede
+ * rectificar (409 `cascada_bloqueada`). Una sustitutiva avisa que puede rectificar los meses posteriores
+ * ya revisados (H34): la respuesta trae `cascada[]` y la ficha la muestra.
  */
 const props = defineProps<{
     declaracion: Declaracion
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
-const emit = defineEmits<{ hecho: [declaracion: Declaracion], checklist: [], recalcular: [] }>()
+const emit = defineEmits<{ hecho: [declaracion: DeclaracionRevisada], checklist: [], recalcular: [] }>()
 
 const { puede } = usePermisos()
 const confirmo = ref(false)
@@ -80,6 +82,15 @@ function aRecalcular() {
                         </ul>
                     </template>
                 </UAlert>
+                <UAlert
+                    v-if="declaracion.sustitutiva"
+                    color="info"
+                    variant="subtle"
+                    icon="i-lucide-git-branch"
+                    title="Puede rectificar meses posteriores"
+                    description="Si esta sustitutiva cambia el remanente que deja, en la misma operación se rectifican los meses siguientes ya revisados (una versión sustitutiva revisada de cada uno). Los que estaban presentados quedan por presentar como rectificativa. Si alguno no se puede rectificar, no se guarda nada."
+                    data-prueba="revisar-cascada"
+                />
                 <UCheckbox
                     v-model="confirmo"
                     :label="`Entiendo que se registra la liquidación y se bloquean los impuestos de ${mes}`"

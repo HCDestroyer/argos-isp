@@ -5,7 +5,8 @@ import type { Problem } from '@argosisp/contracts'
  * Error de una acción sobre una declaración con qué hacer: las NCRE sin certificar (409
  * `ncre_sin_certificar`) enlazadas a su nota o su DTE, los checks de impuestos que no pasan (422
  * `checks_pendientes`) con el botón a la lista de verificación, y «Recalcular» cuando los datos
- * cambiaron (409 `declaracion_desactualizada`).
+ * cambiaron (409 `declaracion_desactualizada`); con 409 `cascada_bloqueada`, cada mes posterior y si se
+ * podía rectificar o por qué no.
  */
 const props = defineProps<{
     problema: Problem
@@ -20,6 +21,7 @@ const codigo = computed(() => codigoProblema(props.problema))
 const legible = computed(() => problemaDeclaracionLegible(props.problema))
 const notas = computed(() => (codigo.value === 'ncre_sin_certificar' ? ncreDeProblema(props.problema) : []))
 const checks = computed(() => checksPendientesDe(props.problema))
+const meses = computed(() => cascadaBloqueadaDe(props.problema))
 </script>
 
 <template>
@@ -76,6 +78,32 @@ const checks = computed(() => checksPendientesDe(props.problema))
                 :data-clave="c.clave"
             >
                 {{ c.mensaje }}
+            </li>
+        </ul>
+        <ul
+            v-if="meses.length"
+            class="flex flex-col divide-y divide-default rounded-lg border border-default"
+            data-prueba="declaracion-cascada-bloqueada"
+        >
+            <li
+                v-for="m in meses"
+                :key="m.periodo"
+                class="flex flex-col gap-0.5 px-3 py-2 text-sm"
+                :data-periodo="m.periodo"
+            >
+                <span class="flex items-center gap-2">
+                    <span class="font-medium text-highlighted">{{ etiquetaPeriodo(m.periodo) }}</span>
+                    <UBadge
+                        :label="m.causa === null ? 'Se podía rectificar' : 'No se puede rectificar'"
+                        :color="m.causa === null ? 'neutral' : 'error'"
+                        variant="subtle"
+                        size="sm"
+                    />
+                </span>
+                <span
+                    v-if="m.causa !== null"
+                    class="text-xs text-muted"
+                >{{ problemaDeclaracionLegible({ type: `urn:argosisp:problema:${m.causa}`, title: m.causa, status: 409 }).title }}: {{ m.mensaje }}</span>
             </li>
         </ul>
         <div class="flex flex-wrap gap-2">

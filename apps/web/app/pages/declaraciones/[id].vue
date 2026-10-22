@@ -81,6 +81,8 @@ const columnasRenglones = computed<TableColumn<RenglonDeclaracion>[]>(() => [
 ])
 
 /* Acciones. */
+/** Meses que rectificó la última revisión hecha desde esta ficha (H34). */
+const rectificados = shallowRef<MesRectificado[]>([])
 const revisando = ref(false)
 const presentando = ref(false)
 const pagando = ref(false)
@@ -94,6 +96,12 @@ function alTerminar(d: Declaracion, titulo: string, descripcion: string) {
     }
     void cargar()
     void checklist.value?.cargar()
+}
+
+function alRevisar(d: DeclaracionRevisada) {
+    rectificados.value = d.cascada
+    const extra = d.cascada.length ? ` Se rectificaron también: ${d.cascada.map(textoMesRectificado).join('; ')}.` : ''
+    alTerminar(d, 'Declaración revisada', `Liquidación registrada y los impuestos de ${etiquetaPeriodo(periodo.value)} bloqueados.${extra}`)
 }
 
 function alPagar(d: Declaracion) {
@@ -207,6 +215,39 @@ function verChecklist() {
                 :actions="puede('declaraciones.calcular') ? [{ label: acciones?.sustitutiva ? 'Calcular sustitutiva' : 'Recalcular', icon: 'i-lucide-refresh-cw', color: 'warning', variant: 'outline', onClick: () => { recalculando = true } }] : undefined"
                 data-prueba="declaracion-desactualizada"
             />
+
+            <UAlert
+                v-if="rectificados.length"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-git-branch"
+                :title="rectificados.length === 1 ? 'Se rectificó también 1 mes posterior' : `Se rectificaron también ${rectificados.length} meses posteriores`"
+                close
+                data-prueba="declaracion-cascada"
+                @update:open="rectificados = []"
+            >
+                <template #description>
+                    <p class="mb-1">
+                        Esta revisión cambió el remanente que arrastran: cada uno tiene una sustitutiva revisada que liquida la diferencia.
+                    </p>
+                    <ul class="flex flex-col gap-1">
+                        <li
+                            v-for="m in rectificados"
+                            :key="m.declaracion_id"
+                            :data-periodo="m.periodo"
+                        >
+                            <ULink
+                                raw
+                                :to="`/declaraciones/${m.declaracion_id}`"
+                                class="underline underline-offset-2"
+                            >
+                                {{ textoMesRectificado(m) }}
+                            </ULink>
+                            · remanente {{ formatearQuetzales(m.remanente_credito_anterior) }} → {{ formatearQuetzales(m.remanente_credito) }} · a pagar {{ formatearQuetzales(m.a_pagar) }}
+                        </li>
+                    </ul>
+                </template>
+            </UAlert>
 
             <div
                 v-if="acciones && declaracion.estado !== 'sustituida'"
@@ -549,7 +590,7 @@ function verChecklist() {
                 v-if="puede('declaraciones.revisar')"
                 v-model:open="revisando"
                 :declaracion="declaracion"
-                @hecho="alTerminar($event, 'Declaración revisada', `Liquidación registrada y los impuestos de ${etiquetaPeriodo(periodo)} bloqueados.`)"
+                @hecho="alRevisar"
                 @checklist="verChecklist"
                 @recalcular="recalculando = true"
             />

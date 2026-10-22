@@ -34,6 +34,11 @@ export const ESTADOS_OBLIGACION: Record<EstadoObligacion, { etiqueta: string, co
 
 export const ESTADOS_ORDEN = Object.keys(ESTADOS_OBLIGACION) as EstadoObligacion[]
 
+/** La obligación volvió a borrador porque la cascada de remanentes rectificó su declaración presentada (H34). */
+export function esRectificativa(obligacion: Pick<Obligacion, 'motivo_estado'>): boolean {
+    return obligacion.motivo_estado === 'rectificativa'
+}
+
 /** Estado para mostrar: una pendiente o un borrador vencidos son «Vencida» en rojo. */
 export function estadoVisible(obligacion: Pick<Obligacion, 'estado' | 'vencida'>): { etiqueta: string, color: BadgeColor, icono: string } {
     if (obligacion.vencida) {
@@ -47,6 +52,7 @@ const MOTIVOS: Record<string, string> = {
     sin_retenciones_isr: 'No hubo retenciones de ISR en el mes (según el libro)',
     cuarto_trimestre_con_la_anual: 'El cuarto trimestre se paga con la declaración anual',
     antes_de_inicio_libros: 'El periodo es anterior al inicio de los libros en ArgosIsp',
+    rectificativa: 'Rectificativa: una sustitutiva de un mes anterior cambió su remanente; hay que presentarla de nuevo',
 }
 
 /** Por qué una obligación no aplica (`motivo_estado`), en texto; `null` sin motivo. */

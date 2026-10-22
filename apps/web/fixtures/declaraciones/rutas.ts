@@ -15,7 +15,8 @@ import { calcularTotales, finDeMes, hashDatos, parametrosDe, type Declaracion, t
  * versiones de solo inserción (la anterior pasa a `sustituida`), sustitutiva obligatoria tras revisar,
  * `datos_hash` contra los datos de hoy (409 `declaracion_desactualizada`), NCRE sin certificar y
  * `iva_cuadrado` antes de liquidar, bloqueo `impuestos` en el último día del mes, mora y multa del pago
- * tardío. Los asientos (liquidación y pago) no se guardan: solo su número. Los libros del fixture
+ * tardío y la cascada de remanentes (H34) a los meses posteriores ya revisados. Los asientos
+ * (liquidación y pago) no se guardan: solo su número. Los libros del fixture
  * empiezan en julio de 2026 (antes: 422 `antes_de_inicio_libros`).
  */
 
@@ -185,16 +186,181 @@ function dias(desde: string, hasta: string): number {
     return Math.max(0, Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000))
 }
 
-/** Datos de prueba: los libros del mes cambian después de calcular (la versión queda desactualizada). */
-export function cambiarDatosDeclaracionFixture(empresaId: number, periodo: string): void {
+/** Datos de prueba: los libros del mes cambian después de calcular (la versión queda desactualizada); por defecto, una venta más. */
+export function cambiarDatosDeclaracionFixture(empresaId: number, periodo: string, renglon: Schema<'RenglonDeclaracion'> = { seccion: 'ventas', origen: 'dte', documento: 'FACT A-1199', fecha: `${periodo}-28`, tipo: 'FACT', nit: 'CF', base: '250.00', iva: '30.00', total: '280.00', estado: 'certificado' }): void {
     const mes = bd.datosDeclaraciones.find(d => d.empresa_id === empresaId && d.periodo === periodo)
-    const renglon: Schema<'RenglonDeclaracion'> = { seccion: 'ventas', origen: 'dte', documento: 'FACT A-1199', fecha: `${periodo}-28`, tipo: 'FACT', nit: 'CF', base: '250.00', iva: '30.00', total: '280.00', estado: 'certificado' }
     if (mes) {
         mes.renglones.push(renglon)
     }
     else {
         bd.datosDeclaraciones.push({ empresa_id: empresaId, periodo, renglones: [renglon] })
     }
+}
+
+/** `CalcularDeclaracion`: versión nueva en borrador (la anterior pasa a sustituida). */
+function calcularVersion(solicitud: SolicitudFixture, empresaId: number, impuesto: Impuesto, periodo: string, sustitutiva: boolean): Declaracion | RespuestaFixture {
+    if (periodo < INICIO_LIBROS) {
+        return regla('antes_de_inicio_libros', `El periodo ${periodo} es anterior a inicio_libros (${INICIO_LIBROS}-01): sus libros y declaraciones salieron del sistema anterior`, [{ field: 'periodo', message: `Desde ${INICIO_LIBROS}`, rule: 'antes_de_inicio_libros' }])
+    }
+    const obligacion = bd.obligacionesFiscales.find(o => o.empresa_id === empresaId && o.impuesto === impuesto && o.periodo_desde === `${periodo}-01`)
+    if (!obligacion || obligacion.estado === 'no_aplica') {
+        return regla('obligacion_no_aplica', `La empresa no tiene la obligación ${impuesto} de ${periodo}${obligacion?.motivo_estado ? ` (${obligacion.motivo_estado})` : ''}: revise el régimen y las banderas del periodo`, [{ field: 'impuesto', message: obligacion?.motivo_estado ?? 'sin obligación', rule: 'obligacion_no_aplica' }])
+    }
+    const previa = ultima(empresaId, impuesto, periodo)
+    if (previa && (previa.estado === 'revisada' || previa.estado === 'presentada') && !sustitutiva) {
+        const presentada = previa.estado === 'presentada'
+        return conflicto(presentada ? 'declaracion_presentada' : 'declaracion_revisada', presentada ? 'Declaración presentada' : 'Declaración revisada', `La versión ${previa.version} de ${impuesto} ${periodo} está ${previa.estado}: para corregirla calcule una sustitutiva (sustitutiva: true)`)
+    }
+    const calculado = calcularDatos(empresaId, impuesto, periodo)
+    const momento = ahora()
+    const nueva: Declaracion = {
+        id: siguienteId(bd.declaraciones),
+        empresa_id: empresaId,
+        impuesto,
+        periodo_desde: `${periodo}-01`,
+        periodo_hasta: finDeMes(periodo),
+        version: (previa?.version ?? 0) + 1,
+        sustitutiva: previa?.revisada_en !== null && previa?.revisada_en !== undefined,
+        sustituye_a: previa?.id ?? null,
+        obligacion_id: obligacion.id,
+        formulario: obligacion.formulario,
+        vence_en: obligacion.vence_en,
+        ...calculado,
+        calculada_por: usuario(solicitud)?.id ?? null,
+        calculada_en: momento,
+        estado: 'borrador',
+        revisada_por: null,
+        revisada_en: null,
+        asiento_id: null,
+        numero_formulario: null,
+        fecha_presentacion: null,
+        boleta: null,
+        presentada_por: null,
+        presentada_en: null,
+        pago: null,
+        created_at: momento,
+        updated_at: momento,
+    }
+    bd.declaraciones.push(nueva)
+    if (previa && previa.estado !== 'sustituida') {
+        Object.assign(previa, { estado: 'sustituida', updated_at: momento })
+    }
+    actualizarObligacion(nueva, { estado: 'borrador' })
+    registrarAccion(solicitud, 'declaraciones.calcular', { tipo: 'declaracion', id: nueva.id }, { impuesto, periodo, sustitutiva })
+    return nueva
+}
+
+/** `RevisarDeclaracion` sin la cascada: reglas, liquidación, bloqueo de impuestos y checks. */
+function revisarVersion(solicitud: SolicitudFixture, d: Declaracion, cascadaDe: number | null = null): Declaracion | RespuestaFixture {
+    const sustituida = exigirUltima(d)
+    if (sustituida) {
+        return sustituida
+    }
+    if (d.estado !== 'borrador') {
+        return conflicto(d.estado === 'presentada' ? 'declaracion_presentada' : 'declaracion_revisada', 'Declaración revisada', `La versión ${d.version} ya está ${d.estado}`)
+    }
+    const periodo = d.periodo_desde.slice(0, 7)
+    if (d.periodo_hasta >= hoyGuatemala()) {
+        return regla('periodo_en_curso', `El mes ${periodo} no ha terminado: se revisa y liquida después de su último día`)
+    }
+    if (desactualizada(d)) {
+        return desactualizadaProblema(d)
+    }
+    const ncre = ncreSinCertificar(d.empresa_id, periodo)
+    if (ncre.length) {
+        const respuesta = conflicto('ncre_sin_certificar', 'NCRE sin certificar', `Hay ${ncre.length} notas de crédito con su NCRE sin certificar (${ncre.slice(0, 20).map(x => `nota ${x.nota_id}: ${x.estado}`).join(', ')}): certifícalas o anula las rechazadas antes de liquidar el IVA`)
+        return { ...respuesta, cuerpo: { ...(respuesta.cuerpo as Problem), errors: ncre.map(x => ({ field: 'nota_id', message: x.estado, rule: String(x.dte_id), ...x })) } }
+    }
+    const cuadrado = verificarYExigir(solicitud, d.empresa_id, [['impuestos', d.periodo_desde]], ['iva_cuadrado'])
+    if (cuadrado) {
+        return cuadrado
+    }
+    // Liquidación: la diferencia con lo ya liquidado del periodo (sin diferencia, sin asiento).
+    const previa = versiones(d.empresa_id, d.impuesto, periodo).filter(x => x.id !== d.id && x.revisada_en !== null).at(-1)
+    const igual = previa !== undefined && JSON.stringify(previa.totales) === JSON.stringify(d.totales)
+    const momento = ahora()
+    const quien = usuario(solicitud)
+    Object.assign(d, {
+        estado: 'revisada',
+        revisada_por: quien?.id ?? null,
+        revisada_en: momento,
+        asiento_id: igual ? null : 900 + d.id,
+        updated_at: momento,
+    })
+    // Bloqueo `impuestos` en el último día del mes, si no estaba más adelante.
+    const vigente = bd.bloqueosLibro.filter(b => b.empresa_id === d.empresa_id && b.tipo === 'impuestos').sort((a, b) => b.id - a.id)[0]?.hasta ?? null
+    if (vigente === null || vigente < d.periodo_hasta) {
+        bd.bloqueosLibro.push({ id: siguienteId(bd.bloqueosLibro), empresa_id: d.empresa_id, tipo: 'impuestos', hasta: d.periodo_hasta, anterior: vigente, motivo: `Liquidación de ${d.impuesto} ${periodo} (declaración ${d.id})`, creado_por: quien?.id ?? null, creado_por_nombre: quien?.nombre ?? null, created_at: momento })
+    }
+    verificarYExigir(solicitud, d.empresa_id, [['impuestos', d.periodo_desde]])
+    registrarAccion(solicitud, 'declaraciones.revisar', { tipo: 'declaracion', id: d.id }, cascadaDe ? { declaracion_id: d.id, motivo: 'cascada', cascada_de: cascadaDe } : { declaracion_id: d.id })
+    return d
+}
+
+const remanentesQueDeja = (t: Record<string, string>, sufijo = '') => [t[`remanente_credito${sufijo}`] ?? '0.00', t[`remanente_retenciones${sufijo}`] ?? '0.00'] as const
+
+/**
+ * H34: si la revisión cambia el remanente que deja, rectifica en orden cada mes posterior ya revisado
+ * (sustitutiva revisada); se detiene donde el remanente arrastrado no cambia. Una rectificada que
+ * estaba presentada deja su obligación en borrador con `motivo_estado = 'rectificativa'`. Si un mes no
+ * se puede rectificar: 409 `cascada_bloqueada` con un `errors[]` por mes.
+ */
+function cascadaDeRemanentes(solicitud: SolicitudFixture, origen: Declaracion): Schema<'DeclaracionRevisada'>['cascada'] | RespuestaFixture {
+    const salida: Schema<'DeclaracionRevisada'>['cascada'] = []
+    const impuesto: Impuesto = origen.impuesto === 'pc_mensual' ? 'pc_mensual' : 'iva_mensual'
+    let actual = origen
+    for (;;) {
+        const periodo = siguienteMes(actual.periodo_desde.slice(0, 7))
+        const siguiente = versiones(actual.empresa_id, impuesto, periodo).filter(x => x.revisada_en !== null).at(-1)
+        if (!siguiente) {
+            break
+        }
+        const deja = remanentesQueDeja(actual.totales)
+        const arrastra = remanentesQueDeja(siguiente.totales, '_anterior')
+        if (deja[0] === arrastra[0] && deja[1] === arrastra[1]) {
+            break
+        }
+        const estabaPresentada = siguiente.estado === 'presentada'
+        const nueva = calcularVersion(solicitud, actual.empresa_id, impuesto, periodo, true)
+        const revisada = 'status' in nueva ? nueva : revisarVersion(solicitud, nueva, origen.id)
+        if ('status' in revisada) {
+            const problema = revisada.cuerpo as Problem
+            const causa = problema.type.split(':').pop() ?? 'error'
+            return problemaTipado(
+                409,
+                'cascada_bloqueada',
+                'Cascada de remanentes bloqueada',
+                `Revisar ${origen.impuesto} ${origen.periodo_desde.slice(0, 7)} cambia el remanente que arrastra ${periodo}, ya revisado, y ese mes no se puede rectificar (${causa}: ${problema.detail ?? problema.title}). Nada se guardó`,
+                [
+                    ...salida.map(m => ({ field: m.periodo, message: 'rectificable', rule: 'ok' })),
+                    { field: periodo, message: problema.detail ?? problema.title, rule: causa },
+                ],
+            )
+        }
+        if (estabaPresentada) {
+            const o = bd.obligacionesFiscales.find(x => x.id === revisada.obligacion_id)
+            if (o && o.motivo_estado !== 'rectificativa') {
+                Object.assign(o, { motivo_estado: 'rectificativa', version: o.version + 1, updated_at: ahora() })
+            }
+        }
+        salida.push({
+            periodo,
+            declaracion_id: revisada.id,
+            version: revisada.version,
+            sustituye_a: siguiente.id,
+            estaba_presentada: estabaPresentada,
+            remanente_credito_anterior: revisada.totales.remanente_credito_anterior ?? '0.00',
+            remanente_credito: revisada.totales.remanente_credito ?? '0.00',
+            a_pagar: revisada.totales.a_pagar ?? '0.00',
+        })
+        actual = revisada
+    }
+    return salida
+}
+
+function siguienteMes(periodo: string): string {
+    const [anio = 0, mes = 0] = periodo.split('-').map(Number)
+    return new Date(Date.UTC(anio, mes, 1)).toISOString().slice(0, 7)
 }
 
 export const rutasDeclaraciones: RutasFixture = {
@@ -248,60 +414,12 @@ export const rutasDeclaraciones: RutasFixture = {
         if (errores.length || periodo === null || !esImpuesto(cuerpo.impuesto)) {
             return datosInvalidos(errores)
         }
-        const impuesto = cuerpo.impuesto
         const empresaId = typeof cuerpo.empresa_id === 'number' ? cuerpo.empresa_id : empresaActivaDe(solicitud)
         if (empresaId === null) {
             return problemaTipado(422, 'empresa_requerida', 'Empresa requerida', 'Elige la empresa con la que trabajas (cabecera X-Empresa-Id) o indica empresa_id')
         }
-        if (periodo < INICIO_LIBROS) {
-            return regla('antes_de_inicio_libros', `El periodo ${periodo} es anterior a inicio_libros (${INICIO_LIBROS}-01): sus libros y declaraciones salieron del sistema anterior`, [{ field: 'periodo', message: `Desde ${INICIO_LIBROS}`, rule: 'antes_de_inicio_libros' }])
-        }
-        const obligacion = bd.obligacionesFiscales.find(o => o.empresa_id === empresaId && o.impuesto === impuesto && o.periodo_desde === `${periodo}-01`)
-        if (!obligacion || obligacion.estado === 'no_aplica') {
-            return regla('obligacion_no_aplica', `La empresa no tiene la obligación ${impuesto} de ${periodo}${obligacion?.motivo_estado ? ` (${obligacion.motivo_estado})` : ''}: revise el régimen y las banderas del periodo`, [{ field: 'impuesto', message: obligacion?.motivo_estado ?? 'sin obligación', rule: 'obligacion_no_aplica' }])
-        }
-        const previa = ultima(empresaId, impuesto, periodo)
-        if (previa && (previa.estado === 'revisada' || previa.estado === 'presentada') && cuerpo.sustitutiva !== true) {
-            const presentada = previa.estado === 'presentada'
-            return conflicto(presentada ? 'declaracion_presentada' : 'declaracion_revisada', presentada ? 'Declaración presentada' : 'Declaración revisada', `La versión ${previa.version} de ${impuesto} ${periodo} está ${previa.estado}: para corregirla calcule una sustitutiva (sustitutiva: true)`)
-        }
-        const calculado = calcularDatos(empresaId, impuesto, periodo)
-        const momento = ahora()
-        const nueva: Declaracion = {
-            id: siguienteId(bd.declaraciones),
-            empresa_id: empresaId,
-            impuesto,
-            periodo_desde: `${periodo}-01`,
-            periodo_hasta: finDeMes(periodo),
-            version: (previa?.version ?? 0) + 1,
-            sustitutiva: previa?.revisada_en !== null && previa?.revisada_en !== undefined,
-            sustituye_a: previa?.id ?? null,
-            obligacion_id: obligacion.id,
-            formulario: obligacion.formulario,
-            vence_en: obligacion.vence_en,
-            ...calculado,
-            calculada_por: usuario(solicitud)?.id ?? null,
-            calculada_en: momento,
-            estado: 'borrador',
-            revisada_por: null,
-            revisada_en: null,
-            asiento_id: null,
-            numero_formulario: null,
-            fecha_presentacion: null,
-            boleta: null,
-            presentada_por: null,
-            presentada_en: null,
-            pago: null,
-            created_at: momento,
-            updated_at: momento,
-        }
-        bd.declaraciones.push(nueva)
-        if (previa && previa.estado !== 'sustituida') {
-            Object.assign(previa, { estado: 'sustituida', updated_at: momento })
-        }
-        actualizarObligacion(nueva, { estado: 'borrador' })
-        registrarAccion(solicitud, 'declaraciones.calcular', { tipo: 'declaracion', id: nueva.id }, { impuesto, periodo, sustitutiva: cuerpo.sustitutiva === true })
-        return { status: 201, cuerpo: nueva }
+        const nueva = calcularVersion(solicitud, empresaId, cuerpo.impuesto, periodo, cuerpo.sustitutiva === true)
+        return 'status' in nueva ? nueva : { status: 201, cuerpo: nueva }
     })),
 
     'POST /api/v1/declaraciones/:id/revisar': conPermiso('declaraciones.revisar', conIdempotencia((solicitud): RespuestaFixture => {
@@ -309,49 +427,19 @@ export const rutasDeclaraciones: RutasFixture = {
         if ('status' in d) {
             return d
         }
-        const sustituida = exigirUltima(d)
-        if (sustituida) {
-            return sustituida
+        // Todo o nada, como la transacción de la API: si la cascada se bloquea, nada queda guardado.
+        const antes = structuredClone({ declaraciones: bd.declaraciones, obligaciones: bd.obligacionesFiscales, bloqueos: bd.bloqueosLibro, checks: bd.checksCierre, acciones: bd.acciones })
+        const revisada = revisarVersion(solicitud, d)
+        if ('status' in revisada) {
+            return revisada
         }
-        if (d.estado !== 'borrador') {
-            return conflicto(d.estado === 'presentada' ? 'declaracion_presentada' : 'declaracion_revisada', 'Declaración revisada', `La versión ${d.version} ya está ${d.estado}`)
+        const cascada = cascadaDeRemanentes(solicitud, revisada)
+        if (!Array.isArray(cascada)) {
+            Object.assign(bd, { declaraciones: antes.declaraciones, obligacionesFiscales: antes.obligaciones, bloqueosLibro: antes.bloqueos, checksCierre: antes.checks, acciones: antes.acciones })
+            return cascada
         }
-        const periodo = d.periodo_desde.slice(0, 7)
-        if (d.periodo_hasta >= hoyGuatemala()) {
-            return regla('periodo_en_curso', `El mes ${periodo} no ha terminado: se revisa y liquida después de su último día`)
-        }
-        if (desactualizada(d)) {
-            return desactualizadaProblema(d)
-        }
-        const ncre = ncreSinCertificar(d.empresa_id, periodo)
-        if (ncre.length) {
-            const respuesta = conflicto('ncre_sin_certificar', 'NCRE sin certificar', `Hay ${ncre.length} notas de crédito con su NCRE sin certificar (${ncre.slice(0, 20).map(x => `nota ${x.nota_id}: ${x.estado}`).join(', ')}): certifícalas o anula las rechazadas antes de liquidar el IVA`)
-            return { ...respuesta, cuerpo: { ...(respuesta.cuerpo as Problem), errors: ncre.map(x => ({ field: 'nota_id', message: x.estado, rule: String(x.dte_id), ...x })) } }
-        }
-        const cuadrado = verificarYExigir(solicitud, d.empresa_id, [['impuestos', d.periodo_desde]], ['iva_cuadrado'])
-        if (cuadrado) {
-            return cuadrado
-        }
-        // Liquidación: la diferencia con lo ya liquidado del periodo (sin diferencia, sin asiento).
-        const previa = versiones(d.empresa_id, d.impuesto, periodo).filter(x => x.id !== d.id && x.revisada_en !== null).at(-1)
-        const igual = previa !== undefined && JSON.stringify(previa.totales) === JSON.stringify(d.totales)
-        const momento = ahora()
-        const quien = usuario(solicitud)
-        Object.assign(d, {
-            estado: 'revisada',
-            revisada_por: quien?.id ?? null,
-            revisada_en: momento,
-            asiento_id: igual ? null : 900 + d.id,
-            updated_at: momento,
-        })
-        // Bloqueo `impuestos` en el último día del mes, si no estaba más adelante.
-        const vigente = bd.bloqueosLibro.filter(b => b.empresa_id === d.empresa_id && b.tipo === 'impuestos').sort((a, b) => b.id - a.id)[0]?.hasta ?? null
-        if (vigente === null || vigente < d.periodo_hasta) {
-            bd.bloqueosLibro.push({ id: siguienteId(bd.bloqueosLibro), empresa_id: d.empresa_id, tipo: 'impuestos', hasta: d.periodo_hasta, anterior: vigente, motivo: `Liquidación de ${d.impuesto} ${periodo} (declaración ${d.id})`, creado_por: quien?.id ?? null, creado_por_nombre: quien?.nombre ?? null, created_at: momento })
-        }
-        verificarYExigir(solicitud, d.empresa_id, [['impuestos', d.periodo_desde]])
-        registrarAccion(solicitud, 'declaraciones.revisar', { tipo: 'declaracion', id: d.id }, { declaracion_id: d.id })
-        return { status: 200, cuerpo: d }
+        const cuerpo: Schema<'DeclaracionRevisada'> = { ...revisada, cascada }
+        return { status: 200, cuerpo }
     })),
 
     'POST /api/v1/declaraciones/:id/marcar-presentada': conPermiso('declaraciones.presentar', conIdempotencia((solicitud): RespuestaFixture => {

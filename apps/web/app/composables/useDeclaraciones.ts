@@ -2,6 +2,8 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type Declaracion = Schema<'Declaracion'>
 export type DeclaracionDetalle = Schema<'DeclaracionDetalle'>
+export type DeclaracionRevisada = Schema<'DeclaracionRevisada'>
+export type MesRectificado = DeclaracionRevisada['cascada'][number]
 export type RenglonDeclaracion = Schema<'RenglonDeclaracion'>
 export type LibroEnlazado = Schema<'LibroEnlazado'>
 export type FiltrosDeclaraciones = Omit<NonNullable<paths['/api/v1/declaraciones']['get']['parameters']['query']>, 'cursor' | 'empresas'>
@@ -37,10 +39,12 @@ export function useDeclaraciones() {
     }
 
     /**
-     * `POST /declaraciones/:id/revisar` (`declaraciones.revisar`): liquidación y bloqueo de impuestos.
-     * 409 `declaracion_desactualizada`, `ncre_sin_certificar`; 422 `periodo_en_curso`, `checks_pendientes`.
+     * `POST /declaraciones/:id/revisar` (`declaraciones.revisar`): liquidación y bloqueo de impuestos; si
+     * cambia el remanente que deja, rectifica los meses posteriores ya revisados (`cascada[]`). 409
+     * `declaracion_desactualizada`, `ncre_sin_certificar`, `cascada_bloqueada`; 422 `periodo_en_curso`,
+     * `checks_pendientes`.
      */
-    function revisar(id: number, clave: string): Promise<Resultado<Declaracion>> {
+    function revisar(id: number, clave: string): Promise<Resultado<DeclaracionRevisada>> {
         return resolver(api.POST('/api/v1/declaraciones/{id}/revisar', { params: { path: { id }, header: { 'Idempotency-Key': clave } } }))
     }
 

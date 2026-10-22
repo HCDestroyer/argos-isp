@@ -466,6 +466,15 @@ onMounted(() => {
                                             size="sm"
                                         />
                                         <UBadge
+                                            v-if="esRectificativa(obligacion)"
+                                            label="Rectificativa por presentar"
+                                            icon="i-lucide-file-diff"
+                                            color="warning"
+                                            variant="outline"
+                                            size="sm"
+                                            data-prueba="agenda-rectificativa"
+                                        />
+                                        <UBadge
                                             v-if="!obligacion.formulario"
                                             label="Formulario por confirmar"
                                             icon="i-lucide-user-check"
@@ -554,6 +563,16 @@ onMounted(() => {
                                     variant="subtle"
                                     size="sm"
                                     class="mt-1 self-start sm:hidden"
+                                />
+                                <UBadge
+                                    v-if="esRectificativa(row.original)"
+                                    label="Rectificativa por presentar"
+                                    icon="i-lucide-file-diff"
+                                    color="warning"
+                                    variant="outline"
+                                    size="sm"
+                                    class="mt-1 self-start"
+                                    data-prueba="fila-rectificativa"
                                 />
                             </div>
                         </template>

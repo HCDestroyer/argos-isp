@@ -221,4 +221,48 @@ describe('declaraciones', () => {
         await mountSuspended(PaginaCalendario, { route: '/fiscal/calendario?obligacion=7' })
         await esperar(() => expect(document.querySelector('[data-prueba="detalle-calcular"]')?.getAttribute('href')).toBe('/declaraciones?calcular=iva_mensual&periodo=2026-09'))
     })
+
+    it('cascada de remanentes (H34): una sustitutiva de julio rectifica agosto; bloqueada si agosto no se puede', async () => {
+        // Llega una compra de julio con Q2,000.00 de crédito: julio deja remanente y agosto lo arrastra.
+        cambiarDatosDeclaracionFixture(1, '2026-07', { seccion: 'compras', origen: 'compra', documento: 'Compra 12 · FACT D-77', fecha: '2026-07-30', tipo: 'FACT', nit: '3321456-1', base: '16666.67', iva: '2000.00', total: '18666.67', estado: 'registro' })
+        const d = useDeclaraciones()
+        const julio = await d.calcular({ impuesto: 'iva_mensual', periodo: '2026-07', sustitutiva: true }, nuevaClaveIdempotencia())
+        if (!julio.ok) {
+            throw new Error(julio.problema.title)
+        }
+
+        // Con una NCRE de agosto sin certificar, agosto no se puede rectificar: nada se guarda.
+        const nota = bd.notasCredito.find(n => n.id === 3)
+        const fecha = nota?.fecha ?? ''
+        if (nota) {
+            nota.fecha = '2026-08-20'
+        }
+        const bloqueada = await d.revisar(julio.data.id, nuevaClaveIdempotencia())
+        expect(!bloqueada.ok && [codigoProblema(bloqueada.problema), bloqueada.problema.errors?.map(e => [e.field, e.rule])]).toEqual(['cascada_bloqueada', [['2026-08', 'ncre_sin_certificar']]])
+        expect(bd.declaraciones.find(x => x.id === julio.data.id)?.estado).toBe('borrador')
+        expect(bd.declaraciones.find(x => x.id === 3)?.estado).toBe('presentada')
+        if (nota) {
+            nota.fecha = fecha
+        }
+
+        // Desde la ficha: el aviso de la sustitutiva y, tras revisar, los meses rectificados.
+        const vista = await mountSuspended(PaginaDeclaracion, { route: `/declaraciones/${julio.data.id}` })
+        await esperar(() => expect(vista.find('[data-prueba="abrir-revisar"]').exists()).toBe(true))
+        await vista.find('[data-prueba="abrir-revisar"]').trigger('click')
+        await esperar(() => expect(document.querySelector('[data-prueba="revisar-cascada"]')?.textContent).toContain('Puede rectificar meses posteriores'))
+        document.querySelector<HTMLButtonElement>('[role="dialog"] button[role="checkbox"]')?.click()
+        await esperar(() => expect(botonDelDialogo('Revisar y liquidar')?.disabled).toBe(false))
+        botonDelDialogo('Revisar y liquidar')?.click()
+        await esperar(() => expect(vista.find('[data-prueba="declaracion-cascada"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="declaracion-cascada"]').text()).toContain('agosto 2026, versión 3 (estaba presentada: hay que presentar la rectificativa)')
+        const agosto = bd.declaraciones.find(x => x.periodo_desde === '2026-08-01' && x.version === 3)
+        expect(agosto && [agosto.estado, agosto.sustitutiva, agosto.totales.remanente_credito_anterior, agosto.totales.a_pagar]).toEqual(['revisada', true, '776.00', '0.00'])
+        expect(bd.obligacionesFiscales.find(o => o.id === 4)).toMatchObject({ estado: 'borrador', motivo_estado: 'rectificativa', declaracion_id: agosto?.id })
+        expect(bd.acciones.filter(a => a.accion === 'declaraciones.revisar').map(a => (a.entrada as { motivo?: string }).motivo ?? null)).toEqual([null, 'cascada'])
+
+        // El calendario la marca como rectificativa por presentar.
+        const calendario = await mountSuspended(PaginaCalendario, { route: '/fiscal/calendario?vista=lista&impuesto=iva_mensual' })
+        await esperar(() => expect(calendario.findAll('[data-prueba="fila-rectificativa"]').length).toBe(1))
+        expect(motivoObligacion('rectificativa')).toContain('hay que presentarla de nuevo')
+    })
 })

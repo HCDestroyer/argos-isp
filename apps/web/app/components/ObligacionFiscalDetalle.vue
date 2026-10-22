@@ -78,6 +78,15 @@ const nivel = computed(() => {
             data-prueba="detalle-motivo"
         />
         <UAlert
+            v-else-if="esRectificativa(obligacion)"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-file-diff"
+            title="Rectificativa por presentar"
+            description="Una sustitutiva de un mes anterior cambió el remanente que arrastra este mes: su declaración se rectificó y hay que presentarla de nuevo en Declaraguate."
+            data-prueba="detalle-rectificativa"
+        />
+        <UAlert
             v-else-if="obligacion.vencida"
             color="error"
             variant="subtle"

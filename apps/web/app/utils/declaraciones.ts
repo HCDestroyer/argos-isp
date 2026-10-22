@@ -205,6 +205,7 @@ const TITULOS: Record<string, string> = {
     impuesto_no_soportado: 'Impuesto todavía no soportado',
     sin_monto_a_pagar: 'No hay impuesto por pagar',
     cuenta_de_otra_empresa: 'La cuenta es de otra empresa',
+    cascada_bloqueada: 'Un mes posterior no se puede rectificar',
 }
 
 const QUE_HACER: Record<string, string> = {
@@ -215,6 +216,7 @@ const QUE_HACER: Record<string, string> = {
     ncre_sin_certificar: 'Certifique las NCRE pendientes o anule las rechazadas y vuelva a revisar.',
     checks_pendientes: 'Revise la lista de verificación de impuestos del mes: corrija la causa o supervise la anomalía con una nota.',
     periodo_en_curso: 'Se revisa y liquida después del último día del mes.',
+    cascada_bloqueada: 'Resuelva la causa en el mes indicado (por ejemplo, certifique sus NCRE) y vuelva a revisar: nada se guardó.',
 }
 
 /** Problema con título legible y qué hacer (el `detail` de la API se conserva). */
@@ -245,4 +247,24 @@ export const METODOS_PAGO_DECLARACION: Record<'caja' | 'banco' | 'cuenta_bancari
     caja: 'Caja',
     banco: 'Banco del libro',
     cuenta_bancaria: 'Cuenta bancaria propia',
+}
+
+export interface MesCascadaBloqueada {
+    periodo: string
+    /** `null` = rectificable; si no, el código de la causa (`ncre_sin_certificar`, `checks_pendientes`…). */
+    causa: string | null
+    mensaje: string
+}
+
+/** Los meses de un 409 `cascada_bloqueada`: `field` = AAAA-MM, `rule` = `ok` o el código de la causa. */
+export function cascadaBloqueadaDe(problema: Problem | null): MesCascadaBloqueada[] {
+    if (!problema || codigoProblema(problema) !== 'cascada_bloqueada') {
+        return []
+    }
+    return (problema.errors ?? []).map(e => ({ periodo: e.field, causa: e.rule === 'ok' ? null : (e.rule ?? 'error'), mensaje: e.message }))
+}
+
+/** «noviembre 2026, versión 3 (estaba presentada: hay que presentar la rectificativa)». */
+export function textoMesRectificado(mes: Pick<Schema<'DeclaracionRevisada'>['cascada'][number], 'periodo' | 'version' | 'estaba_presentada'>): string {
+    return `${etiquetaPeriodo(mes.periodo)}, versión ${mes.version}${mes.estaba_presentada ? ' (estaba presentada: hay que presentar la rectificativa)' : ''}`
 }
