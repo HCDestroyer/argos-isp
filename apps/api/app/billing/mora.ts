@@ -5,6 +5,7 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { aplicarAnticipos } from '#billing/cobros'
 import { lineaConIva } from '#billing/facturas'
+import { sinIvaPorRegimen } from '#billing/regimen'
 import { cuentaIva } from '#billing/fel_facturas'
 import { valorParametro } from '#fiscal/parametros'
 import { configuracionFel } from '#fiscal/fel/configuracion'
@@ -88,9 +89,10 @@ export async function crearMora(
     const concepto = `Recargo por mora de la factura ${factura.id}` + (n > 1 ? ` (mes ${n})` : '')
     // `mora_con_iva` (decisión del PM: no por defecto; solo el contador lo activa). Con IVA y FEL
     // activa, el recargo es un aviso (IVA a 2.1.11) que sale como NDEB al cobrarse (§8.3).
-    const conIva = await valorParametro<boolean>(factura.empresa_id, 'mora_con_iva', hoy, t.trx).catch(
-        () => false,
-    )
+    // pequeño contribuyente (#billing/regimen): la mora tampoco separa IVA
+    const conIva = (await sinIvaPorRegimen(t.trx, factura.empresa_id, hoy))
+        ? false
+        : await valorParametro<boolean>(factura.empresa_id, 'mora_con_iva', hoy, t.trx).catch(() => false)
     // H9: es aviso solo si su factura es aviso de cobro o lleva DTE; si la factura no va por FEL, la mora
     // tampoco (su IVA va a 2.1.02 como el de su factura)
     const origenConFel = (await t.trx

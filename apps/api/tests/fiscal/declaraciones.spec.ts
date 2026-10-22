@@ -438,7 +438,23 @@ test.group('Fase 7 · pequeño contribuyente y NCRE', (group) => {
             e.ctx,
         )
         await inicioLibros(e.ctx, e.B, '2026-01-01')
-        await venta(e.B, MES, '300.00')
+        const pcVenta = await venta(e.B, MES, '336.00')
+        // el pequeño contribuyente no separa IVA: total = precio, todo a ingresos, sin 2.1.02 ni etiqueta
+        const factura = pcVenta.facturas[0]!
+        assert.deepEqual([factura.total, factura.iva], ['336.00', '0.00'])
+        const partidasPc = await partidas('factura', factura.id)
+        assert.isTrue(partidasPc.every((p) => p[0] !== '2.1.02' && p[0] !== '2.1.11' && p[3] === null))
+        // su nota de crédito tampoco: reduce el total del libro de ventas
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: factura.id, monto: '36.00', motivo: 'Descuento acordado' },
+            e.ctx,
+        )
+        assert.equal(nota.iva, '0.00')
+        const partidasNota = await partidas('nota_credito', nota.id)
+        assert.isTrue(partidasNota.every((p) => p[0] !== '2.1.02'))
+        // la empresa general del mismo escenario sigue separando el IVA
+        const general = await venta(e.C, MES, '112.00')
+        assert.equal(general.facturas[0]!.iva, '12.00')
         relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
         const iva = await errorDe(calcular(e.ctx, e.B, MES))
         assert.equal(iva.codigo, 'obligacion_no_aplica')
@@ -446,7 +462,13 @@ test.group('Fase 7 · pequeño contribuyente y NCRE', (group) => {
             { empresa_id: e.B, impuesto: 'pc_mensual', periodo: MES },
             e.ctx,
         )
-        assert.include(pc.totales, { ventas: '300.00', base: '300.00', impuesto: '15.00', a_pagar: '15.00' })
+        assert.include(pc.totales, {
+            ventas: '300.00',
+            base: '300.00',
+            impuesto: '15.00',
+            a_pagar: '15.00',
+            iva_en_ventas: '0.00',
+        })
         assert.equal(pc.formulario, 'SAT-2046')
         assert.include(
             pc.parametros.map((p) => p.clave),
@@ -477,6 +499,8 @@ test.group('Fase 7 · pequeño contribuyente y NCRE', (group) => {
         )
         assert.include(pagada.pago, { impuesto: '15.00', mora: '0.00', multa: '0.00', total: '15.00' })
         assert.equal(await saldoCuenta(e.B, '2.1.09'), '0.00')
+        // nada queda en 2.1.02 de la empresa PC
+        assert.equal(Number(await saldoCuenta(e.B, '2.1.02')), 0)
         await afirmarLibroConLiquidacion(assert, [e.B, e.C])
     })
 
