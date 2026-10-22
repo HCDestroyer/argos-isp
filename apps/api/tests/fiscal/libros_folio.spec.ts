@@ -150,6 +150,8 @@ test.group('Fase 6 · libros con folio', (group) => {
             )
         const habilitacion = await habilitar(1, 2)
         assert.include(habilitacion, { folio_desde: 1, folio_hasta: 2, usados: 0, disponibles: 2 })
+        const admin = await db.from('core.usuarios').where('id', e.usuarioId).firstOrFail()
+        assert.include(habilitacion, { registrado_por: e.usuarioId, registrado_por_nombre: admin.nombre })
         const salto = await errorDe(habilitar(5, 10))
         assert.deepEqual([salto.status, salto.codigo], [422, 'habilitacion_no_correlativa'])
 
@@ -382,6 +384,12 @@ test.group('Fase 6 · libros con folio', (group) => {
             }),
             201,
         )
+        const habilitaciones = await estado(
+            client.get('/api/v1/libros/habilitaciones').bearerToken(e.token).headers(cabecera),
+            200,
+        )
+        const usuario = await db.from('core.usuarios').where('id', e.usuarioId).firstOrFail()
+        assert.equal(habilitaciones.body().data[0].registrado_por_nombre, usuario.nombre)
         const emision = await estado(
             client
                 .post('/api/v1/libros/diario/emitir')

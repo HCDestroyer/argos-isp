@@ -42,6 +42,7 @@ export const HabilitacionLibro = definirEsquema(
         usados: { ...entero, description: 'Folios de este rango ya usados por emisiones' },
         disponibles: entero,
         registrado_por: nulable(id),
+        registrado_por_nombre: nulable(texto),
         created_at: instante,
     }),
 )

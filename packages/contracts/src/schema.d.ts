@@ -10027,6 +10027,7 @@ export interface components {
             usados: number;
             disponibles: number;
             registrado_por: number | null;
+            registrado_por_nombre: string | null;
             /** Format: date-time */
             created_at: string;
         };
