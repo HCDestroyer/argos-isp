@@ -62,6 +62,8 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/libro/integridad',
     '/api/v1/libro/mayor',
     '/api/v1/libro/periodos',
+    '/api/v1/libros/emisiones',
+    '/api/v1/libros/habilitaciones',
     '/api/v1/motivos-sin-costo',
     '/api/v1/notas-credito',
     '/api/v1/pagos',

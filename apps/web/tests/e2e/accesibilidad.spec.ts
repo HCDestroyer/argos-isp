@@ -57,6 +57,10 @@ const PANTALLAS = [
     ['bonificaciones', '/bonificaciones'],
     ['ficha de bonificación', '/bonificaciones/3'],
     ['reporte de bonificaciones', '/reportes/bonificaciones'],
+    // Libros legales con folio (fase 6 PR D).
+    ['libros legales', '/libros'],
+    ['emisiones de libros', '/libros/emisiones?emision=3'],
+    ['habilitaciones de folios', '/libros/habilitaciones'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']

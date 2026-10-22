@@ -207,6 +207,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'libro.reabrir_periodo': 'Periodo contable reabierto',
     'libro.sellar': 'Asientos sellados en la cadena de hash',
     'libro.verificar_integridad': 'Integridad del libro verificada',
+    'libros.emitir': 'Libro legal emitido con folio',
+    'libros.habilitar': 'Folios de un libro habilitados',
     'notificaciones.alertar': 'Alerta al equipo enviada',
     'notificaciones.telegram_codigo': 'Código de Telegram generado',
     'notificaciones.telegram_vincular': 'Telegram vinculado por el bot',
@@ -388,6 +390,9 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     anuncio: { etiqueta: 'Anuncio', ruta: id => `/anuncios/${id}` },
     adicional: { etiqueta: 'Adicional', ruta: () => '/adicionales' },
     motivo_cortesia: { etiqueta: 'Motivo de cortesía', ruta: () => '/adicionales/motivos' },
+    // Libros legales con folio (A3, fase 6 PR D).
+    libro_emision: { etiqueta: 'Emisión de libro legal', ruta: id => `/libros/emisiones?emision=${id}` },
+    libro_habilitacion: { etiqueta: 'Habilitación de folios', ruta: () => '/libros/habilitaciones' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */
