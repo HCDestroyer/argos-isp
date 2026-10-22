@@ -29,6 +29,9 @@ export interface CierreVista {
     ultimo_hash: string | null
 }
 
+/** Espacio de advisory locks de cierres (primer entero): cierre, reapertura y checks de una empresa. */
+export const LOCK_CIERRES = 3005
+
 /** Primer día del mes `anio-mes` (422 si no es un mes válido). */
 export function periodoDe(anio: number, mes: number): string {
     const fecha = DateTime.fromObject({ year: anio, month: mes, day: 1 }, { zone: 'utc' })

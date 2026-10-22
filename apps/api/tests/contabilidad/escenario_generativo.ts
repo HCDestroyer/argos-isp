@@ -17,6 +17,8 @@ import RegistrarPagoHistorico from '#billing/actions/registrar_pago_historico'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
+import VerificarCierre from '#ledger/actions/verificar_cierre'
+import RevisarCheck from '#ledger/actions/revisar_check'
 import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import AnularEgreso from '#ledger/actions/anular_egreso'
@@ -997,6 +999,25 @@ export class EscenarioGenerativo {
             estado.cerrado = false
             return `reabre ${periodo.slice(0, 7)} en la empresa ${empresaId}`
         }
+        // lista de verificación (§10.5, fase 6 PR B): el escenario deja anomalías legítimas (2.9.01 de las
+        // importadas, cuotas aún sin correr…); el contador las supervisa con su nota y el cierre sigue
+        // (18.check_mal_formado revisa cada supervisión). Sin esto, todo cierre_mes sería un 422.
+        const verificacion = await new VerificarCierre().execute(
+            { empresa_id: empresaId, tipo: 'mensual', periodo: periodo.slice(0, 7) },
+            this.ctx,
+        )
+        const supervisados: string[] = []
+        for (const check of verificacion.checks.filter((c) => c.estado === 'anomalia')) {
+            await new RevisarCheck().execute(
+                {
+                    check_id: check.id,
+                    estado: 'supervisado',
+                    nota: `auditoría: ${check.clave} supervisado en el escenario`,
+                },
+                this.ctx,
+            )
+            supervisados.push(check.clave)
+        }
         const cierre = await new CerrarPeriodo().execute({ empresa_id: empresaId, anio, mes }, this.ctx)
         const foto = normalizarResumen(cierre.resumen)
         if (estado.foto && !estado.cambiado && JSON.stringify(estado.foto) !== JSON.stringify(foto)) {
@@ -1008,7 +1029,7 @@ export class EscenarioGenerativo {
         estado.cerrado = true
         estado.foto = foto
         estado.cambiado = false
-        return `cierra ${periodo.slice(0, 7)} en la empresa ${empresaId}: ${foto.asientos} asientos, debe ${foto.debe}`
+        return `cierra ${periodo.slice(0, 7)} en la empresa ${empresaId}: ${foto.asientos} asientos, debe ${foto.debe}${supervisados.length > 0 ? ` (supervisados: ${supervisados.join(', ')})` : ''}`
     }
 
     /*
