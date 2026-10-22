@@ -378,7 +378,7 @@ pendiente → contingencia → enviando → certificado
 4. Reserva legal si hubo utilidad: `reserva_legal_pct` × la base de `reserva_legal_base`, `3.3.01 / 3.2.01`. El 15 % del capital es el umbral para capitalizar, no un tope.
 5. Cierra diciembre (`cerrar_periodo`) y guarda `ledger.cierres_anuales`.
 
-Los reportes excluyen el asiento `cierre_anual` del estado de resultados del año, y el cierre exige el check anual (§10.5, §10.8). El procedimiento detallado no está en una norma (NO VERIFICADO, inv. B.3): los pasos son la práctica estándar y el contador los revisa. Un cierre anual no se reabre si hay bloqueo duro; sin él, `libro.reabrir_ejercicio` (solo `admin`) revierte los asientos de cierre con fecha de hoy.
+Los reportes excluyen el asiento `cierre_anual` del estado de resultados del año, y el cierre exige el check anual (§10.5, §10.8). El procedimiento detallado no está en una norma (NO VERIFICADO, inv. B.3): los pasos son la práctica estándar y el contador los revisa. Un cierre anual no se reabre si hay bloqueo duro; sin él, `libro.reabrir_ejercicio` (solo `admin`) reabre diciembre y revierte los asientos de cierre con fecha 31-dic del mismo ejercicio (nunca con fecha de hoy: devolvería los resultados del año cerrado al año en curso; ver desvío (p) en §20), y no reabre si el ejercicio siguiente está cerrado.
 
 ### 9.2 Bloqueos (inv. D.2)
 
