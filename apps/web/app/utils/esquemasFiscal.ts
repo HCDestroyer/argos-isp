@@ -262,3 +262,20 @@ export const esquemaRetiroFrase = z.object({
     vigente_desde: fecha('Elige desde cuándo deja de aplicar'),
     motivo,
 })
+
+type CuerpoFeriado = paths['/api/v1/fiscal/feriados']['post']['requestBody']['content']['application/json']
+
+/**
+ * Alta de un feriado (`POST /fiscal/feriados`, validador `agregarFeriadoValidator` y la acción
+ * `fiscal.agregar_feriado`): fecha, nombre de 3 a 120 caracteres (la acción exige 3 al agregar) y motivo.
+ */
+export const esquemaFeriado = z.object({
+    fecha: fecha('Elige la fecha del feriado'),
+    nombre: z.string().trim().min(3, 'Nombre del feriado (mínimo 3 caracteres)').max(120, 'Máximo 120 caracteres'),
+    motivo,
+}).transform((datos): CuerpoFeriado => ({ fecha: datos.fecha, nombre: datos.nombre, activo: true, motivo: datos.motivo }))
+
+export type EntradaFeriado = z.input<typeof esquemaFeriado>
+
+/** Retiro de un feriado (`activo: false`): la fecha y el nombre se toman del vigente; solo el motivo. */
+export const esquemaRetiroFeriado = z.object({ motivo })

@@ -141,6 +141,9 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'fiscal.editar_impuesto': 'Impuesto editado',
     'fiscal.cambiar_regimen': 'Régimen fiscal cambiado',
     'fiscal.agregar_frase': 'Frase fiscal agregada',
+    'fiscal.agregar_feriado': 'Feriado agregado o retirado',
+    'fiscal.generar_calendario': 'Calendario fiscal generado',
+    'fiscal.emitir_alertas': 'Alertas de vencimientos fiscales revisadas',
     'fel.configurar': 'Configuración FEL cambiada',
     'fel.guardar_credenciales': 'Credenciales FEL guardadas',
     'fel.probar_credenciales': 'Credenciales FEL probadas',
@@ -393,6 +396,9 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     // Libros legales con folio (A3, fase 6 PR D).
     libro_emision: { etiqueta: 'Emisión de libro legal', ruta: id => `/libros/emisiones?emision=${id}` },
     libro_habilitacion: { etiqueta: 'Habilitación de folios', ruta: () => '/libros/habilitaciones' },
+    // Calendario fiscal y feriados (A3, fase 7 PR A).
+    obligacion_fiscal: { etiqueta: 'Obligación fiscal', ruta: id => `/fiscal/calendario?obligacion=${id}` },
+    feriado: { etiqueta: 'Feriado', ruta: () => '/configuracion/fiscal?pestana=feriados' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */
