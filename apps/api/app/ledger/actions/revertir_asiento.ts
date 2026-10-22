@@ -29,7 +29,11 @@ export interface EntradaReverso {
     fecha?: string
     /** solo desde la anulación del documento dueño del asiento (anular pago, factura, egreso…) */
     por_anulacion?: boolean
-    /** copia la etiqueta de impuesto de cada partida con el signo contrario (fase 5, compras) */
+    /**
+     * copia la etiqueta de impuesto de cada partida con el signo contrario (fase 5, compras). Desde
+     * la fase 7 PR B es lo que hace siempre (`false` solo la omite a propósito): un reverso resta en
+     * las cuadrículas lo que su original sumó (§10.2).
+     */
     invertir_etiquetas?: boolean
 }
 
@@ -152,9 +156,9 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
                     haber: m.debe,
                     cliente_id: m.cliente_id,
                     proveedor_id: m.proveedor_id === null ? null : Number(m.proveedor_id),
-                    // con `invertir_etiquetas` el reverso lleva la etiqueta con el signo contrario
-                    // (compras: el libro de compras resta la anulación en su mes, §10.2)
-                    ...(input.invertir_etiquetas && m.cuadricula
+                    // el reverso lleva la etiqueta con el signo contrario: el libro y las cuadrículas
+                    // restan la anulación en su mes (§10.2; compras desde la fase 5, todo desde la 7)
+                    ...(input.invertir_etiquetas !== false && m.cuadricula
                         ? {
                               impuesto_codigo: m.impuesto_codigo,
                               cuadricula: `${m.cuadricula.startsWith('+') ? '-' : '+'}${m.cuadricula.slice(1)}`,

@@ -12771,6 +12771,773 @@
         "x-implementado": true
       }
     },
+    "/api/v1/declaraciones": {
+      "get": {
+        "operationId": "declaracionesListar",
+        "summary": "Declaraciones (todas las versiones), de la más reciente a la más antigua",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "impuesto",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "iva_mensual",
+                  "pc_mensual"
+                ]
+              }
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "borrador",
+                  "revisada",
+                  "presentada",
+                  "sustituida"
+                ]
+              }
+            }
+          },
+          {
+            "name": "periodo",
+            "in": "query",
+            "required": false,
+            "description": "Mes AAAA-MM",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de declaraciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Declaracion"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/declaraciones/{id}": {
+      "get": {
+        "operationId": "declaracionVer",
+        "summary": "Ver una declaración con su detalle y si sus datos cambiaron",
+        "description": "desactualizada = el datos_hash recalculado con los datos de hoy es otro: revisar y marcar presentada responden 409 declaracion_desactualizada (calcule otra versión).",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Declaración (una versión)"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Declaración",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclaracionDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/declaraciones/{id}/marcar-presentada": {
+      "post": {
+        "operationId": "declaracionMarcarPresentada",
+        "summary": "Registrar lo presentado en la Agencia Virtual (el sistema no envía nada)",
+        "description": "Sin asiento. 409 declaracion_no_revisada, declaracion_presentada, declaracion_sustituida, declaracion_desactualizada. La obligación pasa a presentada. Emite declaracion.presentada.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Declaración (una versión)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "numero_formulario": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 60
+                  },
+                  "fecha_presentacion": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "boleta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "numero_formulario",
+                  "fecha_presentacion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Declaración presentada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Declaracion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.presentar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.presentar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/declaraciones/{id}/registrar-pago": {
+      "post": {
+        "operationId": "declaracionRegistrarPago",
+        "summary": "Registrar el pago de una declaración revisada o presentada",
+        "description": "Asiento pago_impuesto: 2.1.06 (o 2.1.09) + 5.4.02 (mora y multa si es tardío) / Caja o Banco. 422 sin_monto_a_pagar; 409 declaracion_pagada, declaracion_no_revisada, declaracion_sustituida. Emite declaracion.pagada.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Declaración (una versión)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "metodo": {
+                    "type": "string",
+                    "enum": [
+                      "caja",
+                      "banco",
+                      "cuenta_bancaria"
+                    ]
+                  },
+                  "caja_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "banco_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "cuenta_bancaria_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del pago; por defecto hoy"
+                  },
+                  "boleta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "metodo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Declaración con su pago",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Declaracion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.pagar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.pagar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/declaraciones/{id}/revisar": {
+      "post": {
+        "operationId": "declaracionRevisar",
+        "summary": "Revisar el borrador: liquidación obligatoria y bloqueo de impuestos",
+        "description": "Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Emite declaracion.revisada y libro.bloqueo_cambiado.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Declaración (una versión)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Declaración revisada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Declaracion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.revisar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.revisar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/declaraciones/calcular": {
+      "post": {
+        "operationId": "declaracionCalcular",
+        "summary": "Calcular el borrador de una declaración (IVA o pequeño contribuyente) del mes",
+        "description": "Versión nueva desde el libro de ventas, el de compras y las constancias de retención del mes. 422 antes_de_inicio_libros, obligacion_no_aplica, impuesto_no_soportado, parametro_sin_confirmar; 409 declaracion_revisada / declaracion_presentada sin sustitutiva. Emite declaracion.calculada.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "impuesto": {
+                    "type": "string",
+                    "enum": [
+                      "iva_mensual",
+                      "pc_mensual"
+                    ],
+                    "description": "iva_mensual (SAT-2237) o pc_mensual (SAT-2046); ISR, ISO y retenciones llegan después"
+                  },
+                  "periodo": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "description": "Mes AAAA-MM"
+                  },
+                  "sustitutiva": {
+                    "description": "true para recalcular un periodo ya revisado o presentado (versión sustitutiva)",
+                    "type": "boolean"
+                  },
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  }
+                },
+                "required": [
+                  "impuesto",
+                  "periodo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Borrador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Declaracion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.calcular; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.calcular",
+        "x-implementado": true
+      }
+    },
     "/api/v1/diferimientos": {
       "get": {
         "operationId": "diferimientosListar",
@@ -20150,6 +20917,15 @@
                   "no_aplica"
                 ]
               }
+            }
+          },
+          {
+            "name": "vencida",
+            "in": "query",
+            "required": false,
+            "description": "true = solo las vencidas sin presentar (pendiente o borrador con vence_en antes de hoy en Guatemala); false = las demás",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -61617,6 +62393,527 @@
           }
         }
       },
+      "Declaracion": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "impuesto",
+          "periodo_desde",
+          "periodo_hasta",
+          "version",
+          "sustitutiva",
+          "sustituye_a",
+          "obligacion_id",
+          "formulario",
+          "vence_en",
+          "parametros",
+          "detalle",
+          "totales",
+          "datos_hash",
+          "calculada_por",
+          "calculada_en",
+          "estado",
+          "revisada_por",
+          "revisada_en",
+          "asiento_id",
+          "numero_formulario",
+          "fecha_presentacion",
+          "boleta",
+          "presentada_por",
+          "presentada_en",
+          "pago",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "impuesto": {
+            "type": "string",
+            "enum": [
+              "iva_mensual",
+              "pc_mensual",
+              "isr_opcional_mensual",
+              "isr_trimestral",
+              "iso_trimestral",
+              "isr_anual",
+              "retenciones_iva",
+              "retenciones_isr"
+            ]
+          },
+          "periodo_desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodo_hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "sustitutiva": {
+            "type": "boolean"
+          },
+          "sustituye_a": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "obligacion_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "formulario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "parametros": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "valor",
+                "vigente_desde",
+                "nivel"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "valor": {
+                  "description": "JSON según el tipo del parámetro (string, número, booleano, objeto o lista)"
+                },
+                "vigente_desde": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "nivel": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "detalle": {
+            "type": "object",
+            "required": [
+              "renglones",
+              "libros",
+              "anterior_id"
+            ],
+            "properties": {
+              "renglones": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RenglonDeclaracion"
+                }
+              },
+              "libros": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/LibroEnlazado"
+                },
+                "description": "Libros de ventas y compras emitidos con folio que cubren el mes"
+              },
+              "anterior_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "description": "Declaración del mes anterior de la que salen los remanentes"
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^-?\\d+\\.\\d{2}$"
+            },
+            "description": "IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas"
+          },
+          "datos_hash": {
+            "type": "string",
+            "description": "sha256 de lo leído (renglones, totales, parámetros y el mes anterior)"
+          },
+          "calculada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "calculada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "revisada",
+              "presentada",
+              "sustituida"
+            ]
+          },
+          "revisada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "revisada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento de liquidación de esta versión (null si no hubo diferencia)"
+          },
+          "numero_formulario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fecha_presentacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "boleta": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "presentada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "presentada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "pago": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PagoDeclaracion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeclaracionDetalle": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "impuesto",
+          "periodo_desde",
+          "periodo_hasta",
+          "version",
+          "sustitutiva",
+          "sustituye_a",
+          "obligacion_id",
+          "formulario",
+          "vence_en",
+          "parametros",
+          "detalle",
+          "totales",
+          "datos_hash",
+          "calculada_por",
+          "calculada_en",
+          "estado",
+          "revisada_por",
+          "revisada_en",
+          "asiento_id",
+          "numero_formulario",
+          "fecha_presentacion",
+          "boleta",
+          "presentada_por",
+          "presentada_en",
+          "pago",
+          "created_at",
+          "updated_at",
+          "desactualizada"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "impuesto": {
+            "type": "string",
+            "enum": [
+              "iva_mensual",
+              "pc_mensual",
+              "isr_opcional_mensual",
+              "isr_trimestral",
+              "iso_trimestral",
+              "isr_anual",
+              "retenciones_iva",
+              "retenciones_isr"
+            ]
+          },
+          "periodo_desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodo_hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "sustitutiva": {
+            "type": "boolean"
+          },
+          "sustituye_a": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "obligacion_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "formulario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "parametros": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "clave",
+                "valor",
+                "vigente_desde",
+                "nivel"
+              ],
+              "properties": {
+                "clave": {
+                  "type": "string"
+                },
+                "valor": {
+                  "description": "JSON según el tipo del parámetro (string, número, booleano, objeto o lista)"
+                },
+                "vigente_desde": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "nivel": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "detalle": {
+            "type": "object",
+            "required": [
+              "renglones",
+              "libros",
+              "anterior_id"
+            ],
+            "properties": {
+              "renglones": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RenglonDeclaracion"
+                }
+              },
+              "libros": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/LibroEnlazado"
+                },
+                "description": "Libros de ventas y compras emitidos con folio que cubren el mes"
+              },
+              "anterior_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "description": "Declaración del mes anterior de la que salen los remanentes"
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^-?\\d+\\.\\d{2}$"
+            },
+            "description": "IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas"
+          },
+          "datos_hash": {
+            "type": "string",
+            "description": "sha256 de lo leído (renglones, totales, parámetros y el mes anterior)"
+          },
+          "calculada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "calculada_en": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "revisada",
+              "presentada",
+              "sustituida"
+            ]
+          },
+          "revisada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "revisada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento de liquidación de esta versión (null si no hubo diferencia)"
+          },
+          "numero_formulario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fecha_presentacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "boleta": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "presentada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "presentada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "pago": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PagoDeclaracion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "desactualizada": {
+            "type": "boolean",
+            "description": "Los datos cambiaron desde que se calculó (otro datos_hash): revisar o presentar responde 409"
+          }
+        }
+      },
       "DependientePago": {
         "type": "object",
         "required": [
@@ -66117,6 +67414,61 @@
           }
         }
       },
+      "LibroEnlazado": {
+        "type": "object",
+        "required": [
+          "emision_id",
+          "libro",
+          "desde",
+          "hasta",
+          "folio_inicial",
+          "folio_final",
+          "sha256",
+          "iva",
+          "mismo_periodo"
+        ],
+        "properties": {
+          "emision_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "libro": {
+            "type": "string",
+            "enum": [
+              "ventas",
+              "compras"
+            ]
+          },
+          "desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "folio_inicial": {
+            "type": "integer"
+          },
+          "folio_final": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "iva": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "mismo_periodo": {
+            "type": "boolean",
+            "description": "La emisión cubre exactamente el mes: su IVA debe ser el del borrador"
+          }
+        }
+      },
       "LineaCompra": {
         "type": "object",
         "required": [
@@ -67828,8 +69180,47 @@
           },
           "regla": {
             "type": "object",
+            "required": [],
+            "properties": {
+              "parametro": {
+                "type": "string",
+                "description": "Parámetro del plazo (iva_declaracion, isr_opcional_plazo…)"
+              },
+              "valor": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Valor del parámetro: plazo, dias, dias_habiles, vence, formulario…"
+              },
+              "vigente_desde": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "Vigencia del valor usado"
+              },
+              "nivel": {
+                "type": "string",
+                "enum": [
+                  "empresa",
+                  "instalacion",
+                  "global",
+                  "paquete",
+                  "derivado"
+                ]
+              },
+              "vence_base": {
+                "type": "string",
+                "format": "date",
+                "description": "Vencimiento según la regla, antes de correrlo al día hábil"
+              },
+              "corrido_a_habil": {
+                "type": "boolean",
+                "description": "vence_base caía en día inhábil"
+              }
+            },
             "additionalProperties": true,
-            "description": "Cómo se calculó el vencimiento: parametro, valor, vigente_desde, nivel, vence_base y corrido_a_habil"
+            "description": "Cómo se calculó el vencimiento. La API envía siempre los seis campos; van opcionales en el tipo para no romper los fixtures que lo tenían como objeto libre"
           },
           "version": {
             "type": "integer"
@@ -68233,6 +69624,72 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PagoDeclaracion": {
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "impuesto",
+          "mora",
+          "multa",
+          "total",
+          "dias_atraso",
+          "boleta",
+          "asiento_id",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "impuesto": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "mora": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "multa": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "dias_atraso": {
+            "type": "integer"
+          },
+          "boleta": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
             "type": "string",
             "format": "date-time"
           }
@@ -73787,6 +75244,73 @@
                 }
               }
             }
+          }
+        }
+      },
+      "RenglonDeclaracion": {
+        "type": "object",
+        "required": [
+          "seccion",
+          "origen",
+          "documento",
+          "fecha",
+          "tipo",
+          "nit",
+          "base",
+          "iva",
+          "total",
+          "estado"
+        ],
+        "properties": {
+          "seccion": {
+            "type": "string",
+            "enum": [
+              "ventas",
+              "compras",
+              "retenciones"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "description": "dte, interno, compra o constancia"
+          },
+          "documento": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "iva": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$",
+            "description": "IVA (ventas), crédito (compras) o retención"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "estado": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

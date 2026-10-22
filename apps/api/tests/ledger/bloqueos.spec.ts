@@ -42,9 +42,16 @@ function ajuste(
     ctx: ContextoAccion,
     empresaId: number,
     fecha: string,
-    extra: { diario?: string; trasladar_si_bloqueado?: boolean; cuentas?: [string, string] } = {},
+    extra: {
+        diario?: string
+        trasladar_si_bloqueado?: boolean
+        cuentas?: [string, string]
+        /** etiqueta de impuesto en la partida del haber (`impuesto_codigo`, `cuadricula`) */
+        etiqueta?: [string, string]
+    } = {},
 ) {
     const [debe, haber] = extra.cuentas ?? ['5.2.99', '1.1.02.01']
+    const [impuesto, cuadricula] = extra.etiqueta ?? [null, null]
     return new RegistrarAsiento().execute(
         {
             empresa_id: empresaId,
@@ -55,7 +62,7 @@ function ajuste(
             trasladar_si_bloqueado: extra.trasladar_si_bloqueado,
             movimientos: [
                 { cuenta: debe, debe: '10.00' },
-                { cuenta: haber, haber: '10.00' },
+                { cuenta: haber, haber: '10.00', impuesto_codigo: impuesto, cuadricula },
             ],
         },
         ctx,
@@ -193,9 +200,13 @@ test.group('Fase 6 · bloqueos del libro', (group) => {
         // diario de compras
         const compras = await errorDe(ajuste(e.ctx, e.B, hasta, { diario: 'COM' }))
         assert.deepEqual([compras.codigo, compras.reglas], ['periodo_bloqueado', ['compras']])
-        // una cuenta de impuesto (ledger.cuentas_con_impuesto)
-        const impuestos = await errorDe(ajuste(e.ctx, e.B, hasta, { cuentas: ['5.2.99', '2.1.02'] }))
+        // fase 7 PR B (§10.4): el bloqueo de impuestos alcanza a los asientos con alguna partida
+        // etiquetada; tocar una cuenta de impuesto sin etiqueta (un ajuste) ya no basta
+        const impuestos = await errorDe(
+            ajuste(e.ctx, e.B, hasta, { cuentas: ['5.2.99', '2.1.06'], etiqueta: ['IVA12', '+V_IVA'] }),
+        )
         assert.deepEqual([impuestos.codigo, impuestos.reglas], ['periodo_bloqueado', ['impuestos']])
+        await ajuste(e.ctx, e.B, hasta, { cuentas: ['5.2.99', '2.1.06'] })
 
         // impuestos no retrocede (ni por desbloquear ni por trigger)
         const atras = await errorDe(

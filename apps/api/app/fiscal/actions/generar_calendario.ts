@@ -212,7 +212,7 @@ export default class GenerarCalendario extends DomainAction<EntradaGenerarCalend
                 cambios.estado = 'no_aplica'
                 cambios.motivo_estado = d.motivo
             }
-            if (await actualizar(t, actual, cambios)) {
+            if (await actualizarObligacion(t, actual, cambios)) {
                 if (cambios.estado === 'no_aplica') resultado.sin_aplicar += 1
                 else resultado.actualizadas += 1
             }
@@ -224,7 +224,7 @@ export default class GenerarCalendario extends DomainAction<EntradaGenerarCalend
             if (deseadas.has(k) || conError.has(actual.impuesto) || actual.estado !== 'pendiente') continue
             if (actual.periodo_desde > hoy) continue
             const motivo = actual.periodo_hasta < inicio ? 'antes_de_inicio_libros' : 'fuera_del_paquete'
-            if (await actualizar(t, actual, { estado: 'no_aplica', motivo_estado: motivo })) {
+            if (await actualizarObligacion(t, actual, { estado: 'no_aplica', motivo_estado: motivo })) {
                 resultado.sin_aplicar += 1
             }
         }
@@ -245,7 +245,11 @@ function canonico(valor: unknown): string {
 }
 
 /** UPDATE de una obligación con `version + 1` y `audit.cambios`; false si no había cambios. */
-async function actualizar(t: Transaccion, actual: ObligacionFila, cambios: Partial<ObligacionFila>) {
+export async function actualizarObligacion(
+    t: Transaccion,
+    actual: ObligacionFila,
+    cambios: Partial<ObligacionFila>,
+) {
     const campos = Object.keys(cambios) as Array<keyof ObligacionFila>
     if (campos.length === 0) return false
     const antes: Record<string, unknown> = {}

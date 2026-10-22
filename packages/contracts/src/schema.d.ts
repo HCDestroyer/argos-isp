@@ -1529,6 +1529,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/declaraciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Declaraciones (todas las versiones), de la más reciente a la más antigua */
+        get: operations["declaracionesListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/declaraciones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ver una declaración con su detalle y si sus datos cambiaron
+         * @description desactualizada = el datos_hash recalculado con los datos de hoy es otro: revisar y marcar presentada responden 409 declaracion_desactualizada (calcule otra versión).
+         */
+        get: operations["declaracionVer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/declaraciones/{id}/marcar-presentada": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar lo presentado en la Agencia Virtual (el sistema no envía nada)
+         * @description Sin asiento. 409 declaracion_no_revisada, declaracion_presentada, declaracion_sustituida, declaracion_desactualizada. La obligación pasa a presentada. Emite declaracion.presentada.
+         */
+        post: operations["declaracionMarcarPresentada"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/declaraciones/{id}/registrar-pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar el pago de una declaración revisada o presentada
+         * @description Asiento pago_impuesto: 2.1.06 (o 2.1.09) + 5.4.02 (mora y multa si es tardío) / Caja o Banco. 422 sin_monto_a_pagar; 409 declaracion_pagada, declaracion_no_revisada, declaracion_sustituida. Emite declaracion.pagada.
+         */
+        post: operations["declaracionRegistrarPago"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/declaraciones/{id}/revisar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revisar el borrador: liquidación obligatoria y bloqueo de impuestos
+         * @description Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Emite declaracion.revisada y libro.bloqueo_cambiado.
+         */
+        post: operations["declaracionRevisar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/declaraciones/calcular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calcular el borrador de una declaración (IVA o pequeño contribuyente) del mes
+         * @description Versión nueva desde el libro de ventas, el de compras y las constancias de retención del mes. 422 antes_de_inicio_libros, obligacion_no_aplica, impuesto_no_soportado, parametro_sin_confirmar; 409 declaracion_revisada / declaracion_presentada sin sustitutiva. Emite declaracion.calculada.
+         */
+        post: operations["declaracionCalcular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diferimientos": {
         parameters: {
             query?: never;
@@ -9216,6 +9333,128 @@ export interface components {
             /** @enum {string} */
             moneda: "GTQ" | "USD";
         };
+        Declaracion: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            impuesto: "iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr";
+            /** Format: date */
+            periodo_desde: string;
+            /** Format: date */
+            periodo_hasta: string;
+            version: number;
+            sustitutiva: boolean;
+            sustituye_a: number | null;
+            obligacion_id: number;
+            formulario: string | null;
+            /** Format: date */
+            vence_en: string;
+            parametros: {
+                clave: string;
+                /** @description JSON según el tipo del parámetro (string, número, booleano, objeto o lista) */
+                valor: unknown;
+                /** Format: date */
+                vigente_desde: string | null;
+                nivel: string;
+            }[];
+            detalle: {
+                renglones: components["schemas"]["RenglonDeclaracion"][];
+                /** @description Libros de ventas y compras emitidos con folio que cubren el mes */
+                libros: components["schemas"]["LibroEnlazado"][];
+                /** @description Declaración del mes anterior de la que salen los remanentes */
+                anterior_id: number | null;
+            };
+            /** @description IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas */
+            totales: {
+                [key: string]: string;
+            };
+            /** @description sha256 de lo leído (renglones, totales, parámetros y el mes anterior) */
+            datos_hash: string;
+            calculada_por: number | null;
+            /** Format: date-time */
+            calculada_en: string;
+            /** @enum {string} */
+            estado: "borrador" | "revisada" | "presentada" | "sustituida";
+            revisada_por: number | null;
+            /** Format: date-time */
+            revisada_en: string | null;
+            /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
+            asiento_id: number | null;
+            numero_formulario: string | null;
+            /** Format: date */
+            fecha_presentacion: string | null;
+            boleta: string | null;
+            presentada_por: number | null;
+            /** Format: date-time */
+            presentada_en: string | null;
+            pago: components["schemas"]["PagoDeclaracion"] | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DeclaracionDetalle: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            impuesto: "iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr";
+            /** Format: date */
+            periodo_desde: string;
+            /** Format: date */
+            periodo_hasta: string;
+            version: number;
+            sustitutiva: boolean;
+            sustituye_a: number | null;
+            obligacion_id: number;
+            formulario: string | null;
+            /** Format: date */
+            vence_en: string;
+            parametros: {
+                clave: string;
+                /** @description JSON según el tipo del parámetro (string, número, booleano, objeto o lista) */
+                valor: unknown;
+                /** Format: date */
+                vigente_desde: string | null;
+                nivel: string;
+            }[];
+            detalle: {
+                renglones: components["schemas"]["RenglonDeclaracion"][];
+                /** @description Libros de ventas y compras emitidos con folio que cubren el mes */
+                libros: components["schemas"]["LibroEnlazado"][];
+                /** @description Declaración del mes anterior de la que salen los remanentes */
+                anterior_id: number | null;
+            };
+            /** @description IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas */
+            totales: {
+                [key: string]: string;
+            };
+            /** @description sha256 de lo leído (renglones, totales, parámetros y el mes anterior) */
+            datos_hash: string;
+            calculada_por: number | null;
+            /** Format: date-time */
+            calculada_en: string;
+            /** @enum {string} */
+            estado: "borrador" | "revisada" | "presentada" | "sustituida";
+            revisada_por: number | null;
+            /** Format: date-time */
+            revisada_en: string | null;
+            /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
+            asiento_id: number | null;
+            numero_formulario: string | null;
+            /** Format: date */
+            fecha_presentacion: string | null;
+            boleta: string | null;
+            presentada_por: number | null;
+            /** Format: date-time */
+            presentada_en: string | null;
+            pago: components["schemas"]["PagoDeclaracion"] | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description Los datos cambiaron desde que se calculó (otro datos_hash): revisar o presentar responde 409 */
+            desactualizada: boolean;
+        };
         DependientePago: {
             id: number;
             nombre: string;
@@ -10373,6 +10612,21 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        LibroEnlazado: {
+            emision_id: number;
+            /** @enum {string} */
+            libro: "ventas" | "compras";
+            /** Format: date */
+            desde: string;
+            /** Format: date */
+            hasta: string;
+            folio_inicial: number;
+            folio_final: number;
+            sha256: string;
+            iva: string | null;
+            /** @description La emisión cubre exactamente el mes: su IVA debe ser el del borrador */
+            mismo_periodo: boolean;
+        };
         LineaCompra: {
             id: number;
             descripcion: string;
@@ -10825,8 +11079,29 @@ export interface components {
             motivo_estado: string | null;
             /** @description Borrador de la declaración (fase 7 PR B) */
             declaracion_id: number | null;
-            /** @description Cómo se calculó el vencimiento: parametro, valor, vigente_desde, nivel, vence_base y corrido_a_habil */
+            /** @description Cómo se calculó el vencimiento. La API envía siempre los seis campos; van opcionales en el tipo para no romper los fixtures que lo tenían como objeto libre */
             regla: {
+                /** @description Parámetro del plazo (iva_declaracion, isr_opcional_plazo…) */
+                parametro?: string;
+                /** @description Valor del parámetro: plazo, dias, dias_habiles, vence, formulario… */
+                valor?: {
+                    [key: string]: unknown;
+                };
+                /**
+                 * Format: date
+                 * @description Vigencia del valor usado
+                 */
+                vigente_desde?: string | null;
+                /** @enum {string} */
+                nivel?: "empresa" | "instalacion" | "global" | "paquete" | "derivado";
+                /**
+                 * Format: date
+                 * @description Vencimiento según la regla, antes de correrlo al día hábil
+                 */
+                vence_base?: string;
+                /** @description vence_base caía en día inhábil */
+                corrido_a_habil?: boolean;
+            } & {
                 [key: string]: unknown;
             };
             version: number;
@@ -10929,6 +11204,21 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        PagoDeclaracion: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            impuesto: string;
+            mora: string;
+            multa: string;
+            total: string;
+            dias_atraso: number;
+            boleta: string | null;
+            asiento_id: number;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
         };
         PagoPorLiquidar: {
             pago_id: number;
@@ -12359,6 +12649,22 @@ export interface components {
                     deuda_maxima: components["schemas"]["Dinero"] | null;
                 };
             };
+        };
+        RenglonDeclaracion: {
+            /** @enum {string} */
+            seccion: "ventas" | "compras" | "retenciones";
+            /** @description dte, interno, compra o constancia */
+            origen: string;
+            documento: string;
+            /** Format: date */
+            fecha: string;
+            tipo: string | null;
+            nit: string | null;
+            base: string;
+            /** @description IVA (ventas), crédito (compras) o retención */
+            iva: string;
+            total: string;
+            estado: string | null;
         };
         ReporteAltasBajas: {
             reporte: string;
@@ -20943,6 +21249,426 @@ export interface operations {
             };
         };
     };
+    declaracionesListar: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                impuesto?: ("iva_mensual" | "pc_mensual")[];
+                estado?: ("borrador" | "revisada" | "presentada" | "sustituida")[];
+                /** @description Mes AAAA-MM */
+                periodo?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de declaraciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Declaracion"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionVer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Declaración */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeclaracionDetalle"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionMarcarPresentada: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    numero_formulario: string;
+                    /** Format: date */
+                    fecha_presentacion: string;
+                    boleta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Declaración presentada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Declaracion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.presentar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionRegistrarPago: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    metodo: "caja" | "banco" | "cuenta_bancaria";
+                    caja_id?: number | null;
+                    banco_id?: number | null;
+                    cuenta_bancaria_id?: number | null;
+                    /**
+                     * Format: date
+                     * @description Fecha del pago; por defecto hoy
+                     */
+                    fecha?: string | null;
+                    boleta?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Declaración con su pago */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Declaracion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.pagar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionRevisar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Declaración revisada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Declaracion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.revisar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionCalcular: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description iva_mensual (SAT-2237) o pc_mensual (SAT-2046); ISR, ISO y retenciones llegan después
+                     * @enum {string}
+                     */
+                    impuesto: "iva_mensual" | "pc_mensual";
+                    /** @description Mes AAAA-MM */
+                    periodo: string;
+                    /** @description true para recalcular un periodo ya revisado o presentado (versión sustitutiva) */
+                    sustitutiva?: boolean;
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Borrador */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Declaracion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.calcular; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     diferimientosListar: {
         parameters: {
             query?: {
@@ -25067,6 +25793,8 @@ export interface operations {
                 impuesto?: ("iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr")[];
                 /** @description Uno o varios estados (se repite el parámetro); por defecto todos */
                 estado?: ("pendiente" | "borrador" | "presentada" | "no_aplica")[];
+                /** @description true = solo las vencidas sin presentar (pendiente o borrador con vence_en antes de hoy en Guatemala); false = las demás */
+                vencida?: boolean;
                 /** @description Vence desde (inclusive) */
                 desde?: string;
                 /** @description Vence hasta (inclusive) */

@@ -27,8 +27,13 @@ import { balanceComprobacion } from '#ledger/comprobacion'
  * - Anuales (`periodo` = 1 de enero): incobrables, resultados_cero (ingresos, gastos, 3.3.03 y
  *   3.3.02 en cero al 31-dic: pasa solo con el ejercicio cerrado) y comprobacion_cuadra (balance de
  *   comprobación del año cuadrado antes y después del cierre). `libro.cerrar_ejercicio` los verifica
- *   y exige después de sus asientos; el duro que cruza un fin de año, también. Los de `impuestos`
- *   (iva_cuadrado, iva_liquidado) llegan con las declaraciones (fase 7).
+ *   y exige después de sus asientos; el duro que cruza un fin de año, también.
+ * - De impuestos (`periodo` = primer día del mes; fase 7 PR B, `#fiscal/declaraciones`):
+ *   iva_cuadrado (Σ `V_IVA`, `C_IVA` y `RET_IVA_REC` del mes = libros de ventas, compras y
+ *   constancias = última versión del borrador; pequeño contribuyente: ventas y retenciones) e
+ *   iva_liquidado (con la versión revisada: el neto del mes de `2.1.02` en cero y el de `1.1.04` =
+ *   lo que dejó la liquidación; pequeño contribuyente: `2.1.09` = a pagar). `declaraciones.revisar`
+ *   exige iva_cuadrado antes de liquidar y los dos después.
  * - Los que comparan saldos con documentos (cartera, proveedores, 2.1.11, tránsito, cobros por
  *   liquidar) miran el estado al verificar, como los reportes que comparan; los demás, el periodo.
  */
@@ -90,6 +95,16 @@ export const CHECKS: readonly DefinicionCheck[] = [
         clave: 'depreciacion_al_dia',
         tipo: 'mensual',
         titulo: 'Cuotas de activos y diferidos del periodo contabilizadas',
+    },
+    {
+        clave: 'iva_cuadrado',
+        tipo: 'impuestos',
+        titulo: 'Cuadrículas del libro = libros de IVA = borrador de la declaración',
+    },
+    {
+        clave: 'iva_liquidado',
+        tipo: 'impuestos',
+        titulo: 'Débito y crédito del periodo trasladados por la liquidación',
     },
     { clave: 'incobrables', tipo: 'anual', titulo: 'Estimación de incobrables (1.1.12) dentro del tope' },
     {
@@ -530,6 +545,137 @@ const CALCULOS: Record<string, Calculo> = {
     },
 }
 
+/*
+|--------------------------------------------------------------------------
+| Impuestos (fase 7 PR B)
+|--------------------------------------------------------------------------
+*/
+
+const resumen = (pares: Array<[string, string]>) => pares.map(([k, v]) => `${k} ${v}`).join(' · ')
+
+CALCULOS.iva_cuadrado = async (c, empresaId, periodo) => {
+    const d = await import('#fiscal/declaraciones')
+    const impuesto = await d.impuestoDelMes(c, empresaId, periodo)
+    if (!impuesto) {
+        return {
+            clave: 'iva_cuadrado',
+            esperado: 'sin obligación',
+            obtenido: 'sin obligación',
+            resultado: 'ok',
+            detalle: null,
+        }
+    }
+    const libros = await d.calcularDatos(c, empresaId, impuesto, periodo)
+    const etiquetas = await d.cuadriculasDelMes(c, empresaId, periodo)
+    const borrador = await d.ultimaVersion(c, empresaId, impuesto, periodo)
+    const t = libros.totales
+    const esperado =
+        impuesto === 'iva_mensual'
+            ? resumen([
+                  ['V_IVA', t.debito!],
+                  ['C_IVA', t.credito!],
+                  ['RET_IVA_REC', t.retenciones!],
+              ])
+            : resumen([
+                  ['ventas', t.ventas!],
+                  ['RET_IVA_REC', t.retenciones!],
+              ])
+    const obtenido =
+        impuesto === 'iva_mensual'
+            ? resumen([
+                  ['V_IVA', aTexto(etiquetas.V_IVA)],
+                  ['C_IVA', aTexto(etiquetas.C_IVA)],
+                  ['RET_IVA_REC', aTexto(etiquetas.RET_IVA_REC)],
+              ])
+            : resumen([
+                  ['ventas', t.ventas!],
+                  ['RET_IVA_REC', aTexto(etiquetas.RET_IVA_REC)],
+              ])
+    // un libro emitido con folio del mismo mes guarda su IVA: debe ser el del borrador
+    const librosDistintos = libros.detalle.libros.filter(
+        (l) =>
+            l.mismo_periodo &&
+            l.iva !== null &&
+            l.iva !== (l.libro === 'ventas' ? (t.debito ?? t.iva_en_ventas) : (t.credito ?? l.iva)),
+    )
+    const borradorAlDia = borrador !== null && borrador.datos_hash === libros.datos_hash
+    return {
+        clave: 'iva_cuadrado',
+        esperado,
+        obtenido: borradorAlDia
+            ? obtenido
+            : `${obtenido} · ${borrador ? 'borrador desactualizado' : 'sin borrador'}`,
+        resultado: esperado === obtenido && borradorAlDia && librosDistintos.length === 0 ? 'ok' : 'anomalia',
+        detalle: {
+            impuesto,
+            declaracion_id: borrador?.id ?? null,
+            version: borrador?.version ?? null,
+            borrador_al_dia: borradorAlDia,
+            v_iva_sin_etiqueta: aTexto(etiquetas.V_IVA_sin_etiqueta),
+            libros_distintos: librosDistintos.map((l) => l.emision_id),
+        },
+    }
+}
+
+CALCULOS.iva_liquidado = async (c, empresaId, periodo) => {
+    const d = await import('#fiscal/declaraciones')
+    const impuesto = await d.impuestoDelMes(c, empresaId, periodo)
+    if (!impuesto) {
+        return {
+            clave: 'iva_liquidado',
+            esperado: 'sin obligación',
+            obtenido: 'sin obligación',
+            resultado: 'ok',
+            detalle: null,
+        }
+    }
+    const revisada = (await c
+        .from('fiscal.declaraciones')
+        .where({ empresa_id: empresaId, impuesto, periodo_desde: periodo })
+        .whereNotNull('revisada_en')
+        .orderBy('version', 'desc')
+        .select('id', 'version', 'totales')
+        .first()) as { id: number; version: number; totales: Record<string, string> } | null
+    if (!revisada) {
+        return {
+            clave: 'iva_liquidado',
+            esperado: 'liquidada',
+            obtenido: 'sin liquidar',
+            resultado: 'anomalia',
+            detalle: { impuesto },
+        }
+    }
+    const liquidado = await d.liquidadoDelPeriodo(c, empresaId, impuesto, periodo)
+    const t = revisada.totales
+    let esperado: string
+    let obtenido: string
+    if (impuesto === 'iva_mensual') {
+        const debitoMes = await d.movimientoDelMes(c, empresaId, periodo, CUENTAS.IVA_DEBITO)
+        const creditoMes = await d.movimientoDelMes(c, empresaId, periodo, CUENTAS_GT.IVA_CREDITO)
+        const debito = debitoMes.plus(liquidado.get(CUENTAS.IVA_DEBITO) ?? CERO)
+        const credito = creditoMes.plus(liquidado.get(CUENTAS_GT.IVA_CREDITO) ?? CERO)
+        const remanente = dec(t.remanente_credito ?? '0').minus(dec(t.remanente_credito_anterior ?? '0'))
+        esperado = resumen([
+            ['2.1.02', '0.00'],
+            ['1.1.04', aTexto(remanente)],
+        ])
+        obtenido = resumen([
+            ['2.1.02', aTexto(debito)],
+            ['1.1.04', aTexto(credito)],
+        ])
+    } else {
+        esperado = resumen([['2.1.09', aTexto(CERO.minus(dec(t.a_pagar ?? '0')))]])
+        obtenido = resumen([['2.1.09', aTexto(liquidado.get(CUENTAS_GT.PC_POR_PAGAR) ?? CERO)]])
+    }
+    return {
+        clave: 'iva_liquidado',
+        esperado,
+        obtenido,
+        resultado: igual(esperado, obtenido),
+        detalle: { impuesto, declaracion_id: Number(revisada.id), version: Number(revisada.version) },
+    }
+}
+
 /** Corre los checks automáticos del tipo (sin escribir). */
 export async function calcularChecks(
     c: QueryClientContract,
@@ -659,11 +805,13 @@ export async function exigirChecks(
     empresaId: number,
     tipo: TipoCheck,
     periodo: string,
+    claves?: readonly string[],
 ): Promise<void> {
     const vigentes = await checksVigentes(c, empresaId, tipo, periodo)
     const errores: ErrorCampo[] = []
     for (const def of checksDelTipo(tipo)) {
         if (!CALCULOS[def.clave]) continue
+        if (claves && !claves.includes(def.clave)) continue
         const v = vigentes.find((x) => x.clave === def.clave)
         if (!v) {
             errores.push({

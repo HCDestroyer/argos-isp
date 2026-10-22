@@ -319,6 +319,8 @@ export interface FiltrosObligaciones {
     limit?: number | null
     impuesto?: string[] | null
     estado?: string[] | null
+    /** true: vencidas sin presentar; false: las demás */
+    vencida?: boolean | null
     /** vence_en desde / hasta (inclusive) */
     desde?: string | null
     hasta?: string | null
@@ -341,6 +343,14 @@ export async function listarObligaciones(
             q.whereIn('o.impuesto', filtros.impuesto!),
         )
         .if(filtros.estado && filtros.estado.length > 0, (q) => q.whereIn('o.estado', filtros.estado!))
+        .if(filtros.vencida === true, (q) =>
+            q.whereIn('o.estado', ESTADOS_ABIERTOS as string[]).where('o.vence_en', '<', hoy),
+        )
+        .if(filtros.vencida === false, (q) =>
+            q.where((w) =>
+                w.whereNotIn('o.estado', ESTADOS_ABIERTOS as string[]).orWhere('o.vence_en', '>=', hoy),
+            ),
+        )
         .if(filtros.desde, (q) => q.where('o.vence_en', '>=', filtros.desde!))
         .if(filtros.hasta, (q) => q.where('o.vence_en', '<=', filtros.hasta!))
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('o.empresa_id', ids))
