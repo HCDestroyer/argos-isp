@@ -22,6 +22,7 @@ import { cierres, egresos } from './egresos/datos'
 import { bloqueosLibro, excepcionesBloqueo, pendientesPorBloqueo, type PendientePorBloqueo } from './libro/bloqueos'
 import { acciones } from './bitacora/datos'
 import { emisionesLibros, habilitacionesLibros } from './libros/datos'
+import { obligacionesIniciales, type ObligacionFila } from './calendario/datos'
 import { accionesCorridas, calculosChecks, checksCierre, type CalculoCheck } from './libro/checks'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
@@ -117,6 +118,9 @@ interface BaseFixtures {
     librosEmisiones: Schema<'EmisionLibro'>[]
     /** Emisiones cuyo archivo ya no coincide con su SHA-256 (409 `archivo_alterado`). */
     librosAlterados: number[]
+    /** Calendario fiscal (A3, fase 7 PR A): filas de `fiscal.obligaciones` y feriados de solo inserción. */
+    obligacionesFiscales: ObligacionFila[]
+    feriadosFiscales: Schema<'FeriadoFiscal'>[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
@@ -257,6 +261,8 @@ function inicial(): BaseFixtures {
         librosHabilitaciones: habilitacionesLibros,
         librosEmisiones: emisionesLibros,
         librosAlterados: [],
+        obligacionesFiscales: obligacionesIniciales(),
+        feriadosFiscales: [],
         bancos,
         cuentasBancarias,
         empresa,

@@ -19198,6 +19198,203 @@
         "x-implementado": true
       }
     },
+    "/api/v1/fiscal/feriados": {
+      "get": {
+        "operationId": "fiscalFeriados",
+        "summary": "Feriados (días inhábiles para los plazos) de un año",
+        "description": "Globales. vigentes = fechas inhábiles del año (la última fila de cada fecha, activa); historial = todas las altas y retiros. Sin filas solo son inhábiles sábados y domingos (confirmar con contador).",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "anio",
+            "in": "query",
+            "required": false,
+            "description": "Año; por defecto el año en curso (Guatemala)",
+            "schema": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Feriados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeriadosFiscales"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fiscal.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fiscal.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "fiscalAgregarFeriado",
+        "summary": "Agregar o retirar un feriado",
+        "description": "Global: requiere alcance global (403 alcance_global_requerido). Solo inserción; activo = false lo retira. En la misma transacción recalcula el calendario de todas las empresas (vencimientos sin presentar). Emite fiscal.parametros_cambiados (claves [feriados]). 409 feriado_duplicado; 422 feriado_inexistente.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 120,
+                    "description": "Obligatorio al agregar; al retirar (activo = false) se toma el vigente"
+                  },
+                  "activo": {
+                    "description": "false = la fecha deja de ser feriado (fila nueva; nada se borra)",
+                    "type": "boolean"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "fecha",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Feriado y recalculo del calendario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeriadoAgregado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fiscal.configurar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/fiscal/frases": {
       "get": {
         "operationId": "fiscalFrases",
@@ -19862,6 +20059,255 @@
           }
         },
         "x-permiso": "fiscal.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fiscal/obligaciones": {
+      "get": {
+        "operationId": "fiscalObligaciones",
+        "summary": "Calendario fiscal: obligaciones por vencimiento",
+        "description": "De la empresa activa (o empresas=todas con alcance global), por vence_en ascendente. Las genera el cron fiscal:calendario para todo lo pendiente hasta el periodo en curso, según el régimen y las banderas vigentes en cada periodo; un vencimiento en día inhábil (sábado, domingo o fiscal.feriados) corre al siguiente hábil. dias_restantes y vencida se calculan con la fecha de hoy en Guatemala.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "impuesto",
+            "in": "query",
+            "required": false,
+            "description": "Uno o varios impuestos (se repite el parámetro)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "iva_mensual",
+                  "pc_mensual",
+                  "isr_opcional_mensual",
+                  "isr_trimestral",
+                  "iso_trimestral",
+                  "isr_anual",
+                  "retenciones_iva",
+                  "retenciones_isr"
+                ]
+              }
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "description": "Uno o varios estados (se repite el parámetro); por defecto todos",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "pendiente",
+                  "borrador",
+                  "presentada",
+                  "no_aplica"
+                ]
+              }
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Vence desde (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Vence hasta (inclusive)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de obligaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ObligacionFiscal"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fiscal/obligaciones/{id}": {
+      "get": {
+        "operationId": "fiscalObligacion",
+        "summary": "Ver una obligación del calendario fiscal",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Obligación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObligacionFiscal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.ver",
         "x-implementado": true
       }
     },
@@ -64388,6 +64834,139 @@
           }
         }
       },
+      "FeriadoAgregado": {
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "nombre",
+          "activo",
+          "origen",
+          "motivo",
+          "creado_por",
+          "created_at",
+          "calendario"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "paquete",
+              "usuario"
+            ]
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "calendario": {
+            "$ref": "#/components/schemas/ResultadoCalendarioFiscal",
+            "description": "Recalculo del calendario de todas las empresas"
+          }
+        }
+      },
+      "FeriadoFiscal": {
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "nombre",
+          "activo",
+          "origen",
+          "motivo",
+          "creado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false = retiro del feriado de esa fecha"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "paquete",
+              "usuario"
+            ]
+          },
+          "motivo": {
+            "type": "string"
+          },
+          "creado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FeriadosFiscales": {
+        "type": "object",
+        "required": [
+          "anio",
+          "vigentes",
+          "historial"
+        ],
+        "properties": {
+          "anio": {
+            "type": "integer"
+          },
+          "vigentes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeriadoFiscal"
+            },
+            "description": "Fechas inhábiles vigentes del año"
+          },
+          "historial": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeriadoFiscal"
+            },
+            "description": "Todas las filas del año (altas y retiros)"
+          }
+        }
+      },
       "FoliosLibro": {
         "type": "object",
         "required": [
@@ -67138,6 +67717,132 @@
             }
           }
         ]
+      },
+      "ObligacionFiscal": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "impuesto",
+          "nombre",
+          "periodicidad",
+          "periodo_desde",
+          "periodo_hasta",
+          "formulario",
+          "vence_en",
+          "dias_restantes",
+          "vencida",
+          "estado",
+          "motivo_estado",
+          "declaracion_id",
+          "regla",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "impuesto": {
+            "type": "string",
+            "enum": [
+              "iva_mensual",
+              "pc_mensual",
+              "isr_opcional_mensual",
+              "isr_trimestral",
+              "iso_trimestral",
+              "isr_anual",
+              "retenciones_iva",
+              "retenciones_isr"
+            ]
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre de la obligación para mostrar"
+          },
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "mensual",
+              "trimestral",
+              "anual"
+            ]
+          },
+          "periodo_desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodo_hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "formulario": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SAT-2237…; null = por confirmar con contador"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date",
+            "description": "Vencimiento ya corrido al día hábil si caía en inhábil"
+          },
+          "dias_restantes": {
+            "type": "integer",
+            "description": "Días calendario de hoy (Guatemala) al vencimiento; negativo si venció"
+          },
+          "vencida": {
+            "type": "boolean",
+            "description": "Venció sin presentarse (pendiente o borrador)"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "borrador",
+              "presentada",
+              "no_aplica"
+            ]
+          },
+          "motivo_estado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica: regimen_<régimen>, no_es_agente_retencion_iva, sin_retenciones_isr, cuarto_trimestre_con_la_anual, antes_de_inicio_libros"
+          },
+          "declaracion_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Borrador de la declaración (fase 7 PR B)"
+          },
+          "regla": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Cómo se calculó el vencimiento: parametro, valor, vigente_desde, nivel, vence_base y corrido_a_habil"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "PaginaCanjesLealtad": {
         "type": "object",
@@ -76623,6 +77328,66 @@
             "items": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        }
+      },
+      "ResultadoCalendarioFiscal": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "empresas",
+          "creadas",
+          "actualizadas",
+          "sin_aplicar",
+          "errores"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "empresas": {
+            "type": "integer"
+          },
+          "creadas": {
+            "type": "integer"
+          },
+          "actualizadas": {
+            "type": "integer"
+          },
+          "sin_aplicar": {
+            "type": "integer",
+            "description": "Obligaciones que pasaron a no_aplica"
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "impuesto",
+                "codigo",
+                "detalle"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "impuesto": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "codigo": {
+                  "type": "string"
+                },
+                "detalle": {
+                  "type": "string"
+                }
+              }
             }
           }
         }

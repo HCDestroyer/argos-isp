@@ -60,6 +60,10 @@ export const INMUTABLES: Record<string, string> = {
     // fase 6 PR D (A3): libros legales con folio (§3.7, §7; desvíos s y t de §20)
     'fiscal.libros_habilitados': 'rango de folios habilitado de un libro; correlativo al anterior (§3.7)',
     'fiscal.libros_emisiones': 'emisión oficial con folio, archivo y SHA-256; reimprimir = fila nueva (§7)',
+    // fase 7 PR A (A3): calendario fiscal (§3.2, §3.7, §21)
+    'fiscal.feriados': 'día inhábil global; retirarlo = fila nueva con activo false (§3.2)',
+    'fiscal.alertas':
+        'alerta de vencimiento o del límite PC; clave única por obligación (o año) y umbral (§11.3)',
     // §10.3 conciliación bancaria
     'ledger.extractos': 'extracto bancario (§10.3)',
     'ledger.extractos_lineas': 'línea de extracto (§10.3)',
@@ -142,6 +146,9 @@ export const MUTABLES: Record<string, string> = {
     'core.servicios_adicionales':
         'asignación a un servicio con version y audit.cambios; la baja es estado + baja_en, nunca DELETE',
     'network.planes_adicionales': 'configuración del plan (lista reemplazable) con el diff en audit.cambios',
+    // fase 7 PR A (A3): el calendario lo concilia el cron con version + 1 y audit.cambios; nunca DELETE ni TRUNCATE
+    'fiscal.obligaciones':
+        'calendario fiscal: vence_en, formulario, regla, estado y declaracion_id con version y audit.cambios (§3.7)',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */

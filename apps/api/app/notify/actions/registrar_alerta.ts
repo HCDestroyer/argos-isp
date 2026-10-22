@@ -13,6 +13,7 @@ import {
 } from '#notify/alertas'
 import { quetzales } from '#notify/formato'
 import { numeroDeFactura } from '#notify/variables'
+import { variablesLimitePc, variablesVencimiento } from '#notify/calendario_fiscal'
 
 /** Eventos del catálogo que generan alertas internas. */
 export const EVENTOS_ALERTA = [
@@ -26,6 +27,9 @@ export const EVENTOS_ALERTA = [
     'dte.rechazado',
     'fel.contingencia_cambiada',
     'nota_credito.anulada',
+    // Calendario fiscal (fase 7 PR A, contrato §14 y §21)
+    'fiscal.vencimiento_proximo',
+    'fiscal.limite_pc',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',
     'horus.router_estado_cambiado',
@@ -88,6 +92,8 @@ function texto(valor: unknown): string {
  * | `fel.contingencia_cambiada` (`activa`) | `fel-contingencia:<empresa_id>`, abierto hasta desactivarla | al abrir |
  * | `fel.contingencia_cambiada` (`!activa`) | cierra `fel-contingencia:<empresa_id>` | siempre ("desactivada") |
  * | `nota_credito.anulada` | `nota-credito:<nota_credito_id>`, puntual, una vez por nota | siempre |
+ * | `fiscal.vencimiento_proximo` | `fiscal-vence:<obligacion_id>:<umbral>`, puntual, una vez por obligación y umbral | siempre |
+ * | `fiscal.limite_pc` | `fiscal-pc:<empresa_id>:<anio>:<umbral_pct>`, puntual, una vez por umbral y año | siempre |
  *
  * Los fiscales usan la configuración de canales de la empresa del evento (`empresa_id`): Telegram
  * al chat del equipo y correo a `correo.contabilidad`.
@@ -103,6 +109,9 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
 
     protected async handle(input: EntradaAlerta, t: Transaccion): Promise<ResultadoAlerta> {
         const { trx } = t
+        // Multiempresa: la auditoría lleva la empresa del evento cuando la trae (también el duplicado).
+        const empresaEvento = enteroPositivo(input.payload.empresa_id)
+        if (empresaEvento) t.fijarEmpresa(empresaEvento)
         await bloquearOrigen(trx, input.origen)
         const previo = (await trx
             .from('notify.alertas_eventos')
@@ -117,6 +126,7 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                       .where('estado', 'encolado')
                       .select('id')) as Array<{ id: number }>)
                 : []
+            if (previo.incidente_id) t.fijarEntidad('incidente', previo.incidente_id)
             return {
                 duplicado: true,
                 incidenteId: previo.incidente_id,
@@ -291,6 +301,51 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                     monto_q: quetzales(texto(p.monto) || '0'),
                     motivo: texto(p.motivo),
                 })
+            }
+            case 'fiscal.vencimiento_proximo': {
+                // A3 ya lo emite una vez por obligación y umbral (`fiscal.alertas`); `unico` cubre
+                // una reemisión con otro id de outbox.
+                const umbral = texto(p.umbral)
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `fiscal-vence:${texto(p.obligacion_id)}:${umbral}`,
+                    tipo: 'fiscal_vencimiento',
+                    detalle: {
+                        empresa_id: empresaId,
+                        obligacion_id: p.obligacion_id ?? null,
+                        impuesto: texto(p.impuesto) || null,
+                        vence_en: texto(p.vence_en) || null,
+                        umbral: p.umbral ?? null,
+                    },
+                    ahora,
+                    puntual: true,
+                    unico: true,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    'alerta.fiscal.vencimiento_proximo',
+                    variablesVencimiento(p),
+                )
+            }
+            case 'fiscal.limite_pc': {
+                const variables = variablesLimitePc(p)
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `fiscal-pc:${empresaId ?? '-'}:${texto(p.anio)}:${variables.umbral}`,
+                    tipo: 'fiscal_limite_pc',
+                    detalle: {
+                        empresa_id: empresaId,
+                        anio: p.anio ?? null,
+                        umbral_pct: texto(p.umbral_pct) || null,
+                        acumulado: texto(p.acumulado) || null,
+                        limite: texto(p.limite) || null,
+                    },
+                    ahora,
+                    puntual: true,
+                    unico: true,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(incidente, 'abierto', 'alerta.fiscal.limite_pc', variables)
             }
             case 'aaa.caido': {
                 const nodo = texto(p.nodo) || 'aaa'

@@ -9,7 +9,8 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * Además consume el grupo `billing` del bus de eventos (`pago.registrado` → cumplir promesas,
  * `ConsumidorBilling`; `factura.*`, `pago.*`, `promesa.*` y `servicio.estado_cambiado` →
  * refrescar los resúmenes del dashboard, `ConsumidorResumenes`; `fiscal.parametros_cambiados` →
- * invalidar la caché de parámetros fiscales, `ConsumidorFiscal`; `pago.registrado` → pedir la
+ * invalidar la caché de parámetros fiscales, `ConsumidorFiscal`, y regenerar el calendario fiscal
+ * si cambió el régimen, una bandera o un plazo, `ConsumidorCalendario`; `pago.registrado` → pedir la
  * certificación de los avisos de cobro cubiertos, `ConsumidorFel`); `--sin-eventos` lo apaga.
  *
  * También consume el grupo `lealtad` (`ConsumidorLealtad`: pagos, facturas, notas de crédito y
@@ -61,6 +62,7 @@ export default class BillingWorker extends BaseCommand {
             const { ConsumidorResumenes } = await import('#billing/reportes/resumenes')
             const { ConsumidorFiscal } = await import('#fiscal/consumidor')
             const { ConsumidorFel } = await import('#fiscal/consumidor_fel')
+            const { ConsumidorCalendario } = await import('#fiscal/consumidor_calendario')
             // promesas primero (pueden cambiar estados) y después los resúmenes del dashboard
             const grupo = new EjecutorGrupo({
                 grupo: 'billing',
@@ -69,6 +71,7 @@ export default class BillingWorker extends BaseCommand {
                     new ConsumidorResumenes(),
                     new ConsumidorFiscal(),
                     new ConsumidorFel(),
+                    new ConsumidorCalendario(),
                 ],
             })
             grupo.iniciar()

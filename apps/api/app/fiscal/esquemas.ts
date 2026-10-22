@@ -485,3 +485,111 @@ export const LoteCertificacion = definirEsquema(
         errores: lista(objeto({ factura_id: id, tipo: texto, detalle: texto })),
     }),
 )
+
+// ---------------------------------------------------------------------------------------------
+// Calendario fiscal (fase 7 PR A, contrato §3.7, §9.3 y §21)
+// ---------------------------------------------------------------------------------------------
+
+export const ObligacionFiscal = definirEsquema(
+    'ObligacionFiscal',
+    objeto({
+        id,
+        empresa_id: id,
+        impuesto: enumerado([
+            'iva_mensual',
+            'pc_mensual',
+            'isr_opcional_mensual',
+            'isr_trimestral',
+            'iso_trimestral',
+            'isr_anual',
+            'retenciones_iva',
+            'retenciones_isr',
+        ]),
+        nombre: { ...texto, description: 'Nombre de la obligación para mostrar' },
+        periodicidad: enumerado(['mensual', 'trimestral', 'anual']),
+        periodo_desde: fecha,
+        periodo_hasta: fecha,
+        formulario: { ...nulable(texto), description: 'SAT-2237…; null = por confirmar con contador' },
+        vence_en: { ...fecha, description: 'Vencimiento ya corrido al día hábil si caía en inhábil' },
+        dias_restantes: {
+            ...entero,
+            description: 'Días calendario de hoy (Guatemala) al vencimiento; negativo si venció',
+        },
+        vencida: { ...booleano, description: 'Venció sin presentarse (pendiente o borrador)' },
+        estado: enumerado(['pendiente', 'borrador', 'presentada', 'no_aplica']),
+        motivo_estado: {
+            ...nulable(texto),
+            description:
+                'Por qué no aplica: regimen_<régimen>, no_es_agente_retencion_iva, sin_retenciones_isr, cuarto_trimestre_con_la_anual, antes_de_inicio_libros',
+        },
+        declaracion_id: { ...nulable(id), description: 'Borrador de la declaración (fase 7 PR B)' },
+        regla: {
+            ...jsonLibre,
+            description:
+                'Cómo se calculó el vencimiento: parametro, valor, vigente_desde, nivel, vence_base y corrido_a_habil',
+        },
+        version: entero,
+        created_at: instante,
+        updated_at: instante,
+    }),
+)
+
+export const FeriadoFiscal = definirEsquema(
+    'FeriadoFiscal',
+    objeto({
+        id,
+        fecha,
+        nombre: texto,
+        activo: { ...booleano, description: 'false = retiro del feriado de esa fecha' },
+        origen: enumerado(['paquete', 'usuario']),
+        motivo: texto,
+        creado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+export const FeriadosFiscales = definirEsquema(
+    'FeriadosFiscales',
+    objeto({
+        anio: entero,
+        vigentes: { ...lista(FeriadoFiscal), description: 'Fechas inhábiles vigentes del año' },
+        historial: { ...lista(FeriadoFiscal), description: 'Todas las filas del año (altas y retiros)' },
+    }),
+)
+
+const ErrorCalendario = objeto({
+    empresa_id: id,
+    impuesto: nulable(texto),
+    codigo: texto,
+    detalle: texto,
+})
+
+export const ResultadoCalendarioFiscal = definirEsquema(
+    'ResultadoCalendarioFiscal',
+    objeto({
+        hoy: fecha,
+        empresas: entero,
+        creadas: entero,
+        actualizadas: entero,
+        sin_aplicar: { ...entero, description: 'Obligaciones que pasaron a no_aplica' },
+        errores: lista(ErrorCalendario),
+    }),
+)
+
+export const FeriadoAgregado = definirEsquema(
+    'FeriadoAgregado',
+    objeto({
+        id,
+        fecha,
+        nombre: texto,
+        activo: booleano,
+        origen: enumerado(['paquete', 'usuario']),
+        motivo: texto,
+        creado_por: nulable(id),
+        created_at: instante,
+        calendario: {
+            ...ResultadoCalendarioFiscal,
+            description: 'Recalculo del calendario de todas las empresas',
+        },
+    }),
+)

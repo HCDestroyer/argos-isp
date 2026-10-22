@@ -10,7 +10,7 @@ import { recargarConfiguracion } from '#notify/configuracion'
 import { ConsumidorAlertas } from '#notify/consumidor_alertas'
 import ConfigurarNotificaciones, { type EntradaConfigurar } from '#notify/actions/configurar_notificaciones'
 import EnviarNotificacion from '#notify/actions/enviar_notificacion'
-import { CanalFalso, ColaFalsa, crearCliente } from '#tests/notify/ayudas_notify'
+import { apartarUsuariosContabilidad, CanalFalso, ColaFalsa, crearCliente } from '#tests/notify/ayudas_notify'
 
 /**
  * Avisos fiscales (contrato de localización fiscal §14): `libro.integridad_rota`, `dte.rechazado`,
@@ -85,6 +85,9 @@ async function incidente(clave: string) {
     } | null
 }
 
+/** Usuarios de contabilidad apartados por una prueba; el teardown los reactiva. */
+let reactivar: (() => Promise<void>) | null = null
+
 function porCanal(envios: Envio[], canal: string): Envio {
     const envio = envios.find((e) => e.canal === canal)
     if (!envio) throw new Error(`sin envío por ${canal}`)
@@ -106,6 +109,8 @@ test.group('notify · avisos fiscales al equipo y a contabilidad', (group) => {
             telegram: { token: TOKEN, chat_equipo: CHAT_GLOBAL },
         })
         return async () => {
+            await reactivar?.()
+            reactivar = null
             reiniciarCanales()
             await db.from('notify.configuracion_canales').delete()
             await recargarConfiguracion()
@@ -310,6 +315,8 @@ test.group('notify · avisos fiscales al equipo y a contabilidad', (group) => {
     }) => {
         const clienteId = await crearCliente({ nombre: 'María López' })
         await configurar({ correo: { contabilidad: null } })
+        // sin correo de contabilidad ni usuarios con rol contabilidad (el respaldo)
+        reactivar = await apartarUsuariosContabilidad()
         const consumidor = new ConsumidorAlertas(new ColaFalsa())
         const notaId = randomInt(1_000_000, 9_000_000)
         const payload = {
@@ -332,7 +339,7 @@ test.group('notify · avisos fiscales al equipo y a contabilidad', (group) => {
         assert.include(porCanal(envios, 'correo'), {
             estado: 'fallido',
             destino: '-',
-            error: 'Correo de contabilidad no configurado en la configuración global',
+            error: 'Correo de contabilidad no configurado en la configuración global y sin usuarios activos con rol contabilidad en la empresa',
         })
 
         // Alertas por Telegram apagadas: queda omitido con el motivo (el correo sigue su suerte)
