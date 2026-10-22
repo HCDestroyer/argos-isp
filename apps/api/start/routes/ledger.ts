@@ -407,7 +407,7 @@ const periodos: Ruta[] = [
         cuerpo: v.cerrarPeriodoValidator,
         idempotente: true,
         descripcion:
-            'Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está.',
+            'Después del cierre ningún asiento puede tener fecha en el mes, ni siquiera un reverso (van con fecha de hoy, en el periodo abierto). Solo meses terminados (422 periodo_en_curso); 409 periodo_cerrado si ya lo está. Antes verifica la lista de verificación del mes (§10.5): un check en anomalía sin supervisar responde 422 checks_pendientes con un error por clave.',
         respuesta: { status: 201, descripcion: 'Mes cerrado', esquema: CierrePeriodo },
         handler: (ctx, { cuerpo }) => new CerrarPeriodo().execute(cuerpo, ctx.contextoAccion()),
     }),

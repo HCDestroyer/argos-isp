@@ -270,6 +270,8 @@ test.group('Auditor contable · hallazgos', (group) => {
         await gastoDel(e, '2026-10-02', '20.00')
         const enNoviembre = new Date('2026-11-05T12:00:00-06:00')
         await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9, ahora: enNoviembre }, e.ctx)
+        // check turnos_cerrados (§10.5): el turno que abre prepararEmpresas se cierra antes de cerrar su mes
+        await new CerrarCaja().execute({ caja_id: e.cajas.get(e.B)!, contado: '100.00' }, e.ctx)
         await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 10, ahora: enNoviembre }, e.ctx)
         const columna = await columnaPartida()
         const antes = await partidasDe(e.B, columna!)

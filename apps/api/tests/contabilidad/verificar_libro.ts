@@ -59,7 +59,10 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {
+    '9.nota_sobre_importada_con_iva_residual':
+        'H27: una nota de crédito por el total de una factura importada con IVA se guarda con IVA 0 (el asiento de la importada es CxC / 2.9.01 sin IVA); decisión pendiente del PM',
+}
 
 type Fila = Record<string, unknown>
 
@@ -795,6 +798,16 @@ async function verificarLibroCon(
                 count(n.id)::int AS cantidad_notas
            FROM billing.facturas f JOIN billing.notas_credito n ON n.factura_id = f.id AND NOT ${anulada('n')}
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+            AND coalesce(f.reglas_snapshot ->> 'importada', '') <> 'true'
+          GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
+    )
+    await revisar(
+        '9.nota_sobre_importada_con_iva_residual (H27: el mismo criterio sobre una factura importada; su asiento es CxC / 2.9.01 sin IVA y la nota se guarda con IVA 0, pendiente de la decisión del PM)',
+        `SELECT f.id, f.total::text, f.iva::text, sum(n.monto)::text AS notas, sum(n.iva)::text AS iva_notas,
+                count(n.id)::int AS cantidad_notas
+           FROM billing.facturas f JOIN billing.notas_credito n ON n.factura_id = f.id AND NOT ${anulada('n')}
+          WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+            AND coalesce(f.reglas_snapshot ->> 'importada', '') = 'true'
           GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
     )
     /*
@@ -2981,6 +2994,84 @@ async function verificarLibroCon(
                                                 AND p.tipo = b.tipo AND p.created_at < a.created_at))
                          OR EXISTS (SELECT 1 FROM ledger.cierres_mensuales c WHERE c.empresa_id = a.empresa_id
                                      AND c.periodo = date_trunc('month', a.fecha_documento)::date AND c.created_at < a.created_at)))`,
+    )
+
+    /*
+    | 18 · Lista de verificación de cierre (fase 6 PR B; contrato de localización fiscal §10.5): el
+    | cierre de un mes y el bloqueo duro exigen sus checks revisados o supervisados al momento de
+    | hacerse; un check automático nunca se escribe a mano y una supervisión copia el resultado que
+    | supervisa, con nota y quien la hizo. Las claves salen de la tabla de §10.5 (no del código).
+    */
+    const CHECKS_MENSUALES = [
+        'cxc_antiguedad',
+        'cxc_auxiliar',
+        'cxp_antiguedad',
+        'apertura_cero',
+        'iva_por_certificar',
+        'turnos_cerrados',
+        'fondos_transito',
+        'cobros_por_liquidar',
+        'extractos_conciliados',
+        'dte_pendientes',
+        'por_certificar',
+        'compras_sin_periodo',
+        'secuencias_sin_huecos',
+        'hash_verificado',
+        'depreciacion_al_dia',
+    ]
+    const CHECKS_ANUALES = ['incobrables', 'resultados_cero', 'comprobacion_cuadra']
+    const CHECKS_IMPUESTOS = ['iva_cuadrado', 'iva_liquidado']
+    const listaSql = (claves: string[]) => `(${claves.map((c) => `'${c}'`).join(', ')})`
+    /** claves de `tipo` sin un check vigente que pase para la empresa `e` y el periodo `p` en el instante `t` */
+    const checksQueNoPasan = (tipo: string, claves: string[], e: string, p: string, t: string) =>
+        `(SELECT array_agg(k.clave ORDER BY k.clave) FROM unnest(ARRAY[${claves.map((c) => `'${c}'`).join(', ')}]) AS k(clave)
+           WHERE NOT EXISTS (
+                 SELECT 1 FROM ledger.cierres_checks x
+                  WHERE x.empresa_id = ${e} AND x.tipo = '${tipo}' AND x.periodo = ${p} AND x.clave = k.clave
+                    AND x.created_at <= ${t} AND x.estado IN ('revisado', 'supervisado')
+                    AND x.id = (SELECT max(y.id) FROM ledger.cierres_checks y
+                                 WHERE y.empresa_id = x.empresa_id AND y.tipo = x.tipo AND y.periodo = x.periodo
+                                   AND y.clave = x.clave AND y.created_at <= ${t})))`
+    /** desde que existe la lista (la primera fila): los cierres de antes de la PR B no la tenían */
+    const desdeLista = `(SELECT min(created_at) FROM ledger.cierres_checks)`
+    await revisar(
+        '18.cierre_con_checks_pendientes (al cerrar un mes, cada check mensual de §10.5 tenía su última fila revisada o supervisada; al fijar el bloqueo duro, los del mes de su fecha)',
+        `WITH c AS (
+             SELECT 'cierre' AS que, c.id, c.empresa_id, c.periodo, c.created_at,
+                    ${checksQueNoPasan('mensual', CHECKS_MENSUALES, 'c.empresa_id', 'c.periodo', 'c.created_at')} AS pendientes
+               FROM ledger.cierres_mensuales c
+              WHERE ${E('c.empresa_id')} AND c.created_at >= ${desdeLista}
+             UNION ALL
+             SELECT 'duro', b.id, b.empresa_id, date_trunc('month', b.hasta)::date, b.created_at,
+                    ${checksQueNoPasan('mensual', CHECKS_MENSUALES, 'b.empresa_id', "date_trunc('month', b.hasta)::date", 'b.created_at')}
+               FROM ledger.bloqueos b
+              WHERE ${E('b.empresa_id')} AND b.tipo = 'duro' AND b.created_at >= ${desdeLista}
+         )
+         SELECT que, id, empresa_id, to_char(periodo, 'YYYY-MM') AS periodo, pendientes FROM c WHERE pendientes IS NOT NULL`,
+    )
+    await revisar(
+        '18.check_mal_formado (clave de su tipo en §10.5; un automático lleva revisado si ok y anomalia si no, sin nota ni revisor; una revisión manual copia esperado, obtenido y resultado de la fila vigente que revisa, que estaba en anomalía, cambia su estado y lleva nota y revisor)',
+        `WITH k AS (
+             SELECT k.*,
+                    (SELECT p.id FROM ledger.cierres_checks p
+                      WHERE p.empresa_id = k.empresa_id AND p.tipo = k.tipo AND p.periodo = k.periodo
+                        AND p.clave = k.clave AND p.id < k.id ORDER BY p.id DESC LIMIT 1) AS previa
+               FROM ledger.cierres_checks k WHERE ${E('k.empresa_id')}
+         )
+         SELECT k.id, k.empresa_id, k.tipo, to_char(k.periodo, 'YYYY-MM') AS periodo, k.clave, k.automatico, k.estado,
+                k.resultado, p.estado AS estado_previo
+           FROM k LEFT JOIN ledger.cierres_checks p ON p.id = k.previa
+          WHERE (k.tipo = 'mensual' AND k.clave NOT IN ${listaSql(CHECKS_MENSUALES)})
+             OR (k.tipo = 'anual' AND k.clave NOT IN ${listaSql(CHECKS_ANUALES)})
+             OR (k.tipo = 'impuestos' AND k.clave NOT IN ${listaSql(CHECKS_IMPUESTOS)})
+             OR (k.automatico AND (k.estado <> CASE WHEN k.resultado = 'ok' THEN 'revisado' ELSE 'anomalia' END
+                                   OR k.nota IS NOT NULL OR k.revisado_por IS NOT NULL
+                                   OR (k.clave = 'por_certificar' AND k.resultado <> 'ok')))
+             OR (NOT k.automatico AND (p.id IS NULL OR p.resultado <> 'anomalia' OR k.resultado <> 'anomalia'
+                                       OR p.valor_esperado IS DISTINCT FROM k.valor_esperado
+                                       OR p.valor_obtenido IS DISTINCT FROM k.valor_obtenido
+                                       OR p.estado = k.estado OR k.revisado_por IS NULL
+                                       OR length(btrim(coalesce(k.nota, ''))) < 3))`,
     )
 
     /*

@@ -10,10 +10,31 @@ import db from '@adonisjs/lucid/services/db'
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
-import { exigirAcceso } from '#billing/empresa'
+import { exigirAcceso, exigirEmpresaPeticion } from '#billing/empresa'
 import { NoEncontrado } from '#shared/errores'
 import * as v from '#ledger/validators_bloqueos'
-import { BloqueoLibro, BloqueosEmpresa, ExcepcionBloqueo } from '#ledger/esquemas_bloqueos'
+import {
+    BloqueoLibro,
+    BloqueosEmpresa,
+    CheckCierre,
+    ChecksCierre,
+    ExcepcionBloqueo,
+    VerificacionCierre,
+} from '#ledger/esquemas_bloqueos'
+import {
+    checkPasa,
+    checksDelTipo,
+    checksVigentes,
+    historialChecks,
+    periodoDeCheck,
+    textoPeriodo,
+    verCheck,
+    TIPOS_CHECK,
+    type TipoCheck,
+} from '#ledger/checks'
+import VerificarCierre from '#ledger/actions/verificar_cierre'
+import RevisarCheck from '#ledger/actions/revisar_check'
+import { resolverEmpresaActiva } from '#core/empresas'
 import { bloqueosVigentes, listarBloqueos, listarExcepciones, verExcepcion } from '#ledger/bloqueos'
 import BloquearLibro from '#ledger/actions/bloquear_libro'
 import BloquearDuro from '#ledger/actions/bloquear_duro'
@@ -25,6 +46,31 @@ async function empresasDe(ids: number[] | null): Promise<number[]> {
     if (ids !== null) return ids
     const filas = (await db.from('core.empresas').orderBy('id').select('id')) as Array<{ id: number }>
     return filas.map((f) => Number(f.id))
+}
+
+/** `:tipo` de la ruta (404 si no es uno del catálogo). */
+function tipoDeRuta(tipo: string | undefined): TipoCheck {
+    if (!(TIPOS_CHECK as readonly string[]).includes(String(tipo))) {
+        throw new NoEncontrado(`Tipo de cierre desconocido: ${tipo}`)
+    }
+    return tipo as TipoCheck
+}
+
+/** Vigentes, los que faltan por verificar y si el cierre pasa. */
+async function armarChecks(empresaId: number, tipo: TipoCheck, periodo: string, conHistorial: boolean) {
+    const checks = await checksVigentes(db.connection(), empresaId, tipo, periodo)
+    const sinVerificar = checksDelTipo(tipo)
+        .filter((d) => !checks.some((c) => c.clave === d.clave))
+        .map((d) => ({ clave: d.clave, titulo: d.titulo }))
+    return {
+        empresa_id: empresaId,
+        tipo,
+        periodo: textoPeriodo(tipo, periodo),
+        checks,
+        sin_verificar: sinVerificar,
+        pasan: sinVerificar.length === 0 && checks.every(checkPasa),
+        ...(conHistorial ? { historial: await historialChecks(empresaId, tipo, periodo) } : {}),
+    }
 }
 
 const bloqueos: Ruta[] = [
@@ -144,4 +190,71 @@ const bloqueos: Ruta[] = [
     }),
 ]
 
-export default [...bloqueos]
+const checks: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/libro/cierres/:tipo/:periodo/checks',
+        operacion: 'libroChecksCierre',
+        resumen: 'Lista de verificación de cierre: checks vigentes de un mes o un año',
+        etiqueta: 'libro',
+        permiso: 'libro.ver',
+        query: v.checksValidator,
+        descripcion:
+            'tipo mensual (periodo AAAA-MM) o anual (AAAA). Cada check con su última fila: esperado, obtenido, resultado (ok, anomalia) y estado (revisado, anomalia, supervisado). Un check sin fila aún no se verificó. Con historial=true trae todas las filas, la más reciente primero.',
+        respuesta: { status: 200, descripcion: 'Checks del cierre', esquema: ChecksCierre },
+        handler: async (ctx, { params, query }) => {
+            const tipo = tipoDeRuta(String(params.tipo))
+            const periodo = periodoDeCheck(tipo, String(params.periodo))
+            const empresaId = query.empresa_id ?? (await resolverEmpresaActiva(ctx.contextoAccion()))
+            exigirEmpresaPeticion(ctx.empresa, empresaId)
+            return armarChecks(empresaId, tipo, periodo, query.historial === true)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/cierres/:tipo/:periodo/verificar',
+        operacion: 'libroVerificarCierre',
+        resumen: 'Correr los checks automáticos de un cierre',
+        etiqueta: 'libro',
+        permiso: 'libro.cerrar_periodo',
+        cuerpo: v.verificarCierreValidator,
+        idempotente: true,
+        descripcion:
+            'Guarda el resultado de cada check (fila nueva solo si cambió, así una supervisión sigue vigente mientras la anomalía sea la misma) y emite libro.checks_verificados. cerrarPeriodo y el bloqueo duro también lo corren y exigen los checks en ok o supervisados (422 checks_pendientes).',
+        respuesta: { status: 200, descripcion: 'Checks verificados', esquema: VerificacionCierre },
+        handler: (ctx, { params, cuerpo }) =>
+            new VerificarCierre().execute(
+                {
+                    empresa_id: cuerpo.empresa_id ?? null,
+                    tipo: tipoDeRuta(String(params.tipo)),
+                    periodo: String(params.periodo),
+                },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/libro/cierres/checks/:id/revisar',
+        operacion: 'libroRevisarCheck',
+        resumen: 'Supervisar un check en anomalía (con nota) o retirar la supervisión',
+        etiqueta: 'libro',
+        permiso: 'libro.cerrar_periodo',
+        cuerpo: v.revisarCheckValidator,
+        idempotente: true,
+        descripcion:
+            'estado supervisado (nota obligatoria) deja pasar el cierre con esa anomalía; anomalia la retira. 409 check_desactualizado si la fila ya no es la vigente; 422 check_en_orden si el check está ok.',
+        respuesta: { status: 201, descripcion: 'Check revisado', esquema: CheckCierre },
+        handler: async (ctx, { params, cuerpo }) => {
+            const id = Number(params.id)
+            const check = await verCheck(id)
+            if (!check) throw new NoEncontrado(`El check ${id} no existe`)
+            exigirAcceso(ctx, { empresa_id: check.empresa_id })
+            return new RevisarCheck().execute(
+                { check_id: id, estado: cuerpo.estado, nota: cuerpo.nota },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+]
+
+export default [...bloqueos, ...checks]

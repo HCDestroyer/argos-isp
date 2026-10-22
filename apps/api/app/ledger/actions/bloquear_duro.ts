@@ -3,6 +3,8 @@ import { Problema, type ErrorCampo } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
+import { exigirChecks } from '#ledger/checks'
+import VerificarCierre from '#ledger/actions/verificar_cierre'
 import {
     bloquearBloqueos,
     bloqueoVigente,
@@ -26,8 +28,9 @@ import {
  *       emitido hasta `hasta`;
  *     - `extractos_sin_conciliar`: ninguna línea de extracto con fecha ≤ `hasta` sin conciliación
  *       vigente.
- *   Los checks de cierre (cobros por liquidar, cadena de hash, check anual) se suman con la lista
- *   de verificación (PR B de la fase 6: 422 `checks_pendientes`).
+ * - Lista de verificación (PR B): verifica y exige los checks mensuales del mes de `hasta` y los
+ *   anuales del último año que el duro cubre entero (si no lo cubría ya el duro anterior): 422
+ *   `checks_pendientes`.
  * - Emite `libro.bloqueo_cambiado`.
  */
 
@@ -92,6 +95,21 @@ export default class BloquearDuro extends DomainAction<EntradaBloquearDuro, Bloq
                 `No se puede fijar el bloqueo duro hasta ${hasta}: ${errores.map((e) => e.message).join('; ')}`,
                 errores,
             )
+        }
+        // lista de verificación (§10.4, §10.5): el mes de `hasta` y, si cubre un fin de año, el año
+        const mes = hasta.slice(0, 7)
+        await new VerificarCierre().execute({ empresa_id: empresaId, tipo: 'mensual', periodo: mes }, t.ctx, {
+            trx: t.trx,
+        })
+        await exigirChecks(t.trx, empresaId, 'mensual', `${mes}-01`)
+        const anio = hasta.endsWith('-12-31') ? Number(hasta.slice(0, 4)) : Number(hasta.slice(0, 4)) - 1
+        if (anterior === null || anterior < `${anio}-12-31`) {
+            await new VerificarCierre().execute(
+                { empresa_id: empresaId, tipo: 'anual', periodo: String(anio) },
+                t.ctx,
+                { trx: t.trx },
+            )
+            await exigirChecks(t.trx, empresaId, 'anual', `${anio}-01-01`)
         }
         return guardarBloqueo(t, { empresaId, tipo: 'duro', hasta, motivo, confirmacion: esperada })
     }

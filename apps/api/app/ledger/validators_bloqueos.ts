@@ -81,3 +81,28 @@ export const crearExcepcionValidator = vine.compile(
 )
 
 export const revocarExcepcionValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+/*
+| Lista de verificación de cierre (§10.5)
+*/
+
+export const checksValidator = vine.compile(
+    vine.object({
+        empresa_id: empresa,
+        historial: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Todas las filas, la más reciente primero' }),
+    }),
+)
+
+export const verificarCierreValidator = vine.compile(vine.object({ empresa_id: empresa }))
+
+export const revisarCheckValidator = vine.compile(
+    vine.object({
+        estado: vine.enum(['supervisado', 'anomalia'] as const).meta({
+            description: 'supervisado deja pasar el cierre con esa anomalía; anomalia retira la supervisión',
+        }),
+        nota: motivo(),
+    }),
+)

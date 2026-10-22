@@ -5,7 +5,16 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { asignarPartidas } from '#ledger/diarios'
-import { periodoCerrado, periodoDe, resumenDelMes, verCierre, type CierreVista } from '#ledger/cierres'
+import {
+    LOCK_CIERRES,
+    periodoCerrado,
+    periodoDe,
+    resumenDelMes,
+    verCierre,
+    type CierreVista,
+} from '#ledger/cierres'
+import { exigirChecks } from '#ledger/checks'
+import VerificarCierre from '#ledger/actions/verificar_cierre'
 import { verificarCadena } from '#ledger/sellos'
 import SellarAsientos from '#ledger/actions/sellar_asientos'
 
@@ -28,6 +37,10 @@ import SellarAsientos from '#ledger/actions/sellar_asientos'
  * - Cadena de hash (§10.10): sella antes los asientos pendientes de la empresa (`SellarAsientos`
  *   anidada, esperando el lock de la cadena), recalcula la cadena completa y, si no verifica,
  *   responde 409 `integridad_rota` con el sello roto. El cierre guarda el último sello y su hash.
+ * - Lista de verificación (§10.5, fase 6): corre `cierres.verificar` del mes y exige cada check
+ *   en `ok` o supervisado (422 `checks_pendientes`, un `errors[]` por clave con esperado y
+ *   obtenido). Como la acción falla, esa verificación no queda guardada: para ver y supervisar las
+ *   anomalías, `POST /libro/cierres/mensual/:periodo/verificar` antes de cerrar.
  */
 
 export interface EntradaCerrarPeriodo {
@@ -39,8 +52,7 @@ export interface EntradaCerrarPeriodo {
     ahora?: Date
 }
 
-/** Espacio de advisory locks de cierres (primer entero). */
-export const LOCK_CIERRES = 3005
+export { LOCK_CIERRES } from '#ledger/cierres'
 
 export default class CerrarPeriodo extends DomainAction<EntradaCerrarPeriodo, CierreVista> {
     readonly nombre = 'libro.cerrar_periodo'
@@ -128,6 +140,14 @@ export default class CerrarPeriodo extends DomainAction<EntradaCerrarPeriodo, Ci
                 'Integridad del libro',
             )
         }
+
+        // lista de verificación de cierre (§10.5)
+        await new VerificarCierre().execute(
+            { empresa_id: empresaId, tipo: 'mensual', periodo: periodo.slice(0, 7) },
+            t.ctx,
+            { trx: t.trx },
+        )
+        await exigirChecks(t.trx, empresaId, 'mensual', periodo)
 
         const resumen = await resumenDelMes(t.trx, periodo, empresaId)
         const [fila] = (await t.trx

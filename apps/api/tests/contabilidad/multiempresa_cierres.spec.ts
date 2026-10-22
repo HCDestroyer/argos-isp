@@ -11,6 +11,8 @@ import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
+import VerificarCierre from '#ledger/actions/verificar_cierre'
+import RevisarCheck from '#ledger/actions/revisar_check'
 import { balanceSaldos } from '#ledger/estados_financieros'
 import { saldoCliente } from '#ledger/consultas'
 import { saldoAnticipos } from '#billing/cobros'
@@ -29,6 +31,30 @@ import {
 /**
  * Auditor contable · invariantes 6 (multiempresa), 7 (cierres) y 8 (importación modo B).
  */
+
+/**
+ * Cierra septiembre de B con la factura importada aún en 2.9.01: el check `apertura_cero` (§10.5) da
+ * anomalía mientras no exista el cierre de apertura (pendiente en `pendientes_fases.spec.ts`), y aquí
+ * se supervisa con su nota, como haría el contador; los demás checks tienen que pasar solos.
+ */
+async function cerrarSeptiembreConApertura(e: { B: number; ctx: Parameters<CerrarPeriodo['execute']>[1] }) {
+    const verificacion = await new VerificarCierre().execute(
+        { empresa_id: e.B, tipo: 'mensual', periodo: '2026-09' },
+        e.ctx,
+    )
+    const apertura = verificacion.checks.find((c) => c.clave === 'apertura_cero')!
+    if (apertura.estado === 'anomalia') {
+        await new RevisarCheck().execute(
+            {
+                check_id: apertura.id,
+                estado: 'supervisado',
+                nota: 'Importación en curso: 2.9.01 se cancela con el cierre de apertura',
+            },
+            e.ctx,
+        )
+    }
+    return new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+}
 
 test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
@@ -127,7 +153,7 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
             },
             e.ctx,
         )
-        const primero = await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+        const primero = await cerrarSeptiembreConApertura(e)
         const foto = normalizarResumen(primero.resumen)
         assert.equal(foto.asientos, 2)
         assert.equal(foto.debe, '345.67')
@@ -222,7 +248,7 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
 
         // reabrir y cerrar sin cambios: la misma foto
         await new ReabrirPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9, motivo: 'revisión' }, e.ctx)
-        const segundo = await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+        const segundo = await cerrarSeptiembreConApertura(e)
         assert.deepEqual(normalizarResumen(segundo.resumen), foto)
         // reabrir, registrar y cerrar: la foto cambia exactamente en ese asiento
         await new ReabrirPeriodo().execute(
@@ -243,7 +269,7 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
             },
             e.ctx,
         )
-        const cierre = await new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
+        const cierre = await cerrarSeptiembreConApertura(e)
         const tercero = normalizarResumen(cierre.resumen)
         assert.equal(tercero.asientos, foto.asientos + 1)
         assert.equal(tercero.debe, dec(foto.debe).plus('100.00').toFixed(2))
