@@ -47,9 +47,9 @@ import { crearClienteFila } from '#tests/core/fabricas'
  * H32 (arreglado por A3 en 0c5f602): la mora con IVA sin FEL (asiento `mora`, IVA a 2.1.02) no salía en el
  * libro de ventas; ahora es la fila interna `MORA`.
  *
- * H33 (abierto): el DTE de un aviso de cobro lleva sus montos en el mes de su `fecha_emision`, pero la
- * reclasificación 2.1.11 → 2.1.02 se fecha con la certificación: si la certificación cae en el mes
- * siguiente, el libro de ventas emitido de un mes no cuadra con 2.1.02 (inv. 20).
+ * H33 (arreglado por A3 en 4393daa): el DTE de un aviso llevaba sus montos en el mes de su
+ * `fecha_emision` aunque la reclasificación 2.1.11 → 2.1.02 cayera en el mes de la certificación;
+ * ahora los montos van al mes de la reclasificación y el DTE sale informativo en el suyo.
  */
 
 test.group('Auditor contable · hallazgos de la fase 6', (group) => {
@@ -274,7 +274,7 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         )
     })
 
-    test('H33: aviso cuyo DTE nace a fin de mes y se certifica en el mes siguiente: el libro de ventas emitido del primer mes no cuadra con 2.1.02', async ({
+    test('H33 (arreglado en 4393daa): aviso cuyo DTE nace a fin de mes y se certifica en el mes siguiente: el IVA va al mes de la reclasificación y el DTE sale informativo en su mes', async ({
         assert,
     }) => {
         const e = await empresasFel('obligatoria')
@@ -306,8 +306,22 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
             },
             { iva_libro: '0.00', iva_debito: '0.00' },
         )
+        const septiembre = await construirLibro('ventas', e.B, { desde, hasta: finDeMes(desde) })
+        assert.deepEqual(
+            septiembre.reporte.filas.map((f) => [f.origen, f.estado, f.iva]),
+            [['dte', 'reclasificado_posterior', '0.00']],
+        )
+        const hoy = hoyGuatemala()
+        const mes = { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) }
+        const octubre = await construirLibro('ventas', e.B, mes)
+        assert.include(
+            octubre.reporte.filas.map((f) => `${f.origen}:${f.estado}:${f.iva}`),
+            `dte:vigente:${s.facturas[0]!.iva}`,
+        )
+        assert.equal(
+            octubre.reporte.totales.iva,
+            aTexto(CERO.minus(await neto(e.B, '2.1.02', mes.desde, mes.hasta))),
+        )
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails(
-        'H33: el DTE de un aviso suma en el mes de su fecha de emisión y la reclasificación en el de su certificación',
-    )
+    })
 })
