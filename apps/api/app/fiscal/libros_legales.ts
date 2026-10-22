@@ -487,7 +487,12 @@ interface DocumentoVenta {
     iva: string
     anulado: boolean
     /** DTE de un documento cuyo IVA fue a 2.1.02 en otro mes (H31): fila sin montos */
-    informativo: 'certificado_posterior' | 'certificado_previo' | null
+    informativo:
+        | 'certificado_posterior'
+        | 'certificado_previo'
+        | 'reclasificado_posterior'
+        | 'reclasificado_previo'
+        | null
     referencia: string | null
 }
 
@@ -539,30 +544,63 @@ export async function libroVentasLegal(
               GROUP BY x.origen_tipo, x.origen_id
          ), debito AS (
              SELECT * FROM orig WHERE NOT aviso
-         ), dte AS (
-             SELECT 'dte' AS origen, d.documento_tipo AS clase, d.id,
-                    CASE WHEN d.documento_tipo IN ('factura', 'nota_debito') THEN d.documento_id END AS factura_id,
-                    (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date AS fecha_doc,
-                    CASE WHEN d.estado = 'anulado' AND NOT (o.id IS NOT NULL
-                              AND date_trunc('month', o.fecha) <> date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date))
-                         THEN coalesce(o.reverso, (d.anulado_en AT TIME ZONE 'America/Guatemala')::date) END AS fecha_anul,
-                    d.tipo_dte AS tipo, d.serie, d.numero, d.autorizacion,
-                    coalesce(d.receptor->>'id', 'CF') AS nit, coalesce(d.receptor->>'nombre', '') AS cliente,
-                    d.total::text AS total, d.iva::text AS iva,
-                    -- H31: el IVA del documento ya fue a 2.1.02 en el mes de su asiento, que es otro
-                    CASE WHEN o.id IS NOT NULL
-                          AND date_trunc('month', o.fecha) <> date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
-                         THEN CASE WHEN o.fecha < (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date
-                                   THEN 'certificado_posterior' ELSE 'certificado_previo' END END AS informativo,
-                    CASE WHEN o.id IS NOT NULL
-                         THEN (CASE d.documento_tipo WHEN 'factura' THEN 'Factura ' WHEN 'nota_debito' THEN 'Mora '
-                                    ELSE 'Nota ' END)
-                              || d.documento_id || ' del ' || to_char(o.fecha, 'YYYY-MM-DD') END AS referencia
+         ), dte_base AS (
+             SELECT d.*, o.id AS o_id, o.fecha AS o_fecha, o.reverso AS o_reverso,
+                    (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date AS emitido,
+                    -- H33: reclasificación 2.1.11 / 2.1.02 del aviso (o la NDEB de una mora aviso)
+                    r.fecha AS reclas, r.reverso AS reclas_reverso
                FROM fiscal.dte d
                LEFT JOIN debito o ON o.id = d.documento_id
                     AND o.clase = CASE d.documento_tipo WHEN 'nota_debito' THEN 'mora' ELSE d.documento_tipo END
+               LEFT JOIN LATERAL (
+                    SELECT x.fecha, (SELECT min(y.fecha) FROM ledger.asientos y WHERE y.reversa_de = x.id) AS reverso
+                      FROM ledger.asientos x
+                     WHERE x.empresa_id = d.empresa_id AND x.origen_tipo = 'reclasificacion'
+                       AND x.origen_id = d.id AND x.reversa_de IS NULL
+                     ORDER BY x.id LIMIT 1) r ON true
               WHERE d.empresa_id = :empresa AND d.autorizacion IS NOT NULL
                 AND d.estado IN ('certificado', 'anulacion_pendiente', 'anulado')
+         ), dte_marcado AS (
+             SELECT b.*,
+                    -- H31: el IVA ya fue a 2.1.02 en el mes del asiento del documento, que es otro
+                    (b.o_id IS NOT NULL AND date_trunc('month', b.o_fecha) <> date_trunc('month', b.emitido)) AS otro_mes,
+                    -- H33: el IVA del aviso llegó a 2.1.02 con la reclasificación, en otro mes
+                    (b.o_id IS NULL AND b.reclas IS NOT NULL
+                     AND date_trunc('month', b.reclas) <> date_trunc('month', b.emitido)) AS reclasificado
+               FROM dte_base b
+         ), dte AS (
+             -- la fila con montos: en el mes de emisión, o en el de la reclasificación (H33)
+             SELECT 'dte' AS origen, d.documento_tipo AS clase, d.id,
+                    CASE WHEN d.documento_tipo IN ('factura', 'nota_debito') THEN d.documento_id END AS factura_id,
+                    CASE WHEN d.reclasificado THEN d.reclas ELSE d.emitido END AS fecha_doc,
+                    CASE WHEN d.estado = 'anulado' AND NOT d.otro_mes
+                         THEN coalesce(d.o_reverso, d.reclas_reverso, (d.anulado_en AT TIME ZONE 'America/Guatemala')::date)
+                    END AS fecha_anul,
+                    d.tipo_dte AS tipo, d.serie, d.numero, d.autorizacion,
+                    coalesce(d.receptor->>'id', 'CF') AS nit, coalesce(d.receptor->>'nombre', '') AS cliente,
+                    d.total::text AS total, d.iva::text AS iva,
+                    CASE WHEN d.otro_mes
+                         THEN CASE WHEN d.o_fecha < d.emitido THEN 'certificado_posterior' ELSE 'certificado_previo' END
+                    END AS informativo,
+                    CASE WHEN d.otro_mes
+                         THEN (CASE d.documento_tipo WHEN 'factura' THEN 'Factura ' WHEN 'nota_debito' THEN 'Mora '
+                                    ELSE 'Nota ' END)
+                              || d.documento_id || ' del ' || to_char(d.o_fecha, 'YYYY-MM-DD')
+                         WHEN d.reclasificado
+                         THEN 'emitido el ' || to_char(d.emitido, 'YYYY-MM-DD')
+                    END AS referencia
+               FROM dte_marcado d
+             UNION ALL
+             -- H33: en el mes de emisión del DTE reclasificado en otro mes, fila informativa sin montos
+             SELECT 'dte', d.documento_tipo, d.id,
+                    CASE WHEN d.documento_tipo IN ('factura', 'nota_debito') THEN d.documento_id END,
+                    d.emitido, NULL::date,
+                    d.tipo_dte, d.serie, d.numero, d.autorizacion,
+                    coalesce(d.receptor->>'id', 'CF'), coalesce(d.receptor->>'nombre', ''),
+                    d.total::text, d.iva::text,
+                    CASE WHEN d.reclas > d.emitido THEN 'reclasificado_posterior' ELSE 'reclasificado_previo' END,
+                    'reclasificación del ' || to_char(d.reclas, 'YYYY-MM-DD')
+               FROM dte_marcado d WHERE d.reclasificado
          ), facturas AS (
              -- sin FEL (o certificada en otro mes): la fila interna en el mes de su asiento
              SELECT 'interno' AS origen, CASE WHEN f.tipo = 'mora' THEN 'mora' ELSE 'factura' END AS clase,
@@ -676,7 +714,7 @@ export async function libroVentasLegal(
             fecha: r.fecha,
             origen: r.origen,
             documento: `${nombre} ${r.id}${anulacion ? ' (anulación)' : ''}${
-                r.referencia && r.informativo ? ` · IVA en ${r.referencia}` : ''
+                !r.referencia ? '' : r.informativo ? ` · IVA en ${r.referencia}` : ` · ${r.referencia}`
             }`,
             tipo: r.tipo,
             serie: r.serie,

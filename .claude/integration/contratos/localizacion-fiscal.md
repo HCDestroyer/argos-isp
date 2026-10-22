@@ -1198,14 +1198,16 @@ Rama `a3/fase6` desde `main`. Cuatro PRs en orden, cada una auditada antes de la
     | `factura` (`facturas.generar`, `emitir_cargo_unico`, adicionales y descuentos de lealtad como líneas, `facturas.sustituir` para la nueva, confirmación de una `por_certificar`) | Sí, salvo aviso de cobro (`2.1.11`) | Fila interna en el mes del asiento o DTE del mismo mes; aviso: el DTE |
     | `mora` (`facturas.vencer`, `mora_con_iva`) | Sí con IVA, salvo aviso | Fila interna `MORA` o NDEB del mismo mes; aviso: la NDEB (H32) |
     | `nota_credito` (`facturas.nota_credito`, canje de lealtad sobre factura emitida, NCRE de una sustitución) | Sí (o `2.1.11` en un aviso sin DTE) | Fila interna o NCRE del mismo mes, en negativo; sobre aviso sin DTE: no |
-    | `reclasificacion` (`2.1.11 / 2.1.02` al certificar un aviso o su NDEB) | Sí | El DTE del aviso en su fecha de emisión (= fecha de la reclasificación) |
+    | `reclasificacion` (`2.1.11 / 2.1.02` al certificar un aviso o su NDEB) | Sí | El DTE del aviso: en su mes de emisión, o en el de la reclasificación si es otro (H33) |
+    | Reverso de `reclasificacion` (anular un aviso certificado) | Sí | La fila `anulacion` del DTE en el mes del reverso; sin efecto distinto en cifras |
     | Reversos de `factura`, `mora`, `nota_credito` (`facturas.anular`, `fel.anular_dte`, anulación de nota, sustitución) | Sí | Cero en el mismo mes o fila `anulacion` negativa en el mes del reverso (H28) |
     | `factura` de saldos iniciales e importadas (`clave_externa`) | No (`2.9.01`) | No |
     | `castigo`, `provision` (cartera) | No (`2.1.11` de avisos sin DTE, `1.1.12`, `5.3.02`) | No |
     | `bonificacion`, `diferencia_cobro`, `pago` (retenciones a `1.1.05`/`1.1.06`), `sorteo`, `compra`, `pago_proveedor`, `egreso`, `diferido`, `depreciacion`, `alta_activo`, `baja_activo`, `cierre_caja`, `deposito`, `traslado`, `banco`, `liquidacion_cobro`, `cierre_anual` | No | No |
     | `ajuste` (asiento manual) | Solo si el usuario la usa | No: no es documento de venta; un ajuste a `2.1.02` deja el libro distinto de la cuenta (contador) |
 
-    Quedan para después: la liquidación del IVA (fase 7, `impuestos`) moverá `2.1.02` sin ser venta, así que el invariante deberá excluirla; y un DTE de aviso cuya reclasificación se traslade de mes por un bloqueo.
+    Queda para después: la liquidación del IVA (fase 7, `impuestos`) moverá `2.1.02` sin ser venta, así que el invariante deberá excluirla.
+  - **H33 · aviso reclasificado en otro mes.** `fiscal.dte.fecha_emision` es la creación del DTE y la reclasificación `2.1.11 / 2.1.02` (origen `reclasificacion`, `origen_id` = el DTE) va con la fecha de certificación o, bajo un bloqueo, el primer día abierto. Si cae en otro mes que `fecha_emision`, el DTE del aviso (o la NDEB de una mora aviso) lleva sus montos en el mes de la reclasificación (`documento` «· emitido el AAAA-MM-DD») y en el mes de emisión sale una fila informativa sin montos (`reclasificado_posterior` o `reclasificado_previo`). Su anulación va con el reverso de la reclasificación.
   - Preguntas al contador: filas 56 (anulación en otro mes), 57 (mes de la retención) 58 (venta sin FEL certificada en otro mes) y 59 (mora sin IVA) de §15.
 - **Desvío (x) · evento `libro.emitido`** (`emision_id`, `empresa_id`, `libro`, `desde`, `hasta`, `folio_inicial`, `folio_final`, `formato`, `sha256`, `reimpresion_de`), agregado a §11.3, `contratos/eventos.md` y `CLAUDE.md`.
 - Archivos en el almacenamiento de comprobantes (`COMPROBANTES_DIR/libros/<empresa>/<libro>/<uuid>.<ext>`), nunca en la base; las dos tablas son de solo inserción (trigger y `REVOKE`).
