@@ -161,14 +161,14 @@ describe('calendario fiscal', () => {
         await vista.find('[data-prueba="mes-anterior"]').trigger('click')
         await esperar(() => expect(vista.find('[data-prueba="calendario-titulo-mes"]').text()).toBe('Agosto 2026'))
         await esperar(() => expect(vista.findAll('[data-prueba="agenda-motivo"]').map(m => m.text())).toEqual(['No hubo retenciones de ISR en el mes (según el libro)', 'La empresa no era agente de retención de IVA en ese periodo']))
-        expect(vista.find('[data-obligacion="2"]').classes()).toContain('opacity-60')
+        expect(vista.find('[data-obligacion="2"]').classes()).toContain('line-through')
         expect(vista.find('[data-fecha="2026-08-31"] [data-obligacion="1"]').attributes('data-estado')).toBe('presentada')
     })
 
     it('lista: filtros por estado e impuesto en la URL, motivo de las que no aplican y error visible con Reintentar', async () => {
         const vista = await mountSuspended(PaginaCalendario, { route: '/fiscal/calendario?vista=lista&estado=no_aplica' })
         await esperar(() => expect(vista.findAll('[data-prueba="fila-motivo"]').length).toBe(2))
-        expect(vista.find('[data-prueba="tabla-obligaciones"] tbody tr').classes()).toContain('opacity-60')
+        expect(vista.find('[data-prueba="tabla-obligaciones"] tbody tr').classes()).toContain('bg-elevated/50')
 
         simularFalla('GET /api/v1/fiscal/obligaciones', 500)
         const rota = await mountSuspended(PaginaCalendario, { route: '/fiscal/calendario' })

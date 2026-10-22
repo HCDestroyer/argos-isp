@@ -125,7 +125,7 @@ function etiquetaDe(obligacion: ObligacionFiscal): string {
                         size="xs"
                         block
                         class="justify-start"
-                        :class="{ 'opacity-60 line-through decoration-1': obligacion.estado === 'no_aplica' }"
+                        :class="{ 'line-through decoration-1': obligacion.estado === 'no_aplica' }"
                         :ui="{ label: 'truncate' }"
                         :aria-label="etiquetaDe(obligacion)"
                         :title="etiquetaDe(obligacion)"

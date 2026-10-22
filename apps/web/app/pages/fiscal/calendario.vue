@@ -152,7 +152,7 @@ const metaTabla = {
     class: {
         tr: (fila: { original: ObligacionFiscal }) => [
             'cursor-pointer',
-            fila.original.estado === 'no_aplica' ? 'opacity-60' : '',
+            fila.original.estado === 'no_aplica' ? 'bg-elevated/50' : '',
             fila.original.vencida ? 'bg-error/5' : '',
         ].join(' '),
     },
@@ -434,14 +434,14 @@ onMounted(() => {
                                 variant="outline"
                                 block
                                 class="items-start justify-start text-left"
-                                :class="{ 'opacity-60': obligacion.estado === 'no_aplica', 'ring-error/60': obligacion.vencida }"
+                                :class="{ 'border-dashed bg-elevated/50': obligacion.estado === 'no_aplica', 'ring-error/60': obligacion.vencida }"
                                 :data-agenda="obligacion.id"
                                 @click="abrirDetalle(obligacion)"
                             >
                                 <span class="flex min-w-0 flex-1 flex-col gap-1">
                                     <span
                                         class="text-sm font-medium"
-                                        :class="obligacion.vencida ? 'text-error' : 'text-highlighted'"
+                                        :class="obligacion.vencida ? 'text-error' : obligacion.estado === 'no_aplica' ? 'text-muted line-through decoration-1' : 'text-highlighted'"
                                     >{{ obligacion.nombre }}</span>
                                     <span class="text-xs font-normal text-muted">
                                         {{ periodoObligacion(obligacion) }}<template v-if="consolidado"> · {{ nombreEmpresa(obligacion.empresa_id) }}</template><template v-if="obligacion.formulario"> · {{ obligacion.formulario }}</template>
@@ -538,7 +538,10 @@ onMounted(() => {
                         </template>
                         <template #nombre-cell="{ row }">
                             <div class="flex min-w-0 flex-col">
-                                <span class="text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
+                                <span
+                                    class="text-sm font-medium"
+                                    :class="row.original.estado === 'no_aplica' ? 'text-muted line-through decoration-1' : 'text-highlighted'"
+                                >{{ row.original.nombre }}</span>
                                 <span class="text-xs text-muted">{{ periodoObligacion(row.original) }}<template v-if="consolidado"> · {{ nombreEmpresa(row.original.empresa_id) }}</template></span>
                                 <span
                                     v-if="row.original.estado === 'no_aplica'"
