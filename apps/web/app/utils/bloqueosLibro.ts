@@ -153,6 +153,9 @@ export function problemaBloqueoLegible(problema: Problem): Problem {
         })
         return { ...problema, title: 'Faltan requisitos para el bloqueo duro', detail: faltan.length ? faltan.join(' · ') : problema.detail }
     }
+    if (codigo === 'checks_pendientes') {
+        return problemaCheckLegible(problema)
+    }
     if (codigo === 'periodo_bloqueado') {
         const tipo = problema.errors?.[0]?.rule
         const visual = tipo && Object.hasOwn(TIPOS_BLOQUEO, tipo) ? TIPOS_BLOQUEO[tipo as TipoBloqueo] : null

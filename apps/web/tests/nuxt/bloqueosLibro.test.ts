@@ -139,7 +139,16 @@ describe('bloqueos del libro', () => {
         for (const boton of ['abrir-bloquear', 'abrir-desbloquear', 'abrir-duro', 'abrir-excepcion', 'revocar-excepcion']) {
             expect(vista.find(`[data-prueba="${boton}"]`).exists(), boton).toBe(false)
         }
-        expect(vista.find('[data-prueba="procesos-bloqueados"]').exists()).toBe(false)
+        // La última corrida se lee con `facturas.ver`; correrla pide `facturas.generar`.
+        await esperar(() => expect(vista.find('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="correr-facturar"]').exists()).toBe(false)
+        expect(vista.find('[data-prueba="correr-vencer"]').exists()).toBe(false)
         vista.unmount()
+
+        useUsuarioActual().value = { ...meAdmin, permisos: meAdmin.permisos.filter(p => p !== 'facturas.ver' && p !== 'facturas.generar') }
+        const sinFacturas = await mountSuspended(PaginaBloqueos, { route: '/libro/bloqueos' })
+        await esperar(() => expect(sinFacturas.find('[data-tipo="global"] [data-prueba="bloqueo-vigente"]').exists()).toBe(true))
+        expect(sinFacturas.find('[data-prueba="procesos-bloqueados"]').exists()).toBe(false)
+        sinFacturas.unmount()
     })
 })

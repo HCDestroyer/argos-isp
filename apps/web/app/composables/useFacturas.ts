@@ -86,5 +86,13 @@ export function useFacturas() {
         }))
     }
 
-    return { listar, ver, anular, notaCredito, sustituir, generar, vencer }
+    /**
+     * `GET /facturas/corridas` (`facturas.ver`): la última corrida de facturar y de vencer de cada
+     * empresa, con lo que quedó pendiente por un bloqueo del libro. No corre nada.
+     */
+    function corridas(): Promise<Resultado<CorridasFacturacion[]>> {
+        return resolver(api.GET('/api/v1/facturas/corridas'))
+    }
+
+    return { listar, ver, anular, notaCredito, sustituir, generar, vencer, corridas }
 }
