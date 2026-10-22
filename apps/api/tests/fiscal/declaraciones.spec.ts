@@ -3,7 +3,7 @@ import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { errorDe, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
-import { afirmarLibroConLiquidacion } from '#tests/fiscal/ayudas_declaraciones'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
 import { cola, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
@@ -74,6 +74,10 @@ const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemal
 const MES = HOY.slice(0, 7)
 const FIN = DateTime.fromISO(`${MES}-01`).endOf('month').toISODate()!
 const SIGUIENTE = DateTime.fromISO(`${MES}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
+
+const DESPUES = DateTime.fromISO(`${MES}-01`).plus({ months: 2 }).toFormat('yyyy-MM')
+const reloj = (mes: string) => (relojFiscal.ahora = () => new Date(`${mes}-05T18:00:00Z`))
+const mesTras = (mes: string) => DateTime.fromISO(`${mes}-01`).plus({ months: 1 }).toFormat('yyyy-MM')
 
 const calcular = (
     ctx: ContextoAccion,
@@ -267,7 +271,7 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
             () => db.from('fiscal.declaraciones').where('id', borrador.id).delete(),
             /no se borran/,
         )
-        await afirmarLibroConLiquidacion(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('remanente de crédito al mes siguiente; datos_hash detecta el cambio (409); sustitutiva con la diferencia', async ({
@@ -342,7 +346,7 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
             new RevisarDeclaracion().execute({ declaracion_id: siguiente.id }, e.ctx),
         )
         assert.equal(desactualizado.codigo, 'declaracion_desactualizada')
-        await afirmarLibroConLiquidacion(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('retenciones recibidas: el borrador las resta y cuadra con RET_IVA_REC; el pago anulado las devuelve', async ({
@@ -396,7 +400,7 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
         // el mes no ha terminado: no se revisa
         const enCurso = await errorDe(new RevisarDeclaracion().execute({ declaracion_id: otra.id }, e.ctx))
         assert.equal(enCurso.codigo, 'periodo_en_curso')
-        await afirmarLibroConLiquidacion(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('reglas: antes de inicio_libros, obligación que no aplica, periodo futuro', async ({ assert }) => {
@@ -413,7 +417,127 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
             ),
         )
         assert.deepEqual([pc.status, pc.codigo], [422, 'obligacion_no_aplica'])
-        await afirmarLibroConLiquidacion(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+})
+
+test.group('Fase 7 · cascada de remanentes (H34)', (group) => {
+    const original = relojFiscal.ahora
+    group.each.teardown(async () => {
+        relojFiscal.ahora = original
+        await soloEmpresaPrincipal()
+    })
+
+    async function excepcion(e: Awaited<ReturnType<typeof prepararEmpresasGt>>) {
+        await new CrearExcepcionBloqueo().execute(
+            {
+                empresa_id: e.B,
+                tipo: 'impuestos',
+                motivo: 'Factura del mes recibida tarde',
+                hasta_en: new Date(Date.now() + 3_600_000).toISOString(),
+            },
+            e.ctx,
+        )
+    }
+
+    test('una sustitutiva que cambia el remanente rectifica en cascada los dos meses siguientes ya revisados (uno presentado)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        await venta(e.B, MES, '112.00') // IVA 12
+        await compra(e.ctx, e.B, HOY, '336.00') // crédito 36 → remanente 24
+        reloj(SIGUIENTE)
+        const octubre = await calcular(e.ctx, e.B, MES)
+        await new RevisarDeclaracion().execute({ declaracion_id: octubre.id }, e.ctx)
+        reloj(DESPUES)
+        const noviembre = await calcular(e.ctx, e.B, SIGUIENTE)
+        await new RevisarDeclaracion().execute({ declaracion_id: noviembre.id }, e.ctx)
+        await new MarcarDeclaracionPresentada().execute(
+            {
+                declaracion_id: noviembre.id,
+                numero_formulario: '2237-11',
+                fecha_presentacion: `${DESPUES}-02`,
+            },
+            e.ctx,
+        )
+        reloj(mesTras(DESPUES))
+        const diciembre = await calcular(e.ctx, e.B, DESPUES)
+        assert.include(diciembre.totales, { remanente_credito_anterior: '24.00', remanente_credito: '24.00' })
+        await new RevisarDeclaracion().execute({ declaracion_id: diciembre.id }, e.ctx)
+
+        // compra tardía del primer mes: su sustitutiva deja 30 y rectifica noviembre y diciembre
+        await excepcion(e)
+        await compra(e.ctx, e.B, HOY, '56.00') // crédito 6
+        const sustitutiva = await calcular(e.ctx, e.B, MES, { sustitutiva: true })
+        const revisada = await new RevisarDeclaracion().execute({ declaracion_id: sustitutiva.id }, e.ctx)
+        assert.deepEqual(
+            revisada.cascada.map((m) => [
+                m.periodo,
+                m.version,
+                m.estaba_presentada,
+                m.remanente_credito_anterior,
+                m.remanente_credito,
+            ]),
+            [
+                [SIGUIENTE, 2, true, '30.00', '30.00'],
+                [DESPUES, 2, false, '30.00', '30.00'],
+            ],
+        )
+        // noviembre vuelve a «por presentar» como rectificativa; su versión presentada queda sustituida
+        const obligacion = await db
+            .from('fiscal.obligaciones')
+            .where({ empresa_id: e.B, impuesto: 'iva_mensual', periodo_desde: `${SIGUIENTE}-01` })
+            .firstOrFail()
+        assert.deepEqual(
+            [obligacion.estado, obligacion.motivo_estado, Number(obligacion.declaracion_id)],
+            ['borrador', 'rectificativa', revisada.cascada[0]!.declaracion_id],
+        )
+        const presentadaAntes = await db.from('fiscal.declaraciones').where('id', noviembre.id).firstOrFail()
+        assert.equal(presentadaAntes.estado, 'sustituida')
+        const avisos = await eventos('declaracion.revisada', 'cascada_de', sustitutiva.id)
+        assert.deepEqual(
+            avisos.map((a) => [a.motivo, a.periodo_desde]),
+            [
+                ['cascada', `${SIGUIENTE}-01`],
+                ['cascada', `${DESPUES}-01`],
+            ],
+        )
+        // sin asiento extra: el crédito no usado queda en 1.1.04 (30) y todo cuadra
+        assert.equal(await saldoCuenta(e.B, '1.1.04'), '30.00')
+        for (const mes of [MES, SIGUIENTE, DESPUES]) {
+            const checks = await checksVigentes(db.connection(), e.B, 'impuestos', `${mes}-01`)
+            assert.isTrue(
+                checks.every((c) => c.resultado === 'ok'),
+                mes,
+            )
+        }
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('la cascada se detiene donde el remanente no cambia', async ({ assert }) => {
+        const e = await prepararEmpresasGt()
+        await venta(e.B, MES, '224.00') // IVA 24
+        await compra(e.ctx, e.B, HOY, '112.00') // crédito 12 → a pagar 12, remanente 0
+        reloj(SIGUIENTE)
+        const octubre = await calcular(e.ctx, e.B, MES)
+        await new RevisarDeclaracion().execute({ declaracion_id: octubre.id }, e.ctx)
+        reloj(DESPUES)
+        const noviembre = await calcular(e.ctx, e.B, SIGUIENTE)
+        await new RevisarDeclaracion().execute({ declaracion_id: noviembre.id }, e.ctx)
+
+        await excepcion(e)
+        await compra(e.ctx, e.B, HOY, '56.00') // crédito 6: a pagar 6, remanente sigue en 0
+        const sustitutiva = await calcular(e.ctx, e.B, MES, { sustitutiva: true })
+        const revisada = await new RevisarDeclaracion().execute({ declaracion_id: sustitutiva.id }, e.ctx)
+        assert.include(revisada.totales, { a_pagar: '6.00', remanente_credito: '0.00' })
+        assert.deepEqual(revisada.cascada, [])
+        const intacta = await db.from('fiscal.declaraciones').where('id', noviembre.id).firstOrFail()
+        assert.equal(intacta.estado, 'revisada')
+        assert.sameDeepMembers(await partidas('liquidacion_impuesto', sustitutiva.id), [
+            ['1.1.04', '0.00', '6.00', null],
+            ['2.1.06', '6.00', '0.00', null],
+        ])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })
 
@@ -501,7 +625,7 @@ test.group('Fase 7 · pequeño contribuyente y NCRE', (group) => {
         assert.equal(await saldoCuenta(e.B, '2.1.09'), '0.00')
         // nada queda en 2.1.02 de la empresa PC
         assert.equal(Number(await saldoCuenta(e.B, '2.1.02')), 0)
-        await afirmarLibroConLiquidacion(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('una NCRE sin certificar del mes impide liquidar (409 ncre_sin_certificar)', async ({ assert }) => {
@@ -518,7 +642,7 @@ test.group('Fase 7 · pequeño contribuyente y NCRE', (group) => {
         const error = await errorDe(new RevisarDeclaracion().execute({ declaracion_id: borrador.id }, e.ctx))
         assert.deepEqual([error.status, error.codigo], [409, 'ncre_sin_certificar'])
         assert.isNull(await bloqueoVigente(db.connection(), e.B, 'impuestos'))
-        await afirmarLibroConLiquidacion(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })
 
@@ -636,6 +760,6 @@ test.group('Fase 7 · declaraciones por la API', (group) => {
                 .json({ impuesto: 'iva_mensual', periodo: MES }),
             403,
         )
-        await afirmarLibroConLiquidacion(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })

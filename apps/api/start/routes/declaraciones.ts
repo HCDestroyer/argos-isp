@@ -10,7 +10,7 @@ import { empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirEmpresaPeticion } from '#billing/empresa'
 import db from '@adonisjs/lucid/services/db'
 import * as v from '#fiscal/validators'
-import { Declaracion, DeclaracionDetalle } from '#fiscal/esquemas'
+import { Declaracion, DeclaracionDetalle, DeclaracionRevisada } from '#fiscal/esquemas'
 import { hashActual, listarDeclaraciones, verDeclaracion } from '#fiscal/declaraciones'
 import CalcularDeclaracion from '#fiscal/actions/calcular_declaracion'
 import RevisarDeclaracion from '#fiscal/actions/revisar_declaracion'
@@ -74,8 +74,12 @@ const declaraciones: Ruta[] = [
         parametros: ID,
         idempotente: true,
         descripcion:
-            'Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Emite declaracion.revisada y libro.bloqueo_cambiado.',
-        respuesta: { status: 200, descripcion: 'Declaración revisada', esquema: Declaracion },
+            'Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Si cambia el remanente que deja, rectifica en la misma transacción cada mes posterior ya revisado (cascada[]; 409 cascada_bloqueada si uno no se puede). Emite declaracion.revisada (motivo cascada en los rectificados) y libro.bloqueo_cambiado.',
+        respuesta: {
+            status: 200,
+            descripcion: 'Declaración revisada y los meses rectificados en cascada',
+            esquema: DeclaracionRevisada,
+        },
         handler: (ctx, { params }) =>
             new RevisarDeclaracion().execute({ declaracion_id: Number(params.id) }, ctx.contextoAccion()),
     }),
