@@ -63,9 +63,24 @@ Errores: 422 `localizacion_no_instalada`, `pais_no_soportado`, `parametro_no_edi
 
 Lecturas (`fel.ver`): `GET /fel/proveedores` (catálogo de certificadores: campos de credenciales, ambientes, `solo_pruebas`, capacidades), `GET /dte` (cursor, `?empresas=todas`, `estado` repetible, `desde`/`hasta` por fecha de emisión), `/dte/:id`, `/dte/:id/intentos` (bitácora ante el certificador, sin credenciales), `/dte/:id/xml`, `/dte/:id/pdf` (si el certificador lo devolvió). La nota de crédito trae su NCRE (`dte_id`, `fel_estado`, `fel_uuid`, `fel_serie`, `fel_numero`, `fel_error`) y la factura `sustituida_por` / `sustituye_a`. Para otros módulos (portal, notify): `dteVigenteDe(documento_tipo, documento_id)` en `fel/dte.ts` devuelve el DTE con valor fiscal (`certificado`, `anulacion_pendiente` o `anulado`) o null. La factura trae `fel_uuid`, `fel_serie`, `fel_numero`, `fel_estado`, `fel_error` y `dte_id` desde `fiscal.dte` (las columnas `billing.facturas.fel_*` del sistema anterior ya no se escriben; se migraron como DTE `certificado`, §12.4), además de `aviso_cobro`, `certificar_al` y `tipo_dte`.
 
+## Libros legales con folio (fase 6 PR D, contrato §7 y §20)
+
+- `libros_legales.ts`: Diario (movimiento por fila y total por partida; partida de `ledger.asientos_partidas`), Mayor (saldo inicial, movimientos con saldo acumulado y saldo final por cuenta), Compras (`libros.ts`, por mes del IVA) y Ventas (DTE certificados por fecha de emisión; sin FEL, facturas que no son aviso y sus notas; anulados en cero) con la forma de `/reportes/*`. La columna `fila` marca `movimiento`, `total`, `saldo_inicial` o `saldo_final`; `totales` suma solo movimientos.
+- `libros_pdf.ts`: PDF con pdfkit (carta horizontal): encabezado legal en cada página, «Página N de M», «Vienen»/«Van» con los acumulados, «Total del libro»; vista previa con la marca de agua «Borrador sin folio», emisión con el folio por página, la marca de reimpresión y el último sello y hash de la cadena al pie.
+- `libros_emisiones.ts`: habilitaciones y emisiones (lectura), estado de folios (`foliosDe`), archivos en `COMPROBANTES_DIR/libros/` (descarga con SHA-256 recalculado: 409 `archivo_alterado`) y `generarArchivoLibro` (PDF, o XLSX con el folio de cada fila).
+- Tablas de solo inserción: `fiscal.libros_habilitados` (rangos correlativos por libro, trigger) y `fiscal.libros_emisiones` (folio siguiente y dentro de lo habilitado, trigger; `reimpresion_de`).
+
+| Acción             | Ruta                                                     | Qué hace                                                                                                                                                                                                            |
+| ------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `libros.habilitar` | `POST /libros/habilitaciones`                            | Registra un rango de folios (correlativo al anterior del libro: 422 `habilitacion_no_correlativa`)                                                                                                                  |
+| `libros.emitir`    | `POST /libros/:libro/emitir { desde, hasta?, formato? }` | Meses cerrados y bajo bloqueo `global` o `duro` (422 `periodo_sin_bloqueo`), cadena verificada (409 `integridad_rota`), folios habilitados (422 `folios_agotados`); guarda archivo y SHA-256; emite `libro.emitido` |
+
+Lecturas (`libros.ver`): `GET /libros/diario`, `/libros/mayor`, `/libros/ventas`, `/libros/compras` (`formato` `json`, `csv`, `xlsx`, `pdf`), `GET /libros/folios`, `GET /libros/habilitaciones`, `GET /libros/emisiones[/:id]`, `GET /libros/emisiones/:id/archivo`.
+
 ## Eventos
 
 - Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`).
+- Libros: `libro.emitido` (emisión oficial con folio).
 - FEL: `dte.certificado`, `dte.rechazado` (`definitivo`), `dte.anulado`, `fel.contingencia_cambiada` y `factura.sustituida`. En `obligatoria` con `emitir`, `factura.emitida` sale al certificarse.
 - Consume `fiscal.parametros_cambiados` (grupo `billing`) para invalidar la caché y `pago.registrado` (`ConsumidorFel`) para pedir la certificación de los avisos cubiertos.
 

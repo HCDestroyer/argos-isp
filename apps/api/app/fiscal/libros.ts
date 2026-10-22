@@ -7,9 +7,9 @@ import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
- * Libros legales (contrato de localización fiscal §7). Por ahora el **Libro de compras y servicios
- * recibidos** (fase 5) en vista previa (`GET /libros/compras`): la emisión con folio llega con los
- * bloqueos (fase 6).
+ * Libros legales (contrato de localización fiscal §7): el **Libro de compras y servicios
+ * recibidos** (fase 5) en vista previa (`GET /libros/compras`). La emisión con folio y los demás
+ * libros (Diario, Mayor, Ventas) están en `#fiscal/libros_legales` (fase 6 PR D).
  *
  * Filas, por empresa y por mes del IVA:
  * - cada compra con `periodo_iva` en el rango, con sus valores tal como se registró (`registro`);
@@ -73,8 +73,8 @@ const COLUMNAS_DINERO = [
     'iva_credito',
 ] as const
 
-/** Filas del libro de compras de la empresa en el rango de meses. */
-async function filasLibroCompras(
+/** Filas del libro de compras de la empresa en el rango de meses (también para `#fiscal/libros_legales`). */
+export async function filasLibroCompras(
     cliente: QueryClientContract,
     empresaId: number,
     desde: string,

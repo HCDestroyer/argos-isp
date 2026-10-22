@@ -27,12 +27,8 @@ const PENDIENTES: Pendiente[] = [
     },
     // «un periodo con bloqueo duro rechaza cualquier asiento»: activado en `fase6.spec.ts` (fase 6 PR A), con
     // 409 bloqueo_duro según la tabla de errores §11 (desvío (c) de §20), no 422 periodo_cerrado
-    {
-        titulo: 'libros emitidos solo bajo bloqueo, con folios correlativos',
-        fase: 'localización fiscal, fase 5',
-        criterio:
-            'Contrato §7: fiscal.libros_emisiones con folios sin huecos por (empresa, libro) dentro del rango habilitado; 422 sin bloqueo; sha256 guardado igual al del archivo.',
-    },
+    // «libros emitidos solo bajo bloqueo, con folios correlativos»: activado en `libros_legales.spec.ts` (fase 6 PR D,
+    // inv. 20 de `verificarLibro`)
     {
         titulo: '2.9.01 Saldos de apertura queda en 0 después de la importación y el cierre',
         fase: 'localización fiscal, fase 5 (cierre; estudio Odoo n.º 39)',

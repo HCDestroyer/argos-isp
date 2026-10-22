@@ -102,7 +102,12 @@ function celdaXlsx(ref: string, valor: ValorCelda, columna: Columna | null, negr
     return `<c r="${ref}" t="inlineStr"${negrita ? ' s="1"' : ''}><is><t xml:space="preserve">${xml(String(valor))}</t></is></c>`
 }
 
-function hoja(reporte: Reporte): string {
+/** Opciones del XLSX: renglones de texto en negrita antes de la tabla (encabezado de un libro legal). */
+export interface OpcionesXlsx {
+    encabezado?: string[]
+}
+
+function hoja(reporte: Reporte, opciones: OpcionesXlsx = {}): string {
     const filas: string[] = []
     const agregar = (valores: ValorCelda[], negrita: boolean, datos: boolean) => {
         const r = filas.length + 1
@@ -113,6 +118,8 @@ function hoja(reporte: Reporte): string {
             .join('')
         filas.push(`<row r="${r}">${celdas}</row>`)
     }
+    for (const linea of opciones.encabezado ?? []) agregar([linea], true, false)
+    const filaTitulos = filas.length + 1
     agregar(
         reporte.columnas.map((c) => c.titulo),
         true,
@@ -135,7 +142,7 @@ function hoja(reporte: Reporte): string {
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-        '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+        `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${filaTitulos}" topLeftCell="A${filaTitulos + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
         `<cols>${anchos}</cols>` +
         `<sheetData>${filas.join('')}</sheetData>` +
         '</worksheet>'
@@ -163,7 +170,7 @@ function nombreHoja(titulo: string): string {
     return titulo.replaceAll(/[[\]:*?/\\]/g, ' ').slice(0, 31) || 'Reporte'
 }
 
-export function aXlsx(reporte: Reporte): Buffer {
+export function aXlsx(reporte: Reporte, opciones: OpcionesXlsx = {}): Buffer {
     const archivos: Array<[string, string]> = [
         [
             '[Content_Types].xml',
@@ -198,7 +205,7 @@ export function aXlsx(reporte: Reporte): Buffer {
                 '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
                 '</Relationships>',
         ],
-        ['xl/worksheets/sheet1.xml', hoja(reporte)],
+        ['xl/worksheets/sheet1.xml', hoja(reporte, opciones)],
         ['xl/styles.xml', ESTILOS],
     ]
     return zipSinCompresion(archivos.map(([nombre, contenido]) => [nombre, Buffer.from(contenido, 'utf8')]))

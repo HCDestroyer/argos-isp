@@ -36,6 +36,7 @@ import { rutasNotificaciones } from './notificaciones/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasEstadosFinancieros } from './libro/estados'
 import { rutasLibro } from './libro/rutas'
+import { rutasLibros } from './libros/rutas'
 import { rutasBloqueosLibro, rutasCorridasConBloqueo } from './libro/bloqueos'
 import { rutasChecksCierre, rutasCorridasFacturacion } from './libro/checks'
 import { empresaActivaDe, empresaNoPermitida, problemaTipado, sinSesion, usuariosPorToken } from './comun'
@@ -488,6 +489,8 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     // Antes que los reportes genéricos (GET /reportes/:reporte).
     ...rutasLealtad,
     ...rutasSorteos,
+    // Antes que las compras: `GET /libros/compras` es de los libros legales.
+    ...rutasLibros,
     ...rutasCompras,
     ...rutasAnuncios,
     ...rutasVersion,

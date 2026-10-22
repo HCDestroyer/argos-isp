@@ -57,6 +57,9 @@ export const INMUTABLES: Record<string, string> = {
     // fase 6 PR C (A3): reabrir el ejercicio = fila nueva; el cierre no se borra (§9.1)
     'ledger.reaperturas_anuales': 'reapertura de un cierre anual (§9.1)',
     'ledger.cierres_checks': 'lista de verificación de cierre (§10.5)',
+    // fase 6 PR D (A3): libros legales con folio (§3.7, §7; desvíos s y t de §20)
+    'fiscal.libros_habilitados': 'rango de folios habilitado de un libro; correlativo al anterior (§3.7)',
+    'fiscal.libros_emisiones': 'emisión oficial con folio, archivo y SHA-256; reimprimir = fila nueva (§7)',
     // §10.3 conciliación bancaria
     'ledger.extractos': 'extracto bancario (§10.3)',
     'ledger.extractos_lineas': 'línea de extracto (§10.3)',

@@ -427,6 +427,23 @@ export interface CatalogoEventos {
         anio: number
         motivo: string
     }
+    /**
+     * Emisión oficial con folio de un libro legal (§7, fase 6 PR D): `desde`/`hasta` meses completos,
+     * folios usados y SHA-256 del archivo guardado. `reimpresion_de` = la emisión anterior que cubría
+     * el rango (null si es la primera).
+     */
+    'libro.emitido': {
+        emision_id: number
+        empresa_id: number
+        libro: 'diario' | 'mayor' | 'compras' | 'ventas'
+        desde: string
+        hasta: string
+        folio_inicial: number
+        folio_final: number
+        formato: 'pdf' | 'xlsx'
+        sha256: string
+        reimpresion_de: number | null
+    }
 
     // notify (A6)
     'notificacion.enviada': {
@@ -836,6 +853,7 @@ export const EVENTOS = [
     'ejercicio.cerrado',
     'ejercicio.reabierto',
     'libro.checks_verificados',
+    'libro.emitido',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
     'fiscal.localizacion_instalada',

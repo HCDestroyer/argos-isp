@@ -32093,11 +32093,160 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libros/{libro}/emitir": {
+      "post": {
+        "operationId": "librosEmitir",
+        "summary": "Emisión oficial con folio de un libro (Diario, Mayor, Compras o Ventas)",
+        "description": "Meses completos (desde y hasta van al primer y último día de su mes). Exige cada mes cerrado y el bloqueo global o duro hasta el fin del rango (422 periodo_sin_bloqueo, errors[] con rule mes_abierto o sin_bloqueo) y la cadena de hash verificada (409 integridad_rota). Toma el siguiente folio del libro y uno por página dentro de lo habilitado (422 folios_agotados). Guarda el archivo con su SHA-256 y el último sello y hash del cierre del último mes. Un rango que se cruza con una emisión anterior es una reimpresión (folios nuevos y la marca). Emite libro.emitido.",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "libro",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "diario",
+                "mayor",
+                "compras",
+                "ventas"
+              ]
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "desde": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Mes final; por defecto el de desde"
+                  },
+                  "formato": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "xlsx"
+                    ],
+                    "description": "Por defecto pdf. XLSX: las filas con el folio de su página"
+                  }
+                },
+                "required": [
+                  "desde"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Emisión registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmisionLibro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.emitir",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libros/compras": {
       "get": {
         "operationId": "librosCompras",
         "summary": "Libro de compras y servicios recibidos (vista previa, sin folio)",
-        "description": "Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio llega con los bloqueos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.",
+        "description": "Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio es POST /libros/compras/emitir; formato=pdf da la vista previa en PDF con la marca de agua «Borrador sin folio». Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.",
         "tags": [
           "libros"
         ],
@@ -32151,7 +32300,8 @@
               "enum": [
                 "json",
                 "csv",
-                "xlsx"
+                "xlsx",
+                "pdf"
               ]
             }
           }
@@ -32258,6 +32408,963 @@
                   "items": {
                     "$ref": "#/components/schemas/CuadreCompras"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/diario": {
+      "get": {
+        "operationId": "librosDiario",
+        "summary": "Libro Diario (vista previa, sin folio)",
+        "description": "Cualquier rango (por defecto el mes en curso). Cada movimiento en una fila (fila = movimiento) y debajo el total de la partida (fila = total). Orden cronológico: fecha, partida (la guardada al cerrar el mes, §10.7; null en meses abiertos) y número del diario. totales suma solo los movimientos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final. Con `formato=pdf` responde el libro en PDF (carta horizontal, encabezado legal, «Página N de M», «Van» y «Vienen») con la marca de agua «Borrador sin folio».",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto la empresa activa",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el primer día del mes en curso",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el último día del mes de desde",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx",
+                "pdf"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Libro (vista previa)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteLibroDiario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/emisiones": {
+      "get": {
+        "operationId": "librosEmisiones",
+        "summary": "Emisiones oficiales de los libros (la más reciente primero)",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "libro",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "diario",
+                "mayor",
+                "inventarios",
+                "estados_financieros",
+                "compras",
+                "ventas"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de emisiones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EmisionLibro"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/emisiones/{id}": {
+      "get": {
+        "operationId": "librosEmision",
+        "summary": "Una emisión oficial de un libro",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Emisión",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmisionLibro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/emisiones/{id}/archivo": {
+      "get": {
+        "operationId": "librosEmisionArchivo",
+        "summary": "Archivo de una emisión (PDF o XLSX) tal como se guardó",
+        "description": "Vuelve a calcular el SHA-256 del archivo y responde 409 archivo_alterado si no coincide con el registrado.",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/folios": {
+      "get": {
+        "operationId": "librosFolios",
+        "summary": "Folios de cada libro: el siguiente y cuántos quedan habilitados",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto la empresa activa",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Folios por libro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FoliosLibro"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/habilitaciones": {
+      "get": {
+        "operationId": "librosHabilitaciones",
+        "summary": "Rangos de folios habilitados de los libros (el más reciente primero)",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "libro",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "diario",
+                "mayor",
+                "inventarios",
+                "estados_financieros",
+                "compras",
+                "ventas"
+              ]
+            }
+          },
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de habilitaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HabilitacionLibro"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "librosHabilitar",
+        "summary": "Registrar un rango de folios habilitado de un libro (solo inserción)",
+        "description": "Rangos correlativos por libro: el primero empieza donde diga la autorización y cada uno nuevo en el folio siguiente al último habilitado (422 habilitacion_no_correlativa). fecha no futura. Una habilitación no se edita ni se borra.",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "libro": {
+                    "type": "string",
+                    "enum": [
+                      "diario",
+                      "mayor",
+                      "inventarios",
+                      "estados_financieros",
+                      "compras",
+                      "ventas"
+                    ]
+                  },
+                  "autorizacion": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120,
+                    "description": "Número de la autorización (SAT-7121 y Registro Mercantil)"
+                  },
+                  "folio_desde": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "folio_hasta": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "fecha": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "libro",
+                  "autorizacion",
+                  "folio_desde",
+                  "folio_hasta",
+                  "fecha"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Habilitación registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabilitacionLibro"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.habilitar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.habilitar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/mayor": {
+      "get": {
+        "operationId": "librosMayor",
+        "summary": "Libro Mayor (vista previa, sin folio)",
+        "description": "Por cuenta con saldo inicial o movimientos en el rango: saldo inicial (fila = saldo_inicial), cada movimiento con su saldo acumulado y el saldo final con el debe y el haber de la cuenta (fila = saldo_final). El saldo va según la naturaleza de la cuenta. totales suma el debe y el haber de los movimientos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final. Con `formato=pdf` responde el libro en PDF (carta horizontal, encabezado legal, «Página N de M», «Van» y «Vienen») con la marca de agua «Borrador sin folio».",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto la empresa activa",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el primer día del mes en curso",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el último día del mes de desde",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx",
+                "pdf"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Libro (vista previa)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteLibroMayor"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libros.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libros.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libros/ventas": {
+      "get": {
+        "operationId": "librosVentas",
+        "summary": "Libro de Ventas y Servicios Prestados (vista previa, sin folio)",
+        "description": "DTE certificados del rango (fecha de emisión) y, sin FEL, facturas que no son aviso de cobro (fecha de su asiento) y sus notas de crédito. Anulados con valores en cero; NCRE y notas restan. Los avisos de cobro sin DTE no entran (su IVA está en 2.1.11). retenciones = constancias de los pagos vigentes aplicados a la factura, en proporción a lo aplicado. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final. Con `formato=pdf` responde el libro en PDF (carta horizontal, encabezado legal, «Página N de M», «Van» y «Vienen») con la marca de agua «Borrador sin folio».",
+        "tags": [
+          "libros"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto la empresa activa",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el primer día del mes en curso",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "description": "Por defecto el último día del mes de desde",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "formato",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv",
+                "xlsx",
+                "pdf"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Libro (vista previa)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteLibroVentas"
                 }
               }
             }
@@ -61081,6 +62188,132 @@
           }
         }
       },
+      "EmisionLibro": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "libro",
+          "desde",
+          "hasta",
+          "folio_inicial",
+          "folio_final",
+          "paginas",
+          "formato",
+          "tamano",
+          "sha256",
+          "filas",
+          "totales",
+          "ultimo_sello",
+          "ultimo_hash",
+          "reimpresion",
+          "reimpresion_de",
+          "generado_por",
+          "generado_por_nombre",
+          "generado_en"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "libro": {
+            "type": "string",
+            "enum": [
+              "diario",
+              "mayor",
+              "inventarios",
+              "estados_financieros",
+              "compras",
+              "ventas"
+            ]
+          },
+          "desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "folio_inicial": {
+            "type": "integer"
+          },
+          "folio_final": {
+            "type": "integer"
+          },
+          "paginas": {
+            "type": "integer"
+          },
+          "formato": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "xlsx"
+            ]
+          },
+          "tamano": {
+            "type": "integer",
+            "description": "Bytes del archivo"
+          },
+          "sha256": {
+            "type": "string",
+            "description": "SHA-256 (hex) del archivo guardado"
+          },
+          "filas": {
+            "type": "integer"
+          },
+          "totales": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Totales del libro (columnas de dinero)"
+          },
+          "ultimo_sello": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ultimo_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Último hash de la cadena del periodo (§10.10)"
+          },
+          "reimpresion": {
+            "type": "boolean"
+          },
+          "reimpresion_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "generado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "generado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EmisorFactura": {
         "type": "object",
         "required": [
@@ -63155,6 +64388,63 @@
           }
         }
       },
+      "FoliosLibro": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "libro",
+          "primero",
+          "ultimo_habilitado",
+          "ultimo_usado",
+          "siguiente",
+          "disponibles"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "libro": {
+            "type": "string",
+            "enum": [
+              "diario",
+              "mayor",
+              "inventarios",
+              "estados_financieros",
+              "compras",
+              "ventas"
+            ]
+          },
+          "primero": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ultimo_habilitado": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ultimo_usado": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "siguiente": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Folio que tomará la próxima emisión (null sin habilitación)"
+          },
+          "disponibles": {
+            "type": "integer"
+          }
+        }
+      },
       "FraseFiscal": {
         "type": "object",
         "required": [
@@ -63309,6 +64599,96 @@
               "$ref": "#/components/schemas/FraseFiscal"
             },
             "description": "Todas las filas de frases manuales"
+          }
+        }
+      },
+      "HabilitacionLibro": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "libro",
+          "tipo",
+          "autorizacion",
+          "folio_desde",
+          "folio_hasta",
+          "fecha",
+          "nota",
+          "usados",
+          "disponibles",
+          "registrado_por",
+          "registrado_por_nombre",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "libro": {
+            "type": "string",
+            "enum": [
+              "diario",
+              "mayor",
+              "inventarios",
+              "estados_financieros",
+              "compras",
+              "ventas"
+            ]
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "computarizado"
+            ]
+          },
+          "autorizacion": {
+            "type": "string",
+            "description": "Número de la autorización (SAT-7121 y Registro Mercantil)"
+          },
+          "folio_desde": {
+            "type": "integer"
+          },
+          "folio_hasta": {
+            "type": "integer"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "nota": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "usados": {
+            "type": "integer",
+            "description": "Folios de este rango ya usados por emisiones"
+          },
+          "disponibles": {
+            "type": "integer"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "registrado_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -74005,6 +75385,723 @@
                 "type": [
                   "number",
                   "null"
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteLibroDiario": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fila",
+                "partida",
+                "fecha",
+                "diario",
+                "numero",
+                "asiento_id",
+                "cuenta",
+                "cuenta_nombre",
+                "descripcion",
+                "debe",
+                "haber"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "fila": {
+                  "type": "string"
+                },
+                "partida": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "diario": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "numero": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "asiento_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cuenta": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cuenta_nombre": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "descripcion": {
+                  "type": "string"
+                },
+                "debe": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "haber": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "fila",
+              "partida",
+              "fecha",
+              "diario",
+              "numero",
+              "asiento_id",
+              "cuenta",
+              "cuenta_nombre",
+              "descripcion",
+              "debe",
+              "haber"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "fila": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "partida": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "fecha": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "diario": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "numero": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "asiento_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cuenta": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cuenta_nombre": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "descripcion": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "debe": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "haber": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteLibroMayor": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fila",
+                "cuenta",
+                "cuenta_nombre",
+                "fecha",
+                "partida",
+                "asiento_id",
+                "descripcion",
+                "debe",
+                "haber",
+                "saldo"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "fila": {
+                  "type": "string"
+                },
+                "cuenta": {
+                  "type": "string"
+                },
+                "cuenta_nombre": {
+                  "type": "string"
+                },
+                "fecha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "partida": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "asiento_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "descripcion": {
+                  "type": "string"
+                },
+                "debe": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "haber": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "saldo": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "fila",
+              "cuenta",
+              "cuenta_nombre",
+              "fecha",
+              "partida",
+              "asiento_id",
+              "descripcion",
+              "debe",
+              "haber",
+              "saldo"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "fila": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cuenta": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cuenta_nombre": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "fecha": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "partida": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "asiento_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "descripcion": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "debe": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "haber": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saldo": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Suma de las columnas de dinero y enteros"
+          },
+          "generado_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ReporteLibroVentas": {
+        "type": "object",
+        "required": [
+          "reporte",
+          "titulo",
+          "filtros",
+          "columnas",
+          "filas",
+          "totales",
+          "generado_en"
+        ],
+        "properties": {
+          "reporte": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "filtros": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "columnas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnaReporte"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "fecha",
+                "origen",
+                "documento",
+                "tipo",
+                "serie",
+                "numero",
+                "autorizacion",
+                "nit",
+                "cliente",
+                "bienes",
+                "servicios",
+                "exportacion",
+                "exento",
+                "iva",
+                "total",
+                "estado",
+                "retenciones"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "empresa": {
+                  "type": "string"
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "origen": {
+                  "type": "string"
+                },
+                "documento": {
+                  "type": "string"
+                },
+                "tipo": {
+                  "type": "string"
+                },
+                "serie": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "numero": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "autorizacion": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nit": {
+                  "type": "string"
+                },
+                "cliente": {
+                  "type": "string"
+                },
+                "bienes": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "servicios": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "exportacion": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "exento": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "iva": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "total": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "estado": {
+                  "type": "string"
+                },
+                "retenciones": {
+                  "$ref": "#/components/schemas/Dinero"
+                }
+              }
+            }
+          },
+          "totales": {
+            "type": "object",
+            "required": [
+              "fecha",
+              "origen",
+              "documento",
+              "tipo",
+              "serie",
+              "numero",
+              "autorizacion",
+              "nit",
+              "cliente",
+              "bienes",
+              "servicios",
+              "exportacion",
+              "exento",
+              "iva",
+              "total",
+              "estado",
+              "retenciones"
+            ],
+            "properties": {
+              "empresa_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "empresa": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "fecha": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "origen": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "documento": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "tipo": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "serie": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "numero": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "autorizacion": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "nit": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cliente": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bienes": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "servicios": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "exportacion": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "exento": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "iva": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "total": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "estado": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "retenciones": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               }
             },

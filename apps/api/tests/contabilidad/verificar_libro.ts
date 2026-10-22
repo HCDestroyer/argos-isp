@@ -9,6 +9,7 @@ import { resumenDelMes } from '#ledger/cierres'
 import { carteraVencida } from '#billing/reportes/reportes'
 import { verificarCadena } from '#ledger/sellos'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { construirLibro, esLibroEmitible } from '#fiscal/libros_legales'
 
 /**
  * Auditor contable · `verificarLibro(empresaId?)`.
@@ -3183,6 +3184,161 @@ async function verificarLibroCon(
                              AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales rp WHERE rp.cierre_id = p.id
                                               AND rp.reabierto_en <= b.created_at))`,
     )
+
+    /*
+    | 20 · Libros legales con folio (fase 6 PR D; contrato de localización fiscal §3.7, §7 y §20,
+    | desvíos (s), (t), (u) y (v)): habilitaciones correlativas por (empresa, libro); emisiones con
+    | folios contiguos dentro de lo habilitado, un folio por página; cada emisión de meses completos
+    | que estaban cerrados y bajo el bloqueo global o duro al emitirse, con el último hash del cierre
+    | de su último mes y la reimpresión bien enlazada; y mientras sus meses sigan cerrados por los
+    | mismos cierres, el Diario y el Mayor emitidos cuadran con `ledger` del periodo y el libro
+    | rehecho da el mismo contenido.
+    */
+    const [hayLibros] = await filas(`SELECT to_regclass('fiscal.libros_emisiones') IS NOT NULL AS existe`)
+    /** el mes `mes` de la empresa de `e` tenía un cierre vigente al crearse la emisión `e` */
+    const cierreAlEmitir = (e: string, mes: string) =>
+        `(SELECT c.id FROM ledger.cierres_mensuales c
+           WHERE c.empresa_id = ${e}.empresa_id AND c.periodo = ${mes} AND c.created_at <= ${e}.created_at
+             AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_mensuales r WHERE r.cierre_id = c.id
+                              AND r.reabierto_en <= ${e}.created_at)
+           ORDER BY c.id DESC LIMIT 1)`
+    /** los meses de `e` siguen cerrados por cierres anteriores a la emisión (nada se reabrió) */
+    const sigueCerrada = (e: string) =>
+        `NOT EXISTS (SELECT 1 FROM generate_series(${e}.desde, ${e}.hasta, interval '1 month') g(mes)
+                      WHERE NOT EXISTS (SELECT 1 FROM ledger.cierres_mensuales c
+                                         WHERE c.empresa_id = ${e}.empresa_id AND c.periodo = g.mes::date
+                                           AND c.created_at <= ${e}.created_at
+                                           AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_mensuales r
+                                                            WHERE r.cierre_id = c.id)))`
+    const bloqueoAlEmitir = (e: string, tipo: string) =>
+        `(SELECT b.hasta FROM ledger.bloqueos b WHERE b.empresa_id = ${e}.empresa_id AND b.tipo = '${tipo}'
+            AND b.created_at <= ${e}.created_at ORDER BY b.id DESC LIMIT 1)`
+    if (hayLibros?.existe) {
+        await revisar(
+            '20.folios_de_libro_no_correlativos (por empresa y libro: cada habilitación empieza en el folio siguiente a la anterior; cada emisión en el siguiente de la anterior, la primera en el primero habilitado, un folio por página y sin pasar del último habilitado al emitir)',
+            `WITH h AS (
+                 SELECT h.id, h.empresa_id, h.libro, h.folio_desde, h.folio_hasta,
+                        lag(h.folio_hasta) OVER (PARTITION BY h.empresa_id, h.libro ORDER BY h.id) AS previo
+                   FROM fiscal.libros_habilitados h WHERE ${E('h.empresa_id')}
+             ), e AS (
+                 SELECT e.id, e.empresa_id, e.libro, e.folio_inicial, e.folio_final, e.paginas, e.created_at,
+                        lag(e.folio_final) OVER (PARTITION BY e.empresa_id, e.libro ORDER BY e.id) AS previo
+                   FROM fiscal.libros_emisiones e WHERE ${E('e.empresa_id')}
+             )
+             SELECT 'habilitacion' AS que, h.id, h.empresa_id, h.libro, h.folio_desde AS desde, h.folio_hasta AS hasta,
+                    h.previo, NULL::int AS tope
+               FROM h WHERE h.folio_desde < 1 OR h.folio_hasta < h.folio_desde
+                         OR (h.previo IS NOT NULL AND h.folio_desde <> h.previo + 1)
+             UNION ALL
+             SELECT 'emision', e.id, e.empresa_id, e.libro, e.folio_inicial, e.folio_final, e.previo, x.tope
+               FROM e CROSS JOIN LATERAL (
+                        SELECT min(x.folio_desde) AS primero, max(x.folio_hasta) AS tope
+                          FROM fiscal.libros_habilitados x
+                         WHERE x.empresa_id = e.empresa_id AND x.libro = e.libro AND x.created_at <= e.created_at) x
+              WHERE e.paginas < 1 OR e.folio_final <> e.folio_inicial + e.paginas - 1 OR x.tope IS NULL
+                 OR e.folio_final > x.tope
+                 OR (e.previo IS NULL AND e.folio_inicial <> x.primero)
+                 OR (e.previo IS NOT NULL AND e.folio_inicial <> e.previo + 1)`,
+        )
+        await revisar(
+            '20.libro_emitido_sin_cierre_o_bloqueo (meses completos; al emitir, cada mes con su cierre vigente y el mayor de los bloqueos global y duro hasta el último día; último sello y hash = los del cierre del último mes; reimpresion_de = la última emisión anterior del libro que se cruza con el rango)',
+            `SELECT e.id, e.empresa_id, e.libro, to_char(e.desde, 'YYYY-MM-DD') AS desde, to_char(e.hasta, 'YYYY-MM-DD') AS hasta,
+                    (SELECT array_agg(to_char(g.mes, 'YYYY-MM')) FROM generate_series(e.desde, e.hasta, interval '1 month') g(mes)
+                      WHERE ${cierreAlEmitir('e', 'g.mes::date')} IS NULL) AS meses_abiertos,
+                    to_char(greatest(${bloqueoAlEmitir('e', 'global')}, ${bloqueoAlEmitir('e', 'duro')}), 'YYYY-MM-DD') AS bloqueo,
+                    e.ultimo_sello, e.ultimo_hash, cu.ultimo_sello AS sello_cierre, cu.ultimo_hash AS hash_cierre,
+                    e.reimpresion_de,
+                    (SELECT max(o.id) FROM fiscal.libros_emisiones o WHERE o.empresa_id = e.empresa_id AND o.libro = e.libro
+                        AND o.id < e.id AND o.desde <= e.hasta AND o.hasta >= e.desde) AS reimprime
+               FROM fiscal.libros_emisiones e
+               LEFT JOIN ledger.cierres_mensuales cu
+                      ON cu.id = ${cierreAlEmitir('e', "date_trunc('month', e.hasta)::date")}
+              WHERE ${E('e.empresa_id')}
+                AND (e.desde <> date_trunc('month', e.desde)::date
+                     OR e.hasta <> (date_trunc('month', e.hasta) + interval '1 month - 1 day')::date
+                     OR EXISTS (SELECT 1 FROM generate_series(e.desde, e.hasta, interval '1 month') g(mes)
+                                 WHERE ${cierreAlEmitir('e', 'g.mes::date')} IS NULL)
+                     OR coalesce(greatest(${bloqueoAlEmitir('e', 'global')}, ${bloqueoAlEmitir('e', 'duro')}) < e.hasta, true)
+                     OR cu.id IS NULL OR e.ultimo_hash IS DISTINCT FROM cu.ultimo_hash
+                     OR e.ultimo_sello IS DISTINCT FROM cu.ultimo_sello
+                     OR e.reimpresion_de IS DISTINCT FROM
+                        (SELECT max(o.id) FROM fiscal.libros_emisiones o WHERE o.empresa_id = e.empresa_id AND o.libro = e.libro
+                            AND o.id < e.id AND o.desde <= e.hasta AND o.hasta >= e.desde))`,
+        )
+        await revisar(
+            '20.libro_emitido_distinto_del_mayor (Diario y Mayor emitidos, con sus meses aún cerrados por los mismos cierres: Σ debe = Σ haber = los movimientos de ledger de la empresa en el rango; el Diario tiene una fila por movimiento y una de total por asiento)',
+            `WITH l AS (
+                 SELECT e.id AS emision_id, e.empresa_id, e.libro, e.filas, e.totales ->> 'debe' AS debe, e.totales ->> 'haber' AS haber,
+                        (SELECT coalesce(sum(m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                          WHERE a.empresa_id = e.empresa_id AND a.fecha BETWEEN e.desde AND e.hasta) AS debe_libro,
+                        (SELECT coalesce(sum(m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                          WHERE a.empresa_id = e.empresa_id AND a.fecha BETWEEN e.desde AND e.hasta) AS haber_libro,
+                        (SELECT count(m.id) + count(DISTINCT a.id) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                          WHERE a.empresa_id = e.empresa_id AND a.fecha BETWEEN e.desde AND e.hasta) AS filas_diario
+                   FROM fiscal.libros_emisiones e
+                  WHERE ${E('e.empresa_id')} AND e.libro IN ('diario', 'mayor') AND ${sigueCerrada('e')}
+             )
+             SELECT emision_id, empresa_id, libro, filas, filas_diario::int, debe, haber, debe_libro::text, haber_libro::text
+               FROM l
+              WHERE debe IS NULL OR haber IS NULL OR debe::numeric <> debe_libro OR haber::numeric <> haber_libro
+                 OR debe_libro <> haber_libro OR (libro = 'diario' AND filas <> filas_diario)`,
+        )
+        // fase 7: la liquidación mensual del IVA moverá 2.1.02 sin ser venta; ese asiento (origen de la
+        // declaración) se excluye de este cuadre cuando exista. Un ajuste manual a 2.1.02 lo rompe a propósito.
+        await revisar(
+            '20.libro_ventas_distinto_del_iva_debito (libro de ventas emitido, con sus meses aún cerrados: Σ IVA = movimiento de 2.1.02 de la empresa en el rango; cada venta suma una sola vez y en el mes en que se movió el débito)',
+            `SELECT e.id AS emision_id, e.empresa_id, to_char(e.desde, 'YYYY-MM') AS desde, to_char(e.hasta, 'YYYY-MM') AS hasta,
+                    e.totales ->> 'iva' AS iva_libro,
+                    (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta)::text AS iva_debito
+               FROM fiscal.libros_emisiones e
+              WHERE ${E('e.empresa_id')} AND e.libro = 'ventas' AND ${sigueCerrada('e')}
+                AND (e.totales ->> 'iva')::numeric IS DISTINCT FROM
+                    (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta)`,
+        )
+        if (!opciones.sinFuncionesProducto) {
+            const emisiones = await filas(
+                `SELECT e.id, e.empresa_id, e.libro, to_char(e.desde, 'YYYY-MM-DD') AS desde,
+                        to_char(e.hasta, 'YYYY-MM-DD') AS hasta, e.filas, e.totales
+                   FROM fiscal.libros_emisiones e
+                  WHERE ${E('e.empresa_id')} AND ${sigueCerrada('e')}
+                  ORDER BY e.id`,
+            )
+            for (const e of emisiones) {
+                const libro = String(e.libro)
+                if (!esLibroEmitible(libro)) continue
+                const rehecho = await construirLibro(
+                    libro,
+                    Number(e.empresa_id),
+                    { desde: String(e.desde), hasta: String(e.hasta) },
+                    clienteLectura ?? db.connection(),
+                )
+                const guardados = (
+                    typeof e.totales === 'string' ? JSON.parse(e.totales) : e.totales
+                ) as Record<string, unknown>
+                const ahora = rehecho.reporte.totales as Record<string, unknown>
+                const distintos = [...new Set([...Object.keys(guardados), ...Object.keys(ahora)])].filter(
+                    (k) => (guardados[k] ?? null) !== (ahora[k] ?? null),
+                )
+                if (distintos.length > 0 || Number(e.filas) !== rehecho.reporte.filas.length) {
+                    violaciones.push({
+                        invariante:
+                            '20.libro_emitido_cambio (con sus meses aún cerrados y bloqueados, el libro rehecho del mismo rango da otras filas o totales que los guardados en la emisión)',
+                        detalle: {
+                            emision_id: Number(e.id),
+                            empresa_id: Number(e.empresa_id),
+                            libro,
+                            filas: [Number(e.filas), rehecho.reporte.filas.length],
+                            totales: Object.fromEntries(distintos.map((k) => [k, [guardados[k], ahora[k]]])),
+                        },
+                    })
+                }
+            }
+        }
+    }
 
     /*
     | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica

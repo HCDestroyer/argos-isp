@@ -21,6 +21,7 @@ import { asientosBonificaciones, bonificaciones, conceptosCargo, motivosSinCosto
 import { cierres, egresos } from './egresos/datos'
 import { bloqueosLibro, excepcionesBloqueo, pendientesPorBloqueo, type PendientePorBloqueo } from './libro/bloqueos'
 import { acciones } from './bitacora/datos'
+import { emisionesLibros, habilitacionesLibros } from './libros/datos'
 import { accionesCorridas, calculosChecks, checksCierre, type CalculoCheck } from './libro/checks'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
@@ -111,6 +112,11 @@ interface BaseFixtures {
     checksCierre: Schema<'CheckCierre'>[]
     /** Lo que el cálculo de un check da distinto de «cuadra» (empresa, tipo, periodo y clave). */
     calculosChecks: CalculoCheck[]
+    /** Libros legales con folio (A3, fase 6 PR D): habilitaciones y emisiones, de solo inserción. */
+    librosHabilitaciones: Schema<'HabilitacionLibro'>[]
+    librosEmisiones: Schema<'EmisionLibro'>[]
+    /** Emisiones cuyo archivo ya no coincide con su SHA-256 (409 `archivo_alterado`). */
+    librosAlterados: number[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
@@ -248,6 +254,9 @@ function inicial(): BaseFixtures {
         pendientesPorBloqueo,
         checksCierre,
         calculosChecks,
+        librosHabilitaciones: habilitacionesLibros,
+        librosEmisiones: emisionesLibros,
+        librosAlterados: [],
         bancos,
         cuentasBancarias,
         empresa,

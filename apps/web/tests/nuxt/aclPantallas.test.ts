@@ -130,6 +130,9 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'BloqueoLibroModal.vue': { permisos: ['libro.bloquear', 'libro.desbloquear'], desde: ['pages/libro/bloqueos.vue'] },
     'BloqueoDuroModal.vue': { permisos: ['libro.bloquear_duro'], desde: ['pages/libro/bloqueos.vue'] },
     'ExcepcionBloqueoModal.vue': { permisos: ['libro.excepcion_bloqueo'], desde: ['pages/libro/bloqueos.vue'] },
+    // Libros legales con folio (fase 6 PR D): leen los folios del libro (`libros.ver`, el de la página).
+    'EmitirLibroModal.vue': { permisos: ['libros.emitir', 'libros.ver'], desde: ['pages/libros/index.vue'] },
+    'HabilitacionLibroModal.vue': { permisos: ['libros.habilitar', 'libros.ver'], desde: ['pages/libros/habilitaciones.vue'] },
     'CargoUnicoModal.vue': { permisos: ['facturas.emitir_cargo_unico', 'facturas.ver'], desde: ['pages/servicios/[id].vue', 'pages/clientes/[id]/index.vue'] },
     'PeriodosBonificados.vue': { permisos: ['facturas.ver'], desde: ['components/ClienteEstadoCuenta.vue', 'pages/servicios/[id].vue'] },
     'AnularFacturaModal.vue': { permisos: ['facturas.anular', 'fel.anular'], desde: ['pages/facturas/[id].vue'] },
