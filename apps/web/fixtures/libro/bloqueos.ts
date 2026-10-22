@@ -3,6 +3,7 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, usuariosPorToken } from '../comun'
 import { fechaGuatemala } from './datos'
+import { registrarCorrida, verificarYExigir, type EntradaCorrida } from './checks'
 
 /**
  * Bloqueos del libro (A3, fase 6 PR A, contrato fiscal §11). Historial de solo inserción: el vigente de
@@ -182,6 +183,15 @@ export const rutasBloqueosLibro: RutasFixture = {
         ]
         if (faltan.length) {
             return problemaTipado(422, 'bloqueo_duro_requisitos', 'Regla de negocio', `Antes del bloqueo duro hasta ${hasta}: ${faltan.map(f => f.message).join('; ')}`, faltan)
+        }
+        // Fase 6 PR B: los checks mensuales del mes de `hasta` y los anuales del último año que cubre entero.
+        const anio = hasta.endsWith('-12-31') ? Number(hasta.slice(0, 4)) : Number(hasta.slice(0, 4)) - 1
+        const checks = verificarYExigir(solicitud, empresaId, [
+            ['mensual', `${hasta.slice(0, 7)}-01`],
+            ...(duro === null || duro < `${anio}-12-31` ? [['anual', `${anio}-01-01`] as ['anual', string]] : []),
+        ])
+        if (checks) {
+            return checks
         }
         const bloqueo = registrar(solicitud, empresaId, 'duro', hasta, motivo)
         registrarAccion(solicitud, 'libro.bloquear_duro', { tipo: 'bloqueo_libro', id: bloqueo.id }, cuerpo)
@@ -365,18 +375,24 @@ function corrida(solicitud: SolicitudFixture, proceso: 'facturar' | 'vencer'): {
     return { entraron: entran.length, bloqueados: bloqueos.reduce((s, b) => s + b.documentos, 0), bloqueos }
 }
 
+/** Como `RegistrarCorrida`: `empresas` null cuando recorrió todas (sin empresa activa), o la activa. */
+function parametrosCorrida(solicitud: SolicitudFixture): EntradaCorrida['parametros'] {
+    const activa = empresaActivaDe(solicitud)
+    return { hasta: fechaGuatemala(ahora()), servicio_id: null, empresas: solicitud.headers.get('X-Empresa-Id') && activa ? [activa] : null }
+}
+
 export const rutasCorridasConBloqueo: RutasFixture = {
     'POST /api/v1/facturas/generar': conPermiso('facturas.generar', conIdempotencia((solicitud) => {
         const r = corrida(solicitud, 'facturar')
         const activos = bd.servicios.filter(s => s.estado !== 'retirado').length
         const resultado: Schema<'ResultadoGeneracion'> = { generadas: r.entraron, omitidas: Math.max(0, activos - r.entraron - r.bloqueados), facturas: [], errores: 0, bloqueados: r.bloqueados, bloqueos: r.bloqueos }
-        registrarAccion(solicitud, 'facturas.generar', { tipo: 'corrida', id: 0 }, {})
+        registrarCorrida(solicitud, 'facturas.generar', { parametros: parametrosCorrida(solicitud), resultado: { ...resultado }, bloqueos: r.bloqueos })
         return { status: 200, cuerpo: resultado }
     })),
     'POST /api/v1/facturas/vencer': conPermiso('facturas.generar', conIdempotencia((solicitud) => {
         const r = corrida(solicitud, 'vencer')
         const resultado: Schema<'ResultadoVencimiento'> = { vencidas: 0, moras: r.entraron, errores: 0, bloqueados: r.bloqueados, bloqueos: r.bloqueos }
-        registrarAccion(solicitud, 'facturas.vencer_pendientes', { tipo: 'corrida', id: 0 }, {})
+        registrarCorrida(solicitud, 'facturas.vencer_pendientes', { parametros: parametrosCorrida(solicitud), resultado: { ...resultado }, bloqueos: r.bloqueos })
         return { status: 200, cuerpo: resultado }
     })),
 }

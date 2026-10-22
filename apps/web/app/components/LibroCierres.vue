@@ -5,14 +5,22 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
 /**
  * Cierre mensual del libro (A3): un mes cerrado no admite asientos con fecha en él (ni egresos
  * ni reversos). Cerrar pide `libro.cerrar_periodo` y confirmación; reabrir pide
- * `libro.reabrir_periodo` y motivo.
+ * `libro.reabrir_periodo` y motivo. La lista de verificación del mes (fase 6 PR B) va arriba: cerrar
+ * la verifica y la exige (422 `checks_pendientes` con los checks que faltan).
  */
 const toast = useToast()
+const route = useRoute()
 const { puede, enlace } = usePermisos()
 
 const lista = usePaginacionCursor(cursor => useLibro().periodos(cursor))
 const hoy = hoyGuatemala()
 const cerrables = computed(() => mesesCerrables(hoy, lista.filas.value))
+
+/* Lista de verificación: los meses pasados; por defecto el de `?mes=` o el primero que falta cerrar. */
+const mesesChecklist = periodosRecientes(hoy, 13).slice(1).map(p => p.slice(0, 7))
+const mesQuery = typeof route.query.mes === 'string' && mesesChecklist.includes(route.query.mes) ? route.query.mes : undefined
+const mesChecklist = ref<string | undefined>(mesQuery)
+const checklist = useTemplateRef<{ cargar: () => Promise<void> }>('checklist')
 
 const columnas: TableColumn<CierrePeriodo>[] = [
     { accessorKey: 'periodo', header: 'Mes', meta: { class: { td: 'whitespace-normal' } } },
@@ -35,6 +43,23 @@ let claveCierre = nuevaClaveIdempotencia()
  * 409 `integridad_rota`: se lleva a la pestaña de integridad.
  */
 const codigoCierre = computed(() => (problemaCierre.value ? codigoProblema(problemaCierre.value) : null))
+/** 422 `checks_pendientes`: los checks del mes que están en anomalía o sin verificar. */
+const checksFaltantes = computed(() => checksPendientesDe(problemaCierre.value))
+
+/** Lleva a la lista de verificación del mes que no se pudo cerrar. */
+function verChecklist() {
+    const periodo = mesACerrar.value
+    cerrando.value = false
+    if (!periodo) {
+        return
+    }
+    if (mesChecklist.value === periodo) {
+        void checklist.value?.cargar()
+    }
+    else {
+        mesChecklist.value = periodo
+    }
+}
 const notasSinCertificar = computed(() => (codigoCierre.value === 'ncre_sin_certificar' ? ncreDeProblema(problemaCierre.value) : []))
 
 const itemsMes = computed<SelectItem[]>(() => cerrables.value.map(p => ({ label: etiquetaPeriodo(p), value: p })))
@@ -61,10 +86,14 @@ async function confirmarCierre() {
     const resultado = await useLibro().cerrarPeriodo(mesACerrar.value, claveCierre)
     enviandoCierre.value = false
     if (!resultado.ok) {
-        problemaCierre.value = problemaFelLegible(resultado.problema)
+        problemaCierre.value = problemaCheckLegible(problemaFelLegible(resultado.problema))
         return
     }
     cerrando.value = false
+    // El cierre verificó los checks del mes: la lista cambia si es la que se ve.
+    if (mesChecklist.value === resultado.data.periodo) {
+        void checklist.value?.cargar()
+    }
     toast.add({ title: `${etiquetaPeriodo(resultado.data.periodo)} cerrado`, description: 'Ya no se pueden registrar asientos con fecha en ese mes.', icon: 'i-lucide-lock', color: 'success' })
     void lista.recargar()
 }
@@ -94,7 +123,10 @@ function alReabrir(cierre: CierrePeriodo) {
     void lista.recargar()
 }
 
-onMounted(() => void lista.recargar())
+onMounted(async () => {
+    await lista.recargar()
+    mesChecklist.value ??= cerrables.value[0] ?? mesesChecklist[0]
+})
 </script>
 
 <template>
@@ -113,6 +145,12 @@ onMounted(() => void lista.recargar())
                 @click="abrirCierre"
             />
         </div>
+
+        <CierreChecklist
+            ref="checklist"
+            v-model:mes="mesChecklist"
+            :meses="mesesChecklist"
+        />
 
         <ProblemaAlerta
             v-if="lista.problema.value"
@@ -250,6 +288,31 @@ onMounted(() => void lista.recargar())
                         v-if="problemaCierre"
                         :problema="problemaCierre"
                         data-prueba="cierre-error"
+                    />
+                    <ul
+                        v-if="checksFaltantes.length"
+                        class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                        data-prueba="cierre-checks"
+                    >
+                        <li
+                            v-for="c in checksFaltantes"
+                            :key="c.clave"
+                            class="px-3 py-2 text-sm"
+                            :data-clave="c.clave"
+                        >
+                            {{ c.mensaje }}
+                        </li>
+                    </ul>
+                    <UButton
+                        v-if="checksFaltantes.length"
+                        label="Ver la lista de verificación"
+                        icon="i-lucide-list-checks"
+                        color="neutral"
+                        variant="outline"
+                        size="sm"
+                        class="self-start"
+                        data-prueba="cierre-a-checklist"
+                        @click="verChecklist"
                     />
                     <ul
                         v-if="notasSinCertificar.length"

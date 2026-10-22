@@ -7,7 +7,9 @@ import type { FormSubmitEvent } from '@nuxt/ui'
  * registra con fecha hasta ese día, ni con excepción, y ningún mes se reabre. Por eso pide escribir
  * exactamente «BLOQUEO DURO hasta AAAA-MM-DD» con la misma fecha (422 `confirmacion_invalida` si no).
  * La API exige además los meses cerrados, los DTE certificados y los extractos conciliados hasta esa
- * fecha (422 `bloqueo_duro_requisitos`, con cada faltante).
+ * fecha (422 `bloqueo_duro_requisitos`, con cada faltante) y la lista de verificación del mes de
+ * `hasta` (y la anual del año que cubre entero): 422 `checks_pendientes`, con los checks que faltan y
+ * el camino a la lista.
  */
 const props = defineProps<{
     empresaId: number
@@ -18,6 +20,7 @@ const props = defineProps<{
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ hecho: [bloqueo: BloqueoLibro] }>()
 
+const { enlace } = usePermisos()
 const formulario = useTemplateRef('formulario')
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
@@ -34,6 +37,9 @@ const hoy = hoyGuatemala()
 const esquema = computed(() => esquemaDuro(props.vigentes, hoy))
 const frase = computed(() => (estado.hasta ? confirmacionDuro(estado.hasta) : null))
 const coincide = computed(() => !!frase.value && estado.confirmacion === frase.value)
+const checksFaltantes = computed(() => checksPendientesDe(problema.value))
+/** El mes de `hasta` con que se envió (el de la lista que falta). */
+const mesEnviado = ref<string | null>(null)
 
 watch(abierto, (valor) => {
     if (valor) {
@@ -47,6 +53,7 @@ async function enviar(evento: FormSubmitEvent<Entrada>) {
     enviando.value = true
     problema.value = null
     const d = evento.data
+    mesEnviado.value = d.hasta.slice(0, 7)
     const resultado = await useBloqueosLibro().bloquearDuro({ empresa_id: props.empresaId, hasta: d.hasta, motivo: d.motivo, confirmacion: d.confirmacion }, clave)
     enviando.value = false
     if (resultado.ok) {
@@ -132,6 +139,31 @@ async function enviar(evento: FormSubmitEvent<Entrada>) {
                     v-if="problema"
                     :problema="problema"
                     data-prueba="duro-problema"
+                />
+                <ul
+                    v-if="checksFaltantes.length"
+                    class="flex flex-col divide-y divide-default rounded-lg border border-default"
+                    data-prueba="duro-checks"
+                >
+                    <li
+                        v-for="c in checksFaltantes"
+                        :key="c.clave"
+                        class="px-3 py-2 text-sm"
+                        :data-clave="c.clave"
+                    >
+                        {{ c.mensaje }}
+                    </li>
+                </ul>
+                <UButton
+                    v-if="checksFaltantes.length && mesEnviado && enlace(`/libro?tab=cierres&mes=${mesEnviado}`)"
+                    :label="`Lista de verificación de ${etiquetaPeriodo(mesEnviado)}`"
+                    icon="i-lucide-list-checks"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    class="self-start"
+                    :to="enlace(`/libro?tab=cierres&mes=${mesEnviado}`)"
+                    data-prueba="duro-a-checklist"
                 />
             </UForm>
         </template>
