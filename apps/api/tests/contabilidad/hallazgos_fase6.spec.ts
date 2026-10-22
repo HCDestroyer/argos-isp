@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
 import { prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
-import { verificarLibro } from '#tests/contabilidad/verificar_libro'
+import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import AnularFactura from '#billing/actions/anular_factura'
@@ -14,7 +14,8 @@ import { CERO, aTexto } from '#ledger/dinero'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { empresasSinFel, habilitar, mesConMovimiento, neto } from '#tests/contabilidad/ayudas_libros'
 import { haceMeses } from '#tests/ledger/ayudas_compras'
-import { datosNit } from '#tests/fiscal/ayudas_fel'
+import { cola, configurarModo, datosNit } from '#tests/fiscal/ayudas_fel'
+import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import { crearClienteFila } from '#tests/core/fabricas'
 
 /**
@@ -28,8 +29,12 @@ import { crearClienteFila } from '#tests/core/fabricas'
  * `.fails` que falla como se espera sale en el resumen como «regression» (no es que pase).
  *
  * H28–H30 (fase 6 PR D, libros con folio): el libro de ventas de un mes cerrado, bloqueado y ya
- * emitido cambia con hechos posteriores (anulación, dato fiscal del cliente, retención recibida). El
- * inv. 20.libro_emitido_cambio lo detecta (H28, H30); H29 compara las filas.
+ * emitido cambiaba con hechos posteriores (anulación, dato fiscal del cliente, retención recibida).
+ * Arreglados por A3 en 8814035: quedan como pruebas normales (el inv. 20.libro_emitido_cambio los vigila).
+ *
+ * H31 (abierto): una factura sin FEL que sale como interna en el libro de su mes y se certifica en un
+ * mes posterior vuelve a sumar como DTE en el libro del mes de la certificación (IVA dos veces en el
+ * año; 2.1.02 no se movió al certificar).
  */
 
 test.group('Auditor contable · hallazgos de la fase 6', (group) => {
@@ -65,7 +70,7 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         )
     }).fails('H27: nota de crédito sobre una factura importada con IVA (decisión del PM pendiente)')
 
-    test('H28: anular en un mes abierto una factura de un mes con el libro de ventas emitido cambia ese libro (y el anulado no sale en el mes de la anulación)', async ({
+    test('H28 (arreglado en 8814035): anular en un mes abierto una factura de un mes con el libro de ventas emitido no cambia ese libro y la anulación sale en negativo en su mes', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -84,6 +89,19 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
             desde: inicioDeMes(hoy),
             hasta: finDeMes(hoy),
         })
+        // un libro de los dos meses: la original vigente y la anulación en negativo, neto = 2.1.02
+        const dosMeses = await construirLibro('ventas', e.B, { desde, hasta: finDeMes(hoy) })
+        assert.deepEqual(
+            dosMeses.reporte.filas.map((f) => [f.estado, f.iva]),
+            [
+                ['vigente', s.facturas[0]!.iva],
+                ['anulacion', aTexto(CERO.minus(s.facturas[0]!.iva))],
+            ],
+        )
+        assert.equal(
+            dosMeses.reporte.totales.iva,
+            aTexto(CERO.minus(await neto(e.B, '2.1.02', desde, finDeMes(hoy)))),
+        )
         const encontradas = await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true })
         const violaciones = encontradas.map((v) => v.invariante.split(' ')[0])
         assert.deepEqual(
@@ -99,11 +117,9 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
                 ),
             },
         )
-    }).fails(
-        'H28: el libro de ventas pone en cero el anulado en el mes del documento aunque ese mes ya tenga libro emitido',
-    )
+    })
 
-    test('H29: el libro de ventas sin FEL toma el NIT actual del cliente: editar al cliente cambia el libro ya emitido', async ({
+    test('H29 (arreglado en 8814035): editar al cliente no cambia el libro de ventas ya emitido; el receptor de la factura no se reescribe', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -123,11 +139,18 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         )
         const despues = await construirLibro('ventas', e.B, { desde, hasta: finDeMes(desde) })
         assert.deepEqual(despues.reporte.filas, antes.reporte.filas)
-    }).fails(
-        'H29: el receptor de una factura sin DTE es el dato fiscal actual del cliente, no el de la fecha de la factura',
-    )
+        // el receptor guardado no se cambia (trigger), tampoco por el dueño de la tabla
+        await assert.rejects(
+            () =>
+                db.rawQuery(
+                    `UPDATE billing.facturas SET receptor = '{"tipo":"nit","id":"1","nombre":"x"}'::jsonb WHERE id = ?`,
+                    [s.facturas[0]!.id],
+                ),
+            /no se cambia/,
+        )
+    })
 
-    test('H30: una retención recibida después del libro emitido cambia la columna de retenciones de ese mes', async ({
+    test('H30 (arreglado en 8814035): una retención recibida después del libro emitido no cambia ese mes', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -149,5 +172,41 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         const encontradas = await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true })
         const violaciones = encontradas.map((v) => v.invariante.split(' ')[0])
         assert.deepEqual(violaciones, [])
-    }).fails('H30: las retenciones del libro de ventas se leen al día de hoy, no al cierre del mes emitido')
+    })
+
+    test('H31: una factura sin FEL que se certifica en un mes posterior sale dos veces en los libros de ventas (IVA duplicado)', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        const desde = haceMeses(1)
+        const s = await mesConMovimiento(e, e.B, desde, { clienteId: await crearClienteFila(datosNit()) })
+        await habilitar(e, e.B, 'ventas', 1, 50)
+        const septiembre = await new EmitirLibro().execute({ empresa_id: e.B, libro: 'ventas', desde }, e.ctx)
+        assert.equal(septiembre.totales.iva, s.facturas[0]!.iva)
+        // la empresa activa la FEL (opcional) y certifica a mano la factura vieja: su DTE nace hoy
+        await configurarModo(e, e.B, 'opcional')
+        await new SolicitarCertificacion().execute({ factura_id: s.facturas[0]!.id }, e.ctx)
+        await cola(e)
+        const dte = await db
+            .from('fiscal.dte')
+            .where({ documento_tipo: 'factura', documento_id: s.facturas[0]!.id })
+            .whereNotNull('autorizacion')
+            .first()
+        assert.isNotNull(dte, 'la factura quedó certificada')
+        const hoy = hoyGuatemala()
+        const mes = { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) }
+        const octubre = await construirLibro('ventas', e.B, mes)
+        // Σ IVA de los libros de ventas del año = IVA débito del año (cada venta una sola vez)
+        assert.deepEqual(
+            {
+                septiembre: septiembre.totales.iva,
+                octubre: octubre.reporte.totales.iva,
+            },
+            {
+                septiembre: s.facturas[0]!.iva,
+                octubre: aTexto(CERO.minus(await neto(e.B, '2.1.02', mes.desde, mes.hasta))),
+            },
+        )
+        await afirmarLibro(assert, [e.B, e.C])
+    }).fails('H31: la venta interna de un mes emitido vuelve a sumar como DTE en el mes en que se certifica')
 })
