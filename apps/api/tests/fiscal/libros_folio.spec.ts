@@ -150,6 +150,8 @@ test.group('Fase 6 · libros con folio', (group) => {
             )
         const habilitacion = await habilitar(1, 2)
         assert.include(habilitacion, { folio_desde: 1, folio_hasta: 2, usados: 0, disponibles: 2 })
+        const admin = await db.from('core.usuarios').where('id', e.usuarioId).firstOrFail()
+        assert.include(habilitacion, { registrado_por: e.usuarioId, registrado_por_nombre: admin.nombre })
         const salto = await errorDe(habilitar(5, 10))
         assert.deepEqual([salto.status, salto.codigo], [422, 'habilitacion_no_correlativa'])
 
@@ -305,6 +307,22 @@ test.group('Fase 6 · libros con folio', (group) => {
             ventasC.reporte.filas.map((f) => [f.origen, f.documento, f.total, f.iva, f.nit]),
             sinFel.facturas.map((f) => ['interno', `Factura ${f.id}`, f.total, f.iva, 'CF']),
         )
+        // H29: el receptor queda guardado al emitir; editar al cliente no cambia el libro
+        await db.from('core.clientes').where('id', sinFel.clienteId).update({
+            tipo_documento_fiscal: 'nit',
+            nit_cui: '1234567-8',
+            nombre_fiscal: 'Otro nombre',
+        })
+        const otraVez = await construirLibro('ventas', e.C, mes)
+        assert.deepEqual(otraVez.reporte.filas, ventasC.reporte.filas)
+        await assert.rejects(
+            () =>
+                db
+                    .from('billing.facturas')
+                    .where('id', sinFel.facturas[0]!.id)
+                    .update({ receptor: JSON.stringify({ tipo: 'nit', id: '1', nombre: 'x' }) }),
+            /no se cambia/,
+        )
         const ivaC = sinFel.facturas.reduce((s, f) => s.plus(dec(f.iva)), CERO)
         assert.equal(ventasC.reporte.totales.iva, aTexto(ivaC))
 
@@ -382,6 +400,12 @@ test.group('Fase 6 · libros con folio', (group) => {
             }),
             201,
         )
+        const habilitaciones = await estado(
+            client.get('/api/v1/libros/habilitaciones').bearerToken(e.token).headers(cabecera),
+            200,
+        )
+        const usuario = await db.from('core.usuarios').where('id', e.usuarioId).firstOrFail()
+        assert.equal(habilitaciones.body().data[0].registrado_por_nombre, usuario.nombre)
         const emision = await estado(
             client
                 .post('/api/v1/libros/diario/emitir')
