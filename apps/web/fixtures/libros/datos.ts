@@ -34,6 +34,7 @@ function habilitacion(id: number, datos: Pick<Habilitacion, 'libro' | 'autorizac
         usados: 0,
         disponibles: datos.folio_hasta - datos.folio_desde + 1,
         registrado_por: 1,
+        registrado_por_nombre: 'Ana Administradora',
         created_at: `${datos.fecha}T16:00:00.000Z`,
         ...datos,
     }

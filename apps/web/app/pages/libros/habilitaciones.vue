@@ -161,6 +161,10 @@ onMounted(() => {
                             <div class="flex flex-col">
                                 <span class="text-sm">{{ row.original.autorizacion }}</span>
                                 <span class="text-xs text-muted">{{ formatearFecha(row.original.fecha) }}{{ row.original.nota ? ` · ${row.original.nota}` : '' }}</span>
+                                <span
+                                    class="text-xs text-muted"
+                                    data-prueba="habilitacion-registrado-por"
+                                >Registró: {{ row.original.registrado_por_nombre ?? '—' }}</span>
                             </div>
                         </template>
                         <template #empty>

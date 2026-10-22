@@ -111,7 +111,7 @@ describe('libros legales con folio', () => {
         const compras = await l.emitir('compras', { desde: '2026-09-01' }, nuevaClaveIdempotencia())
         expect(!compras.ok && codigoProblema(compras.problema)).toBe('folios_agotados')
         const primera = await l.habilitar({ libro: 'compras', autorizacion: 'SAT-7121-2026-000300', folio_desde: 1, folio_hasta: 25, fecha: '2026-10-10' }, nuevaClaveIdempotencia())
-        expect(primera.ok && [primera.data.usados, primera.data.disponibles]).toEqual([0, 25])
+        expect(primera.ok && [primera.data.usados, primera.data.disponibles, primera.data.registrado_por_nombre]).toEqual([0, 25, 'Ana Administradora'])
         const salto = await l.habilitar({ libro: 'compras', autorizacion: 'SAT-7121-2026-000301', folio_desde: 30, folio_hasta: 40, fecha: '2026-10-10' }, nuevaClaveIdempotencia())
         expect(!salto.ok && [codigoProblema(salto.problema), salto.problema.errors?.[0]?.field, salto.problema.errors?.[0]?.message]).toEqual(['habilitacion_no_correlativa', 'folio_desde', 'Debe ser 26'])
         const futura = await l.habilitar({ libro: 'compras', autorizacion: 'SAT', folio_desde: 26, folio_hasta: 40, fecha: '2026-10-20' }, nuevaClaveIdempotencia())
@@ -209,6 +209,7 @@ describe('libros legales con folio', () => {
     it('habilitaciones: uso por rango, propone el folio siguiente y la API rechaza un salto', async () => {
         const vista = await mountSuspended(PaginaHabilitaciones, { route: '/libros/habilitaciones' })
         await esperar(() => expect(vista.findAll('[data-prueba="habilitacion-disponibles"]').map(d => d.text())).toEqual(['18 disponibles', '50 disponibles', '42 disponibles']))
+        expect(vista.findAll('[data-prueba="habilitacion-registrado-por"]').map(d => d.text())).toEqual(['Registró: Ana Administradora', 'Registró: Ana Administradora', 'Registró: Ana Administradora'])
         await vista.find('[data-prueba="abrir-habilitacion"]').trigger('click')
         await esperar(() => expect(document.querySelector<HTMLInputElement>('[data-prueba="habilitacion-desde"] input, input[data-prueba="habilitacion-desde"]')?.value).toBe('51'))
         expect(document.querySelector('[role="dialog"]')?.textContent).toContain('El siguiente al último habilitado (50).')

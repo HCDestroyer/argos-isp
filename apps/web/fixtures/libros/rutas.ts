@@ -436,6 +436,7 @@ export const rutasLibros: RutasFixture = {
             usados: 0,
             disponibles: hasta - desde + 1,
             registrado_por: quien?.id ?? null,
+            registrado_por_nombre: quien?.nombre ?? null,
             created_at: new Date().toISOString(),
         }
         bd.librosHabilitaciones.push(nueva)
