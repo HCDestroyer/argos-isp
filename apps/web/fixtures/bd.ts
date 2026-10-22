@@ -21,6 +21,7 @@ import { asientosBonificaciones, bonificaciones, conceptosCargo, motivosSinCosto
 import { cierres, egresos } from './egresos/datos'
 import { bloqueosLibro, excepcionesBloqueo, pendientesPorBloqueo, type PendientePorBloqueo } from './libro/bloqueos'
 import { acciones } from './bitacora/datos'
+import { accionesCorridas, calculosChecks, checksCierre, type CalculoCheck } from './libro/checks'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
 import { empresas } from './empresas/datos'
@@ -106,6 +107,10 @@ interface BaseFixtures {
     bloqueosLibro: Schema<'BloqueoLibro'>[]
     excepcionesBloqueo: Schema<'ExcepcionBloqueo'>[]
     pendientesPorBloqueo: PendientePorBloqueo[]
+    /** Lista de verificación de cierre (A3, fase 6 PR B): solo inserción; el vigente de cada clave es su última fila. */
+    checksCierre: Schema<'CheckCierre'>[]
+    /** Lo que el cálculo de un check da distinto de «cuadra» (empresa, tipo, periodo y clave). */
+    calculosChecks: CalculoCheck[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
@@ -224,7 +229,8 @@ function inicial(): BaseFixtures {
         planes,
         planesPorRouter,
         plantillas,
-        acciones,
+        // Las corridas del cron (facturar y vencer) van al final, con ids que siguen a la semilla.
+        acciones: [...acciones, ...accionesCorridas.map((a, i) => ({ ...a, id: siguienteId(acciones) + i, request_id: `req-cron-${siguienteId(acciones) + i}` }))],
         cambios,
         sesiones,
         facturas,
@@ -240,6 +246,8 @@ function inicial(): BaseFixtures {
         bloqueosLibro,
         excepcionesBloqueo,
         pendientesPorBloqueo,
+        checksCierre,
+        calculosChecks,
         bancos,
         cuentasBancarias,
         empresa,
