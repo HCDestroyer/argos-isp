@@ -646,6 +646,38 @@ async function verificarLibroCon(
                  OR (lin.factura_id IS NOT NULL AND NOT mov.importada AND (lin.total <> f.total OR lin.iva <> f.iva)))`,
     )
     await revisar(
+        '9.factura_sin_asiento (toda factura no anulada con total > 0 tiene exactamente un asiento original de su origen, factura o mora, de su empresa y sin reverso; salvo las importadas (contrato de importación: saldada en origen o saldo inicial, sin asiento) y las por_certificar (localización fiscal §1 y §8.4: nace sin asiento, que se escribe al certificarse); y todo asiento original factura o mora es de una factura de su empresa y tipo)',
+        `WITH f AS (
+             SELECT f.id, f.empresa_id, f.tipo, f.estado, f.total,
+                    CASE WHEN f.tipo = 'mora' THEN 'mora' ELSE 'factura' END AS origen
+               FROM billing.facturas f
+              WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
+                AND f.estado NOT IN ('anulada', 'por_certificar') AND f.total > 0
+                AND coalesce(f.reglas_snapshot ->> 'importada', '') <> 'true'
+         )
+         SELECT f.id, f.tipo, f.estado, f.total::text, 'factura' AS que,
+                (SELECT count(*) FROM ledger.asientos a
+                  WHERE a.origen_tipo = f.origen AND a.origen_id = f.id AND a.reversa_de IS NULL)::int AS originales,
+                (SELECT count(*) FROM ledger.asientos a
+                  WHERE a.origen_tipo = f.origen AND a.origen_id = f.id AND a.reversa_de IS NULL
+                    AND a.empresa_id = f.empresa_id
+                    AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))::int AS vigentes
+           FROM f
+          WHERE (SELECT count(*) FROM ledger.asientos a
+                  WHERE a.origen_tipo IN ('factura', 'mora') AND a.origen_id = f.id AND a.reversa_de IS NULL) <> 1
+             OR NOT EXISTS (SELECT 1 FROM ledger.asientos a
+                             WHERE a.origen_tipo = f.origen AND a.origen_id = f.id AND a.reversa_de IS NULL
+                               AND a.empresa_id = f.empresa_id
+                               AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id))
+         UNION ALL
+         SELECT a.id, a.origen_tipo, NULL, NULL, 'asiento_sin_factura', NULL, NULL
+           FROM ledger.asientos a
+          WHERE ${E('a.empresa_id')} AND a.origen_tipo IN ('factura', 'mora') AND a.reversa_de IS NULL
+            AND NOT EXISTS (SELECT 1 FROM billing.facturas x
+                             WHERE x.id = a.origen_id AND x.empresa_id = a.empresa_id
+                               AND (x.tipo = 'mora') = (a.origen_tipo = 'mora'))`,
+    )
+    await revisar(
         '9.mora_con_iva (decisión del PM: la mora no lleva IVA salvo mora_con_iva de la empresa)',
         `SELECT f.id, f.iva::text, f.subtotal::text, f.total::text,
                 (SELECT coalesce(sum(m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id

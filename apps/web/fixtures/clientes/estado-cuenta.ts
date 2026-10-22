@@ -2,6 +2,7 @@ import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import { bd } from '../bd'
 import { clavesHistoricas, dinero } from '../facturacion/datos'
+import { fechaGuatemala } from '../libro/datos'
 
 type Movimiento = Schema<'MovimientoEstadoCuenta'>
 
@@ -82,7 +83,7 @@ function cuentaDe(clienteId: number, empresaId: number | null): Omit<Schema<'Est
         if (pago.historico) {
             // Como `RegistrarPagoHistorico`: la descripción del asiento lleva el id del origen.
             eventos.push({
-                fecha: pago.created_at.slice(0, 10),
+                fecha: fechaGuatemala(pago.created_at),
                 tipo: 'pago',
                 referencia_id: pago.id,
                 empresa_id: pago.empresa_id,
@@ -93,7 +94,7 @@ function cuentaDe(clienteId: number, empresaId: number | null): Omit<Schema<'Est
             continue
         }
         eventos.push({
-            fecha: pago.created_at.slice(0, 10),
+            fecha: fechaGuatemala(pago.created_at),
             tipo: 'pago',
             referencia_id: pago.id,
             empresa_id: pago.empresa_id,

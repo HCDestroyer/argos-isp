@@ -6,6 +6,7 @@ import { morasDebidas, reglaMora, type ReglaMora } from '#billing/mora'
 import VencerFactura from '#billing/actions/vencer_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { TAMANO_LOTE } from '#billing/actions/generar_facturas'
+import { empresasDelProceso } from '#billing/empresa'
 import { BloqueosDeCorrida, type BloqueoCorrida } from '#billing/bloqueos_corrida'
 
 /**
@@ -21,6 +22,9 @@ import { BloqueosDeCorrida, type BloqueoCorrida } from '#billing/bloqueos_corrid
  * Bloqueos del libro (fase 6): una mora cuyo asiento cae bajo un bloqueo no se crea (la factura
  * igual se vence); se cuenta en `bloqueados`, se detalla en `bloqueos` y la corrida avisa con
  * `libro.proceso_bloqueado`. La siguiente corrida la vuelve a intentar.
+ *
+ * Multiempresa: pedido por un usuario (`POST /facturas/vencer`) recorre solo su empresa activa o,
+ * sin ella, las de su alcance (`empresasDelProceso`); el cron (sistema) recorre todas.
  */
 
 export interface EntradaVencerFacturas {
@@ -57,11 +61,12 @@ export default class VencerFacturas {
             bloqueos: [],
         }
         const bloqueos = new BloqueosDeCorrida()
+        const empresas = empresasDelProceso(ctx)
 
         // 1. por vencer
         await this.recorrer(
             (q) => q.whereIn('f.estado', ['emitida', 'parcial']).where('f.vence_en', '<', hoy),
-            input,
+            { ...input, empresas },
             async (factura) => this.vencer(factura.id, hoy, resultado, bloqueos, ctx),
         )
         // 2. vencidas con recargos de mora pendientes
@@ -70,7 +75,7 @@ export default class VencerFacturas {
                 q
                     .where('f.estado', 'vencida')
                     .whereRaw(`coalesce(f.reglas_snapshot->>'mora_tipo', 'ninguna') <> 'ninguna'`),
-            input,
+            { ...input, empresas },
             async (factura) => {
                 const debidas = morasDebidas(reglaMora(factura.reglas_snapshot), factura.vence_en, hoy)
                 if (debidas > factura.moras) await this.vencer(factura.id, hoy, resultado, bloqueos, ctx)
@@ -81,7 +86,7 @@ export default class VencerFacturas {
         resultado.bloqueos = bloqueos.lista()
         await new RegistrarCorrida(this.nombre).execute(
             {
-                parametros: { hasta: hoy, servicio_id: input.servicio_id ?? null },
+                parametros: { hasta: hoy, servicio_id: input.servicio_id ?? null, empresas },
                 resultado: { ...resultado },
                 bloqueos: resultado.bloqueos,
             },
@@ -113,7 +118,7 @@ export default class VencerFacturas {
 
     private async recorrer(
         filtro: (q: ReturnType<typeof consultaBase>) => unknown,
-        input: EntradaVencerFacturas,
+        input: EntradaVencerFacturas & { empresas: number[] | null },
         procesar: (factura: Candidata) => Promise<void>,
     ) {
         let cursor = 0
@@ -121,6 +126,7 @@ export default class VencerFacturas {
             const consulta = consultaBase()
                 .where('f.id', '>', cursor)
                 .if(input.servicio_id, (q) => q.where('f.servicio_id', input.servicio_id!))
+                .if(input.empresas !== null, (q) => q.whereIn('f.empresa_id', input.empresas!))
             filtro(consulta)
             const lote = (await consulta.orderBy('f.id', 'asc').limit(TAMANO_LOTE)) as Candidata[]
             for (const factura of lote) await procesar(factura)

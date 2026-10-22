@@ -8,6 +8,7 @@ import VencerFacturas, { type ResultadoVencimiento } from '#billing/actions/venc
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { TAMANO_LOTE } from '#billing/actions/generar_facturas'
 import { HORA_CORTE_EFECTIVA, serviciosConHoraCorte } from '#billing/cortes'
+import { empresasDelProceso } from '#billing/empresa'
 
 /**
  * `servicios.corte` (cron de corte, cada minuto, y `POST /facturas/corte`): a la `hora_corte`
@@ -20,6 +21,9 @@ import { HORA_CORTE_EFECTIVA, serviciosConHoraCorte } from '#billing/cortes'
  *   vencimiento atrasado.
  * - Con `servicio_id` (o `ignorar_hora`) es un corte manual: evalúa sin mirar ni registrar
  *   `cortes_ejecutados`. `ignorar_hora` además deja bajar de estado antes de la hora.
+ * - Multiempresa: pedido por un usuario (`POST /facturas/corte`) evalúa y vence solo su empresa
+ *   activa o, sin ella, las de su alcance (`empresasDelProceso`); el cron (sistema), todas. Un
+ *   corte acotado no marca `cortes_ejecutados` (las demás empresas siguen pendientes para el cron).
  */
 
 export interface EntradaCorte {
@@ -45,9 +49,13 @@ export default class EjecutarCorte {
         const local = DateTime.fromJSDate(ahora).setZone(ZONA_NEGOCIO)
         const hoy = local.toISODate()!
         const hora = local.toFormat('HH:mm')
-        const manual = Boolean(input.servicio_id) || Boolean(input.ignorar_hora)
+        const empresas = empresasDelProceso(ctx)
+        const manual = Boolean(input.servicio_id) || Boolean(input.ignorar_hora) || empresas !== null
 
-        const horas = manual ? ['*'] : await this.horasPendientes(hoy, hora)
+        const horas =
+            Boolean(input.servicio_id) || Boolean(input.ignorar_hora)
+                ? ['*']
+                : await this.horasPendientes(hoy, hora, empresas)
         const resultado: ResultadoCorte = {
             horas: [],
             evaluados: 0,
@@ -70,6 +78,7 @@ export default class EjecutarCorte {
                     .where('s.id', '>', cursor)
                     .if(horaCorte !== '*', (q) => q.whereRaw(`${HORA_CORTE_EFECTIVA} = ?`, [horaCorte]))
                     .if(input.servicio_id, (q) => q.where('s.id', input.servicio_id!))
+                    .if(empresas !== null, (q) => q.whereIn('s.empresa_id', empresas!))
                     .orderBy('s.id', 'asc')
                     .limit(TAMANO_LOTE)
                     .select('s.id')) as Array<{ id: number }>
@@ -113,6 +122,7 @@ export default class EjecutarCorte {
                     ahora: ahora.toISOString(),
                     servicio_id: input.servicio_id ?? null,
                     ignorar_hora: input.ignorar_hora ?? false,
+                    empresas,
                 },
                 resultado: { ...resultado },
             },
@@ -122,9 +132,10 @@ export default class EjecutarCorte {
     }
 
     /** Horas de corte de hoy que ya llegaron y no se han procesado. */
-    private async horasPendientes(hoy: string, hora: string): Promise<string[]> {
+    private async horasPendientes(hoy: string, hora: string, empresas: number[] | null): Promise<string[]> {
         const filas = (await serviciosConHoraCorte()
             .whereRaw(`${HORA_CORTE_EFECTIVA} <= ?`, [hora])
+            .if(empresas !== null, (q) => q.whereIn('s.empresa_id', empresas!))
             .whereRaw(
                 `NOT EXISTS (SELECT 1 FROM billing.cortes_ejecutados c WHERE c.clave = ? || ' ' || ${HORA_CORTE_EFECTIVA})`,
                 [hoy],
