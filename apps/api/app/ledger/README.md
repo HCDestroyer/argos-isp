@@ -133,6 +133,17 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 - Lecturas (`libro.ver`): `GET /libro/bloqueos` (vigentes por tipo de cada empresa), `/libro/bloqueos/historial`, `/libro/bloqueos/excepciones?estado=vigente|vencida|revocada`.
 - Emite `libro.bloqueo_cambiado { empresa_id, tipo, hasta, anterior }`.
 
+## Cierre anual y balance de comprobación (fase 6 · PR C, `ejercicios.ts`, `comprobacion.ts`, contrato §9.1 y §10.8)
+
+| Acción | Archivo | Permiso | Qué hace |
+| --- | --- | --- | --- |
+| `libro.cerrar_ejercicio` | `actions/cerrar_ejercicio.ts` | `libro.cerrar_ejercicio` | `POST /libro/ejercicios/cerrar { anio, empresa_id?, isr { monto, acreditado_trimestral?, acreditado_iso?, nota? } }` (201). El ISR lo escribe el usuario (obligatorio, `0.00` si no hay; acreditados ≤ saldo de `1.1.07`/`1.1.08` al 31-dic y ≤ ISR, 422 `isr_acreditable`). Requisitos (422 `ejercicio_requisitos`, `rule` = `meses_abiertos`, `diciembre_cerrado`, `dte_pendientes`, `ejercicio_anterior_abierto`); 409 `ejercicio_cerrado` |
+| `libro.reabrir_ejercicio` | `actions/reabrir_ejercicio.ts` | `libro.reabrir_ejercicio` (solo `admin`) | `POST /libro/ejercicios/reabrir { anio, motivo }`: agrega la reapertura, reabre diciembre y revierte los asientos del cierre con fecha 31-dic. 409 `ejercicio_abierto`, `bloqueo_duro`, `reapertura_fuera_de_orden` (año siguiente cerrado) |
+
+- Asientos (fecha 31-dic, diario `CIE`, origen `cierre_anual`, `origen_id` = el cierre): provisión del ISR `5.5.01 / 1.1.07 + 1.1.08 + 2.1.07`; cancelación de cada ingreso y gasto del año contra `3.3.03`; `3.3.03 → 3.3.02`; `3.3.02 → 3.3.01`; reserva legal `3.3.01 / 3.2.01` (`reserva_legal_pct` × la base de `reserva_legal_base`, solo con utilidad). Después cierra diciembre (`cerrar_periodo` anidada). Emite `ejercicio.cerrado` y `ejercicio.reabierto`.
+- Tablas (solo inserción, trigger y `REVOKE`): `ledger.cierres_anuales` (ISR, `resultado_antes_isr`, `resultado`, `reserva_legal`, `resumen`) y `ledger.reaperturas_anuales`. `ledger.ejercicio_cerrado(fecha, empresa)` = cierre sin reapertura; un trigger impide dos vigentes. Con el ejercicio cerrado ningún mes del año se reabre (409 `ejercicio_cerrado`) y sus asientos no se revierten directo.
+- Lecturas (`libro.ver`): `GET /libro/ejercicios` (consolidable, `estado`, `anio`), `GET /libro/ejercicios/:id` (con `asientos[]`) y `GET /libro/comprobacion?desde&hasta&sin_cierre_anual` (por cuenta y grupo; `cuadra`). El estado de resultados excluye la partida de cierre (los asientos del cierre que tocan `3.3.03`) y su reverso; el balance separa `resultado_ejercicios_sin_cerrar` de `resultado_ejercicio`.
+
 ## Egresos (`egresos.ts`)
 
 | Acción              | Archivo                       | Qué hace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -215,6 +226,6 @@ Detalle y desvíos en §19 del contrato. Todo de solo inserción (trigger y `REV
 
 ## Eventos
 
-Emite: `libro.bloqueo_cambiado` (fase 6, arriba); `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
+Emite: `ejercicio.cerrado`, `ejercicio.reabierto` y `libro.bloqueo_cambiado` (fase 6, arriba); `compra.registrada`, `compra.anulada`, `activo.dado_de_baja` (fase 5, arriba); `cobros.liquidados`, `caja.depositada`, `banco.extracto_importado`, `banco.conciliado` y `cartera.castigada` (fase 4, arriba); `caja.cerrada` (`caja_id`, `empresa_id`, `cajero_id` = cajero asignado o quien abrió, `esperado`, `contado`, `diferencia`) y `libro.integridad_rota` (`empresa_id`, `sello`, `asiento_id`, `esperado`, `obtenido`; sellador y verificación diaria, una vez por empresa y sello). Consume: ninguno.
 - `GET /bancos/depositos?caja_id=&turno_id=` (permiso `bancos.ver` **o** `cajas.ver`, `autorizarLecturaDeCaja` de `lectura_caja.ts`): con `bancos.ver`, todos; con solo `cajas.ver` (el cajero), `caja_id` o `turno_id` obligatorio y la caja en su alcance (403; sin filtro 422); sin ninguno, 403.
 - `GET /egresos?caja_id=&turno_id=` (permiso `egresos.ver` **o** `cajas.ver`, mismo patrón): con solo `cajas.ver` el cajero lee los egresos de su caja o turno para el esperado provisional de /caja.

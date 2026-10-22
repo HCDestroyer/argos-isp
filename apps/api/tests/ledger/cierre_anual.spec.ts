@@ -153,7 +153,7 @@ test.group('Fase 6 · cierre anual', (group) => {
         // evento y auditoría con el ISR escrito por el usuario
         const evento = await db
             .from('audit.outbox')
-            .where('evento', 'libro.ejercicio_cerrado')
+            .where('evento', 'ejercicio.cerrado')
             .whereRaw(`(payload->>'empresa_id')::bigint = ?`, [e.B])
             .firstOrFail()
         assert.deepInclude(evento.payload, {

@@ -22,7 +22,7 @@ import RevertirAsiento from '#ledger/actions/revertir_asiento'
  *   §9.1, que dice «con fecha de hoy»: un reverso con fecha de hoy devolvería los ingresos y gastos
  *   del año cerrado al año en curso y el libro del 31-dic quedaría cancelado dos veces al volver a
  *   cerrar). Diciembre queda abierto para corregir y volver a cerrar con `libro.cerrar_ejercicio`.
- * - Emite `libro.ejercicio_reabierto`.
+ * - Emite `ejercicio.reabierto`.
  */
 
 export interface EntradaReabrirEjercicio {
@@ -102,7 +102,7 @@ export default class ReabrirEjercicio extends DomainAction<EntradaReabrirEjercic
             )
         }
 
-        await t.emit('libro.ejercicio_reabierto', {
+        await t.emit('ejercicio.reabierto', {
             empresa_id: empresaId,
             cierre_id: cierreId,
             anio,

@@ -44,7 +44,7 @@ import CerrarPeriodo, { LOCK_CIERRES } from '#ledger/actions/cerrar_periodo'
  *
  * `resultado_antes_isr` es el resultado contable del año antes de la provisión del cierre (incluye
  * el ISR que ya estuviera en `5.5.01`); `resultado` = `resultado_antes_isr − isr`.
- * Emite `libro.ejercicio_cerrado`.
+ * Emite `ejercicio.cerrado`.
  */
 
 export interface EntradaCerrarEjercicio {
@@ -253,7 +253,7 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
             },
         )
 
-        await t.emit('libro.ejercicio_cerrado', {
+        await t.emit('ejercicio.cerrado', {
             empresa_id: empresaId,
             cierre_id: cierreId,
             anio,

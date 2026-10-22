@@ -402,7 +402,7 @@ export interface CatalogoEventos {
      * Cierre anual (§9.1, fase 6 PR C): el ejercicio `anio` de la empresa quedó cerrado (resultados
      * en cero, traslado a 3.3.01, reserva legal y diciembre cerrado). Montos con 2 decimales.
      */
-    'libro.ejercicio_cerrado': {
+    'ejercicio.cerrado': {
         empresa_id: number
         cierre_id: number
         anio: number
@@ -411,7 +411,7 @@ export interface CatalogoEventos {
         reserva_legal: string
     }
     /** Un admin reabrió el ejercicio: los asientos del cierre se revirtieron y diciembre quedó abierto. */
-    'libro.ejercicio_reabierto': {
+    'ejercicio.reabierto': {
         empresa_id: number
         cierre_id: number
         anio: number
@@ -823,8 +823,8 @@ export const EVENTOS = [
     'libro.integridad_rota',
     'libro.bloqueo_cambiado',
     'libro.proceso_bloqueado',
-    'libro.ejercicio_cerrado',
-    'libro.ejercicio_reabierto',
+    'ejercicio.cerrado',
+    'ejercicio.reabierto',
     'notificacion.enviada',
     'notificaciones.config_cambiada',
     'fiscal.localizacion_instalada',
