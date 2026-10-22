@@ -16,12 +16,15 @@ const props = withDefaults(defineProps<{
     icono?: string
     color?: ButtonProps['color']
     placeholder?: string
+    /** Nombre del campo (por defecto «Motivo»; «Nota» al supervisar un check de cierre). */
+    etiqueta?: string
     ejecutar: (motivo: string, claveIdempotencia: string) => Promise<Resultado<T>>
 }>(), {
     descripcion: undefined,
     icono: 'i-lucide-ban',
     color: 'error',
     placeholder: 'Ej.: se emitió con el plan equivocado',
+    etiqueta: 'Motivo',
 })
 
 const abierto = defineModel<boolean>('open', { default: false })
@@ -81,7 +84,7 @@ async function enviar(evento: FormSubmitEvent<DatosMotivo>) {
                 />
 
                 <UFormField
-                    label="Motivo"
+                    :label="etiqueta"
                     name="motivo"
                     required
                     help="Queda en la bitácora junto con tu usuario."

@@ -6,6 +6,7 @@ import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaE
 import { bancosLibro } from '../libro/datos'
 import { categoriasEgreso } from './datos'
 import { ncreSinCertificar, rupturaDe } from '../fel/rutas'
+import { verificarYExigir } from '../libro/checks'
 
 type Egreso = Schema<'Egreso'>
 type Errores = NonNullable<Problem['errors']>
@@ -232,6 +233,11 @@ export const rutasEgresos: RutasFixture = {
         const ruptura = rupturaDe(empresaCierre)
         if (ruptura) {
             return problemaCodigo(409, 'integridad_rota', 'Integridad del libro', `La cadena de hash del libro está rota en el sello ${ruptura.sello} (${ruptura.motivo}): no se puede cerrar el mes`)
+        }
+        // Fase 6 PR B: verifica y exige la lista de verificación del mes (422 `checks_pendientes`).
+        const checks = verificarYExigir(solicitud, empresaCierre, [['mensual', `${periodo}-01`]])
+        if (checks) {
+            return checks
         }
         const quien = usuario(solicitud)
         const cierre: Schema<'CierrePeriodo'> = {

@@ -37,6 +37,7 @@ import { rutasFacturacion } from './facturacion/rutas'
 import { rutasEstadosFinancieros } from './libro/estados'
 import { rutasLibro } from './libro/rutas'
 import { rutasBloqueosLibro, rutasCorridasConBloqueo } from './libro/bloqueos'
+import { rutasChecksCierre, rutasCorridasFacturacion } from './libro/checks'
 import { empresaActivaDe, empresaNoPermitida, problemaTipado, sinSesion, usuariosPorToken } from './comun'
 import { TICKET_SIN_VINCULAR, TICKET_VINCULADO, TOKEN_VINCULACION } from './horus/datos'
 import { rutasHorus } from './horus/rutas'
@@ -505,9 +506,12 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasPlantillas,
     ...rutasBitacora,
     ...rutasSesiones,
+    // Antes que `GET /facturas/:id`.
+    ...rutasCorridasFacturacion,
     ...rutasFacturacion,
     // Antes que las rutas genéricas del libro y que `POST /facturas/:id/…`.
     ...rutasBloqueosLibro,
+    ...rutasChecksCierre,
     ...rutasCorridasConBloqueo,
     ...rutasLibro,
     ...rutasEstadosFinancieros,

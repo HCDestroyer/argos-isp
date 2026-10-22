@@ -124,6 +124,9 @@ function rutasDePaginas(): Map<string, string> {
  * ficha del plan solo edita: siempre le pasa el plan, así que nunca crea).
  */
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exentos?: Record<string, string[]> }> = {
+    // LibroCierres solo se abre desde /libro (página con `libro.ver`): ya lo comprobó quien la abrió.
+    'CierreChecklist.vue': { permisos: ['libro.ver'], desde: ['components/LibroCierres.vue'], exentos: { 'components/LibroCierres.vue': ['libro.ver'] } },
+    'ProcesosDetenidos.vue': { permisos: ['facturas.ver'], desde: ['pages/libro/bloqueos.vue'] },
     'BloqueoLibroModal.vue': { permisos: ['libro.bloquear', 'libro.desbloquear'], desde: ['pages/libro/bloqueos.vue'] },
     'BloqueoDuroModal.vue': { permisos: ['libro.bloquear_duro'], desde: ['pages/libro/bloqueos.vue'] },
     'ExcepcionBloqueoModal.vue': { permisos: ['libro.excepcion_bloqueo'], desde: ['pages/libro/bloqueos.vue'] },

@@ -6,7 +6,7 @@ import type { SelectItem, TableColumn } from '@nuxt/ui'
  * Bloqueos del libro (A3, fase 6 PR A, contrato fiscal §11): por empresa, el `hasta` vigente de cada
  * tipo (global, ventas, compras, impuestos y el duro), las acciones que el permiso deja (bloquear,
  * desbloquear, bloqueo duro con confirmación de texto, excepciones con fecha de fin, solo admin), los
- * procesos que una corrida no contabilizó por un bloqueo y el historial. Si algo no se puede leer, el
+ * la última corrida de facturar y vencer con lo que dejó pendiente un bloqueo y el historial. Si algo no se puede leer, el
  * error se ve con «Reintentar» y no se muestra ningún estado inventado.
  */
 definePageMeta({ permiso: 'libro.ver' })
@@ -137,51 +137,6 @@ const columnasHistorial: TableColumn<BloqueoLibro>[] = [
     { accessorKey: 'motivo', header: 'Motivo', meta: { class: { th: 'hidden sm:table-cell', td: 'hidden whitespace-normal sm:table-cell' } } },
 ]
 
-/* Procesos pendientes por un bloqueo: correr de nuevo y ver qué quedó detenido. */
-const procesoAConfirmar = ref<ProcesoConBloqueo | null>(null)
-const confirmandoProceso = computed({
-    get: () => procesoAConfirmar.value !== null,
-    set: (valor: boolean) => {
-        if (!valor) {
-            procesoAConfirmar.value = null
-        }
-    },
-})
-const corridas = reactive<Partial<Record<ProcesoConBloqueo, { resumen: string, bloqueados: number, bloqueos: BloqueoDeProceso[] }>>>({})
-
-function correrProceso(): Promise<Resultado<{ resumen: string, bloqueados: number, bloqueos: BloqueoDeProceso[] }>> {
-    const proceso = procesoAConfirmar.value
-    const clave = nuevaClaveIdempotencia()
-    if (proceso === 'facturar') {
-        return useFacturas().generar(clave).then(r => (r.ok
-            ? { ok: true, data: { resumen: `${r.data.generadas} generadas · ${r.data.omitidas} ya tenían factura${r.data.errores ? ` · ${r.data.errores} con error` : ''}`, bloqueados: r.data.bloqueados ?? 0, bloqueos: r.data.bloqueos ?? [] } }
-            : r))
-    }
-    return useFacturas().vencer(clave).then(r => (r.ok
-        ? { ok: true, data: { resumen: `${r.data.vencidas} vencidas · ${r.data.moras} moras${r.data.errores ? ` · ${r.data.errores} con error` : ''}`, bloqueados: r.data.bloqueados, bloqueos: r.data.bloqueos } }
-        : r))
-}
-
-const ultimoProceso = ref<ProcesoConBloqueo | null>(null)
-
-function alCorrer(resultado: { resumen: string, bloqueados: number, bloqueos: BloqueoDeProceso[] }) {
-    const proceso = ultimoProceso.value
-    if (proceso) {
-        corridas[proceso] = resultado
-    }
-    toast.add({
-        title: resultado.bloqueados ? `${resultado.bloqueados} pendientes por un bloqueo` : 'Sin pendientes por bloqueos',
-        description: resultado.resumen,
-        icon: resultado.bloqueados ? 'i-lucide-lock' : 'i-lucide-circle-check',
-        color: resultado.bloqueados ? 'warning' : 'success',
-    })
-}
-
-function pedirProceso(proceso: ProcesoConBloqueo) {
-    ultimoProceso.value = proceso
-    procesoAConfirmar.value = proceso
-}
-
 onMounted(() => {
     void cargar()
     void excepciones.recargar()
@@ -310,73 +265,7 @@ onMounted(() => {
                 </div>
             </UPageCard>
 
-            <UPageCard
-                v-if="puede('facturas.generar')"
-                title="Procesos detenidos por un bloqueo"
-                description="La facturación y el vencimiento no contabilizan lo que cae bajo un bloqueo: lo dejan pendiente y cada corrida lo reintenta. Después de desbloquear (o con una excepción), córralos para que entre lo pendiente."
-                icon="i-lucide-hourglass"
-                variant="subtle"
-                data-prueba="procesos-bloqueados"
-            >
-                <div class="grid gap-3 lg:grid-cols-2">
-                    <div
-                        v-for="(visual, proceso) in PROCESOS_CON_BLOQUEO"
-                        :key="proceso"
-                        class="flex flex-col gap-2 rounded-lg border border-default p-3"
-                        :data-proceso="proceso"
-                    >
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <span class="flex items-center gap-2 text-sm font-medium text-highlighted">
-                                <UIcon
-                                    :name="visual.icono"
-                                    class="size-4"
-                                />
-                                {{ visual.etiqueta }}
-                            </span>
-                            <UButton
-                                label="Correr ahora"
-                                icon="i-lucide-play"
-                                color="neutral"
-                                variant="outline"
-                                size="sm"
-                                :data-prueba="`correr-${proceso}`"
-                                @click="pedirProceso(proceso)"
-                            />
-                        </div>
-                        <p class="text-xs text-muted">
-                            {{ visual.descripcion }}
-                        </p>
-                        <template v-if="corridas[proceso]">
-                            <p class="text-sm">
-                                {{ corridas[proceso]?.resumen }}
-                            </p>
-                            <p
-                                class="text-sm font-medium"
-                                :class="corridas[proceso]?.bloqueados ? 'text-warning' : 'text-success'"
-                                data-prueba="proceso-bloqueados"
-                            >
-                                {{ corridas[proceso]?.bloqueados ? `${corridas[proceso]?.bloqueados} documentos siguen pendientes por un bloqueo` : 'Nada quedó detenido por un bloqueo' }}
-                            </p>
-                            <ul
-                                v-if="corridas[proceso]?.bloqueos.length"
-                                class="flex flex-col gap-1 text-xs text-muted"
-                            >
-                                <li
-                                    v-for="(b, indice) in corridas[proceso]?.bloqueos"
-                                    :key="indice"
-                                    data-prueba="proceso-bloqueo"
-                                >
-                                    {{ TIPOS_BLOQUEO[b.tipo].etiqueta }}{{ b.hasta ? ` hasta ${formatearFecha(b.hasta)}` : '' }} · fecha {{ formatearFecha(b.fecha) }} · {{ b.documentos }} {{ b.documentos === 1 ? 'documento' : 'documentos' }}<template v-if="nombreEmpresa(b.empresa_id)">
-                                        · {{ nombreEmpresa(b.empresa_id) }}
-                                    </template><template v-if="b.ejemplos.length">
-                                        · ids {{ b.ejemplos.slice(0, 5).join(', ') }}{{ b.ejemplos.length > 5 ? '…' : '' }}
-                                    </template>
-                                </li>
-                            </ul>
-                        </template>
-                    </div>
-                </div>
-            </UPageCard>
+            <ProcesosDetenidos v-if="puede('facturas.ver')" />
 
             <section
                 class="flex flex-col gap-3"
@@ -583,17 +472,6 @@ onMounted(() => {
             placeholder="Ej.: ya se registraron las facturas pendientes"
             :ejecutar="revocar"
             @hecho="alRevocar"
-        />
-        <ConfirmacionModal
-            v-if="puede('facturas.generar')"
-            v-model:open="confirmandoProceso"
-            :titulo="procesoAConfirmar ? PROCESOS_CON_BLOQUEO[procesoAConfirmar].etiqueta : 'Proceso'"
-            efecto="Procesa todo lo pendiente hasta hoy, como la corrida automática. Lo que siga bajo un bloqueo queda pendiente y se ve aquí."
-            confirmar="Correr ahora"
-            icono="i-lucide-play"
-            color="primary"
-            :ejecutar="correrProceso"
-            @hecho="alCorrer"
         />
     </PanelPagina>
 </template>

@@ -38,10 +38,15 @@ test('bloquear compras, el duro con su confirmación y sus requisitos, una excep
     await expect(duro.locator('[data-prueba="duro-problema"]')).toContainText('Meses sin cerrar')
     await duro.getByRole('button', { name: 'Cancelar' }).click()
 
-    // Procesos: la facturación de septiembre sigue detenida por el bloqueo de ventas.
-    await page.locator('[data-prueba="correr-facturar"]').click()
+    // Procesos: la última corrida (la del cron) dejó la facturación de septiembre detenida por el bloqueo
+    // de ventas; se lee sin correr nada. «Correr ahora» es aparte y después se vuelve a leer.
+    const corridas = page.locator('[data-prueba="corridas-empresa"]').first()
+    await expect(corridas.locator('[data-proceso="facturar"] [data-prueba="proceso-ultima"]')).toContainText('Automática')
+    await expect(corridas.locator('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]')).toHaveText('3 documentos siguen pendientes por un bloqueo')
+    await corridas.locator('[data-prueba="correr-facturar"]').click()
     await page.getByRole('dialog', { name: 'Facturación pendiente' }).getByRole('button', { name: 'Correr ahora' }).click()
-    await expect(page.locator('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]')).toHaveText('3 documentos siguen pendientes por un bloqueo')
+    await expect(corridas.locator('[data-proceso="facturar"] [data-prueba="proceso-ultima"]')).toContainText('A mano')
+    await expect(corridas.locator('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]')).toHaveText('3 documentos siguen pendientes por un bloqueo')
 
     // Excepción para todos sobre ventas: la siguiente corrida factura lo pendiente.
     await empresa.locator('[data-prueba="abrir-excepcion"]').click()
@@ -53,9 +58,9 @@ test('bloquear compras, el duro con su confirmación y sus requisitos, una excep
     await excepcion.getByRole('button', { name: 'Crear excepción' }).click()
     await expect(excepcion).toHaveCount(0)
     await expect(page.locator('[data-prueba="tabla-excepciones"] [data-prueba="excepcion-estado"]')).toHaveCount(2)
-    await page.locator('[data-prueba="correr-facturar"]').click()
+    await corridas.locator('[data-prueba="correr-facturar"]').click()
     await page.getByRole('dialog', { name: 'Facturación pendiente' }).getByRole('button', { name: 'Correr ahora' }).click()
-    await expect(page.locator('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]')).toHaveText('Nada quedó detenido por un bloqueo')
+    await expect(corridas.locator('[data-proceso="facturar"] [data-prueba="proceso-bloqueados"]')).toHaveText('Nada quedó detenido por un bloqueo')
 
     // Revocar la excepción con motivo.
     await page.locator('[data-prueba="revocar-excepcion"]').first().click()
