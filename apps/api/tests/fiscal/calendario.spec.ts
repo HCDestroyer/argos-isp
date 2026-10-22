@@ -392,6 +392,8 @@ test.group('Fase 7 · calendario fiscal: generación y conciliación', (group) =
         assert.deepEqual([noEs.status, noEs.codigo], [422, 'feriado_inexistente'])
 
         try {
+            const previo = await db.from('audit.outbox').max('id as id').first()
+            const desdeOutbox = Number(previo?.id ?? 0)
             const agregado = await new AgregarFeriado().execute(
                 {
                     fecha: '2026-11-02',
@@ -416,7 +418,17 @@ test.group('Fase 7 · calendario fiscal: generación y conciliación', (group) =
             const fila = await db.from('fiscal.obligaciones').where('id', corridas[0]!.id).firstOrFail()
             const regla = fila.regla as Record<string, unknown>
             assert.include(regla, { vence_base: '2026-10-31', corrido_a_habil: true })
-            assert.lengthOf(await eventos('fiscal.parametros_cambiados', 'vigente_desde', '2026-11-02'), 1)
+            // solo los eventos de esta prueba (otra prueba puede usar el mismo feriado)
+            const avisos = await db
+                .from('audit.outbox')
+                .where('evento', 'fiscal.parametros_cambiados')
+                .where('id', '>', desdeOutbox)
+                .whereRaw(`payload ->> 'vigente_desde' = ?`, ['2026-11-02'])
+                .select('payload')
+            assert.deepEqual(
+                avisos.map((a) => a.payload),
+                [{ empresa_id: null, claves: ['feriados'], vigente_desde: '2026-11-02' }],
+            )
         } finally {
             await new AgregarFeriado().execute(
                 { fecha: '2026-11-02', activo: false, motivo: 'Fin de la prueba' },
