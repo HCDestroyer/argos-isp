@@ -41,7 +41,9 @@ import RegistrarConstanciaEmitida from '#ledger/actions/registrar_constancia_emi
 import { empresaDeProveedor, listarProveedores, verProveedor } from '#ledger/proveedores'
 import { empresaDeCompra, listarCompras, verCompra } from '#ledger/compras'
 import { dimensionesDeEgreso } from '#ledger/egresos'
-import { cuadreCompras, libroCompras } from '#fiscal/libros'
+import { cuadreCompras, libroCompras, mesesDelRango } from '#fiscal/libros'
+import { libroComprasLegal } from '#fiscal/libros_legales'
+import { responderLibro } from '#fiscal/libros_http'
 import CrearProveedor from '#ledger/actions/crear_proveedor'
 import EditarProveedor from '#ledger/actions/editar_proveedor'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
@@ -364,15 +366,17 @@ const libros: Ruta[] = [
         permiso: 'libros.ver',
         query: v.libroComprasValidator,
         descripcion:
-            'Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio llega con los bloqueos.' +
+            'Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio es POST /libros/compras/emitir; formato=pdf da la vista previa en PDF con la marca de agua «Borrador sin folio».' +
             DESCRIPCION_EXPORTACION,
         respuesta: { status: 200, descripcion: 'Libro', esquema: ReporteLibroCompras },
-        handler: async (ctx, { query }) =>
-            responderReporte(
-                ctx,
-                await libroCompras(await empresaDelLibro(ctx, query.empresa_id), query),
-                query.formato,
-            ),
+        handler: async (ctx, { query }) => {
+            const empresaId = await empresaDelLibro(ctx, query.empresa_id)
+            if (query.formato === 'pdf') {
+                // libro legal con la marca de agua «Borrador sin folio» (fase 6 PR D)
+                return responderLibro(ctx, await libroComprasLegal(empresaId, mesesDelRango(query)), 'pdf')
+            }
+            return responderReporte(ctx, await libroCompras(empresaId, query), query.formato)
+        },
     }),
     definirRuta({
         metodo: 'get',

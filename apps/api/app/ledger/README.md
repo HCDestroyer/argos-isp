@@ -158,6 +158,10 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 - Tablas (solo inserción, trigger y `REVOKE`): `ledger.cierres_anuales` (ISR, `resultado_antes_isr`, `resultado`, `reserva_legal`, `resumen`) y `ledger.reaperturas_anuales`. `ledger.ejercicio_cerrado(fecha, empresa)` = cierre sin reapertura; un trigger impide dos vigentes. Con el ejercicio cerrado ningún mes del año se reabre (409 `ejercicio_cerrado`) y sus asientos no se revierten directo.
 - Lecturas (`libro.ver`): `GET /libro/ejercicios` (consolidable, `estado`, `anio`), `GET /libro/ejercicios/:id` (con `asientos[]`) y `GET /libro/comprobacion?desde&hasta&sin_cierre_anual` (por cuenta y grupo; `cuadra`). El estado de resultados excluye la partida de cierre (los asientos del cierre que tocan `3.3.03`) y su reverso; el balance separa `resultado_ejercicios_sin_cerrar` de `resultado_ejercicio`.
 
+## Libros legales con folio (fase 6 · PR D)
+
+Viven en `app/fiscal` (`libros_legales.ts`, `libros_pdf.ts`, `libros_emisiones.ts`; ver su README): leen `ledger.asientos`, `movimientos`, `asientos_partidas`, `asientos_numeros`, `ledger.compras` y `ledger.cierres_mensuales` (último sello y hash del mes) y exigen meses cerrados con bloqueo `global` o `duro`. No escriben en `ledger`.
+
 ## Egresos (`egresos.ts`)
 
 | Acción              | Archivo                       | Qué hace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

@@ -4338,6 +4338,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/libros/{libro}/emitir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emisión oficial con folio de un libro (Diario, Mayor, Compras o Ventas)
+         * @description Meses completos (desde y hasta van al primer y último día de su mes). Exige cada mes cerrado y el bloqueo global o duro hasta el fin del rango (422 periodo_sin_bloqueo, errors[] con rule mes_abierto o sin_bloqueo) y la cadena de hash verificada (409 integridad_rota). Toma el siguiente folio del libro y uno por página dentro de lo habilitado (422 folios_agotados). Guarda el archivo con su SHA-256 y el último sello y hash del cierre del último mes. Un rango que se cruza con una emisión anterior es una reimpresión (folios nuevos y la marca). Emite libro.emitido.
+         */
+        post: operations["librosEmitir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/libros/compras": {
         parameters: {
             query?: never;
@@ -4347,7 +4367,7 @@ export interface paths {
         };
         /**
          * Libro de compras y servicios recibidos (vista previa, sin folio)
-         * @description Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio llega con los bloqueos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.
+         * @description Por mes del IVA: las compras con su periodo_iva en el rango y las anulaciones cuyo reverso cae en él (en negativo). El total de iva_credito cuadra con el movimiento de 1.1.04 de los asientos de compras del rango (GET /libros/compras/cuadre). La emisión con folio es POST /libros/compras/emitir; formato=pdf da la vista previa en PDF con la marca de agua «Borrador sin folio». Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final.
          */
         get: operations["librosCompras"];
         put?: never;
@@ -4367,6 +4387,158 @@ export interface paths {
         };
         /** Cuadre del libro de compras con 1.1.04 IVA crédito fiscal, por mes */
         get: operations["librosComprasCuadre"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/diario": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Libro Diario (vista previa, sin folio)
+         * @description Cualquier rango (por defecto el mes en curso). Cada movimiento en una fila (fila = movimiento) y debajo el total de la partida (fila = total). Orden cronológico: fecha, partida (la guardada al cerrar el mes, §10.7; null en meses abiertos) y número del diario. totales suma solo los movimientos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final. Con `formato=pdf` responde el libro en PDF (carta horizontal, encabezado legal, «Página N de M», «Van» y «Vienen») con la marca de agua «Borrador sin folio».
+         */
+        get: operations["librosDiario"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/emisiones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Emisiones oficiales de los libros (la más reciente primero) */
+        get: operations["librosEmisiones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/emisiones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Una emisión oficial de un libro */
+        get: operations["librosEmision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/emisiones/{id}/archivo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Archivo de una emisión (PDF o XLSX) tal como se guardó
+         * @description Vuelve a calcular el SHA-256 del archivo y responde 409 archivo_alterado si no coincide con el registrado.
+         */
+        get: operations["librosEmisionArchivo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/folios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Folios de cada libro: el siguiente y cuántos quedan habilitados */
+        get: operations["librosFolios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/habilitaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rangos de folios habilitados de los libros (el más reciente primero) */
+        get: operations["librosHabilitaciones"];
+        put?: never;
+        /**
+         * Registrar un rango de folios habilitado de un libro (solo inserción)
+         * @description Rangos correlativos por libro: el primero empieza donde diga la autorización y cada uno nuevo en el folio siguiente al último habilitado (422 habilitacion_no_correlativa). fecha no futura. Una habilitación no se edita ni se borra.
+         */
+        post: operations["librosHabilitar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/mayor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Libro Mayor (vista previa, sin folio)
+         * @description Por cuenta con saldo inicial o movimientos en el rango: saldo inicial (fila = saldo_inicial), cada movimiento con su saldo acumulado y el saldo final con el debe y el haber de la cuenta (fila = saldo_final). El saldo va según la naturaleza de la cuenta. totales suma el debe y el haber de los movimientos. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final. Con `formato=pdf` responde el libro en PDF (carta horizontal, encabezado legal, «Página N de M», «Van» y «Vienen») con la marca de agua «Borrador sin folio».
+         */
+        get: operations["librosMayor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/libros/ventas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Libro de Ventas y Servicios Prestados (vista previa, sin folio)
+         * @description DTE certificados del rango (fecha de emisión) y, sin FEL, facturas que no son aviso de cobro (fecha de su asiento) y sus notas de crédito. Anulados con valores en cero; NCRE y notas restan. Los avisos de cobro sin DTE no entran (su IVA está en 2.1.11). retenciones = constancias de los pagos vigentes aplicados a la factura, en proporción a lo aplicado. Con `formato=csv` o `formato=xlsx` responde el archivo con la fila de totales al final. Con `formato=pdf` responde el libro en PDF (carta horizontal, encabezado legal, «Página N de M», «Van» y «Vienen») con la marca de agua «Borrador sin folio».
+         */
+        get: operations["librosVentas"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9236,6 +9408,39 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        EmisionLibro: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            libro: "diario" | "mayor" | "inventarios" | "estados_financieros" | "compras" | "ventas";
+            /** Format: date */
+            desde: string;
+            /** Format: date */
+            hasta: string;
+            folio_inicial: number;
+            folio_final: number;
+            paginas: number;
+            /** @enum {string} */
+            formato: "pdf" | "xlsx";
+            /** @description Bytes del archivo */
+            tamano: number;
+            /** @description SHA-256 (hex) del archivo guardado */
+            sha256: string;
+            filas: number;
+            /** @description Totales del libro (columnas de dinero) */
+            totales: {
+                [key: string]: unknown;
+            };
+            ultimo_sello: number | null;
+            /** @description Último hash de la cadena del periodo (§10.10) */
+            ultimo_hash: string | null;
+            reimpresion: boolean;
+            reimpresion_de: number | null;
+            generado_por: number | null;
+            generado_por_nombre: string | null;
+            /** Format: date-time */
+            generado_en: string;
+        };
         EmisorFactura: {
             empresa_id: number;
             nit: string | null;
@@ -9758,6 +9963,17 @@ export interface components {
             /** @description Saldo pendiente de las facturas vencidas */
             total: components["schemas"]["Dinero"];
         };
+        FoliosLibro: {
+            empresa_id: number;
+            /** @enum {string} */
+            libro: "diario" | "mayor" | "inventarios" | "estados_financieros" | "compras" | "ventas";
+            primero: number | null;
+            ultimo_habilitado: number | null;
+            ultimo_usado: number | null;
+            /** @description Folio que tomará la próxima emisión (null sin habilitación) */
+            siguiente: number | null;
+            disponibles: number;
+        };
         FraseFiscal: {
             /** @description null en las del régimen (se derivan del régimen vigente) */
             id: number | null;
@@ -9792,6 +10008,27 @@ export interface components {
             vigentes: components["schemas"]["FraseFiscal"][];
             /** @description Todas las filas de frases manuales */
             historial: components["schemas"]["FraseFiscal"][];
+        };
+        HabilitacionLibro: {
+            id: number;
+            empresa_id: number;
+            /** @enum {string} */
+            libro: "diario" | "mayor" | "inventarios" | "estados_financieros" | "compras" | "ventas";
+            /** @enum {string} */
+            tipo: "computarizado";
+            /** @description Número de la autorización (SAT-7121 y Registro Mercantil) */
+            autorizacion: string;
+            folio_desde: number;
+            folio_hasta: number;
+            /** Format: date */
+            fecha: string;
+            nota: string | null;
+            /** @description Folios de este rango ya usados por emisiones */
+            usados: number;
+            disponibles: number;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
         };
         HistorialImpuestoFiscal: {
             vigente: components["schemas"]["ImpuestoFiscal"] | null;
@@ -12439,6 +12676,142 @@ export interface components {
                 credito: number | null;
                 iva_credito: components["schemas"]["Dinero"] | null;
                 periodo_iva: number | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteLibroDiario: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                fila: string;
+                partida: number | null;
+                /** Format: date */
+                fecha: string;
+                diario: string | null;
+                numero: number | null;
+                asiento_id: number;
+                cuenta: string | null;
+                cuenta_nombre: string | null;
+                descripcion: string;
+                debe: components["schemas"]["Dinero"];
+                haber: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                fila: number | null;
+                partida: number | null;
+                fecha: number | null;
+                diario: number | null;
+                numero: number | null;
+                asiento_id: number | null;
+                cuenta: number | null;
+                cuenta_nombre: number | null;
+                descripcion: number | null;
+                debe: components["schemas"]["Dinero"] | null;
+                haber: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteLibroMayor: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                fila: string;
+                cuenta: string;
+                cuenta_nombre: string;
+                /** Format: date */
+                fecha: string | null;
+                partida: number | null;
+                asiento_id: number | null;
+                descripcion: string;
+                debe: components["schemas"]["Dinero"];
+                haber: components["schemas"]["Dinero"];
+                saldo: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                fila: number | null;
+                cuenta: number | null;
+                cuenta_nombre: number | null;
+                fecha: number | null;
+                partida: number | null;
+                asiento_id: number | null;
+                descripcion: number | null;
+                debe: components["schemas"]["Dinero"] | null;
+                haber: components["schemas"]["Dinero"] | null;
+                saldo: components["schemas"]["Dinero"] | null;
+            };
+            /** Format: date-time */
+            generado_en: string;
+        };
+        ReporteLibroVentas: {
+            reporte: string;
+            titulo: string;
+            filtros: {
+                [key: string]: unknown;
+            };
+            columnas: components["schemas"]["ColumnaReporte"][];
+            filas: {
+                empresa_id?: number;
+                empresa?: string;
+                /** Format: date */
+                fecha: string;
+                origen: string;
+                documento: string;
+                tipo: string;
+                serie: string | null;
+                numero: string | null;
+                autorizacion: string | null;
+                nit: string;
+                cliente: string;
+                bienes: components["schemas"]["Dinero"];
+                servicios: components["schemas"]["Dinero"];
+                exportacion: components["schemas"]["Dinero"];
+                exento: components["schemas"]["Dinero"];
+                iva: components["schemas"]["Dinero"];
+                total: components["schemas"]["Dinero"];
+                estado: string;
+                retenciones: components["schemas"]["Dinero"];
+            }[];
+            /** @description Suma de las columnas de dinero y enteros */
+            totales: {
+                empresa_id?: number | null;
+                empresa?: number | null;
+                fecha: number | null;
+                origen: number | null;
+                documento: number | null;
+                tipo: number | null;
+                serie: number | null;
+                numero: number | null;
+                autorizacion: number | null;
+                nit: number | null;
+                cliente: number | null;
+                bienes: components["schemas"]["Dinero"] | null;
+                servicios: components["schemas"]["Dinero"] | null;
+                exportacion: components["schemas"]["Dinero"] | null;
+                exento: components["schemas"]["Dinero"] | null;
+                iva: components["schemas"]["Dinero"] | null;
+                total: components["schemas"]["Dinero"] | null;
+                estado: number | null;
+                retenciones: components["schemas"]["Dinero"] | null;
             };
             /** Format: date-time */
             generado_en: string;
@@ -31111,6 +31484,95 @@ export interface operations {
             };
         };
     };
+    librosEmitir: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                libro: "diario" | "mayor" | "compras" | "ventas";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number;
+                    /** Format: date */
+                    desde: string;
+                    /**
+                     * Format: date
+                     * @description Mes final; por defecto el de desde
+                     */
+                    hasta?: string;
+                    /**
+                     * @description Por defecto pdf. XLSX: las filas con el folio de su página
+                     * @enum {string}
+                     */
+                    formato?: "pdf" | "xlsx";
+                };
+            };
+        };
+        responses: {
+            /** @description Emisión registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmisionLibro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     librosCompras: {
         parameters: {
             query?: {
@@ -31120,7 +31582,7 @@ export interface operations {
                 desde?: string;
                 /** @description Mes final; por defecto el de desde */
                 hasta?: string;
-                formato?: "json" | "csv" | "xlsx";
+                formato?: "json" | "csv" | "xlsx" | "pdf";
             };
             header?: never;
             path?: never;
@@ -31186,6 +31648,510 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CuadreCompras"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosDiario: {
+        parameters: {
+            query?: {
+                /** @description Por defecto la empresa activa */
+                empresa_id?: number;
+                /** @description Por defecto el primer día del mes en curso */
+                desde?: string;
+                /** @description Por defecto el último día del mes de desde */
+                hasta?: string;
+                formato?: "json" | "csv" | "xlsx" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Libro (vista previa) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteLibroDiario"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosEmisiones: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                libro?: "diario" | "mayor" | "inventarios" | "estados_financieros" | "compras" | "ventas";
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de emisiones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EmisionLibro"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosEmision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Emisión */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmisionLibro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosEmisionArchivo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archivo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosFolios: {
+        parameters: {
+            query?: {
+                /** @description Por defecto la empresa activa */
+                empresa_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Folios por libro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoliosLibro"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosHabilitaciones: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                libro?: "diario" | "mayor" | "inventarios" | "estados_financieros" | "compras" | "ventas";
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de habilitaciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["HabilitacionLibro"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosHabilitar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Por defecto la empresa activa */
+                    empresa_id?: number;
+                    /** @enum {string} */
+                    libro: "diario" | "mayor" | "inventarios" | "estados_financieros" | "compras" | "ventas";
+                    /** @description Número de la autorización (SAT-7121 y Registro Mercantil) */
+                    autorizacion: string;
+                    folio_desde: number;
+                    folio_hasta: number;
+                    /** Format: date */
+                    fecha: string;
+                    nota?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Habilitación registrada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HabilitacionLibro"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.habilitar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosMayor: {
+        parameters: {
+            query?: {
+                /** @description Por defecto la empresa activa */
+                empresa_id?: number;
+                /** @description Por defecto el primer día del mes en curso */
+                desde?: string;
+                /** @description Por defecto el último día del mes de desde */
+                hasta?: string;
+                formato?: "json" | "csv" | "xlsx" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Libro (vista previa) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteLibroMayor"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso libros.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    librosVentas: {
+        parameters: {
+            query?: {
+                /** @description Por defecto la empresa activa */
+                empresa_id?: number;
+                /** @description Por defecto el primer día del mes en curso */
+                desde?: string;
+                /** @description Por defecto el último día del mes de desde */
+                hasta?: string;
+                formato?: "json" | "csv" | "xlsx" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Libro (vista previa) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteLibroVentas"];
                 };
             };
             /** @description No autenticado */

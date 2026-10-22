@@ -227,7 +227,8 @@ export const libroComprasValidator = vine.compile(
             .optional()
             .meta({ description: 'Mes inicial (cualquier día); por defecto el actual' }),
         hasta: fechaIso().optional().meta({ description: 'Mes final; por defecto el de desde' }),
-        formato,
+        // pdf: libro legal con la marca de agua «Borrador sin folio» (fase 6 PR D)
+        formato: vine.enum(['json', 'csv', 'xlsx', 'pdf'] as const).optional(),
     }),
 )
 
