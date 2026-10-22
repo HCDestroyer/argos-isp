@@ -216,7 +216,7 @@ const checks: Ruta[] = [
         operacion: 'libroVerificarCierre',
         resumen: 'Correr los checks automáticos de un cierre',
         etiqueta: 'libro',
-        permiso: 'libro.cerrar_periodo',
+        permiso: 'cierres.verificar',
         cuerpo: v.verificarCierreValidator,
         idempotente: true,
         descripcion:
@@ -238,7 +238,7 @@ const checks: Ruta[] = [
         operacion: 'libroRevisarCheck',
         resumen: 'Supervisar un check en anomalía (con nota) o retirar la supervisión',
         etiqueta: 'libro',
-        permiso: 'libro.cerrar_periodo',
+        permiso: 'cierres.revisar_check',
         cuerpo: v.revisarCheckValidator,
         idempotente: true,
         descripcion:

@@ -7,7 +7,7 @@ import { claveFactura, periodosHasta } from '#billing/periodos'
 import EmitirFactura from '#billing/actions/emitir_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { empresasDelProceso } from '#billing/empresa'
-import { BloqueosDeCorrida, type BloqueoCorrida } from '#billing/bloqueos_corrida'
+import { BloqueosDeCorrida, ContadoresPorEmpresa, type BloqueoCorrida } from '#billing/bloqueos_corrida'
 
 /**
  * `facturas.generar` (cron y `POST /facturas/generar`): emite **todo lo pendiente hasta `hasta`**
@@ -53,6 +53,7 @@ export interface ResultadoGeneracion {
 
 interface FilaCandidato {
     id: number
+    empresa_id: number
     plantilla_facturacion_id: number
     fecha_instalacion: string | null
     alta: string
@@ -74,6 +75,12 @@ export default class GenerarFacturas {
             bloqueos: [],
         }
         const bloqueos = new BloqueosDeCorrida()
+        const porEmpresa = new ContadoresPorEmpresa([
+            'generadas',
+            'omitidas',
+            'bonificadas',
+            'errores',
+        ] as const)
 
         const empresas = empresasDelProceso(ctx)
         let cursor = 0
@@ -89,6 +96,7 @@ export default class GenerarFacturas {
                 .limit(TAMANO_LOTE)
                 .select(
                     'id',
+                    'empresa_id',
                     'plantilla_facturacion_id',
                     db.raw(`to_char(fecha_instalacion, 'YYYY-MM-DD') as fecha_instalacion`),
                     db.raw(`to_char(created_at AT TIME ZONE 'America/Guatemala', 'YYYY-MM-DD') as alta`),
@@ -98,9 +106,15 @@ export default class GenerarFacturas {
 
             const existentes = await clavesExistentes(lote.map((s) => s.id))
             for (const servicio of lote) {
+                const antes = { g: resultado.generadas, o: resultado.omitidas, b: resultado.bonificadas }
+                const empresaId = Number(servicio.empresa_id)
                 try {
                     await this.generarServicio(servicio, hasta, existentes, resultado, ctx)
                 } catch (error) {
+                    // los periodos que alcanzó a emitir antes del error cuentan igual
+                    porEmpresa.sumar(empresaId, 'generadas', resultado.generadas - antes.g)
+                    porEmpresa.sumar(empresaId, 'omitidas', resultado.omitidas - antes.o)
+                    porEmpresa.sumar(empresaId, 'bonificadas', resultado.bonificadas - antes.b)
                     if (bloqueos.registrarError(error, servicio.id)) {
                         logger.warn(
                             { err: error, servicioId: servicio.id, requestId: ctx.requestId },
@@ -109,11 +123,16 @@ export default class GenerarFacturas {
                         continue
                     }
                     resultado.errores += 1
+                    porEmpresa.sumar(empresaId, 'errores')
                     logger.error(
                         { err: error, servicioId: servicio.id, requestId: ctx.requestId },
                         'No se pudo facturar el servicio',
                     )
+                    continue
                 }
+                porEmpresa.sumar(empresaId, 'generadas', resultado.generadas - antes.g)
+                porEmpresa.sumar(empresaId, 'omitidas', resultado.omitidas - antes.o)
+                porEmpresa.sumar(empresaId, 'bonificadas', resultado.bonificadas - antes.b)
             }
             if (lote.length < TAMANO_LOTE) break
         }
@@ -123,7 +142,7 @@ export default class GenerarFacturas {
         await new RegistrarCorrida(this.nombre).execute(
             {
                 parametros: { hasta, servicio_id: input.servicio_id ?? null, empresas },
-                resultado: { ...resultado },
+                resultado: { ...resultado, por_empresa: porEmpresa.json(resultado.bloqueos) },
                 bloqueos: resultado.bloqueos,
             },
             ctx,

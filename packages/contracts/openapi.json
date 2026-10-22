@@ -30176,7 +30176,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso cierres.verificar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30216,7 +30216,7 @@
             }
           }
         },
-        "x-permiso": "libro.cerrar_periodo",
+        "x-permiso": "cierres.verificar",
         "x-implementado": true
       }
     },
@@ -30310,7 +30310,7 @@
             }
           },
           "403": {
-            "description": "Sin el permiso libro.cerrar_periodo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "description": "Sin el permiso cierres.revisar_check; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30350,7 +30350,7 @@
             }
           }
         },
-        "x-permiso": "libro.cerrar_periodo",
+        "x-permiso": "cierres.revisar_check",
         "x-implementado": true
       }
     },
@@ -45848,6 +45848,8 @@
                         "cajas.ver",
                         "cartera.castigar",
                         "cartera.provisionar",
+                        "cierres.revisar_check",
+                        "cierres.verificar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -46140,6 +46142,8 @@
                         "cajas.ver",
                         "cartera.castigar",
                         "cartera.provisionar",
+                        "cierres.revisar_check",
+                        "cierres.verificar",
                         "clientes.asignar_responsable_pago",
                         "clientes.crear",
                         "clientes.desvincular_telegram",
@@ -52205,6 +52209,8 @@
                             "cajas.ver",
                             "cartera.castigar",
                             "cartera.provisionar",
+                            "cierres.revisar_check",
+                            "cierres.verificar",
                             "clientes.asignar_responsable_pago",
                             "clientes.crear",
                             "clientes.desvincular_telegram",
@@ -59665,7 +59671,7 @@
                     "null"
                   ],
                   "additionalProperties": true,
-                  "description": "Resultado completo de la corrida (generadas, vencidas, moras, errores…)"
+                  "description": "Solo de la empresa: facturas.generar → generadas, omitidas, bonificadas, errores, bloqueados, bloqueos; facturas.vencer_pendientes → vencidas, moras, errores, bloqueados, bloqueos. null si una corrida anterior de varias empresas no lo separaba"
                 }
               }
             }

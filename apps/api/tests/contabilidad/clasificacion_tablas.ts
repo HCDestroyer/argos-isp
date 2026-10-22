@@ -54,6 +54,8 @@ export const INMUTABLES: Record<string, string> = {
     'ledger.cuentas_con_impuesto':
         'cuentas con impuesto para el bloqueo de impuestos; la cambia una migración (fase 7: etiquetas, §10.2)',
     'ledger.cierres_anuales': 'cierre anual (§3.7)',
+    // fase 6 PR C (A3): reabrir el ejercicio = fila nueva; el cierre no se borra (§9.1)
+    'ledger.reaperturas_anuales': 'reapertura de un cierre anual (§9.1)',
     'ledger.cierres_checks': 'lista de verificación de cierre (§10.5)',
     // §10.3 conciliación bancaria
     'ledger.extractos': 'extracto bancario (§10.3)',

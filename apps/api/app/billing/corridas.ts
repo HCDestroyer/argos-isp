@@ -8,8 +8,10 @@ import type { BloqueoCorrida } from '#billing/bloqueos_corrida'
  * y bloqueos).
  *
  * Una corrida cuenta para una empresa si recorrió todas (cron, o un usuario con alcance global sin
- * empresa activa: `parametros.empresas` null o ausente) o si la incluyó. `bloqueos[]` y
- * `bloqueados` se filtran a la empresa.
+ * empresa activa: `parametros.empresas` null o ausente) o si la incluyó. `resultado`, `bloqueos[]` y
+ * `bloqueados` son solo de la empresa: los contadores salen de `resultado.por_empresa` que guarda la
+ * corrida (A4: antes cada empresa mostraba el total de todas). Una corrida anterior sin
+ * `por_empresa` solo da resultado si fue de esa sola empresa; si recorrió varias, `resultado` es null.
  */
 
 export const PROCESOS_CORRIDA = ['facturas.generar', 'facturas.vencer_pendientes'] as const
@@ -25,7 +27,10 @@ export interface CorridaProceso {
     /** documentos de la empresa que no se contabilizaron por un bloqueo (se reintentan) */
     bloqueados: number
     bloqueos: BloqueoCorrida[]
-    /** el resultado completo de la corrida (todas sus empresas) */
+    /**
+     * contadores de la empresa (generar: generadas, omitidas, bonificadas, errores, bloqueados;
+     * vencer: vencidas, moras, errores, bloqueados) y sus `bloqueos`; null si no se pueden separar
+     */
     resultado: Record<string, unknown> | null
 }
 
@@ -41,7 +46,7 @@ interface FilaCorrida {
     created_at: Date
     entrada: {
         parametros?: { hasta?: string; empresas?: number[] | null }
-        resultado?: Record<string, unknown>
+        resultado?: Record<string, unknown> & { por_empresa?: Record<string, Record<string, number>> }
         bloqueos?: BloqueoCorrida[]
     } | null
 }
@@ -66,18 +71,47 @@ export async function ultimasCorridas(empresas: number[]): Promise<CorridasEmpre
                 .select('accion', 'actor_tipo', 'canal', 'created_at', 'entrada')
                 .first()) as FilaCorrida | null
             const bloqueos = (fila?.entrada?.bloqueos ?? []).filter((b) => Number(b.empresa_id) === empresaId)
+            const bloqueados = bloqueos.reduce((s, b) => s + Number(b.documentos), 0)
             procesos.push({
                 proceso,
                 corrida_en: fila?.created_at ?? null,
                 actor_tipo: fila?.actor_tipo ?? null,
                 canal: fila?.canal ?? null,
                 hasta: fila?.entrada?.parametros?.hasta ?? null,
-                bloqueados: bloqueos.reduce((s, b) => s + Number(b.documentos), 0),
+                bloqueados,
                 bloqueos,
-                resultado: fila?.entrada?.resultado ?? null,
+                resultado: fila ? resultadoDeEmpresa(fila, empresaId, bloqueos, bloqueados) : null,
             })
         }
         salida.push({ empresa_id: empresaId, procesos })
     }
     return salida
+}
+
+/** Contadores de la empresa en la corrida, con sus bloqueos. */
+function resultadoDeEmpresa(
+    fila: FilaCorrida,
+    empresaId: number,
+    bloqueos: BloqueoCorrida[],
+    bloqueados: number,
+): Record<string, unknown> | null {
+    const resultado = fila.entrada?.resultado
+    if (!resultado) return null
+    const porEmpresa = resultado.por_empresa
+    if (porEmpresa) {
+        const ceros =
+            fila.accion === 'facturas.generar'
+                ? { generadas: 0, omitidas: 0, bonificadas: 0, errores: 0 }
+                : { vencidas: 0, moras: 0, errores: 0 }
+        return { ...ceros, ...(porEmpresa[String(empresaId)] ?? {}), bloqueados, bloqueos }
+    }
+    // corrida anterior a `por_empresa`: solo si fue de esta empresa sola
+    const empresas = fila.entrada?.parametros?.empresas
+    if (Array.isArray(empresas) && empresas.length === 1 && Number(empresas[0]) === empresaId) {
+        const contadores = Object.fromEntries(
+            Object.entries(resultado).filter(([clave]) => !['facturas', 'bonificaciones'].includes(clave)),
+        )
+        return { ...contadores, bloqueados, bloqueos }
+    }
+    return null
 }
