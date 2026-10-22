@@ -35,7 +35,9 @@ export const cerrarEjercicioValidator = vine.compile(
     }),
 )
 
-export const reabrirEjercicioValidator = vine.compile(vine.object({ empresa_id: empresa, anio, motivo: motivo() }))
+export const reabrirEjercicioValidator = vine.compile(
+    vine.object({ empresa_id: empresa, anio, motivo: motivo() }),
+)
 
 export const listarEjerciciosValidator = vine.compile(
     vine.object({

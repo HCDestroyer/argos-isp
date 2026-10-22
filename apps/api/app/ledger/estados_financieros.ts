@@ -3,6 +3,7 @@ import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { hoyGuatemala } from '#ledger/fechas'
 import { saldoSegunNaturaleza } from '#ledger/consultas'
 import { resumenEmpresas } from '#billing/empresa'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 
 /**
  * Balance de saldos y estado de resultados **por empresa** (multiempresa: cada NIT tiene su
@@ -83,7 +84,19 @@ async function saldosPorCuenta(
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
         .where('a.fecha', '<=', rango.hasta)
         .if(rango.desde, (q) => q.where('a.fecha', '>=', rango.desde!))
-        .if(sinCierreAnual, (q) => q.whereNot('a.origen_tipo', 'cierre_anual'))
+        // la partida de cierre (y su reverso): los asientos `cierre_anual` que tocan 3.3.03; la
+        // provisión del ISR, que también es del cierre, sí es gasto del año
+        .if(sinCierreAnual, (q) =>
+            q.whereNot((w) =>
+                w.where('a.origen_tipo', 'cierre_anual').whereExists((x) =>
+                    x
+                        .from('ledger.movimientos as mx')
+                        .join('ledger.cuentas as cx', 'cx.id', 'mx.cuenta_id')
+                        .whereRaw('mx.asiento_id = a.id')
+                        .where('cx.codigo', CUENTAS_GT.PERDIDAS_GANANCIAS),
+                ),
+            ),
+        )
         .if(empresas !== null, (q) => q.whereIn('a.empresa_id', empresas!))
         .if(tipos, (q) => q.whereIn('c.tipo', tipos!))
         .groupBy('a.empresa_id', 'c.id', 'c.codigo', 'c.nombre', 'c.tipo', 'c.naturaleza')
@@ -200,7 +213,10 @@ export async function balanceSaldos(filtros: { hasta?: string }, empresas: numbe
     const hasta = filtros.hasta ?? hoyGuatemala()
     const filas = await saldosPorCuenta(empresas, { hasta })
     const inicioAnio = `${hasta.slice(0, 4)}-01-01`
-    const previas = filas.length > 0 ? await saldosPorCuenta(empresas, { hasta: diaAnterior(inicioAnio) }, ['ingreso', 'gasto']) : []
+    const previas =
+        filas.length > 0
+            ? await saldosPorCuenta(empresas, { hasta: diaAnterior(inicioAnio) }, ['ingreso', 'gasto'])
+            : []
     const conSinCerrar = (cuentasPrevias: FilaSaldo[]) => (cuentas: LineaEstado[]) => {
         const totales = totalesBalance(cuentas)
         const anteriores = totalesResultados(lineas(cuentasPrevias)).resultado
@@ -229,8 +245,9 @@ function diaAnterior(fecha: string): string {
 }
 
 /**
- * Estado de resultados del rango: ingresos y gastos por cuenta y el resultado. Sin los asientos del
- * cierre anual ni sus reversos (§10.8): el año cerrado muestra su resultado, no ceros.
+ * Estado de resultados del rango: ingresos y gastos por cuenta y el resultado. Sin la partida de
+ * cierre anual (cancelación contra 3.3.03) ni su reverso (§10.8): el año cerrado muestra su
+ * resultado, no ceros. La provisión del ISR del cierre sí aparece (es gasto del año).
  */
 export async function estadoResultados(
     filtros: { desde?: string; hasta?: string },

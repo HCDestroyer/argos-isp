@@ -77,7 +77,11 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_CIERRES, empresaId])
 
         if ((await cierreVigente(t.trx, empresaId, anio)) !== null) {
-            throw new Conflicto(`El ejercicio ${anio} ya está cerrado`, 'ejercicio_cerrado', 'Ejercicio cerrado')
+            throw new Conflicto(
+                `El ejercicio ${anio} ya está cerrado`,
+                'ejercicio_cerrado',
+                'Ejercicio cerrado',
+            )
         }
         await rechazarSiHayDeclaracion(t, empresaId, anio)
         const errores = await requisitos(t, empresaId, anio)
@@ -181,7 +185,9 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
             const porPagar = isr.minus(trimestral).minus(iso)
             await asiento('provisión del ISR', [
                 { cuenta: CUENTAS_GT.IMPUESTO_SOBRE_RENTA, debe: aTexto(isr) },
-                ...(trimestral.gt(0) ? [{ cuenta: CUENTAS_GT.ISR_PAGOS_TRIMESTRALES, haber: aTexto(trimestral) }] : []),
+                ...(trimestral.gt(0)
+                    ? [{ cuenta: CUENTAS_GT.ISR_PAGOS_TRIMESTRALES, haber: aTexto(trimestral) }]
+                    : []),
                 ...(iso.gt(0) ? [{ cuenta: CUENTAS_GT.ISO_POR_ACREDITAR, haber: aTexto(iso) }] : []),
                 ...(porPagar.gt(0) ? [{ cuenta: CUENTAS_GT.ISR_POR_PAGAR, haber: aTexto(porPagar) }] : []),
             ])
@@ -200,15 +206,19 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
         const cancelacion: LineaAsiento[] = []
         for (const { cuenta, neto } of netos.values()) {
             if (neto.isZero()) continue
-            cancelacion.push(neto.gt(0) ? { cuenta, haber: aTexto(neto) } : { cuenta, debe: aTexto(neto.negated()) })
+            cancelacion.push(
+                neto.gt(0) ? { cuenta, haber: aTexto(neto) } : { cuenta, debe: aTexto(neto.negated()) },
+            )
         }
         if (cancelacion.length > 0) {
             // contrapartida: 3.3.03 recibe la utilidad al haber (o la pérdida al debe)
-            if (!resultado.isZero()) cancelacion.push(
-                resultado.gt(0)
-                    ? { cuenta: CUENTAS_GT.PERDIDAS_GANANCIAS, haber: aTexto(resultado) }
-                    : { cuenta: CUENTAS_GT.PERDIDAS_GANANCIAS, debe: aTexto(resultado.negated()) },
-            )
+            if (!resultado.isZero()) {
+                cancelacion.push(
+                    resultado.gt(0)
+                        ? { cuenta: CUENTAS_GT.PERDIDAS_GANANCIAS, haber: aTexto(resultado) }
+                        : { cuenta: CUENTAS_GT.PERDIDAS_GANANCIAS, debe: aTexto(resultado.negated()) },
+                )
+            }
             await asiento('cancelación de ingresos y gastos', cancelacion)
         }
 
@@ -235,9 +245,13 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
         }
 
         // 6. diciembre se cierra con los asientos del cierre adentro
-        await new CerrarPeriodo().execute({ empresa_id: empresaId, anio, mes: 12, ahora: input.ahora }, t.ctx, {
-            trx: t.trx,
-        })
+        await new CerrarPeriodo().execute(
+            { empresa_id: empresaId, anio, mes: 12, ahora: input.ahora },
+            t.ctx,
+            {
+                trx: t.trx,
+            },
+        )
 
         await t.emit('libro.ejercicio_cerrado', {
             empresa_id: empresaId,
@@ -279,7 +293,13 @@ async function rechazarSiHayDeclaracion(t: Transaccion, empresaId: number, anio:
             'isr_de_declaracion',
             'ISR de la declaración',
             `El ejercicio ${anio} tiene declaración ISR anual: el ISR del cierre sale de ella, no se escribe a mano`,
-            [{ field: 'isr.monto', message: 'El ISR sale de la declaración anual', rule: 'isr_de_declaracion' }],
+            [
+                {
+                    field: 'isr.monto',
+                    message: 'El ISR sale de la declaración anual',
+                    rule: 'isr_de_declaracion',
+                },
+            ],
         )
     }
 }
@@ -292,7 +312,11 @@ async function requisitos(t: Transaccion, empresaId: number, anio: number): Prom
         if (!(await periodoCerrado(t.trx, periodo, empresaId))) abiertos.push(periodo.slice(0, 7))
     }
     if (abiertos.length > 0) {
-        errores.push({ field: 'anio', message: `Meses sin cerrar: ${abiertos.join(', ')}`, rule: 'meses_abiertos' })
+        errores.push({
+            field: 'anio',
+            message: `Meses sin cerrar: ${abiertos.join(', ')}`,
+            rule: 'meses_abiertos',
+        })
     }
     if (await periodoCerrado(t.trx, `${anio}-12-01`, empresaId)) {
         errores.push({

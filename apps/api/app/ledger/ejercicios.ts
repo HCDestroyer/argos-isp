@@ -47,7 +47,10 @@ export function anioValido(anio: number): number {
 
 /** ¿El ejercicio del año de `fecha` está cerrado en la empresa? (misma función que el trigger) */
 export async function ejercicioCerrado(cliente: QueryClientContract, fecha: string, empresaId: number) {
-    const r = await cliente.rawQuery('SELECT ledger.ejercicio_cerrado(?::date, ?) AS cerrado', [fecha, empresaId])
+    const r = await cliente.rawQuery('SELECT ledger.ejercicio_cerrado(?::date, ?) AS cerrado', [
+        fecha,
+        empresaId,
+    ])
     return Boolean((r.rows[0] as { cerrado: boolean }).cerrado)
 }
 
@@ -97,7 +100,13 @@ export async function saldosDeResultados(
             'c.nombre',
             'c.tipo',
             cliente.raw('sum(m.debe - m.haber)::text as neto'),
-        )) as Array<{ cuenta_id: number; codigo: string; nombre: string; tipo: 'ingreso' | 'gasto'; neto: string }>
+        )) as Array<{
+        cuenta_id: number
+        codigo: string
+        nombre: string
+        tipo: 'ingreso' | 'gasto'
+        neto: string
+    }>
     return filas.map((f) => ({ ...f, cuenta_id: Number(f.cuenta_id), neto: dec(f.neto) }))
 }
 
@@ -182,4 +191,3 @@ export async function listarCierresAnuales(
     const pagina = await paginar<CierreAnualVista>(consulta, filtros, { columna: 'c.id' })
     return { ...pagina, data: pagina.data.map(normalizar) }
 }
-

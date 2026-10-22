@@ -93,7 +93,11 @@ function armar(
         let p = catalogo.get(id)?.padre_id ?? null
         while (p !== null && catalogo.has(p)) {
             const g = grupos.get(p) ?? { inicial: CERO, debe: CERO, haber: CERO }
-            grupos.set(p, { inicial: g.inicial.plus(a.inicial), debe: g.debe.plus(a.debe), haber: g.haber.plus(a.haber) })
+            grupos.set(p, {
+                inicial: g.inicial.plus(a.inicial),
+                debe: g.debe.plus(a.debe),
+                haber: g.haber.plus(a.haber),
+            })
             p = catalogo.get(p)!.padre_id
         }
     }
@@ -168,7 +172,11 @@ export async function balanceComprobacion(filtros: FiltrosComprobacion, empresas
     for (const c of (await db
         .from('ledger.cuentas')
         .select('id', 'codigo', 'nombre', 'tipo', 'padre_id', 'imputable')) as FilaCuenta[]) {
-        catalogo.set(Number(c.id), { ...c, id: Number(c.id), padre_id: c.padre_id === null ? null : Number(c.padre_id) })
+        catalogo.set(Number(c.id), {
+            ...c,
+            id: Number(c.id),
+            padre_id: c.padre_id === null ? null : Number(c.padre_id),
+        })
     }
     const acumular = (lista: typeof filas) => {
         const hojas = new Map<number, Acumulado>()
@@ -182,11 +190,15 @@ export async function balanceComprobacion(filtros: FiltrosComprobacion, empresas
             })
         }
         // fuera las cuentas sin saldo inicial ni movimiento en el rango
-        for (const [id, a] of hojas) if (a.inicial.isZero() && a.debe.isZero() && a.haber.isZero()) hojas.delete(id)
+        for (const [id, a] of hojas) {
+            if (a.inicial.isZero() && a.debe.isZero() && a.haber.isZero()) hojas.delete(id)
+        }
         return armar(catalogo, hojas)
     }
 
-    const ids = [...new Set([...(empresas ?? []), ...filas.map((f) => Number(f.empresa_id))])].sort((a, b) => a - b)
+    const ids = [...new Set([...(empresas ?? []), ...filas.map((f) => Number(f.empresa_id))])].sort(
+        (a, b) => a - b,
+    )
     const datos = await resumenEmpresas(ids)
     return {
         desde,

@@ -47,7 +47,11 @@ export default class ReabrirEjercicio extends DomainAction<EntradaReabrirEjercic
         if (duro !== null && fin <= duro) throw new PeriodoBloqueado('duro', fin, duro, empresaId)
         const cierreId = await cierreVigente(t.trx, empresaId, anio)
         if (cierreId === null) {
-            throw new Conflicto(`El ejercicio ${anio} no está cerrado`, 'ejercicio_abierto', 'Ejercicio abierto')
+            throw new Conflicto(
+                `El ejercicio ${anio} no está cerrado`,
+                'ejercicio_abierto',
+                'Ejercicio abierto',
+            )
         }
         t.fijarEntidad('cierre_anual', cierreId)
         if ((await cierreVigente(t.trx, empresaId, anio + 1)) !== null) {
@@ -65,7 +69,12 @@ export default class ReabrirEjercicio extends DomainAction<EntradaReabrirEjercic
 
         if (await periodoCerrado(t.trx, `${anio}-12-01`, empresaId)) {
             await new ReabrirPeriodo().execute(
-                { empresa_id: empresaId, anio, mes: 12, motivo: `Reapertura del ejercicio ${anio}: ${motivo}` },
+                {
+                    empresa_id: empresaId,
+                    anio,
+                    mes: 12,
+                    motivo: `Reapertura del ejercicio ${anio}: ${motivo}`,
+                },
                 t.ctx,
                 { trx: t.trx },
             )
@@ -93,7 +102,12 @@ export default class ReabrirEjercicio extends DomainAction<EntradaReabrirEjercic
             )
         }
 
-        await t.emit('libro.ejercicio_reabierto', { empresa_id: empresaId, cierre_id: cierreId, anio, motivo })
+        await t.emit('libro.ejercicio_reabierto', {
+            empresa_id: empresaId,
+            cierre_id: cierreId,
+            anio,
+            motivo,
+        })
         return verCierreAnual(cierreId, t.trx)
     }
 }

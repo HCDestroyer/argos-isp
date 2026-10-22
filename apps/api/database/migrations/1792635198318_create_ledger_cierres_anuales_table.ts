@@ -57,7 +57,7 @@ export default class extends BaseSchema {
             CREATE OR REPLACE FUNCTION ledger.validar_cierre_anual() RETURNS trigger
             LANGUAGE plpgsql AS $fn$
             BEGIN
-                PERFORM pg_advisory_xact_lock(3006, NEW.empresa_id);
+                PERFORM pg_advisory_xact_lock(3006, NEW.empresa_id::integer);
                 IF ledger.ejercicio_cerrado(make_date(NEW.anio, 1, 1), NEW.empresa_id) THEN
                     RAISE EXCEPTION 'El ejercicio % de la empresa % ya está cerrado', NEW.anio, NEW.empresa_id
                         USING ERRCODE = 'unique_violation';

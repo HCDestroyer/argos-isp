@@ -29,7 +29,8 @@ const ejercicios: Ruta[] = [
         descripcion:
             'Por empresa (y total del grupo en el consolidado): saldo inicial antes de desde, debe y haber del rango y saldo final, cada saldo en su columna deudora o acreedora; las cuentas de agrupación suman a sus hijas. cuadra = Σ debe = Σ haber y Σ deudor = Σ acreedor al inicio y al final. sin_cierre_anual=true lo da antes del cierre anual.',
         respuesta: { status: 200, descripcion: 'Balance de comprobación', esquema: BalanceComprobacion },
-        handler: (ctx, { query }) => balanceComprobacion(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: (ctx, { query }) =>
+            balanceComprobacion(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',
@@ -40,7 +41,8 @@ const ejercicios: Ruta[] = [
         permiso: 'libro.ver',
         query: v.listarEjerciciosValidator,
         respuesta: { status: 200, descripcion: 'Página de cierres anuales', esquema: pagina(CierreAnual) },
-        handler: (ctx, { query }) => listarCierresAnuales(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+        handler: (ctx, { query }) =>
+            listarCierresAnuales(query, empresasDeLaLista(ctx.empresa, query.empresas)),
     }),
     definirRuta({
         metodo: 'get',

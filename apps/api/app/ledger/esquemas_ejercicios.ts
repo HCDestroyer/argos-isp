@@ -40,7 +40,10 @@ export const CierreAnual = definirEsquema(
             description:
                 'desde, hasta, cuentas[] (codigo, nombre, tipo, neto debe − haber cancelado), isr_por_pagar, reserva_legal_pct, reserva_legal_base, base_reserva',
         },
-        asientos: { ...lista(id), description: 'Asientos del cierre (y de sus reversos al reabrir), en orden' },
+        asientos: {
+            ...lista(id),
+            description: 'Asientos del cierre (y de sus reversos al reabrir), en orden',
+        },
         cerrado_en: instante,
         cerrado_por: nulable(id),
         cerrado_por_nombre: nulable(texto),
@@ -91,7 +94,10 @@ export const BalanceComprobacion = definirEsquema(
     objeto({
         desde: fecha,
         hasta: fecha,
-        sin_cierre_anual: { ...booleano, description: 'true = sin los asientos del cierre anual (antes del cierre)' },
+        sin_cierre_anual: {
+            ...booleano,
+            description: 'true = sin los asientos del cierre anual (antes del cierre)',
+        },
         consolidado: booleano,
         empresas: lista(
             objeto({
