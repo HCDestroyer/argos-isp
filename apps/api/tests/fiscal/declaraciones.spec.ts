@@ -536,10 +536,10 @@ test.group('Fase 7 · cascada de remanentes (H34)', (group) => {
         assert.equal(presentadaAntes.estado, 'sustituida')
         const avisos = await eventos('declaracion.revisada', 'cascada_de', sustitutiva.id)
         assert.deepEqual(
-            avisos.map((a) => [a.motivo, a.periodo_desde]),
+            avisos.map((a) => [a.motivo, a.periodo_desde, a.estaba_presentada]),
             [
-                ['cascada', `${SIGUIENTE}-01`],
-                ['cascada', `${DESPUES}-01`],
+                ['cascada', `${SIGUIENTE}-01`, true],
+                ['cascada', `${DESPUES}-01`, false],
             ],
         )
         // sin asiento extra: el crédito no usado queda en 1.1.04 (30) y todo cuadra

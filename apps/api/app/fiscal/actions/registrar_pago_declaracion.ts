@@ -34,7 +34,7 @@ import {
  *   vencimiento; multa por presentación tardía = `multa_declaracion_tardia.por_dia` × días entre el
  *   vencimiento y la presentación, hasta su máximo (solo si ya se marcó presentada). Las dos a
  *   `5.4.02`. El interés resarcitorio no se calcula (sin valor: §15 #9).
- * - Emite `declaracion.pagada` (monto = total pagado).
+ * - Emite `declaracion.pagada` (monto = total pagado; `pago_id` desde la fase 8, pedido de A6).
  */
 
 export interface EntradaPagoDeclaracion {
@@ -169,7 +169,7 @@ export default class RegistrarPagoDeclaracion extends DomainAction<EntradaPagoDe
             t.ctx,
             { trx: t.trx },
         )
-        await t.trx
+        const [filaPago] = (await t.trx
             .insertQuery()
             .table('fiscal.declaraciones_pagos')
             .insert({
@@ -185,8 +185,12 @@ export default class RegistrarPagoDeclaracion extends DomainAction<EntradaPagoDe
                 asiento_id: asiento.id,
                 registrado_por: usuarioDelActor(t.ctx.actor),
             })
+            .returning('id')) as Array<{ id: number }>
         const pagada = await verDeclaracion(d.id, t.trx)
-        await t.emit('declaracion.pagada', payloadDeclaracion(pagada, aTexto(total)))
+        await t.emit('declaracion.pagada', {
+            ...payloadDeclaracion(pagada, aTexto(total)),
+            pago_id: Number(filaPago!.id),
+        })
         return pagada
     }
 }

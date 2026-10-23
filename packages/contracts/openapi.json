@@ -22092,6 +22092,82 @@
         "x-implementado": true
       }
     },
+    "/api/v1/fiscal/tablero": {
+      "get": {
+        "operationId": "fiscalTablero",
+        "summary": "Tablero fiscal: facturado, IVA, ISR, ISO, pequeño contribuyente, vencimientos, libros y FEL",
+        "description": "De la empresa activa (empresas=todas con alcance global: una sección por empresa, sin totales). Cada bloque se calcula por separado con las funciones de las declaraciones y los libros: estado ok con sus datos, no_aplica con su motivo (régimen) o error con su problema RFC 9457 (parámetro sin confirmar, regla no soportada…) y sin cifras. Los estimados se calculan con los datos de hoy y no se guardan. Siempre 200 aunque un bloque falle.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tablero",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TableroFiscal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fiscal.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fiscal.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/horus": {
       "get": {
         "operationId": "horusConectorVer",
@@ -58635,6 +58711,698 @@
           }
         }
       },
+      "BloqueFacturado": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "mes",
+              "anio"
+            ],
+            "properties": {
+              "mes": {
+                "type": "object",
+                "required": [
+                  "desde",
+                  "hasta",
+                  "documentos",
+                  "base",
+                  "iva",
+                  "total",
+                  "por_tipo"
+                ],
+                "properties": {
+                  "desde": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "documentos": {
+                    "type": "integer"
+                  },
+                  "base": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$",
+                    "description": "Sin IVA (gravado y exento)"
+                  },
+                  "iva": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$"
+                  },
+                  "total": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$"
+                  },
+                  "por_tipo": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "tipo",
+                        "documentos",
+                        "base",
+                        "iva",
+                        "total"
+                      ],
+                      "properties": {
+                        "tipo": {
+                          "type": "string",
+                          "description": "Tipo de DTE (FACT, FPEQ, NCRE…) o sin_dte"
+                        },
+                        "documentos": {
+                          "type": "integer"
+                        },
+                        "base": {
+                          "type": "string",
+                          "pattern": "^-?\\d+\\.\\d{2}$"
+                        },
+                        "iva": {
+                          "type": "string",
+                          "pattern": "^-?\\d+\\.\\d{2}$"
+                        },
+                        "total": {
+                          "type": "string",
+                          "pattern": "^-?\\d+\\.\\d{2}$"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "anio": {
+                "type": "object",
+                "required": [
+                  "desde",
+                  "hasta",
+                  "documentos",
+                  "base",
+                  "iva",
+                  "total",
+                  "por_tipo"
+                ],
+                "properties": {
+                  "desde": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "hasta": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "documentos": {
+                    "type": "integer"
+                  },
+                  "base": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$",
+                    "description": "Sin IVA (gravado y exento)"
+                  },
+                  "iva": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$"
+                  },
+                  "total": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$"
+                  },
+                  "por_tipo": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "tipo",
+                        "documentos",
+                        "base",
+                        "iva",
+                        "total"
+                      ],
+                      "properties": {
+                        "tipo": {
+                          "type": "string",
+                          "description": "Tipo de DTE (FACT, FPEQ, NCRE…) o sin_dte"
+                        },
+                        "documentos": {
+                          "type": "integer"
+                        },
+                        "base": {
+                          "type": "string",
+                          "pattern": "^-?\\d+\\.\\d{2}$"
+                        },
+                        "iva": {
+                          "type": "string",
+                          "pattern": "^-?\\d+\\.\\d{2}$"
+                        },
+                        "total": {
+                          "type": "string",
+                          "pattern": "^-?\\d+\\.\\d{2}$"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Facturado del mes y del año (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueFel": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "modo",
+              "obligacion_legal",
+              "proveedor",
+              "contingencia_activa",
+              "dte_pendientes",
+              "alerta"
+            ],
+            "properties": {
+              "modo": {
+                "type": "string",
+                "enum": [
+                  "obligatoria",
+                  "opcional",
+                  "desactivada"
+                ]
+              },
+              "obligacion_legal": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Parámetro fel_modo (lo que exige la ley)"
+              },
+              "proveedor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "contingencia_activa": {
+                "type": "boolean"
+              },
+              "dte_pendientes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "estado",
+                    "cantidad"
+                  ],
+                  "properties": {
+                    "estado": {
+                      "type": "string"
+                    },
+                    "cantidad": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "alerta": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "«FEL es obligatoria para su régimen» si está desactivada"
+              }
+            },
+            "description": "Estado de la FEL (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueIso": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstimadoDeclaracion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO del trimestre en curso (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueIsr": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "regimen",
+              "mensual",
+              "trimestral",
+              "anual"
+            ],
+            "properties": {
+              "regimen": {
+                "type": "string"
+              },
+              "mensual": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/EstimadoDeclaracion"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Régimen opcional: el ISR del mes"
+              },
+              "trimestral": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/EstimadoDeclaracion"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Utilidades: el trimestre en curso (null en el 4.º, que va con la anual)"
+              },
+              "trimestral_con_la_anual": {
+                "type": "boolean"
+              },
+              "anual": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "impuesto",
+                  "periodo",
+                  "periodo_desde",
+                  "periodo_hasta",
+                  "formulario",
+                  "totales",
+                  "notas",
+                  "declaracion",
+                  "meses_transcurridos",
+                  "renta_proyectada",
+                  "isr_proyectado"
+                ],
+                "properties": {
+                  "impuesto": {
+                    "type": "string"
+                  },
+                  "periodo": {
+                    "type": "string",
+                    "description": "AAAA-MM, AAAA-Tn o AAAA"
+                  },
+                  "periodo_desde": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "periodo_hasta": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "formulario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "totales": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "description": "Los totales de la declaración del periodo (ver Declaracion.totales)"
+                  },
+                  "notas": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Criterios a confirmar con el contador"
+                  },
+                  "declaracion": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "required": [
+                      "id",
+                      "version",
+                      "estado",
+                      "al_dia"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "version": {
+                        "type": "integer"
+                      },
+                      "estado": {
+                        "type": "string"
+                      },
+                      "al_dia": {
+                        "type": "boolean",
+                        "description": "Su datos_hash es el de los datos de hoy"
+                      }
+                    },
+                    "description": "Última versión calculada del periodo, si hay"
+                  },
+                  "meses_transcurridos": {
+                    "type": "integer"
+                  },
+                  "renta_proyectada": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$",
+                    "description": "Renta a la fecha × 12 / meses (estimación lineal)"
+                  },
+                  "isr_proyectado": {
+                    "type": "string",
+                    "pattern": "^-?\\d+\\.\\d{2}$",
+                    "description": "ISR a la fecha × 12 / meses (estimación lineal)"
+                  }
+                },
+                "description": "Utilidades: el ISR anual a la fecha y proyectado"
+              }
+            },
+            "description": "ISR estimado (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueIva": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstimadoDeclaracion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "IVA o pequeño contribuyente del mes en curso (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueLibros": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "ventana_meses",
+              "inicio_libros",
+              "libros",
+              "alerta"
+            ],
+            "properties": {
+              "ventana_meses": {
+                "type": "integer"
+              },
+              "inicio_libros": {
+                "type": "string",
+                "format": "date"
+              },
+              "libros": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "libro",
+                    "habilitado",
+                    "ultimo_emitido_hasta",
+                    "meses_sin_emitir",
+                    "meses_atrasados",
+                    "atrasados",
+                    "al_dia"
+                  ],
+                  "properties": {
+                    "libro": {
+                      "type": "string",
+                      "enum": [
+                        "ventas",
+                        "compras",
+                        "diario",
+                        "mayor"
+                      ]
+                    },
+                    "habilitado": {
+                      "type": "boolean"
+                    },
+                    "ultimo_emitido_hasta": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date"
+                    },
+                    "meses_sin_emitir": {
+                      "type": "integer",
+                      "description": "Meses terminados desde inicio_libros sin emisión con folio"
+                    },
+                    "meses_atrasados": {
+                      "type": "integer",
+                      "description": "De ellos, los que pasaron libros_ventana_meses"
+                    },
+                    "atrasados": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "AAAA-MM atrasados (los primeros 24)"
+                    },
+                    "al_dia": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "alerta": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "description": "Libros legales por emitir (solo con estado ok)"
+          }
+        }
+      },
       "BloqueoAdicional": {
         "type": "object",
         "required": [
@@ -58823,6 +59591,262 @@
               "$ref": "#/components/schemas/BloqueoLibro"
             },
             "description": "Última fila de cada tipo que tiene alguna"
+          }
+        }
+      },
+      "BloquePequenoContribuyente": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "anio",
+              "acumulado",
+              "limite",
+              "porcentaje",
+              "disponible",
+              "umbrales",
+              "umbral_alcanzado",
+              "supera_limite",
+              "mensaje"
+            ],
+            "properties": {
+              "anio": {
+                "type": "integer"
+              },
+              "acumulado": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Total del libro de ventas del 1-ene a hoy"
+              },
+              "limite": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "porcentaje": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "disponible": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "umbrales": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^-?\\d+\\.\\d{2}$"
+                }
+              },
+              "umbral_alcanzado": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "supera_limite": {
+                "type": "boolean"
+              },
+              "mensaje": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "«Debe pasar al régimen general» si supera el límite"
+              }
+            },
+            "description": "Facturado del año frente al límite (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueVencimientos": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "hasta",
+              "mora_tributaria",
+              "vencidas",
+              "obligaciones"
+            ],
+            "properties": {
+              "hasta": {
+                "type": "string",
+                "format": "date",
+                "description": "Hoy + 30 días"
+              },
+              "mora_tributaria": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Por ciento diario usado para la mora estimada"
+              },
+              "vencidas": {
+                "type": "integer"
+              },
+              "obligaciones": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "obligacion_id",
+                    "impuesto",
+                    "nombre",
+                    "periodo_desde",
+                    "periodo_hasta",
+                    "formulario",
+                    "vence_en",
+                    "dias_restantes",
+                    "vencida",
+                    "estado",
+                    "declaracion_id",
+                    "a_pagar",
+                    "mora_estimada"
+                  ],
+                  "properties": {
+                    "obligacion_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "impuesto": {
+                      "type": "string"
+                    },
+                    "nombre": {
+                      "type": "string"
+                    },
+                    "periodo_desde": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "periodo_hasta": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "formulario": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "vence_en": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "dias_restantes": {
+                      "type": "integer",
+                      "description": "Negativo si venció"
+                    },
+                    "vencida": {
+                      "type": "boolean"
+                    },
+                    "estado": {
+                      "type": "string",
+                      "enum": [
+                        "pendiente",
+                        "borrador"
+                      ]
+                    },
+                    "declaracion_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    },
+                    "a_pagar": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^-?\\d+\\.\\d{2}$",
+                      "description": "De la última versión; null sin borrador"
+                    },
+                    "mora_estimada": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^-?\\d+\\.\\d{2}$",
+                      "description": "Vencida: a pagar × mora_tributaria × días; null sin borrador o sin vencer"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Obligaciones abiertas (solo con estado ok)"
           }
         }
       },
@@ -66342,6 +67366,86 @@
           "suspendido",
           "retirado"
         ]
+      },
+      "EstimadoDeclaracion": {
+        "type": "object",
+        "required": [
+          "impuesto",
+          "periodo",
+          "periodo_desde",
+          "periodo_hasta",
+          "formulario",
+          "totales",
+          "notas",
+          "declaracion"
+        ],
+        "properties": {
+          "impuesto": {
+            "type": "string"
+          },
+          "periodo": {
+            "type": "string",
+            "description": "AAAA-MM, AAAA-Tn o AAAA"
+          },
+          "periodo_desde": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodo_hasta": {
+            "type": "string",
+            "format": "date"
+          },
+          "formulario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totales": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^-?\\d+\\.\\d{2}$"
+            },
+            "description": "Los totales de la declaración del periodo (ver Declaracion.totales)"
+          },
+          "notas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Criterios a confirmar con el contador"
+          },
+          "declaracion": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "id",
+              "version",
+              "estado",
+              "al_dia"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "version": {
+                "type": "integer"
+              },
+              "estado": {
+                "type": "string"
+              },
+              "al_dia": {
+                "type": "boolean",
+                "description": "Su datos_hash es el de los datos de hoy"
+              }
+            },
+            "description": "Última versión calculada del periodo, si hay"
+          }
+        }
       },
       "EvaluacionPromesa": {
         "type": "object",
@@ -83443,6 +84547,81 @@
             ],
             "minimum": 1,
             "description": "La nota (NCRE) que acreditó la original"
+          }
+        }
+      },
+      "TableroFiscal": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "empresas"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "regimen",
+                "bloques"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "regimen": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "bloques": {
+                  "type": "object",
+                  "required": [
+                    "facturado",
+                    "iva",
+                    "isr",
+                    "iso",
+                    "pequeno_contribuyente",
+                    "vencimientos",
+                    "libros",
+                    "fel"
+                  ],
+                  "properties": {
+                    "facturado": {
+                      "$ref": "#/components/schemas/BloqueFacturado"
+                    },
+                    "iva": {
+                      "$ref": "#/components/schemas/BloqueIva"
+                    },
+                    "isr": {
+                      "$ref": "#/components/schemas/BloqueIsr"
+                    },
+                    "iso": {
+                      "$ref": "#/components/schemas/BloqueIso"
+                    },
+                    "pequeno_contribuyente": {
+                      "$ref": "#/components/schemas/BloquePequenoContribuyente"
+                    },
+                    "vencimientos": {
+                      "$ref": "#/components/schemas/BloqueVencimientos"
+                    },
+                    "libros": {
+                      "$ref": "#/components/schemas/BloqueLibros"
+                    },
+                    "fel": {
+                      "$ref": "#/components/schemas/BloqueFel"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },

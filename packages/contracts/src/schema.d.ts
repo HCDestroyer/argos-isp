@@ -2875,6 +2875,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fiscal/tablero": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tablero fiscal: facturado, IVA, ISR, ISO, pequeño contribuyente, vencimientos, libros y FEL
+         * @description De la empresa activa (empresas=todas con alcance global: una sección por empresa, sin totales). Cada bloque se calcula por separado con las funciones de las declaraciones y los libros: estado ok con sus datos, no_aplica con su motivo (régimen) o error con su problema RFC 9457 (parámetro sin confirmar, regla no soportada…) y sin cifras. Los estimados se calculan con los datos de hoy y no se guardan. Siempre 200 aunque un bloque falle.
+         */
+        get: operations["fiscalTablero"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integraciones/horus": {
         parameters: {
             query?: never;
@@ -8267,6 +8287,174 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        BloqueFacturado: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Facturado del mes y del año (solo con estado ok) */
+            datos: {
+                mes: {
+                    /** Format: date */
+                    desde: string;
+                    /** Format: date */
+                    hasta: string;
+                    documentos: number;
+                    /** @description Sin IVA (gravado y exento) */
+                    base: string;
+                    iva: string;
+                    total: string;
+                    por_tipo: {
+                        /** @description Tipo de DTE (FACT, FPEQ, NCRE…) o sin_dte */
+                        tipo: string;
+                        documentos: number;
+                        base: string;
+                        iva: string;
+                        total: string;
+                    }[];
+                };
+                anio: {
+                    /** Format: date */
+                    desde: string;
+                    /** Format: date */
+                    hasta: string;
+                    documentos: number;
+                    /** @description Sin IVA (gravado y exento) */
+                    base: string;
+                    iva: string;
+                    total: string;
+                    por_tipo: {
+                        /** @description Tipo de DTE (FACT, FPEQ, NCRE…) o sin_dte */
+                        tipo: string;
+                        documentos: number;
+                        base: string;
+                        iva: string;
+                        total: string;
+                    }[];
+                };
+            } | null;
+        };
+        BloqueFel: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Estado de la FEL (solo con estado ok) */
+            datos: {
+                /** @enum {string} */
+                modo: "obligatoria" | "opcional" | "desactivada";
+                /** @description Parámetro fel_modo (lo que exige la ley) */
+                obligacion_legal: string | null;
+                proveedor: string | null;
+                contingencia_activa: boolean;
+                dte_pendientes: {
+                    estado: string;
+                    cantidad: number;
+                }[];
+                /** @description «FEL es obligatoria para su régimen» si está desactivada */
+                alerta: string | null;
+            } | null;
+        };
+        BloqueIso: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description ISO del trimestre en curso (solo con estado ok) */
+            datos: components["schemas"]["EstimadoDeclaracion"] | null;
+        };
+        BloqueIsr: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description ISR estimado (solo con estado ok) */
+            datos: {
+                regimen: string;
+                /** @description Régimen opcional: el ISR del mes */
+                mensual: components["schemas"]["EstimadoDeclaracion"] | null;
+                /** @description Utilidades: el trimestre en curso (null en el 4.º, que va con la anual) */
+                trimestral: components["schemas"]["EstimadoDeclaracion"] | null;
+                trimestral_con_la_anual?: boolean;
+                /** @description Utilidades: el ISR anual a la fecha y proyectado */
+                anual: {
+                    impuesto: string;
+                    /** @description AAAA-MM, AAAA-Tn o AAAA */
+                    periodo: string;
+                    /** Format: date */
+                    periodo_desde: string;
+                    /** Format: date */
+                    periodo_hasta: string;
+                    formulario: string | null;
+                    /** @description Los totales de la declaración del periodo (ver Declaracion.totales) */
+                    totales: {
+                        [key: string]: string;
+                    };
+                    /** @description Criterios a confirmar con el contador */
+                    notas: string[];
+                    /** @description Última versión calculada del periodo, si hay */
+                    declaracion: {
+                        id: number;
+                        version: number;
+                        estado: string;
+                        /** @description Su datos_hash es el de los datos de hoy */
+                        al_dia: boolean;
+                    } | null;
+                    meses_transcurridos: number;
+                    /** @description Renta a la fecha × 12 / meses (estimación lineal) */
+                    renta_proyectada: string;
+                    /** @description ISR a la fecha × 12 / meses (estimación lineal) */
+                    isr_proyectado: string;
+                } | null;
+            } | null;
+        };
+        BloqueIva: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description IVA o pequeño contribuyente del mes en curso (solo con estado ok) */
+            datos: components["schemas"]["EstimadoDeclaracion"] | null;
+        };
+        BloqueLibros: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Libros legales por emitir (solo con estado ok) */
+            datos: {
+                ventana_meses: number;
+                /** Format: date */
+                inicio_libros: string;
+                libros: {
+                    /** @enum {string} */
+                    libro: "ventas" | "compras" | "diario" | "mayor";
+                    habilitado: boolean;
+                    /** Format: date */
+                    ultimo_emitido_hasta: string | null;
+                    /** @description Meses terminados desde inicio_libros sin emisión con folio */
+                    meses_sin_emitir: number;
+                    /** @description De ellos, los que pasaron libros_ventana_meses */
+                    meses_atrasados: number;
+                    /** @description AAAA-MM atrasados (los primeros 24) */
+                    atrasados: string[];
+                    al_dia: boolean;
+                }[];
+                alerta: string | null;
+            } | null;
+        };
         BloqueoAdicional: {
             id: number;
             asignacion_id: number;
@@ -8331,6 +8519,69 @@ export interface components {
             };
             /** @description Última fila de cada tipo que tiene alguna */
             ultimos: components["schemas"]["BloqueoLibro"][];
+        };
+        BloquePequenoContribuyente: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Facturado del año frente al límite (solo con estado ok) */
+            datos: {
+                anio: number;
+                /** @description Total del libro de ventas del 1-ene a hoy */
+                acumulado: string;
+                limite: string;
+                porcentaje: string;
+                disponible: string;
+                umbrales: string[];
+                umbral_alcanzado: string | null;
+                supera_limite: boolean;
+                /** @description «Debe pasar al régimen general» si supera el límite */
+                mensaje: string | null;
+            } | null;
+        };
+        BloqueVencimientos: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Obligaciones abiertas (solo con estado ok) */
+            datos: {
+                /**
+                 * Format: date
+                 * @description Hoy + 30 días
+                 */
+                hasta: string;
+                /** @description Por ciento diario usado para la mora estimada */
+                mora_tributaria: string | null;
+                vencidas: number;
+                obligaciones: {
+                    obligacion_id: number;
+                    impuesto: string;
+                    nombre: string;
+                    /** Format: date */
+                    periodo_desde: string;
+                    /** Format: date */
+                    periodo_hasta: string;
+                    formulario: string | null;
+                    /** Format: date */
+                    vence_en: string;
+                    /** @description Negativo si venció */
+                    dias_restantes: number;
+                    vencida: boolean;
+                    /** @enum {string} */
+                    estado: "pendiente" | "borrador";
+                    declaracion_id: number | null;
+                    /** @description De la última versión; null sin borrador */
+                    a_pagar: string | null;
+                    /** @description Vencida: a pagar × mora_tributaria × días; null sin borrador o sin vencer */
+                    mora_estimada: string | null;
+                }[];
+            } | null;
         };
         Bonificacion: {
             id: number;
@@ -10226,6 +10477,30 @@ export interface components {
         };
         /** @enum {string} */
         EstadoServicio: "activo" | "limitado" | "suspendido" | "retirado";
+        EstimadoDeclaracion: {
+            impuesto: string;
+            /** @description AAAA-MM, AAAA-Tn o AAAA */
+            periodo: string;
+            /** Format: date */
+            periodo_desde: string;
+            /** Format: date */
+            periodo_hasta: string;
+            formulario: string | null;
+            /** @description Los totales de la declaración del periodo (ver Declaracion.totales) */
+            totales: {
+                [key: string]: string;
+            };
+            /** @description Criterios a confirmar con el contador */
+            notas: string[];
+            /** @description Última versión calculada del periodo, si hay */
+            declaracion: {
+                id: number;
+                version: number;
+                estado: string;
+                /** @description Su datos_hash es el de los datos de hoy */
+                al_dia: boolean;
+            } | null;
+        };
         EvaluacionPromesa: {
             /** @enum {string} */
             resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
@@ -14495,6 +14770,24 @@ export interface components {
             tipo: "anulacion" | "nota_credito";
             /** @description La nota (NCRE) que acreditó la original */
             nota_credito_id: number | null;
+        };
+        TableroFiscal: {
+            /** Format: date */
+            hoy: string;
+            empresas: {
+                empresa_id: number;
+                regimen: string | null;
+                bloques: {
+                    facturado: components["schemas"]["BloqueFacturado"];
+                    iva: components["schemas"]["BloqueIva"];
+                    isr: components["schemas"]["BloqueIsr"];
+                    iso: components["schemas"]["BloqueIso"];
+                    pequeno_contribuyente: components["schemas"]["BloquePequenoContribuyente"];
+                    vencimientos: components["schemas"]["BloqueVencimientos"];
+                    libros: components["schemas"]["BloqueLibros"];
+                    fel: components["schemas"]["BloqueFel"];
+                };
+            }[];
         };
         TelegramWebhookRespuesta: {
             ok: boolean;
@@ -26654,6 +26947,56 @@ export interface operations {
             };
             /** @description Petición idempotente en curso */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalTablero: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tablero */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableroFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

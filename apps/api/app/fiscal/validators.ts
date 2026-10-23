@@ -431,3 +431,5 @@ export const listarAjustesValidator = vine.compile(
         trimestre: vine.number().withoutDecimals().min(1).max(4).optional(),
     }),
 )
+
+export const tableroValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))

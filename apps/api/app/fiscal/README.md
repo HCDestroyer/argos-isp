@@ -124,11 +124,15 @@ Lecturas (`declaraciones.ver`): `GET /declaraciones` y `GET /declaraciones/:id` 
 
 Lecturas: `GET /declaraciones/ajustes?anio=` (`declaraciones.ver`), `GET /declaraciones/cuentas-pago` (`declaraciones.pagar`: los bancos del libro).
 
+## Tablero fiscal (fase 8 PR A, contrato §9.4 y §22)
+
+`tablero.ts` (`GET /fiscal/tablero`, `fiscal.ver`): solo lectura. Bloques `facturado`, `iva`, `isr`, `iso`, `pequeno_contribuyente`, `vencimientos`, `libros` (aviso por `libros_ventana_meses`) y `fel`, cada uno calculado por separado con las funciones de las declaraciones y los libros: `ok` con sus datos, `no_aplica` con el motivo o `error` con su problema RFC 9457 y sin cifras. No escribe nada ni emite eventos; nunca cambia el régimen.
+
 ## Eventos
 
 - Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`).
 - Libros: `libro.emitido` (emisión oficial con folio).
-- Declaraciones: `declaracion.calculada`, `declaracion.revisada` (con `libro.bloqueo_cambiado` en IVA, PC y retenciones), `declaracion.presentada`, `declaracion.pagada` y `declaracion.pago_anulado`.
+- Declaraciones: `declaracion.calculada`, `declaracion.revisada` (con `libro.bloqueo_cambiado` en IVA, PC y retenciones), `declaracion.presentada`, `declaracion.pagada` (con `pago_id`) y `declaracion.pago_anulado`; la revisada en cascada lleva `estaba_presentada`.
 - Calendario: `fiscal.vencimiento_proximo` y `fiscal.limite_pc` (cron); `fiscal.parametros_cambiados` con `claves: ['feriados']` al cambiar un feriado.
 - FEL: `dte.certificado`, `dte.rechazado` (`definitivo`), `dte.anulado`, `fel.contingencia_cambiada` y `factura.sustituida`. En `obligatoria` con `emitir`, `factura.emitida` sale al certificarse.
 - Consume `fiscal.parametros_cambiados` (grupo `billing`) para regenerar el calendario (`ConsumidorCalendario`) y para invalidar la caché y `pago.registrado` (`ConsumidorFel`) para pedir la certificación de los avisos cubiertos.

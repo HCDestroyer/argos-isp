@@ -855,10 +855,17 @@ export interface PayloadDeclaracion {
     /** solo `declaracion.revisada` de una rectificación en cascada (H34): la revisión que la causó */
     motivo?: 'cascada'
     cascada_de?: number
+    /** solo en la cascada (fase 8, pedido de A6): la versión sustituida estaba presentada */
+    estaba_presentada?: boolean
+    /** solo `declaracion.pagada` (fase 8, pedido de A6): el pago registrado */
+    pago_id?: number
 }
 
 /** `declaracion.pago_anulado` (fase 7 PR C): `monto` = total del pago anulado (impuesto, mora y multa). */
-export interface PayloadPagoDeclaracionAnulado extends Omit<PayloadDeclaracion, 'motivo' | 'cascada_de'> {
+export interface PayloadPagoDeclaracionAnulado extends Omit<
+    PayloadDeclaracion,
+    'motivo' | 'cascada_de' | 'estaba_presentada' | 'pago_id'
+> {
     pago_id: number
     /** reverso del asiento `pago_impuesto` */
     asiento_id: number
