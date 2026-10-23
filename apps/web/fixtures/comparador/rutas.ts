@@ -313,7 +313,7 @@ const DEPENDENCIAS: Record<Nombre, Nombre[]> = {
     proyeccion: ['datos', 'opcional', 'utilidades', 'iso_piso'],
 }
 
-function compararEmpresa(empresaId: number, hoy: string, crecimiento: Decimal | null): Empresa {
+export function compararEmpresa(empresaId: number, hoy: string, crecimiento: Decimal | null): Empresa {
     const ctx: Contexto = { empresaId, hoy, regimen: regimenDe(empresaId, hoy), crecimiento }
     const bloques = {} as Bloques
     for (const nombre of Object.keys(DEPENDENCIAS) as Nombre[]) {

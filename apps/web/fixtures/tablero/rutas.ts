@@ -351,7 +351,7 @@ function calcularBloque<N extends Nombre>(ctx: Contexto, nombre: N): Bloques[N] 
     }
 }
 
-function tableroEmpresa(empresaId: number, hoy: string): Empresa {
+export function tableroEmpresa(empresaId: number, hoy: string): Empresa {
     const ctx: Contexto = { empresaId, hoy, regimen: regimenDe(empresaId, hoy) }
     const instalada = (bd.fiscal.instalaciones[empresaId] ?? []).length > 0
     const sinLocalizacion = instalada

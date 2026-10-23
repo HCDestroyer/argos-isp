@@ -6,7 +6,8 @@ import type { Problem } from '@argosisp/contracts'
  * límite del pequeño contribuyente, vencimientos, libros por emitir y FEL de la empresa activa; con
  * «Todas», una sección por empresa y ningún total consolidado. Cada bloque se calcula por separado:
  * uno que falla muestra su problema y «Reintentar» (recarga el tablero) en lugar de cifras. Solo lee:
- * no presenta nada ni cambia el régimen.
+ * no presenta nada ni cambia el régimen. Debajo de cada empresa, sus consejos (`GET /fiscal/consejos`, fase
+ * 8 PR C), que se leen aparte: si fallan, solo esa sección muestra el error.
  */
 definePageMeta({ permiso: 'fiscal.ver' })
 
@@ -31,8 +32,37 @@ async function cargar() {
     problema.value = resultado.ok ? null : problemaFiscalLegible(resultado.problema)
 }
 
+/* Consejos: se leen aparte del tablero (otro endpoint); su error no tapa el tablero. */
+const consejos = shallowRef<ConsejosFiscales | null>(null)
+const problemaConsejos = ref<Problem | null>(null)
+const cargandoConsejos = ref(false)
+const verOcultos = ref(false)
+const verSinDatos = ref(false)
+let pedidoConsejos = 0
+
+async function cargarConsejos() {
+    const actual = ++pedidoConsejos
+    cargandoConsejos.value = true
+    const resultado = await useConsejosFiscales().listar()
+    if (actual !== pedidoConsejos) {
+        return
+    }
+    cargandoConsejos.value = false
+    consejos.value = resultado.ok ? resultado.data : null
+    problemaConsejos.value = resultado.ok ? null : problemaFiscalLegible(resultado.problema)
+}
+
+function consejosDe(empresaId: number) {
+    return consejos.value?.empresas.find(e => e.empresa_id === empresaId)?.consejos ?? null
+}
+
+function recargarConsejos() {
+    void cargarConsejos()
+}
+
 function reintentar() {
     void cargar()
+    void cargarConsejos()
 }
 
 watch(eleccion, reintentar)
@@ -99,6 +129,23 @@ onMounted(reintentar)
                         :nombre="nombreEmpresa(empresa.empresa_id)"
                         :reintentar="reintentar"
                         :reintentando="cargando"
+                    />
+                    <ProblemaAlerta
+                        v-if="problemaConsejos"
+                        :problema="problemaConsejos"
+                        :reintentar="recargarConsejos"
+                        :reintentando="cargandoConsejos"
+                        data-prueba="consejos-problema"
+                    />
+                    <ConsejosFiscalesEmpresa
+                        v-else-if="consejos && consejosDe(empresa.empresa_id)"
+                        v-model:ver-ocultos="verOcultos"
+                        v-model:ver-sin-datos="verSinDatos"
+                        :consejos="consejosDe(empresa.empresa_id) ?? []"
+                        :empresa-id="empresa.empresa_id"
+                        :aviso="consejos.aviso"
+                        :recargar="recargarConsejos"
+                        :recargando="cargandoConsejos"
                     />
                 </template>
             </template>
