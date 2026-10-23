@@ -39,6 +39,23 @@ const PAQUETE: Record<string, unknown> = {
     libros_ventana_meses: 2,
     mora_tributaria: '0.05',
     isr_trimestral_plazo: { plazo: 'mes_siguiente', cuarto_trimestre: 'con_la_anual', formulario: 'SAT-1361' },
+    reserva_incobrables_max: '3.00',
+}
+
+/**
+ * Activos fijos del fixture (`ledger.activos` sin bajas; el panel aún no tiene pantalla de activos): el
+ * servidor de ArgosNet y el mostrador de Fibra del Sur se deprecian por debajo del máximo de su clase.
+ */
+const ACTIVOS: { id: number, empresa_id: number, clase: string, descripcion: string, costo: string, valor_residual: string, tasa_anual: string }[] = [
+    { id: 1, empresa_id: 1, clase: 'equipo_red', descripcion: 'Router de borde MikroTik CCR2116', costo: '18500.00', valor_residual: '0.00', tasa_anual: '10.00' },
+    { id: 2, empresa_id: 1, clase: 'computacion', descripcion: 'Servidor del RADIUS', costo: '12000.00', valor_residual: '1200.00', tasa_anual: '20.00' },
+    { id: 3, empresa_id: 1, clase: 'vehiculos', descripcion: 'Pickup de instalaciones', costo: '95000.00', valor_residual: '15000.00', tasa_anual: '20.00' },
+    { id: 4, empresa_id: 2, clase: 'mobiliario', descripcion: 'Mostrador de atención', costo: '6000.00', valor_residual: '0.00', tasa_anual: '10.00' },
+]
+
+/** Proveedor no identificado con NIT: sin NIT o «CF» (consumidor final). */
+function sinNit(nit: string | null): boolean {
+    return !nit || nit.replace(/[^A-Za-z0-9]/g, '').toUpperCase() === 'CF'
 }
 
 /** Señal de `no_aplica` dentro del cálculo de un bloque (`NoAplica` de la API). */
@@ -334,6 +351,95 @@ const CALCULOS: { [N in Nombre]: (ctx: Contexto) => NonNullable<Bloques[N]['dato
             alerta: legal === 'obligatoria' && modo === 'desactivada' ? 'FEL es obligatoria para su régimen: la empresa emite sin DTE (FEL desactivada)' : null,
         }
     },
+
+    compras_sin_nit: (ctx) => {
+        const limite = valor(ctx.empresaId, 'consumidor_final_limite', ctx.hoy)
+        if (typeof limite !== 'string') {
+            throw sinConfirmar('consumidor_final_limite', ctx.hoy)
+        }
+        const anio = ctx.hoy.slice(0, 4)
+        const filas = bd.compras
+            .filter(c => c.empresa_id === ctx.empresaId && c.estado !== 'anulada' && c.tipo_documento !== 'NCRE'
+                && c.fecha_documento >= `${anio}-01-01` && c.fecha_documento <= ctx.hoy
+                && new Decimal(c.total).gte(limite) && sinNit(c.proveedor_nit))
+            .sort((a, b) => a.fecha_documento.localeCompare(b.fecha_documento) || a.id - b.id)
+        return {
+            anio: Number(anio),
+            limite: texto(new Decimal(limite)),
+            cantidad: filas.length,
+            total: texto(filas.reduce((s, c) => s.plus(c.total), new Decimal(0))),
+            compras: filas.slice(0, 50).map(c => ({
+                compra_id: c.id,
+                fecha: c.fecha_documento,
+                documento: `${c.tipo_documento} ${c.serie} ${c.numero}`.replace(/\s+/g, ' ').trim(),
+                total: texto(new Decimal(c.total)),
+                proveedor_id: c.proveedor_id,
+                proveedor: c.proveedor_nombre,
+                identificacion: `nit: ${c.proveedor_nit || 'sin número'}`,
+            })),
+        }
+    },
+
+    incobrables: (ctx) => {
+        // Σ saldos deudores por cliente (facturas abiertas) y estimación registrada en 1.1.12.
+        const porCliente = new Map<number, Decimal>()
+        for (const f of bd.facturas) {
+            if ((f.empresa_id ?? 1) === ctx.empresaId && ['emitida', 'parcial', 'vencida'].includes(f.estado) && f.emitida_en.slice(0, 10) <= ctx.hoy) {
+                porCliente.set(f.cliente_id, (porCliente.get(f.cliente_id) ?? new Decimal(0)).plus(f.total).minus(f.pagado))
+            }
+        }
+        const base = [...porCliente.values()].filter(s => s.gt(0)).reduce((s, x) => s.plus(x), new Decimal(0))
+        const porcentaje = valor(ctx.empresaId, 'reserva_incobrables_max', ctx.hoy)
+        if (typeof porcentaje !== 'string') {
+            throw sinConfirmar('reserva_incobrables_max', ctx.hoy)
+        }
+        const tope = base.times(porcentaje).dividedBy(100).toDecimalPlaces(2)
+        const provisto = bd.provisiones.filter(p => p.empresa_id === ctx.empresaId && p.fecha <= ctx.hoy).reduce((s, p) => s.plus(p.monto), new Decimal(0))
+        const usado = bd.castigos.filter(c => c.empresa_id === ctx.empresaId).reduce((s, c) => s.plus(c.estimacion), new Decimal(0))
+        const estimacion = provisto.minus(usado)
+        return {
+            corte: ctx.hoy,
+            base: texto(base),
+            porcentaje: texto(new Decimal(porcentaje)),
+            tope: texto(tope),
+            estimacion: texto(estimacion),
+            disponible: texto(Decimal.max(tope.minus(estimacion), 0)),
+            sobre_tope: estimacion.gt(tope),
+        }
+    },
+
+    depreciacion: (ctx) => {
+        const topes = valor(ctx.empresaId, 'depreciacion', ctx.hoy)
+        if (!topes || typeof topes !== 'object') {
+            throw sinConfirmar('depreciacion', ctx.hoy)
+        }
+        const tope = topes as Record<string, string>
+        const activos = ACTIVOS.filter(a => a.empresa_id === ctx.empresaId)
+        const bajo = activos
+            .filter(a => tope[a.clase] !== undefined && new Decimal(a.tasa_anual).lt(tope[a.clase]!))
+            .map((a) => {
+                const depreciable = new Decimal(a.costo).minus(a.valor_residual)
+                const actual = depreciable.times(a.tasa_anual).dividedBy(100).toDecimalPlaces(2)
+                const maxima = depreciable.times(tope[a.clase]!).dividedBy(100).toDecimalPlaces(2)
+                return {
+                    activo_id: a.id,
+                    clase: a.clase,
+                    descripcion: a.descripcion,
+                    costo: texto(new Decimal(a.costo)),
+                    tasa_anual: texto(new Decimal(a.tasa_anual)),
+                    tasa_maxima: texto(new Decimal(tope[a.clase]!)),
+                    depreciacion_anual: texto(actual),
+                    depreciacion_anual_maxima: texto(maxima),
+                    diferencia_anual: texto(maxima.minus(actual)),
+                }
+            })
+        return {
+            activos: activos.length,
+            bajo_maximo: bajo.length,
+            diferencia_anual: texto(bajo.reduce((s, b) => s.plus(b.diferencia_anual), new Decimal(0))),
+            detalle: bajo.slice(0, 50),
+        }
+    },
 }
 
 function calcularBloque<N extends Nombre>(ctx: Contexto, nombre: N): Bloques[N] {
@@ -372,6 +478,9 @@ export function tableroEmpresa(empresaId: number, hoy: string): Empresa {
             vencimientos: bloque('vencimientos'),
             libros: bloque('libros'),
             fel: bloque('fel'),
+            compras_sin_nit: bloque('compras_sin_nit'),
+            incobrables: bloque('incobrables'),
+            depreciacion: bloque('depreciacion'),
         },
     }
 }

@@ -4,7 +4,7 @@ import { entrar, fijarHoyFixtures, ir } from './ayudas'
 /**
  * Consejos fiscales en el tablero (A3, fase 8 PR C) en modo fixtures, en escritorio y teléfono. Hoy es el
  * 15/10/2026. ArgosNet: aplican «El otro régimen pagaría menos según la simulación» y «Emita los libros
- * atrasados». Ocultar solo para mí lo quita de la vista y «Ver ocultos» lo devuelve con su marca.
+ * atrasados» del tablero y «Depreciación por debajo del máximo legal» (PR D). Ocultar solo para mí lo quita de la vista y «Ver ocultos» lo devuelve con su marca.
  */
 async function elegirEmpresa(page: Page, nombre: RegExp) {
     const selector = page.locator('[data-prueba="selector-empresa"]:visible').first()
@@ -20,7 +20,8 @@ test('consejos que aplican con fuente y aviso; ocultar solo para mí, verlos y m
     await elegirEmpresa(page, /ArgosNet/)
 
     const consejos = page.locator('[data-consejos="1"]')
-    await expect(consejos.locator('[data-consejo]')).toHaveCount(2)
+    await expect(consejos.locator('[data-consejo]')).toHaveCount(3)
+    await expect(consejos.locator('[data-consejo="depreciacion_bajo_maximo"]')).toContainText('Q1439.64')
     const simulado = consejos.locator('[data-consejo="regimen_simulado"]')
     await expect(simulado).toContainText('pagaría Q3099.46 menos')
     await expect(simulado).toContainText('Confirmar con contador')

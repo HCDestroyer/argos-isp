@@ -67,6 +67,9 @@ describe('tablero fiscal', () => {
                 vencimientos: { ...ok, datos: { hasta: '2026-11-14', mora_tributaria: '0.05', vencidas: 1, obligaciones: [] } },
                 libros: { ...ok, datos: { ventana_meses: 2, inicio_libros: '2025-01-01', libros: [], alerta: 'Libros sin emitir fuera del plazo (2 meses): ventas.' } },
                 fel: { ...ok, datos: { modo: 'desactivada', obligacion_legal: 'obligatoria', proveedor: null, contingencia_activa: false, dte_pendientes: [], alerta: 'FEL es obligatoria para su régimen: la empresa emite sin DTE (FEL desactivada)' } },
+                compras_sin_nit: { ...ok, datos: { anio: 2026, limite: '2500.00', cantidad: 0, total: '0.00', compras: [] } },
+                incobrables: { ...ok, datos: { corte: '2026-10-15', base: '0.00', porcentaje: '3.00', tope: '0.00', estimacion: '0.00', disponible: '0.00', sobre_tope: false } },
+                depreciacion: { ...ok, datos: { activos: 0, bajo_maximo: 0, diferencia_anual: '0.00', detalle: [] } },
             },
         }
         expect(alertasTablero(empresa).map(a => [a.clave, a.titulo])).toEqual([
@@ -196,5 +199,33 @@ describe('tablero fiscal', () => {
         expect(otra.querySelector('[data-bloque]')).toBeNull()
         expect(otra.textContent).toContain('Reintentar')
         expect(otra.textContent).not.toMatch(/Q\s?\d/)
+    })
+    it('bloques del libro (PR D): compras sin NIT con enlace al libro de compras, incobrables y depreciación', async () => {
+        const compra = structuredClone(bd.compras[0]!)
+        bd.compras.push({ ...compra, id: 90, proveedor_id: 90, proveedor_nombre: 'Ferretería El Tornillo', proveedor_nit: 'CF', numero: '7781', fecha_documento: '2026-09-21', total: '3150.00', estado: 'vigente' })
+        const resultado = await useTableroFiscal().ver()
+        const bloques = resultado.ok ? resultado.data.empresas[0]!.bloques : null
+        expect(bloques?.compras_sin_nit.datos).toMatchObject({ anio: 2026, limite: '2500.00', cantidad: 1, total: '3150.00', compras: [{ compra_id: 90, fecha: '2026-09-21', proveedor: 'Ferretería El Tornillo', identificacion: 'nit: CF' }] })
+        expect(bloques?.depreciacion.datos).toMatchObject({ activos: 3, bajo_maximo: 1, diferencia_anual: '1439.64', detalle: [{ activo_id: 2, clase: 'computacion', tasa_maxima: '33.33', depreciacion_anual: '2160.00', depreciacion_anual_maxima: '3599.64' }] })
+        const inc = bloques?.incobrables.datos
+        expect(inc?.porcentaje).toBe('3.00')
+        expect(inc?.tope).toBe(new Decimal(inc?.base ?? '0').times('0.03').toDecimalPlaces(2).toFixed(2))
+        expect(inc?.disponible).toBe(Decimal.max(new Decimal(inc?.tope ?? '0').minus(inc?.estimacion ?? '0'), 0).toFixed(2))
+
+        const pagina = await mountSuspended(PaginaTablero)
+        const raiz = pagina.element as HTMLElement
+        await esperar(() => expect(raiz.querySelector('[data-bloque="compras_sin_nit"] [data-compra="90"]')).not.toBeNull())
+        expect(bloqueDe(raiz, 'compras_sin_nit').querySelector('[data-prueba="compra-libro"]')?.getAttribute('href')).toBe('/libros?libro=compras&desde=2026-09-01&hasta=2026-09-30')
+        expect(bloqueDe(raiz, 'depreciacion').querySelector('[data-activo="2"]')?.textContent).toContain('Equipo de cómputo')
+        expect(bloqueDe(raiz, 'incobrables').textContent).toContain('Por provisionar')
+
+        // Un parámetro sin valor deja su bloque en error, sin cifras, y el resto sigue.
+        bd.fiscal.valores.push({ id: 9002, pais: 'GT', empresa_id: 1, clave: 'depreciacion', valor: null, vigente_desde: '2026-01-01', origen: 'usuario', motivo: 'Por confirmar', creado_por: 1, created_at: '2026-10-01T00:00:00.000Z', nivel: 'empresa' })
+        const sinTopes = await mountSuspended(PaginaTablero)
+        const otra = sinTopes.element as HTMLElement
+        await esperar(() => expect(otra.querySelector('[data-bloque="depreciacion"]')?.getAttribute('data-estado')).toBe('error'))
+        expect(bloqueDe(otra, 'depreciacion').textContent).not.toMatch(/Q\s?\d/)
+        expect(bloqueDe(otra, 'depreciacion').textContent).toContain('Reintentar')
+        expect(bloqueDe(otra, 'incobrables').dataset.estado).toBe('ok')
     })
 })

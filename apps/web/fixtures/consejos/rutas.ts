@@ -17,7 +17,7 @@ import { tableroEmpresa } from '../tablero/rutas'
  */
 
 type Consejo = Schema<'ConsejoFiscal'>
-type Fuente = 'tablero.vencimientos' | 'tablero.isr' | 'tablero.pequeno_contribuyente' | 'tablero.libros' | 'tablero.fel' | 'comparador.datos' | 'comparador.comparacion'
+type Fuente = 'tablero.vencimientos' | 'tablero.isr' | 'tablero.pequeno_contribuyente' | 'tablero.libros' | 'tablero.fel' | 'tablero.compras_sin_nit' | 'tablero.incobrables' | 'tablero.depreciacion' | 'comparador.datos' | 'comparador.comparacion'
 type Datos = Record<string, string | number | boolean | null>
 type Bloque = { estado: 'ok' | 'error' | 'no_aplica', motivo: string | null, error: Problem | null, datos: unknown }
 
@@ -228,6 +228,74 @@ const CATALOGO: Definicion[] = [
             }
             return { aplica: true, texto: String(f.alerta), datos: { modo: String(f.modo) } }
         },
+    },
+    {
+        clave: 'compras_sin_nit',
+        titulo: 'Compras sin NIT del proveedor',
+        fuente: 'inv. E.2; LAT (requisitos de deducibilidad) y Reglamento del IVA, art. 30 (desde Q2,500 se identifica con NIT)',
+        confirmar_contador: true,
+        fuentes: ['tablero.compras_sin_nit'],
+        evaluar: (e) => {
+            const b = e.bloques['tablero.compras_sin_nit']!
+            if (b.cantidad === 0) {
+                return { aplica: false }
+            }
+            const [cantidad, limite, total] = [Number(b.cantidad), String(b.limite), String(b.total)]
+            return {
+                aplica: true,
+                texto: `${cantidad} compra(s) de este año desde Q${limite} (Q${total} en total) son de proveedores sin NIT: pídales factura con su NIT para que el gasto sea deducible`,
+                datos: { cantidad, total, limite },
+            }
+        },
+    },
+    {
+        clave: 'incobrables_sin_usar',
+        titulo: 'Reserva de incobrables sin usar',
+        fuente: 'inv. A.2 (LAT, art. 21.20: hasta el 3 % de los saldos deudores al cierre)',
+        confirmar_contador: true,
+        fuentes: ['tablero.incobrables'],
+        evaluar: (e) => {
+            const b = e.bloques['tablero.incobrables']!
+            if (!num(b.disponible).gt(0)) {
+                return { aplica: false }
+            }
+            const [tope, porcentaje, base, estimacion, disponible] = [String(b.tope), String(b.porcentaje), String(b.base), String(b.estimacion), String(b.disponible)]
+            return {
+                aplica: true,
+                texto: `La reserva de incobrables deducible llega a Q${tope} (${porcentaje} % de Q${base} de saldos deudores) y la registrada es Q${estimacion}: quedan Q${disponible} por provisionar (cartera → provisionar)`,
+                datos: { tope, estimacion, disponible },
+            }
+        },
+    },
+    {
+        clave: 'depreciacion_bajo_maximo',
+        titulo: 'Depreciación por debajo del máximo legal',
+        fuente: 'inv. A.2 (LAT, art. 28: porcentajes máximos anuales por clase); NO VERIFICADO 5',
+        confirmar_contador: true,
+        fuentes: ['tablero.depreciacion'],
+        evaluar: (e) => {
+            const b = e.bloques['tablero.depreciacion']!
+            if (b.bajo_maximo === 0) {
+                return { aplica: false }
+            }
+            const [activos, diferencia] = [Number(b.bajo_maximo), String(b.diferencia_anual)]
+            return {
+                aplica: true,
+                texto: `${activos} activo(s) se deprecian a una tasa menor que el máximo legal de su clase: al máximo, el gasto deducible anual sería Q${diferencia} mayor. La tasa se fija al dar de alta el activo`,
+                datos: { activos, diferencia_anual: diferencia },
+            }
+        },
+    },
+    {
+        clave: 'credito_por_vencer',
+        titulo: 'Crédito fiscal por vencer',
+        fuente: 'inv. A.1 (Ley IVA, art. 20: el crédito se reporta hasta credito_fiscal_ventana_meses después)',
+        confirmar_contador: true,
+        fuentes: [],
+        evaluar: () => ({
+            aplica: false,
+            no_aplica: 'sin_caso: las compras registradas ya tienen su periodo_iva dentro del plazo; el sistema no conoce facturas de proveedores sin registrar (pregunta abierta al contador, §15 #84)',
+        }),
     },
 ]
 

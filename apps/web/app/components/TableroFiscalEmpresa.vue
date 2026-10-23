@@ -499,6 +499,171 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                     </ul>
                 </div>
             </TableroBloque>
+
+            <!-- Compras del año desde el límite sin NIT del proveedor (fase 8 PR D). -->
+            <TableroBloque
+                nombre="compras_sin_nit"
+                :bloque="bloques.compras_sin_nit"
+                :reintentar="reintentar"
+                :reintentando="reintentando"
+            >
+                <div
+                    v-if="bloques.compras_sin_nit.datos"
+                    class="flex flex-col gap-3"
+                >
+                    <p
+                        class="text-sm"
+                        :class="bloques.compras_sin_nit.datos.cantidad ? 'text-highlighted' : 'text-muted'"
+                        data-prueba="compras-sin-nit-resumen"
+                    >
+                        <template v-if="bloques.compras_sin_nit.datos.cantidad">
+                            {{ bloques.compras_sin_nit.datos.cantidad === 1 ? '1 compra' : `${bloques.compras_sin_nit.datos.cantidad} compras` }} de {{ bloques.compras_sin_nit.datos.anio }} desde {{ formatearQuetzales(bloques.compras_sin_nit.datos.limite) }} sin NIT del proveedor: {{ formatearQuetzales(bloques.compras_sin_nit.datos.total) }}.
+                        </template>
+                        <template v-else>
+                            Ninguna compra de {{ bloques.compras_sin_nit.datos.anio }} desde {{ formatearQuetzales(bloques.compras_sin_nit.datos.limite) }} sin NIT del proveedor.
+                        </template>
+                    </p>
+                    <ul
+                        v-if="bloques.compras_sin_nit.datos.compras.length"
+                        class="flex flex-col divide-y divide-default"
+                    >
+                        <li
+                            v-for="c in bloques.compras_sin_nit.datos.compras"
+                            :key="c.compra_id"
+                            class="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+                            :data-compra="c.compra_id"
+                        >
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <span class="text-sm font-medium text-highlighted">{{ c.proveedor }} · {{ c.documento }}</span>
+                                <span class="text-xs text-muted">{{ formatearFecha(c.fecha) }} · {{ c.identificacion }}</span>
+                            </div>
+                            <div class="flex flex-col gap-0.5 sm:items-end">
+                                <span class="text-sm tabular-nums">{{ formatearQuetzales(c.total) }}</span>
+                                <ULink
+                                    v-if="puede('libros.ver')"
+                                    raw
+                                    :to="rutaLibroCompras(c.fecha)"
+                                    class="text-xs underline underline-offset-2 hover:decoration-2"
+                                    data-prueba="compra-libro"
+                                >
+                                    Ver en el libro de compras
+                                </ULink>
+                            </div>
+                        </li>
+                    </ul>
+                    <p
+                        v-if="bloques.compras_sin_nit.datos.cantidad > bloques.compras_sin_nit.datos.compras.length"
+                        class="text-xs text-muted"
+                    >
+                        Se muestran las primeras {{ bloques.compras_sin_nit.datos.compras.length }}.
+                    </p>
+                </div>
+            </TableroBloque>
+
+            <!-- Reserva de incobrables: la misma cuenta que la estimación de cartera. -->
+            <TableroBloque
+                nombre="incobrables"
+                :bloque="bloques.incobrables"
+                :reintentar="reintentar"
+                :reintentando="reintentando"
+            >
+                <template
+                    v-if="bloques.incobrables.datos && puede('reportes.ver')"
+                    #insignia
+                >
+                    <UButton
+                        to="/cartera"
+                        label="Cartera"
+                        icon="i-lucide-shield-alert"
+                        color="neutral"
+                        variant="link"
+                        size="sm"
+                    />
+                </template>
+                <div
+                    v-if="bloques.incobrables.datos"
+                    class="flex flex-col gap-3"
+                >
+                    <dl class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <DatoFicha etiqueta="Saldos deudores">
+                            <span class="tabular-nums">{{ formatearQuetzales(bloques.incobrables.datos.base) }}</span>
+                        </DatoFicha>
+                        <DatoFicha :etiqueta="`Tope (${bloques.incobrables.datos.porcentaje} %)`">
+                            <span class="tabular-nums">{{ formatearQuetzales(bloques.incobrables.datos.tope) }}</span>
+                        </DatoFicha>
+                        <DatoFicha etiqueta="Registrada (1.1.12)">
+                            <span class="tabular-nums">{{ formatearQuetzales(bloques.incobrables.datos.estimacion) }}</span>
+                        </DatoFicha>
+                        <DatoFicha etiqueta="Por provisionar">
+                            <span
+                                class="font-semibold tabular-nums"
+                                data-prueba="incobrables-disponible"
+                            >{{ formatearQuetzales(bloques.incobrables.datos.disponible) }}</span>
+                        </DatoFicha>
+                    </dl>
+                    <UBadge
+                        v-if="bloques.incobrables.datos.sobre_tope"
+                        color="error"
+                        variant="subtle"
+                        icon="i-lucide-triangle-alert"
+                        label="La estimación registrada pasa el tope deducible"
+                        class="self-start"
+                    />
+                    <p class="text-xs text-muted">
+                        Al {{ formatearFecha(bloques.incobrables.datos.corte) }}. Confirmar con contador.
+                    </p>
+                </div>
+            </TableroBloque>
+
+            <!-- Activos que se deprecian a una tasa menor que el máximo legal de su clase. -->
+            <TableroBloque
+                nombre="depreciacion"
+                :bloque="bloques.depreciacion"
+                :reintentar="reintentar"
+                :reintentando="reintentando"
+                class="lg:col-span-2"
+            >
+                <div
+                    v-if="bloques.depreciacion.datos"
+                    class="flex flex-col gap-3"
+                >
+                    <p
+                        class="text-sm"
+                        :class="bloques.depreciacion.datos.bajo_maximo ? 'text-highlighted' : 'text-muted'"
+                        data-prueba="depreciacion-resumen"
+                    >
+                        <template v-if="bloques.depreciacion.datos.bajo_maximo">
+                            {{ bloques.depreciacion.datos.bajo_maximo }} de {{ bloques.depreciacion.datos.activos }} activos bajo el máximo: al máximo, el gasto deducible anual sería {{ formatearQuetzales(bloques.depreciacion.datos.diferencia_anual) }} mayor.
+                        </template>
+                        <template v-else>
+                            {{ bloques.depreciacion.datos.activos === 1 ? 'El activo vigente se deprecia' : `Los ${bloques.depreciacion.datos.activos} activos vigentes se deprecian` }} al máximo de su clase.
+                        </template>
+                    </p>
+                    <ul
+                        v-if="bloques.depreciacion.datos.detalle.length"
+                        class="flex flex-col divide-y divide-default"
+                    >
+                        <li
+                            v-for="a in bloques.depreciacion.datos.detalle"
+                            :key="a.activo_id"
+                            class="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+                            :data-activo="a.activo_id"
+                        >
+                            <div class="flex min-w-0 flex-col gap-0.5">
+                                <span class="text-sm font-medium text-highlighted">{{ a.descripcion }}</span>
+                                <span class="text-xs text-muted">{{ CLASES_ACTIVO[a.clase] ?? a.clase }} · activo #{{ a.activo_id }} · costo {{ formatearQuetzales(a.costo) }} · {{ a.tasa_anual }} % de un máximo de {{ a.tasa_maxima }} %</span>
+                            </div>
+                            <div class="flex flex-col gap-0.5 text-xs sm:items-end">
+                                <span class="tabular-nums text-muted">Anual {{ formatearQuetzales(a.depreciacion_anual) }} · máxima {{ formatearQuetzales(a.depreciacion_anual_maxima) }}</span>
+                                <span class="font-medium tabular-nums text-highlighted">+{{ formatearQuetzales(a.diferencia_anual) }} al año</span>
+                            </div>
+                        </li>
+                    </ul>
+                    <p class="text-xs text-muted">
+                        La tasa se fija al dar de alta el activo. Máximos del parámetro «depreciacion»: confirmar con contador.
+                    </p>
+                </div>
+            </TableroBloque>
         </div>
     </section>
 </template>

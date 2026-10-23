@@ -41,6 +41,10 @@ test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; 
     await expect(argos.locator('[data-bloque="isr"] [data-prueba="isr-con-la-anual"]')).toBeVisible()
     await expect(argos.locator('[data-bloque="isr"]')).toContainText('Confirmar con contador')
     await expect(argos.locator('[data-bloque="facturado"] [data-facturado="mes"]')).toContainText('3,360.00')
+    // Bloques del libro (PR D): ninguna compra sin NIT, el servidor bajo el máximo de su clase.
+    await expect(argos.locator('[data-prueba="compras-sin-nit-resumen"]')).toContainText('Ninguna compra de 2026')
+    await expect(argos.locator('[data-bloque="depreciacion"] [data-activo="2"]')).toContainText('Servidor del RADIUS')
+    await expect(argos.locator('[data-bloque="incobrables"]')).toHaveAttribute('data-estado', 'ok')
 
     // «Reintentar» del bloque recarga el tablero entero (los fixtures responden en el navegador; que
     // trae los datos nuevos lo comprueba `tests/nuxt/tableroFiscal.test.ts`): el ISO sigue sin confirmar.

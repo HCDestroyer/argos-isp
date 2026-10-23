@@ -21,10 +21,13 @@ export const BLOQUES_TABLERO: Record<NombreBloqueTablero, { titulo: string, icon
     vencimientos: { titulo: 'Vencimientos', icono: 'i-lucide-calendar-clock' },
     libros: { titulo: 'Libros por emitir', icono: 'i-lucide-book-marked' },
     fel: { titulo: 'Factura electrónica (FEL)', icono: 'i-lucide-shield-check' },
+    compras_sin_nit: { titulo: 'Compras sin NIT del proveedor', icono: 'i-lucide-receipt' },
+    incobrables: { titulo: 'Reserva de incobrables', icono: 'i-lucide-shield-alert' },
+    depreciacion: { titulo: 'Depreciación bajo el máximo', icono: 'i-lucide-trending-down' },
 }
 
 /** Orden de las tarjetas: lo que vence y las alertas primero, luego los estimados y el facturado. */
-export const ORDEN_BLOQUES_TABLERO: readonly NombreBloqueTablero[] = ['vencimientos', 'iva', 'isr', 'iso', 'pequeno_contribuyente', 'facturado', 'libros', 'fel']
+export const ORDEN_BLOQUES_TABLERO: readonly NombreBloqueTablero[] = ['vencimientos', 'iva', 'isr', 'iso', 'pequeno_contribuyente', 'facturado', 'libros', 'fel', 'compras_sin_nit', 'incobrables', 'depreciacion']
 
 /** Aviso fijo de todo estimado: se calcula con los datos de hoy y no se guarda. */
 export const AVISO_ESTIMADO = 'Estimado con los datos de hoy; no se guarda ni se presenta. Confirmar con contador.'
@@ -51,6 +54,24 @@ export const LIBROS_TABLERO: Record<Libro, string> = {
     compras: 'Compras',
     diario: 'Diario',
     mayor: 'Mayor',
+}
+
+/** Clase de activo (`depreciacion` del paquete) en palabras. */
+export const CLASES_ACTIVO: Record<string, string> = {
+    edificios: 'Edificios',
+    vehiculos: 'Vehículos',
+    equipo_red: 'Equipo de red',
+    mobiliario: 'Mobiliario',
+    computacion: 'Equipo de cómputo',
+    herramientas: 'Herramientas',
+    otros: 'Otros',
+}
+
+/** Libro de compras del mes de una compra (la vista previa de `/libros`). */
+export function rutaLibroCompras(fecha: string): string {
+    const [anio = 0, mes = 1] = fecha.split('-').map(Number)
+    const fin = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10)
+    return `/libros?libro=compras&desde=${fecha.slice(0, 7)}-01&hasta=${fin}`
 }
 
 /** `AAAA-MM` → «ene 2026». */

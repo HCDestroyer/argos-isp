@@ -62,7 +62,13 @@ describe('consejos fiscales', () => {
             limite_pequeno: 'no_aplica',
             libros_atrasados: 'aplica',
             fel_desactivada: 'no_aplica',
+            compras_sin_nit: 'no_aplica',
+            incobrables_sin_usar: 'no_aplica',
+            depreciacion_bajo_maximo: 'aplica',
+            credito_por_vencer: 'no_aplica',
         })
+        expect(argos.consejos.find(c => c.clave === 'depreciacion_bajo_maximo')?.texto).toContain('gasto deducible anual sería Q1439.64 mayor')
+        expect(argos.consejos.find(c => c.clave === 'credito_por_vencer')).toMatchObject({ fuentes: [], motivo: expect.stringContaining('sin_caso') })
         const simulado = argos.consejos.find(c => c.clave === 'regimen_simulado')!
         expect(simulado.texto).toContain('pagaría Q3099.46 menos')
         expect(simulado).toMatchObject({ fuentes: ['comparador.comparacion'], confirmar_contador: true, oculto: false, oculto_por: null, datos: { menor: 'opcional_simplificado', margen_equilibrio: '20.00' } })
@@ -97,7 +103,7 @@ describe('consejos fiscales', () => {
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-consejos="1"]')).not.toBeNull())
         const seccion = dentro(raiz, '[data-consejos="1"]')
-        expect([...seccion.querySelectorAll<HTMLElement>('[data-consejo]')].map(e => e.dataset.consejo)).toEqual(['regimen_simulado', 'libros_atrasados'])
+        expect([...seccion.querySelectorAll<HTMLElement>('[data-consejo]')].map(e => e.dataset.consejo)).toEqual(['regimen_simulado', 'libros_atrasados', 'depreciacion_bajo_maximo'])
         const simulado = dentro(seccion, '[data-consejo="regimen_simulado"]')
         expect(simulado.textContent).toContain('Confirmar con contador')
         expect(simulado.textContent).toContain('Fuente: inv. E.1 (comparador de regímenes)')
