@@ -244,7 +244,15 @@ test.group('Auditor contable · consejos fiscales', (group) => {
         assert.match(b.consejo('forma_pago_trimestral').error!.type, /sin_datos$/)
         assert.match(b.consejo('regimen_simulado').error!.type, /bloque_dependiente$/)
         assert.equal(b.consejo('fel_desactivada').estado, 'aplica', 'los demás siguen')
-        assert.isTrue(s.lista.every((x) => x.estado === 'sin_datos' && x.texto === null && x.datos === null))
+        // sin localización: todo consejo con bloques fuente queda sin datos (uno sin fuentes no tiene cifras)
+        assert.isTrue(
+            s.lista.every(
+                (x) =>
+                    (x.fuentes.length === 0 || x.estado === 'sin_datos') &&
+                    x.texto === null &&
+                    x.datos === null,
+            ),
+        )
         await afirmarLibro(assert, [e.B, e.C])
     })
 

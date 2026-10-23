@@ -244,11 +244,11 @@ test.group('Auditor contable · tablero fiscal', (group) => {
         assert.equal(tB!.bloques.iso.estado, 'error')
         assert.isNull(tB!.bloques.iso.datos)
         assert.match(tB!.bloques.iso.error!.type, /parametro_sin_confirmar$/)
+        const otros = BLOQUES_TABLERO.filter((b) => b !== 'iso' && b !== 'pequeno_contribuyente')
+        assert.isAtLeast(otros.length, 6)
         assert.deepEqual(
-            BLOQUES_TABLERO.filter((b) => b !== 'iso' && b !== 'pequeno_contribuyente').map(
-                (b) => tB!.bloques[b].estado,
-            ),
-            ['ok', 'ok', 'ok', 'ok', 'ok', 'ok'],
+            otros.map((b) => [b, tB!.bloques[b].estado]),
+            otros.map((b) => [b, 'ok']),
         )
         // sin localización: todos los bloques en error, ninguno con cifras
         assert.isTrue(
