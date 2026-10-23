@@ -73,6 +73,9 @@ export const INMUTABLES: Record<string, string> = {
         'ajuste del resultado contable a la renta imponible; se anula con otra fila (§9.3)',
     'fiscal.iso_acreditamientos':
         'ISO por acreditar: origen, acreditado y vencido; cuenta la fila de un documento vigente (§9.3)',
+    // fase 8 PR C (A3): preferencia de pantalla; la vigente es la última fila (empresa, clave, usuario)
+    'fiscal.consejos_ocultos':
+        'ocultar o mostrar un consejo fiscal por empresa o usuario; la vigente es la última fila (§22 PR C)',
     // §10.3 conciliación bancaria
     'ledger.extractos': 'extracto bancario (§10.3)',
     'ledger.extractos_lineas': 'línea de extracto (§10.3)',

@@ -64,6 +64,8 @@ export interface EntradaRevisarDeclaracion {
     declaracion_id: number
     /** @internal la revisa la cascada de otra revisión (H34): no vuelve a encadenar */
     cascada_de?: number | null
+    /** @internal con `cascada_de`: la versión que sustituye estaba presentada (va en el evento) */
+    estaba_presentada?: boolean
 }
 
 /** Un mes recalculado y revisado por la cascada (H34, decisión del líder). */
@@ -200,7 +202,13 @@ export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDecla
         const revisada = await verDeclaracion(d.id, t.trx)
         await t.emit('declaracion.revisada', {
             ...payloadDeclaracion(revisada),
-            ...(input.cascada_de ? { motivo: 'cascada' as const, cascada_de: input.cascada_de } : {}),
+            ...(input.cascada_de
+                ? {
+                      motivo: 'cascada' as const,
+                      cascada_de: input.cascada_de,
+                      estaba_presentada: input.estaba_presentada ?? false,
+                  }
+                : {}),
         })
         const cascada = input.cascada_de || !iva ? [] : await cascadaDeRemanentes(t, revisada)
         if (cascada.length > 0) t.anotarAuditoria({ cascada })
@@ -296,7 +304,11 @@ async function cascadaDeRemanentes(t: Transaccion, origen: DeclaracionFila): Pro
                 { trx: t.trx },
             )
             revisada = await new RevisarDeclaracion().execute(
-                { declaracion_id: nueva.id, cascada_de: origen.id },
+                {
+                    declaracion_id: nueva.id,
+                    cascada_de: origen.id,
+                    estaba_presentada: siguiente.estado === 'presentada',
+                },
                 t.ctx,
                 { trx: t.trx },
             )

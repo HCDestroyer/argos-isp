@@ -431,3 +431,35 @@ export const listarAjustesValidator = vine.compile(
         trimestre: vine.number().withoutDecimals().min(1).max(4).optional(),
     }),
 )
+
+export const tableroValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const comparadorValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        crecimiento: vine
+            .string()
+            .trim()
+            .regex(/^-?\d{1,3}(\.\d{1,2})?$/)
+            .optional()
+            .meta({
+                description:
+                    'Crecimiento mensual de las ventas para la proyección, en por ciento (p. ej. 1.50); por defecto la tendencia de los meses leídos',
+            }),
+    }),
+)
+
+export const consejosValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const ocultarConsejoValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        alcance: vine
+            .enum(['empresa', 'usuario'] as const)
+            .optional()
+            .meta({
+                description: 'empresa (por defecto): para todos; usuario: solo para quien lo pide',
+            }),
+        motivo: vine.string().trim().maxLength(500).nullable().optional(),
+    }),
+)

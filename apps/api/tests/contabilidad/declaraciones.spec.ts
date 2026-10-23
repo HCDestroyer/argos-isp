@@ -21,6 +21,7 @@ import CrearExcepcionBloqueo from '#ledger/actions/crear_excepcion_bloqueo'
 import AnularFactura from '#billing/actions/anular_factura'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import { cola, datosNit, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { eventos } from '#tests/fiscal/ayudas_fiscal'
 import { crearClienteFila } from '#tests/core/fabricas'
 
 /**
@@ -419,6 +420,15 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
             ],
             [2, 'revisada', '30.00'],
         )
+        // fase 8: el aviso de la cascada dice que la versión sustituida no estaba presentada
+        const avisos = await eventos('declaracion.revisada', 'cascada_de', v2.id)
+        assert.deepEqual(
+            avisos.map((x) => [x.motivo, x.periodo_desde, x.estaba_presentada]),
+            [['cascada', `${SIGUIENTE}-01`, false]],
+        )
+        const propios = await eventos('declaracion.revisada', 'declaracion_id', v2.id)
+        assert.lengthOf(propios, 1)
+        assert.notProperty(propios[0]!, 'estaba_presentada', 'solo la revisada en cascada lo lleva')
         const violaciones = await verificarLibro([e.B, e.C])
         assert.deepEqual(
             violaciones.map((x) => x.invariante.split(' ')[0]),
@@ -547,6 +557,12 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         await cola(e)
         const revisada = await new RevisarDeclaracion().execute({ declaracion_id: sustitutiva.id }, e.ctx)
         assert.lengthOf(revisada.cascada, 1)
+        // fase 8: el aviso de la cascada dice que la versión sustituida estaba presentada
+        const avisos = await eventos('declaracion.revisada', 'cascada_de', sustitutiva.id)
+        assert.deepEqual(
+            avisos.map((x) => [x.motivo, x.declaracion_id, x.estaba_presentada]),
+            [['cascada', revisada.cascada[0]!.declaracion_id, true]],
+        )
         assert.include(revisada.cascada[0]!, {
             estaba_presentada: true,
             remanente_credito_anterior: '42.00',

@@ -510,43 +510,30 @@ const CALCULOS: Record<string, Calculo> = {
     },
 
     async incobrables(c, empresaId, _p, fin) {
-        const base = (await c.rawQuery(
-            `SELECT coalesce(sum(s), 0)::text AS base FROM (
-                 SELECT m.cliente_id, sum(m.debe - m.haber) AS s
-                   FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
-                   JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
-                  WHERE cu.codigo = ? AND a.empresa_id = ? AND a.fecha <= ?::date
-                  GROUP BY m.cliente_id
-             ) x WHERE s > 0`,
-            [CUENTAS.CXC_CLIENTES, empresaId, fin],
-        )) as { rows: Array<{ base: string }> }
-        const saldoEstimacion = await saldoCuenta(c, empresaId, CUENTAS_GT.ESTIMACION_INCOBRABLES, fin)
-        const estimacion = saldoEstimacion.negated()
-        let valor: unknown
+        let r: Awaited<ReturnType<typeof reservaIncobrables>>
         try {
-            valor = await valorParametro<string>(empresaId, 'reserva_incobrables_max', fin, c)
+            r = await reservaIncobrables(c, empresaId, fin)
         } catch (error) {
             if (!(error instanceof LocalizacionNoInstalada)) throw error
+            const { base, estimacion } = await baseYEstimacion(c, empresaId, fin)
             // sin localización no hay tope: solo pasa si no hay estimación que medir
             return {
                 clave: 'incobrables',
                 esperado: '0.00 (sin localización fiscal instalada)',
                 obtenido: aTexto(estimacion),
                 resultado: estimacion.isZero() ? 'ok' : 'anomalia',
-                detalle: { base: aTexto(base.rows[0]!.base), sin_localizacion: true },
+                detalle: { base: aTexto(base), sin_localizacion: true },
             }
         }
-        const porcentaje = dec(String(valor))
-        const tope = redondear(dec(base.rows[0]!.base).times(porcentaje).div(100))
         return {
             clave: 'incobrables',
-            esperado: `<= ${aTexto(tope)}`,
-            obtenido: aTexto(estimacion),
-            resultado: estimacion.lte(tope) ? 'ok' : 'anomalia',
+            esperado: `<= ${aTexto(r.tope)}`,
+            obtenido: aTexto(r.estimacion),
+            resultado: r.estimacion.lte(r.tope) ? 'ok' : 'anomalia',
             detalle: {
-                base: aTexto(base.rows[0]!.base),
-                porcentaje: porcentaje.toString(),
-                tope: aTexto(tope),
+                base: aTexto(r.base),
+                porcentaje: r.porcentaje.toString(),
+                tope: aTexto(r.tope),
             },
         }
     },
@@ -712,6 +699,34 @@ CALCULOS.retenciones_cuadradas = async (c, empresaId, periodo) => {
         resultado: igual(e, o),
         detalle: { borradores },
     }
+}
+
+async function baseYEstimacion(c: QueryClientContract, empresaId: number, fin: string) {
+    const base = (await c.rawQuery(
+        `SELECT coalesce(sum(s), 0)::text AS base FROM (
+             SELECT m.cliente_id, sum(m.debe - m.haber) AS s
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+              WHERE cu.codigo = ? AND a.empresa_id = ? AND a.fecha <= ?::date
+              GROUP BY m.cliente_id
+         ) x WHERE s > 0`,
+        [CUENTAS.CXC_CLIENTES, empresaId, fin],
+    )) as { rows: Array<{ base: string }> }
+    const saldoEstimacion = await saldoCuenta(c, empresaId, CUENTAS_GT.ESTIMACION_INCOBRABLES, fin)
+    return { base: dec(base.rows[0]!.base), estimacion: saldoEstimacion.negated() }
+}
+
+/**
+ * Reserva de incobrables al corte (LAT art. 21.20; la de `cartera.provisionar`, el check `incobrables` y
+ * el tablero): base = Σ saldos deudores de los clientes en `1.1.03`, tope = base × `reserva_incobrables_max`
+ * y estimación = saldo acreedor de `1.1.12`.
+ */
+export async function reservaIncobrables(c: QueryClientContract, empresaId: number, fin: string) {
+    const { base, estimacion } = await baseYEstimacion(c, empresaId, fin)
+    const valor = await valorParametro<string>(empresaId, 'reserva_incobrables_max', fin, c)
+    const porcentaje = dec(String(valor))
+    const tope = redondear(base.times(porcentaje).div(100))
+    return { base, porcentaje, tope, estimacion }
 }
 
 /** Corre los checks automáticos del tipo (sin escribir). */
