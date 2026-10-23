@@ -59765,6 +59765,236 @@
           }
         }
       },
+      "BloqueComprasSinNit": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "anio",
+              "limite",
+              "cantidad",
+              "total",
+              "compras"
+            ],
+            "properties": {
+              "anio": {
+                "type": "integer"
+              },
+              "limite": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "consumidor_final_limite: desde este total se identifica con NIT"
+              },
+              "cantidad": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "compras": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "compra_id",
+                    "fecha",
+                    "documento",
+                    "total",
+                    "proveedor_id",
+                    "proveedor",
+                    "identificacion"
+                  ],
+                  "properties": {
+                    "compra_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "fecha": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "documento": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "proveedor_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "proveedor": {
+                      "type": "string"
+                    },
+                    "identificacion": {
+                      "type": "string",
+                      "description": "Tipo de documento y número del proveedor"
+                    }
+                  }
+                },
+                "description": "Las primeras 50"
+              }
+            },
+            "description": "Compras del año desde el límite sin proveedor con NIT (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueDepreciacion": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "activos",
+              "bajo_maximo",
+              "diferencia_anual",
+              "detalle"
+            ],
+            "properties": {
+              "activos": {
+                "type": "integer",
+                "description": "Activos vigentes (sin baja)"
+              },
+              "bajo_maximo": {
+                "type": "integer"
+              },
+              "diferencia_anual": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Σ depreciación anual máxima − la que se registra"
+              },
+              "detalle": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "activo_id",
+                    "clase",
+                    "descripcion",
+                    "costo",
+                    "tasa_anual",
+                    "tasa_maxima",
+                    "depreciacion_anual",
+                    "depreciacion_anual_maxima",
+                    "diferencia_anual"
+                  ],
+                  "properties": {
+                    "activo_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "clase": {
+                      "type": "string"
+                    },
+                    "descripcion": {
+                      "type": "string"
+                    },
+                    "costo": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "tasa_anual": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "tasa_maxima": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "depreciacion_anual": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "depreciacion_anual_maxima": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "diferencia_anual": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    }
+                  }
+                },
+                "description": "Los primeros 50"
+              }
+            },
+            "description": "Activos bajo el máximo de depreciación (solo con estado ok)"
+          }
+        }
+      },
       "BloqueFacturado": {
         "type": "object",
         "required": [
@@ -60059,6 +60289,92 @@
               }
             },
             "description": "Estado de la FEL (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueIncobrables": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "corte",
+              "base",
+              "porcentaje",
+              "tope",
+              "estimacion",
+              "disponible",
+              "sobre_tope"
+            ],
+            "properties": {
+              "corte": {
+                "type": "string",
+                "format": "date"
+              },
+              "base": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Σ saldos deudores de los clientes en 1.1.03"
+              },
+              "porcentaje": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "reserva_incobrables_max"
+              },
+              "tope": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "estimacion": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Saldo de 1.1.12 (estimación registrada)"
+              },
+              "disponible": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Tope − estimación (0 si ya está en el tope)"
+              },
+              "sobre_tope": {
+                "type": "boolean"
+              }
+            },
+            "description": "Reserva de incobrables (solo con estado ok)"
           }
         }
       },
@@ -85994,7 +86310,10 @@
                     "pequeno_contribuyente",
                     "vencimientos",
                     "libros",
-                    "fel"
+                    "fel",
+                    "compras_sin_nit",
+                    "incobrables",
+                    "depreciacion"
                   ],
                   "properties": {
                     "facturado": {
@@ -86020,6 +86339,15 @@
                     },
                     "fel": {
                       "$ref": "#/components/schemas/BloqueFel"
+                    },
+                    "compras_sin_nit": {
+                      "$ref": "#/components/schemas/BloqueComprasSinNit"
+                    },
+                    "incobrables": {
+                      "$ref": "#/components/schemas/BloqueIncobrables"
+                    },
+                    "depreciacion": {
+                      "$ref": "#/components/schemas/BloqueDepreciacion"
                     }
                   }
                 }

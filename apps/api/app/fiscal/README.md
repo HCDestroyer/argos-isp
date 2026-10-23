@@ -126,7 +126,7 @@ Lecturas: `GET /declaraciones/ajustes?anio=` (`declaraciones.ver`), `GET /declar
 
 ## Tablero fiscal (fase 8 PR A, contrato §9.4 y §22)
 
-`tablero.ts` (`GET /fiscal/tablero`, `fiscal.ver`): solo lectura. Bloques `facturado`, `iva`, `isr`, `iso`, `pequeno_contribuyente`, `vencimientos`, `libros` (aviso por `libros_ventana_meses`) y `fel`, cada uno calculado por separado con las funciones de las declaraciones y los libros: `ok` con sus datos, `no_aplica` con el motivo o `error` con su problema RFC 9457 y sin cifras. No escribe nada ni emite eventos; nunca cambia el régimen.
+`tablero.ts` (`GET /fiscal/tablero`, `fiscal.ver`): solo lectura. Bloques `facturado`, `iva`, `isr`, `iso`, `pequeno_contribuyente`, `vencimientos`, `libros` (aviso por `libros_ventana_meses`), `fel` y, desde la PR D, `compras_sin_nit`, `incobrables` y `depreciacion`, cada uno calculado por separado con las funciones de las declaraciones y los libros: `ok` con sus datos, `no_aplica` con el motivo o `error` con su problema RFC 9457 y sin cifras. No escribe nada ni emite eventos; nunca cambia el régimen.
 
 `comparador.ts` (`GET /fiscal/comparador?crecimiento=`, `fiscal.ver`; fase 8 PR B): simulación de los regímenes opcional y sobre utilidades (con el ISO como piso) con los datos del libro de los últimos 12 meses y los parámetros vigentes; margen de equilibrio y proyección. Bloques independientes con su error; supuestos y matices marcados «confirmar con contador». No escribe ni cambia el régimen. `bloques.ts` tiene el bloque común del tablero y el comparador.
 
