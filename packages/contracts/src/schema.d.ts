@@ -9455,14 +9455,14 @@ export interface components {
             datos_hash: string;
             calculada_por: number | null;
             /** @description Nombre de quien calculó la versión */
-            calculada_por_nombre?: string | null;
+            calculada_por_nombre: string | null;
             /** Format: date-time */
             calculada_en: string;
             /** @enum {string} */
             estado: "borrador" | "revisada" | "presentada" | "sustituida";
             revisada_por: number | null;
             /** @description Nombre de quien la revisó */
-            revisada_por_nombre?: string | null;
+            revisada_por_nombre: string | null;
             /** Format: date-time */
             revisada_en: string | null;
             /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
@@ -9473,13 +9473,13 @@ export interface components {
             boleta: string | null;
             presentada_por: number | null;
             /** @description Nombre de quien la marcó presentada */
-            presentada_por_nombre?: string | null;
+            presentada_por_nombre: string | null;
             /** Format: date-time */
             presentada_en: string | null;
             /** @description Pago vigente (sin anular) de esta versión */
             pago: components["schemas"]["PagoDeclaracion"] | null;
             /** @description Pagos anulados de esta versión con su anulación (declaraciones.anular_pago) */
-            pagos_anulados?: components["schemas"]["PagoDeclaracionAnulado"][];
+            pagos_anulados: components["schemas"]["PagoDeclaracionAnulado"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9528,14 +9528,14 @@ export interface components {
             datos_hash: string;
             calculada_por: number | null;
             /** @description Nombre de quien calculó la versión */
-            calculada_por_nombre?: string | null;
+            calculada_por_nombre: string | null;
             /** Format: date-time */
             calculada_en: string;
             /** @enum {string} */
             estado: "borrador" | "revisada" | "presentada" | "sustituida";
             revisada_por: number | null;
             /** @description Nombre de quien la revisó */
-            revisada_por_nombre?: string | null;
+            revisada_por_nombre: string | null;
             /** Format: date-time */
             revisada_en: string | null;
             /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
@@ -9546,13 +9546,13 @@ export interface components {
             boleta: string | null;
             presentada_por: number | null;
             /** @description Nombre de quien la marcó presentada */
-            presentada_por_nombre?: string | null;
+            presentada_por_nombre: string | null;
             /** Format: date-time */
             presentada_en: string | null;
             /** @description Pago vigente (sin anular) de esta versión */
             pago: components["schemas"]["PagoDeclaracion"] | null;
             /** @description Pagos anulados de esta versión con su anulación (declaraciones.anular_pago) */
-            pagos_anulados?: components["schemas"]["PagoDeclaracionAnulado"][];
+            pagos_anulados: components["schemas"]["PagoDeclaracionAnulado"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9603,14 +9603,14 @@ export interface components {
             datos_hash: string;
             calculada_por: number | null;
             /** @description Nombre de quien calculó la versión */
-            calculada_por_nombre?: string | null;
+            calculada_por_nombre: string | null;
             /** Format: date-time */
             calculada_en: string;
             /** @enum {string} */
             estado: "borrador" | "revisada" | "presentada" | "sustituida";
             revisada_por: number | null;
             /** @description Nombre de quien la revisó */
-            revisada_por_nombre?: string | null;
+            revisada_por_nombre: string | null;
             /** Format: date-time */
             revisada_en: string | null;
             /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
@@ -9621,13 +9621,13 @@ export interface components {
             boleta: string | null;
             presentada_por: number | null;
             /** @description Nombre de quien la marcó presentada */
-            presentada_por_nombre?: string | null;
+            presentada_por_nombre: string | null;
             /** Format: date-time */
             presentada_en: string | null;
             /** @description Pago vigente (sin anular) de esta versión */
             pago: components["schemas"]["PagoDeclaracion"] | null;
             /** @description Pagos anulados de esta versión con su anulación (declaraciones.anular_pago) */
-            pagos_anulados?: components["schemas"]["PagoDeclaracionAnulado"][];
+            pagos_anulados: components["schemas"]["PagoDeclaracionAnulado"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -11270,7 +11270,7 @@ export interface components {
             motivo_estado: string | null;
             /** @description Borrador de la declaración (fase 7 PR B) */
             declaracion_id: number | null;
-            /** @description Cómo se calculó el vencimiento. La API envía siempre los seis campos; vigente_desde y nivel siguen opcionales en el tipo hasta que el panel ajuste tests/nuxt/calendarioFiscal.test.ts */
+            /** @description Cómo se calculó el vencimiento (los seis campos, siempre) */
             regla: {
                 /** @description Parámetro del plazo (iva_declaracion, isr_opcional_plazo…) */
                 parametro: string;
@@ -11282,9 +11282,9 @@ export interface components {
                  * Format: date
                  * @description Vigencia del valor usado
                  */
-                vigente_desde?: string | null;
+                vigente_desde: string | null;
                 /** @enum {string} */
-                nivel?: "empresa" | "instalacion" | "global" | "paquete" | "derivado";
+                nivel: "empresa" | "instalacion" | "global" | "paquete" | "derivado";
                 /**
                  * Format: date
                  * @description Vencimiento según la regla, antes de correrlo al día hábil

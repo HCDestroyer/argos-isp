@@ -779,11 +779,22 @@ test.group('Fase 7 · PR C por la API', (group) => {
             403,
         )
 
-        // pedido de A4: regla tipada sin objeto libre; vigente_desde y nivel opcionales en el tipo hasta que
-        // el panel ajuste tests/nuxt/calendarioFiscal.test.ts (desvío b de §21 PR C), pero la API los envía
+        // pedido de A4: los seis campos de ObligacionFiscal.regla son obligatorios en el tipo
         const regla = (s.ObligacionFiscal!.properties as Record<string, any>).regla
-        assert.sameMembers(regla.required, ['parametro', 'valor', 'vence_base', 'corrido_a_habil'])
-        assert.includeMembers(Object.keys(regla.properties), ['vigente_desde', 'nivel'])
+        assert.sameMembers(regla.required, [
+            'parametro',
+            'valor',
+            'vigente_desde',
+            'nivel',
+            'vence_base',
+            'corrido_a_habil',
+        ])
+        assert.includeMembers(s.Declaracion!.required!, [
+            'calculada_por_nombre',
+            'revisada_por_nombre',
+            'presentada_por_nombre',
+            'pagos_anulados',
+        ])
         assert.notProperty(regla, 'additionalProperties')
         await afirmarLibro(assert, [e.B, e.C])
     })

@@ -62982,17 +62982,21 @@
           "totales",
           "datos_hash",
           "calculada_por",
+          "calculada_por_nombre",
           "calculada_en",
           "estado",
           "revisada_por",
+          "revisada_por_nombre",
           "revisada_en",
           "asiento_id",
           "numero_formulario",
           "fecha_presentacion",
           "boleta",
           "presentada_por",
+          "presentada_por_nombre",
           "presentada_en",
           "pago",
+          "pagos_anulados",
           "created_at",
           "updated_at"
         ],
@@ -63283,17 +63287,21 @@
           "totales",
           "datos_hash",
           "calculada_por",
+          "calculada_por_nombre",
           "calculada_en",
           "estado",
           "revisada_por",
+          "revisada_por_nombre",
           "revisada_en",
           "asiento_id",
           "numero_formulario",
           "fecha_presentacion",
           "boleta",
           "presentada_por",
+          "presentada_por_nombre",
           "presentada_en",
           "pago",
+          "pagos_anulados",
           "created_at",
           "updated_at",
           "desactualizada"
@@ -63589,17 +63597,21 @@
           "totales",
           "datos_hash",
           "calculada_por",
+          "calculada_por_nombre",
           "calculada_en",
           "estado",
           "revisada_por",
+          "revisada_por_nombre",
           "revisada_en",
           "asiento_id",
           "numero_formulario",
           "fecha_presentacion",
           "boleta",
           "presentada_por",
+          "presentada_por_nombre",
           "presentada_en",
           "pago",
+          "pagos_anulados",
           "created_at",
           "updated_at",
           "cascada"
@@ -70191,6 +70203,8 @@
             "required": [
               "parametro",
               "valor",
+              "vigente_desde",
+              "nivel",
               "vence_base",
               "corrido_a_habil"
             ],
@@ -70232,7 +70246,7 @@
                 "description": "vence_base caía en día inhábil"
               }
             },
-            "description": "Cómo se calculó el vencimiento. La API envía siempre los seis campos; vigente_desde y nivel siguen opcionales en el tipo hasta que el panel ajuste tests/nuxt/calendarioFiscal.test.ts"
+            "description": "Cómo se calculó el vencimiento (los seis campos, siempre)"
           },
           "version": {
             "type": "integer"
