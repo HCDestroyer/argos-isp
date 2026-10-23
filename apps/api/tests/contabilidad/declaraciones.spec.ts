@@ -538,7 +538,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H35: la liquidación y el pago de una declaración se revierten directo (POST /libro/asientos/:id/revertir) y deshacen lo declarado', async ({
+    test('H35 (arreglado en cd192af): la liquidación y el pago de una declaración no se revierten directo (409 asiento_de_declaracion)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -567,6 +567,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
                     ),
             )
         }
-        assert.deepEqual(intentos, ['reverso_por_documento', 'reverso_por_documento'])
-    }).fails('H35: liquidacion_impuesto y pago_impuesto no están en POR_DOCUMENTO de #ledger/reversos')
+        assert.deepEqual(intentos, ['asiento_de_declaracion', 'asiento_de_declaracion'])
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 })
