@@ -7,9 +7,9 @@ import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import {
     PeriodoBloqueado,
     bloqueoVigente,
-    cuentasTocanImpuesto,
     impedimentoConExcepcion,
     primerDiaAbierto,
+    tocaCuentaDeImpuesto,
 } from '#ledger/bloqueos'
 import { resolverEmpresaActiva } from '#core/empresas'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
@@ -72,7 +72,37 @@ export const ORIGENES_ASIENTO = [
     'bonificacion',
     // fase 6 PR C (§9.1): asientos del cierre anual; origen_id = `ledger.cierres_anuales.id`
     'cierre_anual',
+    // fase 7 PR B (§10.6): liquidación de una declaración y su pago; origen_id = `fiscal.declaraciones.id`
+    'liquidacion_impuesto',
+    'pago_impuesto',
 ] as const
+
+/**
+ * Orígenes de venta (fase 7 PR B, §10.2): su partida de `2.1.02 IVA débito fiscal` lleva la etiqueta
+ * `IVA12` / `±V_IVA` (haber `+`, debe `-`) si la acción no la puso. Así Σ `V_IVA` del periodo = el
+ * IVA del libro de ventas, el bloqueo de impuestos los alcanza por la etiqueta y un reverso resta.
+ * La liquidación (`liquidacion_impuesto`) mueve 2.1.02 sin ser venta: no se etiqueta.
+ */
+export const ORIGENES_VENTA_IVA = new Set(['factura', 'mora', 'nota_credito', 'reclasificacion'])
+export const CUENTA_IVA_DEBITO = '2.1.02'
+
+/** Etiqueta de venta de las partidas de 2.1.02 sin etiqueta (en su lugar). */
+export function etiquetarVentas<
+    L extends {
+        cuenta: { codigo: string }
+        debe: Dec
+        impuesto_codigo: string | null
+        cuadricula: string | null
+    },
+>(origen: string, lineas: L[]): L[] {
+    if (!ORIGENES_VENTA_IVA.has(origen)) return lineas
+    for (const linea of lineas) {
+        if (linea.cuenta.codigo !== CUENTA_IVA_DEBITO || linea.impuesto_codigo !== null) continue
+        linea.impuesto_codigo = 'IVA12'
+        linea.cuadricula = linea.debe.isZero() ? '+V_IVA' : '-V_IVA'
+    }
+    return lineas
+}
 export type OrigenAsiento = (typeof ORIGENES_ASIENTO)[number]
 
 export interface LineaAsiento {
@@ -196,7 +226,10 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
 
-        const lineas = await this.normalizarLineas(t.trx, input.movimientos ?? [], empresaId)
+        const lineas = etiquetarVentas(
+            input.origen_tipo,
+            await this.normalizarLineas(t.trx, input.movimientos ?? [], empresaId),
+        )
         const total = this.validarCuadre(lineas)
         const diario = await diarioDeAsiento(
             t.trx,
@@ -550,12 +583,15 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
         },
     ): Promise<{ fecha: string; fechaDocumento: string | null; excepcionId: number | null }> {
         const usuarioId = usuarioDelActor(t.ctx.actor)
+        // §10.4 (fase 7 PR B): el bloqueo de impuestos alcanza a todo asiento con alguna partida etiquetada
+        // y, salvo la liquidación y su pago, con una partida sin etiqueta en una cuenta de impuesto (un ajuste manual)
         const conImpuesto =
             d.lineas.some((l) => l.impuesto_codigo !== null) ||
-            (await cuentasTocanImpuesto(
-                t.trx,
-                d.lineas.map((l) => l.cuenta.id),
-            ))
+            (!['liquidacion_impuesto', 'pago_impuesto'].includes(d.origen) &&
+                (await tocaCuentaDeImpuesto(
+                    t.trx,
+                    d.lineas.map((l) => l.cuenta.id),
+                )))
         const consulta = {
             fecha: d.fecha,
             empresaId: d.empresaId,

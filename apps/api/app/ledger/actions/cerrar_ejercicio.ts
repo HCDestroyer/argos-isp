@@ -299,7 +299,7 @@ async function rechazarSiHayDeclaracion(t: Transaccion, empresaId: number, anio:
     if (!(tabla.rows[0] as { existe: boolean }).existe) return
     const r = await t.trx.rawQuery(
         `SELECT count(*)::int AS n FROM fiscal.declaraciones
-          WHERE empresa_id = ? AND impuesto = 'isr_anual' AND extract(year FROM periodo)::int = ?`,
+          WHERE empresa_id = ? AND impuesto = 'isr_anual' AND extract(year FROM periodo_desde)::int = ?`,
         [empresaId, anio],
     )
     if (((r.rows[0] as { n: number }).n ?? 0) > 0) {

@@ -279,6 +279,10 @@ export const listarObligacionesValidator = vine.compile(
             .parse(repetible)
             .optional()
             .meta({ description: 'Uno o varios estados (se repite el parámetro); por defecto todos' }),
+        vencida: vine.boolean().optional().meta({
+            description:
+                'true = solo las vencidas sin presentar (pendiente o borrador con vence_en antes de hoy en Guatemala); false = las demás',
+        }),
         desde: fechaIso().optional().meta({ description: 'Vence desde (inclusive)' }),
         hasta: fechaIso().optional().meta({ description: 'Vence hasta (inclusive)' }),
     }),
@@ -306,5 +310,67 @@ export const agregarFeriadoValidator = vine.compile(
             .optional()
             .meta({ description: 'false = la fecha deja de ser feriado (fila nueva; nada se borra)' }),
         motivo: motivo(),
+    }),
+)
+
+// ---------------------------------------------------------------------------------------------
+// Declaraciones (fase 7 PR B)
+// ---------------------------------------------------------------------------------------------
+
+export const calcularDeclaracionValidator = vine.compile(
+    vine.object({
+        impuesto: vine.enum(['iva_mensual', 'pc_mensual'] as const).meta({
+            description:
+                'iva_mensual (SAT-2237) o pc_mensual (SAT-2046); ISR, ISO y retenciones llegan después',
+        }),
+        periodo: vine
+            .string()
+            .trim()
+            .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+            .meta({ description: 'Mes AAAA-MM' }),
+        sustitutiva: vine.boolean().optional().meta({
+            description: 'true para recalcular un periodo ya revisado o presentado (versión sustitutiva)',
+        }),
+        empresa_id: empresaOpcional(),
+    }),
+)
+
+export const listarDeclaracionesValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        impuesto: vine
+            .array(vine.enum(['iva_mensual', 'pc_mensual'] as const))
+            .parse(repetible)
+            .optional(),
+        estado: vine
+            .array(vine.enum(['borrador', 'revisada', 'presentada', 'sustituida'] as const))
+            .parse(repetible)
+            .optional(),
+        periodo: vine
+            .string()
+            .trim()
+            .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+            .optional()
+            .meta({ description: 'Mes AAAA-MM' }),
+    }),
+)
+
+export const marcarPresentadaValidator = vine.compile(
+    vine.object({
+        numero_formulario: vine.string().trim().minLength(3).maxLength(60),
+        fecha_presentacion: fechaIso(),
+        boleta: vine.string().trim().maxLength(60).nullable().optional(),
+    }),
+)
+
+export const pagoDeclaracionValidator = vine.compile(
+    vine.object({
+        metodo: vine.enum(['caja', 'banco', 'cuenta_bancaria'] as const),
+        caja_id: idEntidad().nullable().optional(),
+        banco_id: idEntidad().nullable().optional(),
+        cuenta_bancaria_id: idEntidad().nullable().optional(),
+        fecha: fechaIso().nullable().optional().meta({ description: 'Fecha del pago; por defecto hoy' }),
+        boleta: vine.string().trim().maxLength(60).nullable().optional(),
     }),
 )

@@ -5,6 +5,7 @@ import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { cuentaIngresoDeLinea, totalesDe, type LineaCalculada } from '#billing/facturas'
 import { aplicarAnticipos } from '#billing/cobros'
+import { lineasSinIva, sinIvaPorRegimen } from '#billing/regimen'
 import { cuentaIva } from '#billing/fel_facturas'
 import { configuracionFel, modoEmision, type CertificarAl, type ModoEmision } from '#fiscal/fel/configuracion'
 import {
@@ -102,7 +103,11 @@ export interface ResultadoEmision {
 }
 
 /** Inserta la factura (idempotente por `clave_unica`) y hace lo que su modo FEL pide. */
-export async function emitirDocumento(t: Transaccion, datos: DatosEmision): Promise<ResultadoEmision> {
+export async function emitirDocumento(t: Transaccion, entrada: DatosEmision): Promise<ResultadoEmision> {
+    // pequeño contribuyente: la factura no separa IVA (#billing/regimen)
+    const datos = (await sinIvaPorRegimen(t.trx, entrada.empresa_id, hoyGuatemala()))
+        ? { ...entrada, lineas: lineasSinIva(entrada.lineas) }
+        : entrada
     const config = await configuracionFel(datos.empresa_id, t.trx)
     const totales = totalesDe(datos.lineas)
     // decisión del PM (19 oct): una factura de valor 0 nunca se genera; quien llama registra una

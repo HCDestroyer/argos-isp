@@ -15,8 +15,9 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
  *   impuestos no retrocede (trigger `ledger.validar_bloqueo`).
  * - Qué impide una fecha lo decide `ledger.bloqueo_de` (la misma función que los triggers):
  *   `duro`, `cerrado` (mes cerrado), `global`, `ventas` (diario de ventas), `compras` (diario de
- *   compras, o compras y pagos a proveedores), `impuestos` (asiento con una cuenta de
- *   `ledger.cuentas_con_impuesto` o con etiqueta de impuesto).
+ *   compras, o compras y pagos a proveedores), `impuestos` (asiento con
+ *   alguna partida con etiqueta de impuesto o, fuera de la liquidación y su pago, en una cuenta de impuesto;
+ *   fase 7 PR B).
  * - Excepciones: por tipo (nunca `duro`), para un usuario o para todos, con fin obligatorio.
  *   Cubren solo su tipo; el asiento que entra por una guarda `excepcion_id`.
  */
@@ -177,15 +178,20 @@ export async function primerDiaAbierto(
     return rows[0]!.fecha
 }
 
-/** ¿Alguna de estas cuentas pone el asiento bajo el bloqueo de impuestos? (`ledger.cuentas_con_impuesto`) */
-export async function cuentasTocanImpuesto(
+/**
+ * ¿Alguna de estas cuentas es de impuesto (`ledger.cuenta_de_impuesto`: 1.1.04–1.1.08, 2.1.02,
+ * 2.1.04–2.1.09, 2.1.11)? Una partida sin etiqueta en ellas también pone el asiento bajo el bloqueo de
+ * impuestos (fase 7 PR B, decisión del líder), salvo en la liquidación y su pago.
+ */
+export async function tocaCuentaDeImpuesto(
     cliente: QueryClientContract,
     cuentas: number[],
 ): Promise<boolean> {
     if (cuentas.length === 0) return false
-    const { rows } = (await cliente.rawQuery('SELECT ledger.cuentas_tocan_impuesto(?::bigint[]) AS si', [
-        cuentas,
-    ])) as { rows: Array<{ si: boolean }> }
+    const { rows } = (await cliente.rawQuery(
+        'SELECT bool_or(ledger.cuenta_de_impuesto(c)) AS si FROM unnest(?::bigint[]) AS c',
+        [cuentas],
+    )) as { rows: Array<{ si: boolean | null }> }
     return Boolean(rows[0]?.si)
 }
 

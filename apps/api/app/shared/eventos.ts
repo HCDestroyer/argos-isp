@@ -510,6 +510,14 @@ export interface CatalogoEventos {
         limite: string
         anio: number
     }
+    /**
+     * Declaraciones (fase 7 PR B, §9.3, §10.6 y §11.3): borradores que el sistema nunca presenta.
+     * `monto` = `a_pagar` del borrador (en `pagada`, lo pagado con mora y multa). `version` 1, 2…
+     */
+    'declaracion.calculada': PayloadDeclaracion
+    'declaracion.revisada': PayloadDeclaracion
+    'declaracion.presentada': PayloadDeclaracion
+    'declaracion.pagada': PayloadDeclaracion
     // FEL (A3, `contratos/localizacion-fiscal.md` §11.3)
     'dte.certificado': {
         dte_id: number
@@ -834,6 +842,20 @@ interface PayloadCanjeLealtad {
     bonificacion_id?: number | null
 }
 
+export interface PayloadDeclaracion {
+    declaracion_id: number
+    empresa_id: number
+    impuesto: string
+    periodo_desde: string
+    periodo_hasta: string
+    vence_en: string
+    monto: string
+    version: number
+    /** solo `declaracion.revisada` de una rectificación en cascada (H34): la revisión que la causó */
+    motivo?: 'cascada'
+    cascada_de?: number
+}
+
 export type NombreEvento = keyof CatalogoEventos
 export type PayloadEvento<E extends NombreEvento> = CatalogoEventos[E]
 
@@ -888,6 +910,10 @@ export const EVENTOS = [
     'fiscal.config_cambiada',
     'fiscal.vencimiento_proximo',
     'fiscal.limite_pc',
+    'declaracion.calculada',
+    'declaracion.revisada',
+    'declaracion.presentada',
+    'declaracion.pagada',
     'dte.certificado',
     'dte.rechazado',
     'dte.anulado',

@@ -92,10 +92,30 @@ Lecturas (`libros.ver`): `GET /libros/diario`, `/libros/mayor`, `/libros/ventas`
 
 Lecturas: `GET /fiscal/obligaciones` y `/fiscal/obligaciones/:id` (`declaraciones.ver`), `GET /fiscal/feriados?anio=` (`fiscal.ver`).
 
+## Declaraciones de IVA y pequeño contribuyente (fase 7 PR B, contrato §9.3, §10.6 y §21)
+
+Borradores calculados: el sistema **nunca** presenta nada a la SAT.
+
+- `declaraciones.ts`: el borrador sale del libro de ventas del mes, del de compras (mes del IVA) y de las constancias de retención de IVA recibidas (mes del asiento de su pago). IVA: débito, crédito, retenciones, remanentes del mes anterior, `impuesto_determinado` (D − C − R), lo usado, `a_pagar` y los remanentes que pasan al mes siguiente; pequeño contribuyente: `IVA_PC` sobre el total del libro de ventas menos retenciones. `datos_hash` detecta cualquier cambio de los datos leídos. También la liquidación (neto por cuenta y la diferencia con lo ya liquidado) y el cuadre contra las etiquetas (`cuadriculasDelMes`).
+- `fiscal.declaraciones` (versiones: lo calculado no cambia, el estado avanza `borrador → revisada → presentada`, o `sustituida`) y `fiscal.declaraciones_pagos` (solo inserción). La obligación del calendario queda enlazada (`declaracion_id`) y pasa a `borrador` o `presentada`.
+- Las ventas llevan su etiqueta `V_IVA` (la pone `registrarAsiento` en la partida de `2.1.02` de facturas, mora, notas y reclasificaciones) y los reversos copian la etiqueta con el signo contrario. El bloqueo de impuestos alcanza a todo asiento con alguna partida etiquetada.
+- Checks de impuestos (`#ledger/checks`): `iva_cuadrado` e `iva_liquidado`.
+- Cascada de remanentes (H34): revisar una versión que cambia el remanente que deja rectifica, en la misma transacción, cada mes posterior ya revisado (sustitutiva revisada por la diferencia; un presentado vuelve a «por presentar» como rectificativa); 409 `cascada_bloqueada` si uno no se puede.
+
+| Acción (permiso)          | Ruta                                        | Qué hace                                                                                                                         |
+| ------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `declaraciones.calcular`  | `POST /declaraciones/calcular`              | Versión nueva del borrador (`sustitutiva: true` sobre una revisada o presentada)                                                 |
+| `declaraciones.revisar`   | `POST /declaraciones/:id/revisar`           | Liquidación obligatoria (`liquidacion_impuesto`, diario `IMP`) y bloqueo de impuestos en el último día del mes; exige los checks |
+| `declaraciones.presentar` | `POST /declaraciones/:id/marcar-presentada` | Guarda número de formulario, fecha y boleta; sin asiento                                                                         |
+| `declaraciones.pagar`     | `POST /declaraciones/:id/registrar-pago`    | `pago_impuesto`: `2.1.06` / `2.1.09` + mora y multa a `5.4.02` / Caja o Banco                                                    |
+
+Lecturas (`declaraciones.ver`): `GET /declaraciones` y `GET /declaraciones/:id` (con `desactualizada`).
+
 ## Eventos
 
 - Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`).
 - Libros: `libro.emitido` (emisión oficial con folio).
+- Declaraciones: `declaracion.calculada`, `declaracion.revisada` (con `libro.bloqueo_cambiado`), `declaracion.presentada` y `declaracion.pagada`.
 - Calendario: `fiscal.vencimiento_proximo` y `fiscal.limite_pc` (cron); `fiscal.parametros_cambiados` con `claves: ['feriados']` al cambiar un feriado.
 - FEL: `dte.certificado`, `dte.rechazado` (`definitivo`), `dte.anulado`, `fel.contingencia_cambiada` y `factura.sustituida`. En `obligatoria` con `emitir`, `factura.emitida` sale al certificarse.
 - Consume `fiscal.parametros_cambiados` (grupo `billing`) para regenerar el calendario (`ConsumidorCalendario`) y para invalidar la caché y `pago.registrado` (`ConsumidorFel`) para pedir la certificación de los avisos cubiertos.

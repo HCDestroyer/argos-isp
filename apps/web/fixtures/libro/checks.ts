@@ -60,6 +60,8 @@ const CATALOGO: readonly DefinicionCheck[] = [
     { clave: 'secuencias_sin_huecos', tipo: 'mensual', titulo: 'Numeración de los diarios sin huecos en el año', cuadra: ['0', '0'] },
     { clave: 'hash_verificado', tipo: 'mensual', titulo: 'Cadena de hash verificada hasta el fin del periodo', cuadra: ['verificada', 'verificada'] },
     { clave: 'depreciacion_al_dia', tipo: 'mensual', titulo: 'Cuotas de activos y diferidos del periodo contabilizadas', cuadra: ['0', '0'] },
+    { clave: 'iva_cuadrado', tipo: 'impuestos', titulo: 'Cuadrículas del libro = libros de IVA = borrador de la declaración', cuadra: ['sin obligación', 'sin obligación'] },
+    { clave: 'iva_liquidado', tipo: 'impuestos', titulo: 'Débito y crédito del periodo trasladados por la liquidación', cuadra: ['sin obligación', 'sin obligación'] },
     { clave: 'incobrables', tipo: 'anual', titulo: 'Estimación de incobrables (1.1.12) dentro del tope', cuadra: ['<= 2260.53', '1800.00'] },
 ]
 
@@ -71,11 +73,21 @@ function delTipo(tipo: TipoCheck): readonly DefinicionCheck[] {
     return CATALOGO.filter(d => d.tipo === tipo)
 }
 
-/** Lo que el cálculo de la API da hoy para esa clave: lo que diga `bd.calculosChecks`, o que cuadra. */
+/**
+ * Cálculos que dependen de otros fixtures (`iva_cuadrado` e `iva_liquidado` leen las declaraciones):
+ * los registra su módulo para no importarlo desde aquí. `null` = lo de siempre.
+ */
+export const calculosDinamicos: Record<string, (empresaId: number, periodo: string) => Calculo | null> = {}
+
+/** Lo que el cálculo de la API da hoy para esa clave: lo que diga `bd.calculosChecks`, su cálculo propio o que cuadra. */
 function calcular(empresaId: number, tipo: TipoCheck, periodo: string, def: DefinicionCheck, calculos: readonly CalculoCheck[]): Calculo {
     const propio = calculos.find(c => c.empresa_id === empresaId && c.tipo === tipo && c.periodo === periodo && c.clave === def.clave)
     if (propio) {
         return { esperado: propio.esperado, obtenido: propio.obtenido, resultado: def.aviso ? 'ok' : propio.resultado, detalle: propio.detalle }
+    }
+    const dinamico = calculosDinamicos[def.clave]?.(empresaId, periodo)
+    if (dinamico) {
+        return dinamico
     }
     return { esperado: def.cuadra[0], obtenido: def.cuadra[1], resultado: 'ok', detalle: null }
 }
@@ -182,9 +194,9 @@ function filasNuevas(filas: readonly CheckCierre[], empresaId: number, tipo: Tip
 }
 
 /** Como `exigirChecks`: un `errors[]` por clave sin verificar o que no pasa. */
-function pendientes(filas: readonly CheckCierre[], empresaId: number, tipo: TipoCheck, periodo: string): NonNullable<Schema<'Problem'>['errors']> {
+function pendientes(filas: readonly CheckCierre[], empresaId: number, tipo: TipoCheck, periodo: string, claves?: readonly string[]): NonNullable<Schema<'Problem'>['errors']> {
     const actuales = vigentes(filas, empresaId, tipo, periodo)
-    return delTipo(tipo).flatMap((def) => {
+    return delTipo(tipo).filter(def => !claves || claves.includes(def.clave)).flatMap((def) => {
         const v = actuales.find(c => c.clave === def.clave)
         if (!v) {
             return [{ field: def.clave, message: `${def.titulo}: sin verificar`, rule: 'checks_pendientes' }]
@@ -198,12 +210,12 @@ function pendientes(filas: readonly CheckCierre[], empresaId: number, tipo: Tipo
  * Devuelve el 422 `checks_pendientes` del primero que no pasa (nada queda guardado), o `null` y deja
  * guardadas las verificaciones.
  */
-export function verificarYExigir(solicitud: SolicitudFixture, empresaId: number, cierres: readonly [TipoCheck, string][]): RespuestaFixture | null {
+export function verificarYExigir(solicitud: SolicitudFixture, empresaId: number, cierres: readonly [TipoCheck, string][], claves?: readonly string[]): RespuestaFixture | null {
     const guardadas: CheckCierre[] = []
     for (const [tipo, periodo] of cierres) {
         const antes = [...bd.checksCierre, ...guardadas]
         const filas = [...antes, ...filasNuevas(antes, empresaId, tipo, periodo)]
-        const errores = pendientes(filas, empresaId, tipo, periodo)
+        const errores = pendientes(filas, empresaId, tipo, periodo, claves)
         if (errores.length) {
             return problemaTipado(
                 422,

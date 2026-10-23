@@ -125,7 +125,8 @@ function rutasDePaginas(): Map<string, string> {
  */
 const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exentos?: Record<string, string[]> }> = {
     // LibroCierres solo se abre desde /libro (página con `libro.ver`): ya lo comprobó quien la abrió.
-    'CierreChecklist.vue': { permisos: ['libro.ver'], desde: ['components/LibroCierres.vue'], exentos: { 'components/LibroCierres.vue': ['libro.ver'] } },
+    // La ficha de la declaración (fase 7 PR B) la muestra con `tipo="impuestos"` solo con `libro.ver`.
+    'CierreChecklist.vue': { permisos: ['libro.ver'], desde: ['components/LibroCierres.vue', 'pages/declaraciones/[id].vue'], exentos: { 'components/LibroCierres.vue': ['libro.ver'] } },
     'ProcesosDetenidos.vue': { permisos: ['facturas.ver'], desde: ['pages/libro/bloqueos.vue'] },
     'BloqueoLibroModal.vue': { permisos: ['libro.bloquear', 'libro.desbloquear'], desde: ['pages/libro/bloqueos.vue'] },
     'BloqueoDuroModal.vue': { permisos: ['libro.bloquear_duro'], desde: ['pages/libro/bloqueos.vue'] },

@@ -131,6 +131,7 @@ function etiquetaDe(obligacion: ObligacionFiscal): string {
                         :title="etiquetaDe(obligacion)"
                         :data-obligacion="obligacion.id"
                         :data-estado="obligacion.vencida ? 'vencida' : obligacion.estado"
+                        :data-rectificativa="esRectificativa(obligacion) ? 'si' : undefined"
                         @click="emit('elegir', obligacion)"
                     />
                 </div>

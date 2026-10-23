@@ -279,3 +279,57 @@ export type EntradaFeriado = z.input<typeof esquemaFeriado>
 
 /** Retiro de un feriado (`activo: false`): la fecha y el nombre se toman del vigente; solo el motivo. */
 export const esquemaRetiroFeriado = z.object({ motivo })
+
+type CuerpoCalcular = paths['/api/v1/declaraciones/calcular']['post']['requestBody']['content']['application/json']
+type CuerpoPresentar = paths['/api/v1/declaraciones/{id}/marcar-presentada']['post']['requestBody']['content']['application/json']
+type CuerpoPago = paths['/api/v1/declaraciones/{id}/registrar-pago']['post']['requestBody']['content']['application/json']
+
+/** Calcular una declaración (`POST /declaraciones/calcular`): impuesto y mes AAAA-MM, no futuro. */
+export function esquemaCalcularDeclaracion(hoy: string) {
+    return z.object({
+        impuesto: z.enum(['iva_mensual', 'pc_mensual'], { message: 'Elige el impuesto' }),
+        periodo: z.string().trim().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Elige el mes (AAAA-MM)').refine(p => `${p}-01` <= hoy, 'El mes no puede ser futuro'),
+        sustitutiva: z.boolean(),
+    }).transform((datos): CuerpoCalcular => ({ impuesto: datos.impuesto, periodo: datos.periodo, ...(datos.sustitutiva ? { sustitutiva: true } : {}) }))
+}
+
+export type EntradaCalcularDeclaracion = z.input<ReturnType<typeof esquemaCalcularDeclaracion>>
+
+/** Marcar presentada (validador `marcarPresentadaValidator` y la acción): formulario de 3 a 60, fecha no futura, boleta hasta 60. */
+export function esquemaPresentarDeclaracion(hoy: string) {
+    return z.object({
+        numero_formulario: z.string().trim().min(3, 'Número del formulario presentado (mínimo 3 caracteres)').max(60, 'Máximo 60 caracteres'),
+        fecha_presentacion: fecha('Elige la fecha de presentación').refine(f => f <= hoy, 'No puede ser futura'),
+        boleta: z.string().trim().max(60, 'Máximo 60 caracteres'),
+    }).transform((datos): CuerpoPresentar => ({ numero_formulario: datos.numero_formulario, fecha_presentacion: datos.fecha_presentacion, boleta: datos.boleta || null }))
+}
+
+export type EntradaPresentarDeclaracion = z.input<ReturnType<typeof esquemaPresentarDeclaracion>>
+
+/** Pago de una declaración: método con su caja, banco (vacío = el principal) o cuenta bancaria; fecha no futura (vacía = hoy). */
+export function esquemaPagoDeclaracion(hoy: string) {
+    return z.object({
+        metodo: z.enum(['caja', 'banco', 'cuenta_bancaria']),
+        caja_id: z.number().int().positive().nullable(),
+        banco_id: z.number().int().positive().nullable(),
+        cuenta_bancaria_id: z.number().int().positive().nullable(),
+        fecha: z.string().trim().refine(f => f === '' || (FECHA.test(f) && f <= hoy), 'Fecha no futura (vacía: hoy)'),
+        boleta: z.string().trim().max(60, 'Máximo 60 caracteres'),
+    }).superRefine((datos, ctx) => {
+        if (datos.metodo === 'caja' && datos.caja_id === null) {
+            ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'Elige la caja' })
+        }
+        if (datos.metodo === 'cuenta_bancaria' && datos.cuenta_bancaria_id === null) {
+            ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'Elige la cuenta bancaria' })
+        }
+    }).transform((datos): CuerpoPago => ({
+        metodo: datos.metodo,
+        ...(datos.metodo === 'caja' ? { caja_id: datos.caja_id } : {}),
+        ...(datos.metodo === 'banco' && datos.banco_id !== null ? { banco_id: datos.banco_id } : {}),
+        ...(datos.metodo === 'cuenta_bancaria' ? { cuenta_bancaria_id: datos.cuenta_bancaria_id } : {}),
+        ...(datos.fecha ? { fecha: datos.fecha } : {}),
+        boleta: datos.boleta || null,
+    }))
+}
+
+export type EntradaPagoDeclaracion = z.input<ReturnType<typeof esquemaPagoDeclaracion>>

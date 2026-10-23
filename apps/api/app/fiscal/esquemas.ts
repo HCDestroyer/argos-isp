@@ -524,9 +524,29 @@ export const ObligacionFiscal = definirEsquema(
         },
         declaracion_id: { ...nulable(id), description: 'Borrador de la declaración (fase 7 PR B)' },
         regla: {
-            ...jsonLibre,
+            ...objeto(
+                {
+                    parametro: {
+                        ...texto,
+                        description: 'Parámetro del plazo (iva_declaracion, isr_opcional_plazo…)',
+                    },
+                    valor: {
+                        ...jsonLibre,
+                        description: 'Valor del parámetro: plazo, dias, dias_habiles, vence, formulario…',
+                    },
+                    vigente_desde: { ...nulable(fecha), description: 'Vigencia del valor usado' },
+                    nivel: enumerado(['empresa', 'instalacion', 'global', 'paquete', 'derivado']),
+                    vence_base: {
+                        ...fecha,
+                        description: 'Vencimiento según la regla, antes de correrlo al día hábil',
+                    },
+                    corrido_a_habil: { ...booleano, description: 'vence_base caía en día inhábil' },
+                },
+                ['parametro', 'valor', 'vigente_desde', 'nivel', 'vence_base', 'corrido_a_habil'],
+            ),
+            additionalProperties: true,
             description:
-                'Cómo se calculó el vencimiento: parametro, valor, vigente_desde, nivel, vence_base y corrido_a_habil',
+                'Cómo se calculó el vencimiento. La API envía siempre los seis campos; van opcionales en el tipo para no romper los fixtures que lo tenían como objeto libre',
         },
         version: entero,
         created_at: instante,
@@ -590,6 +610,168 @@ export const FeriadoAgregado = definirEsquema(
         calendario: {
             ...ResultadoCalendarioFiscal,
             description: 'Recalculo del calendario de todas las empresas',
+        },
+    }),
+)
+
+// ---------------------------------------------------------------------------------------------
+// Declaraciones (fase 7 PR B, contrato §3.7, §9.3, §10.6 y §21)
+// ---------------------------------------------------------------------------------------------
+
+const dinero: EsquemaJson = { type: 'string', pattern: '^-?\\d+\\.\\d{2}$' }
+
+export const RenglonDeclaracion = definirEsquema(
+    'RenglonDeclaracion',
+    objeto({
+        seccion: enumerado(['ventas', 'compras', 'retenciones']),
+        origen: { ...texto, description: 'dte, interno, compra o constancia' },
+        documento: texto,
+        fecha,
+        tipo: nulable(texto),
+        nit: nulable(texto),
+        base: dinero,
+        iva: { ...dinero, description: 'IVA (ventas), crédito (compras) o retención' },
+        total: dinero,
+        estado: nulable(texto),
+    }),
+)
+
+export const LibroEnlazado = definirEsquema(
+    'LibroEnlazado',
+    objeto({
+        emision_id: id,
+        libro: enumerado(['ventas', 'compras']),
+        desde: fecha,
+        hasta: fecha,
+        folio_inicial: entero,
+        folio_final: entero,
+        sha256: texto,
+        iva: nulable(dinero),
+        mismo_periodo: {
+            ...booleano,
+            description: 'La emisión cubre exactamente el mes: su IVA debe ser el del borrador',
+        },
+    }),
+)
+
+export const PagoDeclaracion = definirEsquema(
+    'PagoDeclaracion',
+    objeto({
+        id,
+        fecha,
+        impuesto: dinero,
+        mora: dinero,
+        multa: dinero,
+        total: dinero,
+        dias_atraso: entero,
+        boleta: nulable(texto),
+        asiento_id: id,
+        registrado_por: nulable(id),
+        created_at: instante,
+    }),
+)
+
+const camposDeclaracion: Record<string, EsquemaJson> = {
+    id,
+    empresa_id: id,
+    impuesto: enumerado([
+        'iva_mensual',
+        'pc_mensual',
+        'isr_opcional_mensual',
+        'isr_trimestral',
+        'iso_trimestral',
+        'isr_anual',
+        'retenciones_iva',
+        'retenciones_isr',
+    ]),
+    periodo_desde: fecha,
+    periodo_hasta: fecha,
+    version: entero,
+    sustitutiva: booleano,
+    sustituye_a: nulable(id),
+    obligacion_id: id,
+    formulario: nulable(texto),
+    vence_en: fecha,
+    parametros: lista(
+        objeto({ clave: texto, valor: cualquiera, vigente_desde: nulable(fecha), nivel: texto }),
+    ),
+    detalle: objeto({
+        renglones: lista(RenglonDeclaracion),
+        libros: {
+            ...lista(LibroEnlazado),
+            description: 'Libros de ventas y compras emitidos con folio que cubren el mes',
+        },
+        anterior_id: {
+            ...nulable(id),
+            description: 'Declaración del mes anterior de la que salen los remanentes',
+        },
+    }),
+    totales: {
+        type: 'object',
+        additionalProperties: dinero,
+        description:
+            'IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas',
+    },
+    datos_hash: {
+        ...texto,
+        description: 'sha256 de lo leído (renglones, totales, parámetros y el mes anterior)',
+    },
+    calculada_por: nulable(id),
+    calculada_en: instante,
+    estado: enumerado(['borrador', 'revisada', 'presentada', 'sustituida']),
+    revisada_por: nulable(id),
+    revisada_en: nulable(instante),
+    asiento_id: {
+        ...nulable(id),
+        description: 'Asiento de liquidación de esta versión (null si no hubo diferencia)',
+    },
+    numero_formulario: nulable(texto),
+    fecha_presentacion: nulable(fecha),
+    boleta: nulable(texto),
+    presentada_por: nulable(id),
+    presentada_en: nulable(instante),
+    pago: nulable(PagoDeclaracion),
+    created_at: instante,
+    updated_at: instante,
+}
+
+export const Declaracion = definirEsquema('Declaracion', objeto(camposDeclaracion))
+
+export const DeclaracionDetalle = definirEsquema(
+    'DeclaracionDetalle',
+    objeto({
+        ...camposDeclaracion,
+        desactualizada: {
+            ...booleano,
+            description:
+                'Los datos cambiaron desde que se calculó (otro datos_hash): revisar o presentar responde 409',
+        },
+    }),
+)
+
+export const DeclaracionRevisada = definirEsquema(
+    'DeclaracionRevisada',
+    objeto({
+        ...camposDeclaracion,
+        cascada: {
+            ...lista(
+                objeto({
+                    periodo: { ...texto, description: 'AAAA-MM' },
+                    declaracion_id: id,
+                    version: entero,
+                    sustituye_a: id,
+                    estaba_presentada: {
+                        ...booleano,
+                        description:
+                            'La versión sustituida estaba presentada: la obligación vuelve a «por presentar» (rectificativa)',
+                    },
+                    remanente_credito_anterior: dinero,
+                    remanente_credito: dinero,
+                    a_pagar: dinero,
+                }),
+            ),
+            description:
+                'Meses posteriores ya revisados que se rectificaron en la misma transacción porque cambió el remanente que arrastran (H34)',
         },
     }),
 )

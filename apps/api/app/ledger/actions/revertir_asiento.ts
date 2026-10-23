@@ -1,6 +1,6 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Conflicto, NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { bloqueoReversoDirecto } from '#ledger/reversos'
 import RegistrarAsiento, {
@@ -29,7 +29,11 @@ export interface EntradaReverso {
     fecha?: string
     /** solo desde la anulación del documento dueño del asiento (anular pago, factura, egreso…) */
     por_anulacion?: boolean
-    /** copia la etiqueta de impuesto de cada partida con el signo contrario (fase 5, compras) */
+    /**
+     * copia la etiqueta de impuesto de cada partida con el signo contrario (fase 5, compras). Desde
+     * la fase 7 PR B es lo que hace siempre (`false` solo la omite a propósito): un reverso resta en
+     * las cuadrículas lo que su original sumó (§10.2).
+     */
     invertir_etiquetas?: boolean
 }
 
@@ -80,6 +84,22 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
             throw new ReglaNegocio(
                 `El asiento ${original.id} ya es un reverso (de ${original.reversa_de}); no se revierte`,
                 'asiento_es_reverso',
+            )
+        }
+        // H35 (fase 7 PR B): la liquidación de una declaración solo cambia con una sustitutiva y su pago
+        // no tiene anulación todavía (PR C); revertirlos directo dejaría la declaración sin su asiento
+        if (
+            !input.por_anulacion &&
+            (original.origen_tipo === 'liquidacion_impuesto' || original.origen_tipo === 'pago_impuesto')
+        ) {
+            throw new Conflicto(
+                `El asiento ${original.id} es ${original.origen_tipo === 'liquidacion_impuesto' ? 'la liquidación' : 'el pago'} de la declaración ${original.origen_id}: no se revierte directo; ${
+                    original.origen_tipo === 'liquidacion_impuesto'
+                        ? 'calcule y revise una declaración sustitutiva'
+                        : 'el pago de una declaración aún no se anula'
+                }`,
+                'asiento_de_declaracion',
+                'Asiento de una declaración',
             )
         }
         if (!input.por_anulacion) {
@@ -152,9 +172,9 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
                     haber: m.debe,
                     cliente_id: m.cliente_id,
                     proveedor_id: m.proveedor_id === null ? null : Number(m.proveedor_id),
-                    // con `invertir_etiquetas` el reverso lleva la etiqueta con el signo contrario
-                    // (compras: el libro de compras resta la anulación en su mes, §10.2)
-                    ...(input.invertir_etiquetas && m.cuadricula
+                    // el reverso lleva la etiqueta con el signo contrario: el libro y las cuadrículas
+                    // restan la anulación en su mes (§10.2; compras desde la fase 5, todo desde la 7)
+                    ...(input.invertir_etiquetas !== false && m.cuadricula
                         ? {
                               impuesto_codigo: m.impuesto_codigo,
                               cuadricula: `${m.cuadricula.startsWith('+') ? '-' : '+'}${m.cuadricula.slice(1)}`,
