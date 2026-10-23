@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { DateTime } from 'luxon'
 import { Problema } from '#shared/errores'
+import { reservaIncobrables } from '#ledger/checks'
 import { NoAplica, calcularBloque, type Bloque } from '#fiscal/bloques'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { idsEmpresasActivas } from '#core/empresas'
@@ -37,7 +38,9 @@ import {
  * (trimestre en curso), `pequeno_contribuyente` (facturado del año frente a `pc_limite_anual`),
  * `vencimientos` (obligaciones abiertas que vencen en 30 días o ya vencieron, con mora estimada),
  * `libros` (libros legales sin emitir fuera de `libros_ventana_meses`) y `fel` (alerta permanente si
- * la FEL es obligatoria y está desactivada).
+ * la FEL es obligatoria y está desactivada). Fase 8 PR D: `compras_sin_nit` (compras del año desde
+ * `consumidor_final_limite` sin proveedor identificado con NIT), `incobrables` (reserva permitida frente a
+ * la registrada en `1.1.12`) y `depreciacion` (activos a una tasa menor que el máximo legal de su clase).
  */
 
 export const BLOQUES_TABLERO = [
@@ -49,6 +52,9 @@ export const BLOQUES_TABLERO = [
     'vencimientos',
     'libros',
     'fel',
+    'compras_sin_nit',
+    'incobrables',
+    'depreciacion',
 ] as const
 export type NombreBloque = (typeof BLOQUES_TABLERO)[number]
 
@@ -461,6 +467,122 @@ async function fel(ctx: Contexto) {
     }
 }
 
+/** Compras vigentes del año desde `consumidor_final_limite` cuyo proveedor no está identificado con NIT. */
+async function comprasSinNit(ctx: Contexto) {
+    const limite = resolver(ctx.datos.filas, 'consumidor_final_limite', ctx.hoy)?.valor
+    if (typeof limite !== 'string') throw new ParametroSinConfirmar('consumidor_final_limite', ctx.hoy)
+    const anio = ctx.hoy.slice(0, 4)
+    const { rows } = (await ctx.c.rawQuery(
+        `SELECT co.id, co.tipo_documento, co.serie, co.numero, to_char(co.fecha, 'YYYY-MM-DD') AS fecha,
+                co.total::text AS total, p.id AS proveedor_id, p.nombre, p.nit, p.tipo_documento AS documento_proveedor,
+                p.tipo AS tipo_proveedor
+           FROM ledger.compras co JOIN ledger.proveedores p ON p.id = co.proveedor_id
+          WHERE co.empresa_id = ? AND co.fecha BETWEEN ? AND ? AND co.total >= ?::numeric
+            AND co.tipo_documento <> 'NCRE'
+            AND NOT EXISTS (SELECT 1 FROM ledger.compras_anulaciones x WHERE x.compra_id = co.id)
+            AND (p.tipo_documento <> 'nit' OR p.tipo = 'sin_documento'
+                 OR upper(regexp_replace(p.nit, '[^A-Za-z0-9]', '', 'g')) = 'CF')
+          ORDER BY co.fecha, co.id`,
+        [ctx.empresaId, `${anio}-01-01`, ctx.hoy, limite],
+    )) as {
+        rows: Array<{
+            id: number
+            tipo_documento: string
+            serie: string
+            numero: string
+            fecha: string
+            total: string
+            proveedor_id: number
+            nombre: string
+            nit: string
+            documento_proveedor: string
+            tipo_proveedor: string
+        }>
+    }
+    const total = rows.reduce((acc, r) => acc.plus(dec(r.total)), CERO)
+    return {
+        anio: Number(anio),
+        limite: aTexto(limite),
+        cantidad: rows.length,
+        total: aTexto(total),
+        compras: rows.slice(0, 50).map((r) => ({
+            compra_id: Number(r.id),
+            fecha: r.fecha,
+            documento: `${r.tipo_documento} ${r.serie} ${r.numero}`.replace(/\s+/g, ' ').trim(),
+            total: aTexto(r.total),
+            proveedor_id: Number(r.proveedor_id),
+            proveedor: r.nombre,
+            identificacion: `${r.documento_proveedor}${r.tipo_proveedor === 'sin_documento' ? ' (sin documento)' : ''}: ${r.nit}`,
+        })),
+    }
+}
+
+/** Reserva de incobrables a hoy: la misma cuenta que `cartera.provisionar` y el check `incobrables`. */
+async function incobrables(ctx: Contexto) {
+    const r = await reservaIncobrables(ctx.c, ctx.empresaId, ctx.hoy)
+    const disponible = r.tope.minus(r.estimacion)
+    return {
+        corte: ctx.hoy,
+        base: aTexto(r.base),
+        porcentaje: aTexto(r.porcentaje),
+        tope: aTexto(r.tope),
+        estimacion: aTexto(r.estimacion),
+        disponible: aTexto(disponible.isNegative() ? CERO : disponible),
+        sobre_tope: r.estimacion.gt(r.tope),
+    }
+}
+
+/** Activos vigentes que se deprecian a una tasa menor que el máximo legal de su clase (vigente hoy). */
+async function depreciacion(ctx: Contexto) {
+    const topes = resolver(ctx.datos.filas, 'depreciacion', ctx.hoy)?.valor
+    if (!topes || typeof topes !== 'object') throw new ParametroSinConfirmar('depreciacion', ctx.hoy)
+    const activos = (await ctx.c
+        .from('ledger.activos as a')
+        .where('a.empresa_id', ctx.empresaId)
+        .whereNotExists((q) => q.from('ledger.activos_bajas as b').whereRaw('b.activo_id = a.id'))
+        .orderBy('a.id', 'asc')
+        .select(
+            'a.id',
+            'a.clase',
+            'a.descripcion',
+            ctx.c.raw('a.costo::text as costo'),
+            ctx.c.raw('a.valor_residual::text as valor_residual'),
+            'a.tasa_anual',
+        )) as Array<{
+        id: number
+        clase: string
+        descripcion: string
+        costo: string
+        valor_residual: string
+        tasa_anual: string
+    }>
+    const tope = topes as Record<string, string>
+    const bajo = activos
+        .filter((a) => tope[a.clase] !== undefined && dec(a.tasa_anual).lt(dec(tope[a.clase]!)))
+        .map((a) => {
+            const depreciable = dec(a.costo).minus(dec(a.valor_residual))
+            const actual = redondear(depreciable.times(dec(a.tasa_anual)).dividedBy(100))
+            const maxima = redondear(depreciable.times(dec(tope[a.clase]!)).dividedBy(100))
+            return {
+                activo_id: Number(a.id),
+                clase: a.clase,
+                descripcion: a.descripcion,
+                costo: aTexto(a.costo),
+                tasa_anual: aTexto(a.tasa_anual),
+                tasa_maxima: aTexto(tope[a.clase]!),
+                depreciacion_anual: aTexto(actual),
+                depreciacion_anual_maxima: aTexto(maxima),
+                diferencia_anual: aTexto(maxima.minus(actual)),
+            }
+        })
+    return {
+        activos: activos.length,
+        bajo_maximo: bajo.length,
+        diferencia_anual: aTexto(bajo.reduce((acc, b) => acc.plus(dec(b.diferencia_anual)), CERO)),
+        detalle: bajo.slice(0, 50),
+    }
+}
+
 const CALCULOS: Record<NombreBloque, (ctx: Contexto) => Promise<Record<string, unknown>>> = {
     facturado,
     iva: bloqueIva,
@@ -470,4 +592,7 @@ const CALCULOS: Record<NombreBloque, (ctx: Contexto) => Promise<Record<string, u
     vencimientos,
     libros,
     fel,
+    compras_sin_nit: comprasSinNit,
+    incobrables,
+    depreciacion,
 }
