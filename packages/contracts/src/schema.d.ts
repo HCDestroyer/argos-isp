@@ -8513,6 +8513,62 @@ export interface components {
                 perdida: boolean;
             } | null;
         };
+        BloqueComprasSinNit: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Compras del año desde el límite sin proveedor con NIT (solo con estado ok) */
+            datos: {
+                anio: number;
+                /** @description consumidor_final_limite: desde este total se identifica con NIT */
+                limite: string;
+                cantidad: number;
+                total: string;
+                /** @description Las primeras 50 */
+                compras: {
+                    compra_id: number;
+                    /** Format: date */
+                    fecha: string;
+                    documento: string;
+                    total: string;
+                    proveedor_id: number;
+                    proveedor: string;
+                    /** @description Tipo de documento y número del proveedor */
+                    identificacion: string;
+                }[];
+            } | null;
+        };
+        BloqueDepreciacion: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Activos bajo el máximo de depreciación (solo con estado ok) */
+            datos: {
+                /** @description Activos vigentes (sin baja) */
+                activos: number;
+                bajo_maximo: number;
+                /** @description Σ depreciación anual máxima − la que se registra */
+                diferencia_anual: string;
+                /** @description Los primeros 50 */
+                detalle: {
+                    activo_id: number;
+                    clase: string;
+                    descripcion: string;
+                    costo: string;
+                    tasa_anual: string;
+                    tasa_maxima: string;
+                    depreciacion_anual: string;
+                    depreciacion_anual_maxima: string;
+                    diferencia_anual: string;
+                }[];
+            } | null;
+        };
         BloqueFacturado: {
             /** @enum {string} */
             estado: "ok" | "error" | "no_aplica";
@@ -8583,6 +8639,29 @@ export interface components {
                 }[];
                 /** @description «FEL es obligatoria para su régimen» si está desactivada */
                 alerta: string | null;
+            } | null;
+        };
+        BloqueIncobrables: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Reserva de incobrables (solo con estado ok) */
+            datos: {
+                /** Format: date */
+                corte: string;
+                /** @description Σ saldos deudores de los clientes en 1.1.03 */
+                base: string;
+                /** @description reserva_incobrables_max */
+                porcentaje: string;
+                tope: string;
+                /** @description Saldo de 1.1.12 (estimación registrada) */
+                estimacion: string;
+                /** @description Tope − estimación (0 si ya está en el tope) */
+                disponible: string;
+                sobre_tope: boolean;
             } | null;
         };
         BloqueIso: {
@@ -15097,6 +15176,9 @@ export interface components {
                     vencimientos: components["schemas"]["BloqueVencimientos"];
                     libros: components["schemas"]["BloqueLibros"];
                     fel: components["schemas"]["BloqueFel"];
+                    compras_sin_nit: components["schemas"]["BloqueComprasSinNit"];
+                    incobrables: components["schemas"]["BloqueIncobrables"];
+                    depreciacion: components["schemas"]["BloqueDepreciacion"];
                 };
             }[];
         };

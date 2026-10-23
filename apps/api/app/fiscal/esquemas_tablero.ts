@@ -181,6 +181,59 @@ const DatosFel = objeto({
     alerta: { ...nulable(texto), description: '«FEL es obligatoria para su régimen» si está desactivada' },
 })
 
+const DatosComprasSinNit = objeto({
+    anio: entero,
+    limite: { ...dinero, description: 'consumidor_final_limite: desde este total se identifica con NIT' },
+    cantidad: entero,
+    total: dinero,
+    compras: {
+        ...lista(
+            objeto({
+                compra_id: id,
+                fecha,
+                documento: texto,
+                total: dinero,
+                proveedor_id: id,
+                proveedor: texto,
+                identificacion: { ...texto, description: 'Tipo de documento y número del proveedor' },
+            }),
+        ),
+        description: 'Las primeras 50',
+    },
+})
+
+const DatosIncobrables = objeto({
+    corte: fecha,
+    base: { ...dinero, description: 'Σ saldos deudores de los clientes en 1.1.03' },
+    porcentaje: { ...dinero, description: 'reserva_incobrables_max' },
+    tope: dinero,
+    estimacion: { ...dinero, description: 'Saldo de 1.1.12 (estimación registrada)' },
+    disponible: { ...dinero, description: 'Tope − estimación (0 si ya está en el tope)' },
+    sobre_tope: booleano,
+})
+
+const DatosDepreciacion = objeto({
+    activos: { ...entero, description: 'Activos vigentes (sin baja)' },
+    bajo_maximo: entero,
+    diferencia_anual: { ...dinero, description: 'Σ depreciación anual máxima − la que se registra' },
+    detalle: {
+        ...lista(
+            objeto({
+                activo_id: id,
+                clase: texto,
+                descripcion: texto,
+                costo: dinero,
+                tasa_anual: dinero,
+                tasa_maxima: dinero,
+                depreciacion_anual: dinero,
+                depreciacion_anual_maxima: dinero,
+                diferencia_anual: dinero,
+            }),
+        ),
+        description: 'Los primeros 50',
+    },
+})
+
 export const TableroFiscal = definirEsquema(
     'TableroFiscal',
     objeto({
@@ -206,6 +259,17 @@ export const TableroFiscal = definirEsquema(
                     vencimientos: bloque('BloqueVencimientos', DatosVencimientos, 'Obligaciones abiertas'),
                     libros: bloque('BloqueLibros', DatosLibros, 'Libros legales por emitir'),
                     fel: bloque('BloqueFel', DatosFel, 'Estado de la FEL'),
+                    compras_sin_nit: bloque(
+                        'BloqueComprasSinNit',
+                        DatosComprasSinNit,
+                        'Compras del año desde el límite sin proveedor con NIT',
+                    ),
+                    incobrables: bloque('BloqueIncobrables', DatosIncobrables, 'Reserva de incobrables'),
+                    depreciacion: bloque(
+                        'BloqueDepreciacion',
+                        DatosDepreciacion,
+                        'Activos bajo el máximo de depreciación',
+                    ),
                 }),
             }),
         ),
