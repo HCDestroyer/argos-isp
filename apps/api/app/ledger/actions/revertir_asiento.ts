@@ -1,6 +1,6 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { Conflicto, NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { bloqueoReversoDirecto } from '#ledger/reversos'
 import RegistrarAsiento, {
@@ -84,6 +84,22 @@ export default class RevertirAsiento extends DomainAction<EntradaReverso, Asient
             throw new ReglaNegocio(
                 `El asiento ${original.id} ya es un reverso (de ${original.reversa_de}); no se revierte`,
                 'asiento_es_reverso',
+            )
+        }
+        // H35 (fase 7 PR B): la liquidación de una declaración solo cambia con una sustitutiva y su pago
+        // no tiene anulación todavía (PR C); revertirlos directo dejaría la declaración sin su asiento
+        if (
+            !input.por_anulacion &&
+            (original.origen_tipo === 'liquidacion_impuesto' || original.origen_tipo === 'pago_impuesto')
+        ) {
+            throw new Conflicto(
+                `El asiento ${original.id} es ${original.origen_tipo === 'liquidacion_impuesto' ? 'la liquidación' : 'el pago'} de la declaración ${original.origen_id}: no se revierte directo; ${
+                    original.origen_tipo === 'liquidacion_impuesto'
+                        ? 'calcule y revise una declaración sustitutiva'
+                        : 'el pago de una declaración aún no se anula'
+                }`,
+                'asiento_de_declaracion',
+                'Asiento de una declaración',
             )
         }
         if (!input.por_anulacion) {

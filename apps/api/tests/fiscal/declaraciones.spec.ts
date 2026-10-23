@@ -20,6 +20,7 @@ import MarcarDeclaracionPresentada from '#fiscal/actions/marcar_declaracion_pres
 import RegistrarPagoDeclaracion from '#fiscal/actions/registrar_pago_declaracion'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
+import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import CrearExcepcionBloqueo from '#ledger/actions/crear_excepcion_bloqueo'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
 import RegistrarPago from '#billing/actions/registrar_pago'
@@ -277,6 +278,18 @@ test.group('Fase 7 · declaración de IVA y liquidación obligatoria', (group) =
             ],
         )
         assert.equal(await saldoCuenta(e.B, '2.1.06'), '0.00')
+        // H35: ni la liquidación ni el pago se revierten directo
+        for (const origen of ['liquidacion_impuesto', 'pago_impuesto']) {
+            const fila = await db
+                .from('ledger.asientos')
+                .where({ origen_tipo: origen, origen_id: borrador.id })
+                .whereNull('reversa_de')
+                .firstOrFail()
+            const reverso = await errorDe(
+                new RevertirAsiento().execute({ asiento_id: Number(fila.id), motivo: 'Corrección' }, e.ctx),
+            )
+            assert.deepEqual([reverso.status, reverso.codigo], [409, 'asiento_de_declaracion'], origen)
+        }
         const repetido = await errorDe(
             new RegistrarPagoDeclaracion().execute(
                 {
