@@ -7,7 +7,15 @@
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
 import * as v from '#fiscal/validators'
-import { ComparadorRegimenes, TableroFiscal } from '#fiscal/esquemas_tablero'
+import {
+    ComparadorRegimenes,
+    ConsejoOcultado,
+    ConsejosFiscales,
+    TableroFiscal,
+} from '#fiscal/esquemas_tablero'
+import { usuarioDelActor } from '#shared/contexto'
+import { consejosFiscales } from '#fiscal/consejos'
+import OcultarConsejo from '#fiscal/actions/ocultar_consejo'
 import { tableroFiscal } from '#fiscal/tablero'
 import { compararRegimenes } from '#fiscal/comparador'
 
@@ -39,6 +47,61 @@ const tablero: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Comparación', esquema: ComparadorRegimenes },
         handler: (ctx, { query }) =>
             compararRegimenes(empresasDeLaLista(ctx.empresa, query.empresas), query.crecimiento ?? null),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/fiscal/consejos',
+        operacion: 'fiscalConsejos',
+        resumen: 'Consejos fiscales desde las cifras del tablero y del comparador',
+        etiqueta: 'fiscal',
+        permiso: 'fiscal.ver',
+        query: v.consejosValidator,
+        descripcion:
+            'Catálogo del paquete (l10n/gt/consejos.ts) evaluado con los bloques del tablero y del comparador y los parámetros vigentes: aplica (texto y las cifras de los bloques), no_aplica o sin_datos (un bloque fuente en error: va su problema y ningún texto). Todos con fuente, confirmar_contador y el aviso «Referencia; valídelo con su contador»; oculto según fiscal.consejos_ocultos (el del usuario manda sobre el de la empresa). Solo lectura.',
+        respuesta: { status: 200, descripcion: 'Consejos', esquema: ConsejosFiscales },
+        handler: (ctx, { query }) =>
+            consejosFiscales(
+                empresasDeLaLista(ctx.empresa, query.empresas),
+                usuarioDelActor(ctx.contextoAccion().actor),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/fiscal/consejos/:clave/ocultar',
+        operacion: 'fiscalConsejoOcultar',
+        resumen: 'Ocultar un consejo fiscal (empresa o solo para mí)',
+        etiqueta: 'fiscal',
+        permiso: 'fiscal.configurar',
+        parametros: { clave: { type: 'string', pattern: '^[a-z0-9_]+$', description: 'Clave del consejo' } },
+        cuerpo: v.ocultarConsejoValidator,
+        idempotente: true,
+        descripcion:
+            'Solo inserción en fiscal.consejos_ocultos (auditado); alcance empresa (por defecto) o usuario (el del usuario manda sobre el de la empresa). No toca nada contable. 404 si la clave no está en el catálogo.',
+        respuesta: { status: 201, descripcion: 'Estado registrado', esquema: ConsejoOcultado },
+        handler: (ctx, { params, cuerpo }) =>
+            new OcultarConsejo().execute(
+                { ...cuerpo, clave: String(params.clave), oculto: true },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/fiscal/consejos/:clave/mostrar',
+        operacion: 'fiscalConsejoMostrar',
+        resumen: 'Volver a mostrar un consejo fiscal (empresa o solo para mí)',
+        etiqueta: 'fiscal',
+        permiso: 'fiscal.configurar',
+        parametros: { clave: { type: 'string', pattern: '^[a-z0-9_]+$', description: 'Clave del consejo' } },
+        cuerpo: v.ocultarConsejoValidator,
+        idempotente: true,
+        descripcion:
+            'Solo inserción en fiscal.consejos_ocultos (auditado); alcance empresa (por defecto) o usuario (el del usuario manda sobre el de la empresa). No toca nada contable. 404 si la clave no está en el catálogo.',
+        respuesta: { status: 201, descripcion: 'Estado registrado', esquema: ConsejoOcultado },
+        handler: (ctx, { params, cuerpo }) =>
+            new OcultarConsejo().execute(
+                { ...cuerpo, clave: String(params.clave), oculto: false },
+                ctx.contextoAccion(),
+            ),
     }),
 ]
 

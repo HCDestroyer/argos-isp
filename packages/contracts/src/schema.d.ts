@@ -2583,6 +2583,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fiscal/consejos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consejos fiscales desde las cifras del tablero y del comparador
+         * @description Catálogo del paquete (l10n/gt/consejos.ts) evaluado con los bloques del tablero y del comparador y los parámetros vigentes: aplica (texto y las cifras de los bloques), no_aplica o sin_datos (un bloque fuente en error: va su problema y ningún texto). Todos con fuente, confirmar_contador y el aviso «Referencia; valídelo con su contador»; oculto según fiscal.consejos_ocultos (el del usuario manda sobre el de la empresa). Solo lectura.
+         */
+        get: operations["fiscalConsejos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/consejos/{clave}/mostrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Volver a mostrar un consejo fiscal (empresa o solo para mí)
+         * @description Solo inserción en fiscal.consejos_ocultos (auditado); alcance empresa (por defecto) o usuario (el del usuario manda sobre el de la empresa). No toca nada contable. 404 si la clave no está en el catálogo.
+         */
+        post: operations["fiscalConsejoMostrar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fiscal/consejos/{clave}/ocultar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ocultar un consejo fiscal (empresa o solo para mí)
+         * @description Solo inserción en fiscal.consejos_ocultos (auditado); alcance empresa (por defecto) o usuario (el del usuario manda sobre el de la empresa). No toca nada contable. 404 si la clave no está en el catálogo.
+         */
+        post: operations["fiscalConsejoOcultar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fiscal/empresas/{id}/actualizar-localizacion": {
         parameters: {
             query?: never;
@@ -9643,6 +9703,53 @@ export interface components {
             created_at: string | null;
             /** Format: date-time */
             updated_at: string | null;
+        };
+        ConsejoFiscal: {
+            clave: string;
+            titulo: string;
+            /** @description Artículo e investigación de los que sale */
+            fuente: string;
+            confirmar_contador: boolean;
+            /** @description Referencia; valídelo con su contador */
+            aviso: string;
+            /** @description Bloques del tablero o del comparador de los que salen sus cifras */
+            fuentes: string[];
+            /** @enum {string} */
+            estado: "aplica" | "no_aplica" | "sin_datos";
+            /** @description Solo con aplica */
+            texto: string | null;
+            /** @description Las cifras de los bloques fuente que usó (solo con aplica) */
+            datos: {
+                [key: string]: string | number | boolean | null;
+            } | null;
+            motivo: string | null;
+            /** @description El problema del bloque fuente en error (solo con sin_datos) */
+            error: components["schemas"]["Problem"] | null;
+            oculto: boolean;
+            /**
+             * @description null si está visible
+             * @enum {string|null}
+             */
+            oculto_por: "empresa" | "usuario" | null;
+        };
+        ConsejoOcultado: {
+            id: number;
+            empresa_id: number;
+            clave: string;
+            oculto: boolean;
+            /** @enum {string} */
+            alcance: "empresa" | "usuario";
+            usuario_id: number | null;
+        };
+        ConsejosFiscales: {
+            /** Format: date */
+            hoy: string;
+            aviso: string;
+            empresas: {
+                empresa_id: number;
+                regimen: string | null;
+                consejos: components["schemas"]["ConsejoFiscal"][];
+            }[];
         };
         ConstanciaRetencion: {
             id: number;
@@ -25929,6 +26036,222 @@ export interface operations {
             };
             /** @description Sin el permiso fiscal.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalConsejos: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consejos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsejosFiscales"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalConsejoMostrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                clave: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                    /**
+                     * @description empresa (por defecto): para todos; usuario: solo para quien lo pide
+                     * @enum {string}
+                     */
+                    alcance?: "empresa" | "usuario";
+                    motivo?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Estado registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsejoOcultado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalConsejoOcultar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                clave: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                    /**
+                     * @description empresa (por defecto): para todos; usuario: solo para quien lo pide
+                     * @enum {string}
+                     */
+                    alcance?: "empresa" | "usuario";
+                    motivo?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Estado registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsejoOcultado"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -130,6 +130,8 @@ Lecturas: `GET /declaraciones/ajustes?anio=` (`declaraciones.ver`), `GET /declar
 
 `comparador.ts` (`GET /fiscal/comparador?crecimiento=`, `fiscal.ver`; fase 8 PR B): simulación de los regímenes opcional y sobre utilidades (con el ISO como piso) con los datos del libro de los últimos 12 meses y los parámetros vigentes; margen de equilibrio y proyección. Bloques independientes con su error; supuestos y matices marcados «confirmar con contador». No escribe ni cambia el régimen. `bloques.ts` tiene el bloque común del tablero y el comparador.
 
+`consejos.ts` (`GET /fiscal/consejos`, `fiscal.ver`; fase 8 PR C): el catálogo `l10n/gt/consejos.ts` evaluado con los bloques del tablero y del comparador (nunca cifras propias); `aplica`, `no_aplica` o `sin_datos` con el error del bloque fuente. `fiscal.ocultar_consejo` (`fiscal.configurar`; `POST /fiscal/consejos/:clave/ocultar` y `/mostrar`) guarda en `fiscal.consejos_ocultos` (solo inserción) la preferencia por empresa o usuario.
+
 ## Eventos
 
 - Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`).
