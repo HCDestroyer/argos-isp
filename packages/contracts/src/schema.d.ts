@@ -8441,7 +8441,9 @@ export interface components {
             /** @description ISO anual como piso (solo con estado ok) */
             datos: {
                 activo_neto: string;
+                /** @description R de un año: anualizado × 12 / meses con menos de 12 (H37) */
                 ingresos_brutos: string;
+                ingresos_anualizados: boolean;
                 base: string;
                 /** @description Por ciento con 2 decimales */
                 tasa: string;
@@ -8878,12 +8880,17 @@ export interface components {
                     /** @description Negativo si venció */
                     dias_restantes: number;
                     vencida: boolean;
-                    /** @enum {string} */
-                    estado: "pendiente" | "borrador";
+                    /**
+                     * @description presentada solo si le queda impuesto pendiente de pagar
+                     * @enum {string}
+                     */
+                    estado: "pendiente" | "borrador" | "presentada";
                     declaracion_id: number | null;
-                    /** @description De la última versión; null sin borrador */
+                    /** @description Pendiente: a_pagar de la última versión − lo pagado sin anular del periodo; null sin borrador */
                     a_pagar: string | null;
-                    /** @description Vencida: a pagar × mora_tributaria × días; null sin borrador o sin vencer */
+                    /** @description Impuesto pagado sin anular por las versiones del periodo; null sin borrador */
+                    pagado: string | null;
+                    /** @description Vencida con pendiente: pendiente × mora_tributaria × días; null sin pendiente o sin vencer */
                     mora_estimada: string | null;
                 }[];
             } | null;

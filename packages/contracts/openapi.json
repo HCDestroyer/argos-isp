@@ -59458,6 +59458,7 @@
             "required": [
               "activo_neto",
               "ingresos_brutos",
+              "ingresos_anualizados",
               "base",
               "tasa",
               "iso_anual"
@@ -59469,7 +59470,11 @@
               },
               "ingresos_brutos": {
                 "type": "string",
-                "pattern": "^-?\\d+\\.\\d{2}$"
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "R de un año: anualizado × 12 / meses con menos de 12 (H37)"
+              },
+              "ingresos_anualizados": {
+                "type": "boolean"
               },
               "base": {
                 "type": "string",
@@ -61144,6 +61149,7 @@
                     "estado",
                     "declaracion_id",
                     "a_pagar",
+                    "pagado",
                     "mora_estimada"
                   ],
                   "properties": {
@@ -61186,8 +61192,10 @@
                       "type": "string",
                       "enum": [
                         "pendiente",
-                        "borrador"
-                      ]
+                        "borrador",
+                        "presentada"
+                      ],
+                      "description": "presentada solo si le queda impuesto pendiente de pagar"
                     },
                     "declaracion_id": {
                       "type": [
@@ -61202,7 +61210,15 @@
                         "null"
                       ],
                       "pattern": "^-?\\d+\\.\\d{2}$",
-                      "description": "De la última versión; null sin borrador"
+                      "description": "Pendiente: a_pagar de la última versión − lo pagado sin anular del periodo; null sin borrador"
+                    },
+                    "pagado": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^-?\\d+\\.\\d{2}$",
+                      "description": "Impuesto pagado sin anular por las versiones del periodo; null sin borrador"
                     },
                     "mora_estimada": {
                       "type": [
@@ -61210,7 +61226,7 @@
                         "null"
                       ],
                       "pattern": "^-?\\d+\\.\\d{2}$",
-                      "description": "Vencida: a pagar × mora_tributaria × días; null sin borrador o sin vencer"
+                      "description": "Vencida con pendiente: pendiente × mora_tributaria × días; null sin pendiente o sin vencer"
                     }
                   }
                 }

@@ -26,7 +26,8 @@ import { escalaOpcional, resultadosDelRango, saldoActivo, type Tramo } from '#fi
  *   retienen.
  * - `utilidades`: `isr_utilidades_tasa × m × R` (sin pérdidas: 0 con margen negativo).
  * - `iso_piso`: ISO de un año con la base del periodo (`iso_tasa` × la mayor entre el activo neto al
- *   cierre del último mes y los ingresos `R`), como piso del régimen sobre utilidades cuando es mayor.
+ *   cierre del último mes y los ingresos `R` anualizados como el resto con menos de 12 meses; H37), como
+ *   piso del régimen sobre utilidades cuando es mayor.
  * - `comparacion`: ISR anual de cada régimen (utilidades con el piso), la diferencia y el margen de
  *   equilibrio `m*` = opcional / (tasa × `R`) (= `0.28 − 2,400 / R` mensual sobre Q30,000).
  * - `proyeccion`: los próximos 12 meses con `crecimiento` (por ciento mensual; por defecto la tendencia
@@ -385,14 +386,17 @@ async function isoPiso(ctx: Contexto, base: DatosBase) {
     const tasa = dec(leer<string>(ctx, 'iso_tasa')).dividedBy(100)
     leer(ctx, 'iso_base')
     const activo = await saldoActivo(ctx.c, ctx.empresaId, base.hasta)
+    // H37: los ingresos de un año, anualizados como el resto con menos de 12 meses leídos
+    const ingresos = anualizar(base.meses.length, base.R)
     // ISO de un año: 4 trimestres de tasa × ¼ de la mayor base = tasa × la mayor base
-    const mayor = activo.gt(base.R) ? activo : base.R
+    const mayor = activo.gt(ingresos) ? activo : ingresos
     const iso = redondear((mayor.isNegative() ? CERO : mayor).times(tasa))
     return {
         interno: { iso },
         datos: {
             activo_neto: aTexto(activo),
-            ingresos_brutos: aTexto(base.R),
+            ingresos_brutos: aTexto(ingresos),
+            ingresos_anualizados: base.meses.length !== 12,
             base: aTexto(mayor.isNegative() ? CERO : mayor),
             tasa: pct(tasa),
             iso_anual: aTexto(iso),

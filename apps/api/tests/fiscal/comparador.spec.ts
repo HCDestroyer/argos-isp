@@ -93,7 +93,11 @@ test.group('Fase 8 · comparador de regímenes', (group) => {
         assert.include(datos(c.bloques.opcional), { isr_escala: '2900.00', isr_plano_art46: '3500.00' })
         assert.include(datos(c.bloques.utilidades), { tasa: '25.00', isr: '10000.00', perdida: false })
         const iso = datos(c.bloques.iso_piso)
-        const mayor = Math.max(Number(iso.activo_neto), 50000)
+        // H37: los ingresos del piso se anualizan como el resto (50,000 × 12 / meses)
+        const ingresosAnuales = (50000 * 12) / MESES
+        assert.equal(iso.ingresos_brutos, ingresosAnuales.toFixed(2))
+        assert.equal(iso.ingresos_anualizados, MESES !== 12)
+        const mayor = Math.max(Number(iso.activo_neto), ingresosAnuales)
         assert.equal(iso.iso_anual, (mayor / 100).toFixed(2))
 
         const cmp = datos(c.bloques.comparacion)

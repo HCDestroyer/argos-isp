@@ -16,6 +16,7 @@ import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import CalcularDeclaracion from '#fiscal/actions/calcular_declaracion'
 import RevisarDeclaracion from '#fiscal/actions/revisar_declaracion'
 import RegistrarPagoDeclaracion from '#fiscal/actions/registrar_pago_declaracion'
+import MarcarDeclaracionPresentada from '#fiscal/actions/marcar_declaracion_presentada'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import type { ContextoAccion } from '#shared/contexto'
 
@@ -193,6 +194,7 @@ test.group('Fase 8 · tablero fiscal', (group) => {
             estado: 'borrador',
             declaracion_id: d.id,
             a_pagar: '12.00',
+            pagado: '0.00',
             // 12.00 × 0.05 % × 10 días
             mora_estimada: '0.06',
         })
@@ -200,6 +202,23 @@ test.group('Fase 8 · tablero fiscal', (group) => {
         assert.equal(v.mora_tributaria, '0.05')
         // la declaración del mes del tablero (el de hoy) no es la de octubre
         assert.notEqual(datos(t.bloques.iva).periodo, MES)
+
+        // presentada sin pagar y vencida: sigue en vencimientos porque corre mora (decisión del líder, H36)
+        await new MarcarDeclaracionPresentada().execute(
+            { declaracion_id: d.id, numero_formulario: '2237-77', fecha_presentacion: vence.toISODate()! },
+            e.ctx,
+        )
+        const presentada = await tableroDe(e.B)
+        const filaPresentada = datos(presentada.bloques.vencimientos).obligaciones.find(
+            (o: any) => o.declaracion_id === d.id,
+        )
+        assert.include(filaPresentada, {
+            estado: 'presentada',
+            vencida: true,
+            a_pagar: '12.00',
+            pagado: '0.00',
+            mora_estimada: '0.06',
+        })
 
         const pagada = await new RegistrarPagoDeclaracion().execute(
             {
@@ -212,6 +231,12 @@ test.group('Fase 8 · tablero fiscal', (group) => {
         )
         const evento = await eventos('declaracion.pagada', 'declaracion_id', d.id)
         assert.equal(evento[0]!.pago_id, pagada.pago!.id)
+        // presentada y pagada: sale de los vencimientos (H36: el pendiente descuenta lo pagado)
+        const pagadaYa = await tableroDe(e.B)
+        assert.notInclude(
+            datos(pagadaYa.bloques.vencimientos).obligaciones.map((o: any) => o.declaracion_id),
+            d.id,
+        )
         await afirmarLibro(assert, [e.B, e.C])
     })
 

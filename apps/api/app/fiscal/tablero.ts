@@ -36,7 +36,8 @@ import {
  * Bloques: `facturado` (mes y año, por tipo de DTE), `iva` (mes en curso: IVA o pequeño contribuyente),
  * `isr` (opcional: el del mes; utilidades: trimestral en curso y anual a la fecha y proyectado), `iso`
  * (trimestre en curso), `pequeno_contribuyente` (facturado del año frente a `pc_limite_anual`),
- * `vencimientos` (obligaciones abiertas que vencen en 30 días o ya vencieron, con mora estimada),
+ * `vencimientos` (obligaciones abiertas, o presentadas con impuesto pendiente, que vencen en 30 días o
+ * ya vencieron; el pendiente descuenta lo pagado sin anular y la mora corre sobre él; H36),
  * `libros` (libros legales sin emitir fuera de `libros_ventana_meses`) y `fel` (alerta permanente si
  * la FEL es obligatoria y está desactivada). Fase 8 PR D: `compras_sin_nit` (compras del año desde
  * `consumidor_final_limite` sin proveedor identificado con NIT), `incobrables` (reserva permitida frente a
@@ -320,11 +321,12 @@ async function pequenoContribuyente(ctx: Contexto) {
 
 async function vencimientos(ctx: Contexto) {
     const limite = DateTime.fromISO(ctx.hoy, { zone: 'utc' }).plus({ days: DIAS_VENCIMIENTOS }).toISODate()!
+    // abiertas (pendiente, borrador) y, con impuesto pendiente de pagar, también las presentadas: corre mora
     const filas = (
         (await ctx.c
             .from('fiscal.obligaciones as o')
             .where('o.empresa_id', ctx.empresaId)
-            .whereIn('o.estado', ['pendiente', 'borrador'])
+            .whereIn('o.estado', ['pendiente', 'borrador', 'presentada'])
             .where('o.vence_en', '<=', limite)
             .orderBy('o.vence_en', 'asc')
             .orderBy('o.id', 'asc')
@@ -335,14 +337,21 @@ async function vencimientos(ctx: Contexto) {
     for (const o of filas) {
         const dias = diasEntre(ctx.hoy, o.vence_en)
         const vencida = dias < 0
-        let monto: string | null = null
-        let moraEstimada: string | null = null
+        let pendiente: Dec | null = null
+        let pagado: Dec | null = null
         if (o.declaracion_id !== null) {
             const d = await ultimaVersion(ctx.c, ctx.empresaId, o.impuesto, o.periodo_desde)
-            if (d) monto = aTexto(d.totales.a_pagar ?? '0')
+            if (d) {
+                // H36: lo pagado sin anular por cualquier versión del periodo (como registrar_pago)
+                pagado = await pagadoDelPeriodo(ctx, o.impuesto, o.periodo_desde)
+                const resto = dec(d.totales.a_pagar ?? '0').minus(pagado)
+                pendiente = resto.isNegative() ? CERO : resto
+            }
         }
-        if (vencida && monto !== null && mora && typeof mora.valor === 'string') {
-            moraEstimada = aTexto(redondear(dec(monto).times(dec(mora.valor)).dividedBy(100).times(-dias)))
+        if (o.estado === 'presentada' && (pendiente === null || !pendiente.gt(0))) continue
+        let moraEstimada: string | null = null
+        if (vencida && pendiente !== null && pendiente.gt(0) && mora && typeof mora.valor === 'string') {
+            moraEstimada = aTexto(redondear(pendiente.times(dec(mora.valor)).dividedBy(100).times(-dias)))
         }
         salida.push({
             obligacion_id: o.id,
@@ -356,7 +365,8 @@ async function vencimientos(ctx: Contexto) {
             vencida,
             estado: o.estado,
             declaracion_id: o.declaracion_id,
-            a_pagar: monto,
+            a_pagar: pendiente === null ? null : aTexto(pendiente),
+            pagado: pagado === null ? null : aTexto(pagado),
             mora_estimada: moraEstimada,
         })
     }
@@ -366,6 +376,20 @@ async function vencimientos(ctx: Contexto) {
         vencidas: salida.filter((v) => v.vencida).length,
         obligaciones: salida,
     }
+}
+
+/** Σ impuesto de los pagos vigentes (sin anulación) de las versiones del periodo. */
+async function pagadoDelPeriodo(ctx: Contexto, impuesto: string, desde: string): Promise<Dec> {
+    const fila = (await ctx.c
+        .from('fiscal.declaraciones_pagos as p')
+        .join('fiscal.declaraciones as d', 'd.id', 'p.declaracion_id')
+        .where({ 'd.empresa_id': ctx.empresaId, 'd.impuesto': impuesto, 'd.periodo_desde': desde })
+        .whereNotExists((q) =>
+            q.from('fiscal.declaraciones_pagos_anulaciones as x').whereRaw('x.pago_id = p.id'),
+        )
+        .select(ctx.c.raw('coalesce(sum(p.impuesto), 0)::text as pagado'))
+        .first()) as { pagado: string }
+    return dec(fila.pagado)
 }
 
 /** Meses YYYY-MM del rango (ambos incluidos). */
