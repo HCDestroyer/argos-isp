@@ -1,8 +1,8 @@
 import db from '@adonisjs/lucid/services/db'
-import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { DateTime } from 'luxon'
-import { Problema, type ProblemaJson } from '#shared/errores'
+import { Problema } from '#shared/errores'
+import { NoAplica, calcularBloque, type Bloque } from '#fiscal/bloques'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { idsEmpresasActivas } from '#core/empresas'
 import { hoyFiscal } from '#fiscal/comun'
@@ -52,17 +52,6 @@ export const BLOQUES_TABLERO = [
 ] as const
 export type NombreBloque = (typeof BLOQUES_TABLERO)[number]
 
-export type EstadoBloque = 'ok' | 'error' | 'no_aplica'
-
-export interface Bloque<T = Record<string, unknown>> {
-    estado: EstadoBloque
-    /** por qué no aplica (régimen) o, con `ok`, null */
-    motivo: string | null
-    /** el problema RFC 9457 del bloque cuando `estado = error` */
-    error: ProblemaJson | null
-    datos: T | null
-}
-
 export interface TableroEmpresa {
     empresa_id: number
     regimen: string | null
@@ -80,41 +69,6 @@ export const DIAS_VENCIMIENTOS = 30
 const LIBROS_VIGILADOS = ['ventas', 'compras', 'diario', 'mayor'] as const
 /** Meses atrasados que se listan por libro (el resto va en el conteo). */
 const MAX_MESES_LISTADOS = 24
-
-class NoAplica extends Error {
-    constructor(readonly motivo: string) {
-        super(motivo)
-    }
-}
-
-async function calcularBloque<T extends Record<string, unknown>>(
-    empresaId: number,
-    nombre: NombreBloque,
-    calculo: () => Promise<T>,
-): Promise<Bloque> {
-    try {
-        return { estado: 'ok', motivo: null, error: null, datos: await calculo() }
-    } catch (error) {
-        if (error instanceof NoAplica) {
-            return { estado: 'no_aplica', motivo: error.motivo, error: null, datos: null }
-        }
-        if (error instanceof Problema) {
-            return { estado: 'error', motivo: null, error: error.toJSON(), datos: null }
-        }
-        logger.error({ err: error, empresa_id: empresaId, bloque: nombre }, 'tablero fiscal')
-        return {
-            estado: 'error',
-            motivo: null,
-            error: new Problema(
-                500,
-                'error_interno',
-                'Error interno',
-                `El bloque ${nombre} no se pudo calcular; los demás bloques sí`,
-            ).toJSON(),
-            datos: null,
-        }
-    }
-}
 
 interface Contexto {
     c: QueryClientContract

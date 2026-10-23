@@ -26,7 +26,7 @@ const totales: EsquemaJson = {
     description: 'Los totales de la declaración del periodo (ver Declaracion.totales)',
 }
 
-function bloque(nombre: string, datos: EsquemaJson, descripcion: string): EsquemaJson {
+export function bloque(nombre: string, datos: EsquemaJson, descripcion: string): EsquemaJson {
     return definirEsquema(
         nombre,
         objeto({
@@ -206,6 +206,128 @@ export const TableroFiscal = definirEsquema(
                     vencimientos: bloque('BloqueVencimientos', DatosVencimientos, 'Obligaciones abiertas'),
                     libros: bloque('BloqueLibros', DatosLibros, 'Libros legales por emitir'),
                     fel: bloque('BloqueFel', DatosFel, 'Estado de la FEL'),
+                }),
+            }),
+        ),
+    }),
+)
+
+// ---------------------------------------------------------------------------------------------
+// Comparador de regímenes (fase 8 PR B)
+// ---------------------------------------------------------------------------------------------
+
+const porciento: EsquemaJson = { ...dinero, description: 'Por ciento con 2 decimales' }
+
+const DatosBaseComparador = objeto({
+    desde: fecha,
+    hasta: fecha,
+    meses_con_datos: entero,
+    meses: lista(objeto({ mes: { ...texto, description: 'AAAA-MM' }, ventas: dinero })),
+    ventas_sin_iva: { ...dinero, description: 'R: ventas sin IVA del libro de ventas' },
+    ventas_mensual_promedio: dinero,
+    ingresos: dinero,
+    gastos: dinero,
+    no_deducibles: dinero,
+    renta_fiscal: { ...dinero, description: 'Ingresos − gastos + no deducibles' },
+    margen_fiscal: { ...porciento, description: 'm = renta fiscal / R' },
+})
+
+const DatosOpcional = objeto({
+    isr_escala: { ...dinero, description: 'Σ por mes de la escala del art. 44' },
+    isr_plano_art46: {
+        ...dinero,
+        description: '7 % plano de R (clientes que no retienen; NO VERIFICADO 14)',
+    },
+    por_mes: lista(objeto({ mes: texto, isr: dinero })),
+    tasa_efectiva: porciento,
+})
+
+const DatosUtilidades = objeto({
+    tasa: porciento,
+    renta_imponible: dinero,
+    isr: dinero,
+    perdida: booleano,
+})
+
+const DatosIsoPiso = objeto({
+    activo_neto: dinero,
+    ingresos_brutos: dinero,
+    base: dinero,
+    tasa: porciento,
+    iso_anual: dinero,
+})
+
+const DatosComparacion = objeto({
+    meses_base: entero,
+    anualizado: { ...booleano, description: 'Menos de 12 meses leídos: anualizado × 12 / meses' },
+    ventas_anuales: dinero,
+    isr_opcional_anual: dinero,
+    isr_utilidades_anual: dinero,
+    iso_anual: dinero,
+    utilidades_con_iso: { ...dinero, description: 'El mayor entre el ISR y el ISO (piso)' },
+    iso_es_piso: booleano,
+    diferencia: {
+        ...dinero,
+        description: 'Utilidades con ISO − opcional (positiva: el opcional paga menos)',
+    },
+    menor: enumerado(['opcional_simplificado', 'utilidades', 'iguales']),
+    margen_fiscal: porciento,
+    margen_equilibrio: { ...nulable(porciento), description: 'm* = opcional / (tasa × R)' },
+    margen_equilibrio_art46: { ...nulable(porciento), description: 'm* con el 7 % plano (28 %)' },
+    regimen_actual: nulable(texto),
+    nota: texto,
+})
+
+const DatosProyeccion = objeto({
+    crecimiento_mensual: porciento,
+    crecimiento_supuesto: enumerado(['tendencia', 'usuario']),
+    margen_fiscal: porciento,
+    meses: lista(objeto({ mes: texto, ventas: dinero, isr_opcional: dinero })),
+    ventas: dinero,
+    isr_opcional: dinero,
+    isr_utilidades: dinero,
+    utilidades_con_iso: dinero,
+    diferencia: dinero,
+    nota: texto,
+})
+
+export const ComparadorRegimenes = definirEsquema(
+    'ComparadorRegimenes',
+    objeto({
+        hoy: fecha,
+        aviso: { ...texto, description: 'Simulación de referencia; no cambia el régimen' },
+        empresas: lista(
+            objeto({
+                empresa_id: id,
+                regimen: nulable(texto),
+                desde: nulable(fecha),
+                hasta: nulable(fecha),
+                crecimiento: { ...nulable(texto), description: 'Crecimiento mensual usado en la proyección' },
+                supuestos: lista(
+                    objeto({
+                        clave: texto,
+                        valor: { description: 'Valor vigente del parámetro (null si no tiene)' },
+                        vigente_desde: nulable(fecha),
+                        confianza: nulable(texto),
+                        confirmar_contador: booleano,
+                    }),
+                ),
+                matices: lista(objeto({ clave: texto, texto, confirmar_contador: booleano })),
+                bloques: objeto({
+                    datos: bloque(
+                        'BloqueComparadorDatos',
+                        DatosBaseComparador,
+                        'R y margen de los meses leídos',
+                    ),
+                    opcional: bloque('BloqueComparadorOpcional', DatosOpcional, 'ISR del régimen opcional'),
+                    utilidades: bloque('BloqueComparadorUtilidades', DatosUtilidades, 'ISR sobre utilidades'),
+                    iso_piso: bloque('BloqueComparadorIso', DatosIsoPiso, 'ISO anual como piso'),
+                    comparacion: bloque('BloqueComparadorComparacion', DatosComparacion, 'Comparación anual'),
+                    proyeccion: bloque(
+                        'BloqueComparadorProyeccion',
+                        DatosProyeccion,
+                        'Proyección a 12 meses',
+                    ),
                 }),
             }),
         ),

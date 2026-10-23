@@ -2563,6 +2563,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fiscal/comparador": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Comparador de regímenes (simulación; no cambia el régimen)
+         * @description Con los datos del libro de los últimos 12 meses terminados (desde inicio_libros) y los parámetros vigentes: R, margen fiscal m, ISR del régimen opcional (escala del art. 44 y 7 % plano), sobre utilidades, ISO como piso, margen de equilibrio m* y proyección a 12 meses con crecimiento (por ciento mensual; por defecto la tendencia). Cada parte es un bloque: si falta un parámetro trae su error sin cifras y las que dependen de él, 422 bloque_dependiente. supuestos marca lo que debe confirmar el contador; matices son las advertencias fijas. Sin «aplicar»: el cambio de régimen es POST /fiscal/regimen.
+         */
+        get: operations["fiscalComparador"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fiscal/empresas/{id}/actualizar-localizacion": {
         parameters: {
             query?: never;
@@ -8287,6 +8307,152 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        BloqueComparadorComparacion: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Comparación anual (solo con estado ok) */
+            datos: {
+                meses_base: number;
+                /** @description Menos de 12 meses leídos: anualizado × 12 / meses */
+                anualizado: boolean;
+                ventas_anuales: string;
+                isr_opcional_anual: string;
+                isr_utilidades_anual: string;
+                iso_anual: string;
+                /** @description El mayor entre el ISR y el ISO (piso) */
+                utilidades_con_iso: string;
+                iso_es_piso: boolean;
+                /** @description Utilidades con ISO − opcional (positiva: el opcional paga menos) */
+                diferencia: string;
+                /** @enum {string} */
+                menor: "opcional_simplificado" | "utilidades" | "iguales";
+                /** @description Por ciento con 2 decimales */
+                margen_fiscal: string;
+                /** @description m* = opcional / (tasa × R) */
+                margen_equilibrio: string | null;
+                /** @description m* con el 7 % plano (28 %) */
+                margen_equilibrio_art46: string | null;
+                regimen_actual: string | null;
+                nota: string;
+            } | null;
+        };
+        BloqueComparadorDatos: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description R y margen de los meses leídos (solo con estado ok) */
+            datos: {
+                /** Format: date */
+                desde: string;
+                /** Format: date */
+                hasta: string;
+                meses_con_datos: number;
+                meses: {
+                    /** @description AAAA-MM */
+                    mes: string;
+                    ventas: string;
+                }[];
+                /** @description R: ventas sin IVA del libro de ventas */
+                ventas_sin_iva: string;
+                ventas_mensual_promedio: string;
+                ingresos: string;
+                gastos: string;
+                no_deducibles: string;
+                /** @description Ingresos − gastos + no deducibles */
+                renta_fiscal: string;
+                /** @description m = renta fiscal / R */
+                margen_fiscal: string;
+            } | null;
+        };
+        BloqueComparadorIso: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description ISO anual como piso (solo con estado ok) */
+            datos: {
+                activo_neto: string;
+                ingresos_brutos: string;
+                base: string;
+                /** @description Por ciento con 2 decimales */
+                tasa: string;
+                iso_anual: string;
+            } | null;
+        };
+        BloqueComparadorOpcional: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description ISR del régimen opcional (solo con estado ok) */
+            datos: {
+                /** @description Σ por mes de la escala del art. 44 */
+                isr_escala: string;
+                /** @description 7 % plano de R (clientes que no retienen; NO VERIFICADO 14) */
+                isr_plano_art46: string;
+                por_mes: {
+                    mes: string;
+                    isr: string;
+                }[];
+                /** @description Por ciento con 2 decimales */
+                tasa_efectiva: string;
+            } | null;
+        };
+        BloqueComparadorProyeccion: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description Proyección a 12 meses (solo con estado ok) */
+            datos: {
+                /** @description Por ciento con 2 decimales */
+                crecimiento_mensual: string;
+                /** @enum {string} */
+                crecimiento_supuesto: "tendencia" | "usuario";
+                /** @description Por ciento con 2 decimales */
+                margen_fiscal: string;
+                meses: {
+                    mes: string;
+                    ventas: string;
+                    isr_opcional: string;
+                }[];
+                ventas: string;
+                isr_opcional: string;
+                isr_utilidades: string;
+                utilidades_con_iso: string;
+                diferencia: string;
+                nota: string;
+            } | null;
+        };
+        BloqueComparadorUtilidades: {
+            /** @enum {string} */
+            estado: "ok" | "error" | "no_aplica";
+            /** @description Por qué no aplica (régimen); null con ok o error */
+            motivo: string | null;
+            /** @description El problema RFC 9457 del bloque (solo con estado error) */
+            error: components["schemas"]["Problem"] | null;
+            /** @description ISR sobre utilidades (solo con estado ok) */
+            datos: {
+                /** @description Por ciento con 2 decimales */
+                tasa: string;
+                renta_imponible: string;
+                isr: string;
+                perdida: boolean;
+            } | null;
+        };
         BloqueFacturado: {
             /** @enum {string} */
             estado: "ok" | "error" | "no_aplica";
@@ -9038,6 +9204,44 @@ export interface components {
             tipo: "texto" | "dinero" | "entero" | "fecha" | "porcentaje" | "id";
             /** @description Solo viene (en true) si la celda puede ser null (p. ej. "Sin zona"); ausente = nunca null */
             nulable?: boolean;
+        };
+        ComparadorRegimenes: {
+            /** Format: date */
+            hoy: string;
+            /** @description Simulación de referencia; no cambia el régimen */
+            aviso: string;
+            empresas: {
+                empresa_id: number;
+                regimen: string | null;
+                /** Format: date */
+                desde: string | null;
+                /** Format: date */
+                hasta: string | null;
+                /** @description Crecimiento mensual usado en la proyección */
+                crecimiento: string | null;
+                supuestos: {
+                    clave: string;
+                    /** @description Valor vigente del parámetro (null si no tiene) */
+                    valor: unknown;
+                    /** Format: date */
+                    vigente_desde: string | null;
+                    confianza: string | null;
+                    confirmar_contador: boolean;
+                }[];
+                matices: {
+                    clave: string;
+                    texto: string;
+                    confirmar_contador: boolean;
+                }[];
+                bloques: {
+                    datos: components["schemas"]["BloqueComparadorDatos"];
+                    opcional: components["schemas"]["BloqueComparadorOpcional"];
+                    utilidades: components["schemas"]["BloqueComparadorUtilidades"];
+                    iso_piso: components["schemas"]["BloqueComparadorIso"];
+                    comparacion: components["schemas"]["BloqueComparadorComparacion"];
+                    proyeccion: components["schemas"]["BloqueComparadorProyeccion"];
+                };
+            }[];
         };
         Compra: {
             id: number;
@@ -25682,6 +25886,58 @@ export interface operations {
             };
             /** @description Sin el permiso fel.ver */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fiscalComparador: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                /** @description Crecimiento mensual de las ventas para la proyección, en por ciento (p. ej. 1.50); por defecto la tendencia de los meses leídos */
+                crecimiento?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Comparación */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComparadorRegimenes"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso fiscal.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
