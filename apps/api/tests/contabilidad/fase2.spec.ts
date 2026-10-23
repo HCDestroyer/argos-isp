@@ -69,7 +69,9 @@ test.group('Auditor contable · fase 2 (localización fiscal)', (group) => {
         const patrimonio = await db
             .from('ledger.movimientos as m')
             .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+            .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
             .where('c.tipo', 'patrimonio')
+            .where('a.empresa_id', e.B) // otras suites (comparador, renta) mueven capital en sus empresas
             .count('* as n')
             .first()
         assert.equal(Number(patrimonio.n), 0)
