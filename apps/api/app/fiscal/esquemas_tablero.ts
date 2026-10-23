@@ -333,3 +333,59 @@ export const ComparadorRegimenes = definirEsquema(
         ),
     }),
 )
+
+// ---------------------------------------------------------------------------------------------
+// Consejos (fase 8 PR C)
+// ---------------------------------------------------------------------------------------------
+
+export const ConsejoFiscal = definirEsquema(
+    'ConsejoFiscal',
+    objeto({
+        clave: texto,
+        titulo: texto,
+        fuente: { ...texto, description: 'Artículo e investigación de los que sale' },
+        confirmar_contador: booleano,
+        aviso: { ...texto, description: 'Referencia; valídelo con su contador' },
+        fuentes: {
+            ...lista(texto),
+            description: 'Bloques del tablero o del comparador de los que salen sus cifras',
+        },
+        estado: enumerado(['aplica', 'no_aplica', 'sin_datos']),
+        texto: { ...nulable(texto), description: 'Solo con aplica' },
+        datos: {
+            ...nulable({
+                type: 'object',
+                additionalProperties: { type: ['string', 'number', 'boolean', 'null'] },
+            }),
+            description: 'Las cifras de los bloques fuente que usó (solo con aplica)',
+        },
+        motivo: nulable(texto),
+        error: {
+            ...nulable(Problem),
+            description: 'El problema del bloque fuente en error (solo con sin_datos)',
+        },
+        oculto: booleano,
+        oculto_por: { ...nulable(enumerado(['empresa', 'usuario'])), description: 'null si está visible' },
+    }),
+)
+
+export const ConsejosFiscales = definirEsquema(
+    'ConsejosFiscales',
+    objeto({
+        hoy: fecha,
+        aviso: texto,
+        empresas: lista(objeto({ empresa_id: id, regimen: nulable(texto), consejos: lista(ConsejoFiscal) })),
+    }),
+)
+
+export const ConsejoOcultado = definirEsquema(
+    'ConsejoOcultado',
+    objeto({
+        id,
+        empresa_id: id,
+        clave: texto,
+        oculto: booleano,
+        alcance: enumerado(['empresa', 'usuario']),
+        usuario_id: nulable(id),
+    }),
+)
