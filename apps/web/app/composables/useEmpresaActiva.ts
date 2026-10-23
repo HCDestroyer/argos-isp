@@ -46,6 +46,7 @@ export const LISTAS_CONSOLIDABLES: readonly string[] = [
     '/api/v1/facturas/corridas',
     '/api/v1/fiscal/establecimientos',
     '/api/v1/fiscal/obligaciones',
+    '/api/v1/fiscal/tablero',
     '/api/v1/lealtad/canjes',
     '/api/v1/lealtad/premios',
     '/api/v1/lealtad/programas',

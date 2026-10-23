@@ -79,7 +79,7 @@ function valoresDe(empresaId: number, clave: string): Valor[] {
     return bd.fiscal.valores.filter(v => v.clave === clave && (v.empresa_id === null || v.empresa_id === empresaId))
 }
 
-function resolverValor(empresaId: number, clave: string, fecha: string): Valor | null {
+export function resolverValor(empresaId: number, clave: string, fecha: string): Valor | null {
     const filas = valoresDe(empresaId, clave)
     const niveles: Valor['nivel'][] = ['empresa', 'instalacion', 'global', 'paquete']
     for (const nivel of niveles) {
