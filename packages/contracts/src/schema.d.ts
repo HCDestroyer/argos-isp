@@ -8563,9 +8563,15 @@ export interface components {
                     clase: string;
                     descripcion: string;
                     costo: string;
+                    /** @description Depreciación inicial + cuotas vigentes */
+                    acumulada: string;
+                    /** @description Costo − residual − acumulada */
+                    por_depreciar: string;
                     tasa_anual: string;
                     tasa_maxima: string;
+                    /** @description Con la tasa actual, acotada a lo que queda por depreciar */
                     depreciacion_anual: string;
+                    /** @description Con la tasa máxima, acotada a lo que queda (H38) */
                     depreciacion_anual_maxima: string;
                     diferencia_anual: string;
                 }[];

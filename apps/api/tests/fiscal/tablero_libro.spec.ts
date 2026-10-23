@@ -146,4 +146,49 @@ test.group('Fase 8 · bloques del libro y sus consejos', (group) => {
         assert.match(credito.motivo!, /§15 #84/)
         await afirmarLibro(assert, [e.B, e.C])
     })
+
+    test('H38: un activo con poco por depreciar no promete más deducción que lo que le queda', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        await new RegistrarActivo().execute(
+            {
+                empresa_id: e.B,
+                clase: 'computacion',
+                descripcion: 'Servidor viejo',
+                fecha_alta: HOY,
+                costo: '10000.00',
+                depreciacion_inicial: '9999.99',
+                tasa_anual: '5.00',
+                contrapartida: '3.1.01',
+            },
+            e.ctx,
+        )
+        // a 5 % (500 al año) le quedan 0.01: al 33.33 % tampoco deduce más que 0.01
+        const casi = await new RegistrarActivo().execute(
+            {
+                empresa_id: e.B,
+                clase: 'computacion',
+                descripcion: 'Router con 1,000 por depreciar',
+                fecha_alta: HOY,
+                costo: '6000.00',
+                depreciacion_inicial: '5000.00',
+                tasa_anual: '10.00',
+                contrapartida: '3.1.01',
+            },
+            e.ctx,
+        )
+        const tablero = await tableroFiscal([e.B])
+        const d = datos(tablero.empresas[0]!.bloques.depreciacion)
+        // solo el segundo: a 10 % deduce 600, al máximo 1,999.80 pero le quedan 1,000 → 400 de diferencia
+        assert.include(d, { activos: 2, bajo_maximo: 1, diferencia_anual: '400.00' })
+        assert.include(d.detalle[0], {
+            activo_id: casi.id,
+            acumulada: '5000.00',
+            por_depreciar: '1000.00',
+            depreciacion_anual: '600.00',
+            depreciacion_anual_maxima: '1000.00',
+        })
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 })

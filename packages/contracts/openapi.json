@@ -59950,6 +59950,8 @@
                     "clase",
                     "descripcion",
                     "costo",
+                    "acumulada",
+                    "por_depreciar",
                     "tasa_anual",
                     "tasa_maxima",
                     "depreciacion_anual",
@@ -59971,6 +59973,16 @@
                       "type": "string",
                       "pattern": "^-?\\d+\\.\\d{2}$"
                     },
+                    "acumulada": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$",
+                      "description": "Depreciación inicial + cuotas vigentes"
+                    },
+                    "por_depreciar": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$",
+                      "description": "Costo − residual − acumulada"
+                    },
                     "tasa_anual": {
                       "type": "string",
                       "pattern": "^-?\\d+\\.\\d{2}$"
@@ -59981,11 +59993,13 @@
                     },
                     "depreciacion_anual": {
                       "type": "string",
-                      "pattern": "^-?\\d+\\.\\d{2}$"
+                      "pattern": "^-?\\d+\\.\\d{2}$",
+                      "description": "Con la tasa actual, acotada a lo que queda por depreciar"
                     },
                     "depreciacion_anual_maxima": {
                       "type": "string",
-                      "pattern": "^-?\\d+\\.\\d{2}$"
+                      "pattern": "^-?\\d+\\.\\d{2}$",
+                      "description": "Con la tasa máxima, acotada a lo que queda (H38)"
                     },
                     "diferencia_anual": {
                       "type": "string",

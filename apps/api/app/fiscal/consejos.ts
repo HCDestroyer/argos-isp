@@ -159,11 +159,22 @@ export async function consejosFiscales(
                 }
             }
             const entrada: EntradaConsejo = {
+                hoy,
                 regimen: tablero.regimen,
                 bloques: Object.fromEntries(bloques.map(([f, b]) => [f, b.datos!])),
                 parametro: leer,
             }
             const r = def.evaluar(entrada)
+            if (r.sin_datos) {
+                return {
+                    ...base,
+                    estado: 'sin_datos',
+                    texto: null,
+                    datos: null,
+                    motivo: 'Falta un parámetro para evaluarlo',
+                    error: r.sin_datos,
+                }
+            }
             return r.aplica
                 ? {
                       ...base,

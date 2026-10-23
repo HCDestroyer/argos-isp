@@ -3,6 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { DateTime } from 'luxon'
 import { Problema } from '#shared/errores'
 import { reservaIncobrables } from '#ledger/checks'
+import { CUOTA_VIGENTE } from '#ledger/activos'
 import { NoAplica, calcularBloque, type Bloque } from '#fiscal/bloques'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { idsEmpresasActivas } from '#core/empresas'
@@ -556,7 +557,12 @@ async function incobrables(ctx: Contexto) {
     }
 }
 
-/** Activos vigentes que se deprecian a una tasa menor que el máximo legal de su clase (vigente hoy). */
+/**
+ * Activos vigentes que se deprecian a una tasa menor que el máximo legal de su clase (vigente hoy) y aún
+ * tienen saldo por depreciar. H38: la deducción anual de cada tasa se acota a lo que queda por depreciar
+ * (depreciable − depreciación inicial − cuotas vigentes); la diferencia es la de la tasa máxima menos la
+ * de la actual, ambas acotadas, y un activo sin saldo no se lista.
+ */
 async function depreciacion(ctx: Contexto) {
     const topes = resolver(ctx.datos.filas, 'depreciacion', ctx.hoy)?.valor
     if (!topes || typeof topes !== 'object') throw new ParametroSinConfirmar('depreciacion', ctx.hoy)
@@ -571,6 +577,10 @@ async function depreciacion(ctx: Contexto) {
             'a.descripcion',
             ctx.c.raw('a.costo::text as costo'),
             ctx.c.raw('a.valor_residual::text as valor_residual'),
+            ctx.c.raw(
+                `(a.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q
+                   WHERE q.activo_id = a.id AND ${CUOTA_VIGENTE}), 0))::text as acumulada`,
+            ),
             'a.tasa_anual',
         )) as Array<{
         id: number
@@ -578,27 +588,34 @@ async function depreciacion(ctx: Contexto) {
         descripcion: string
         costo: string
         valor_residual: string
+        acumulada: string
         tasa_anual: string
     }>
     const tope = topes as Record<string, string>
+    const acotar = (v: Dec, limite: Dec) => (v.gt(limite) ? limite : v)
     const bajo = activos
         .filter((a) => tope[a.clase] !== undefined && dec(a.tasa_anual).lt(dec(tope[a.clase]!)))
         .map((a) => {
             const depreciable = dec(a.costo).minus(dec(a.valor_residual))
-            const actual = redondear(depreciable.times(dec(a.tasa_anual)).dividedBy(100))
-            const maxima = redondear(depreciable.times(dec(tope[a.clase]!)).dividedBy(100))
-            return {
-                activo_id: Number(a.id),
-                clase: a.clase,
-                descripcion: a.descripcion,
-                costo: aTexto(a.costo),
-                tasa_anual: aTexto(a.tasa_anual),
-                tasa_maxima: aTexto(tope[a.clase]!),
-                depreciacion_anual: aTexto(actual),
-                depreciacion_anual_maxima: aTexto(maxima),
-                diferencia_anual: aTexto(maxima.minus(actual)),
-            }
+            const restante = depreciable.minus(dec(a.acumulada))
+            const actual = acotar(redondear(depreciable.times(dec(a.tasa_anual)).dividedBy(100)), restante)
+            const maxima = acotar(redondear(depreciable.times(dec(tope[a.clase]!)).dividedBy(100)), restante)
+            return { a, restante, actual, maxima }
         })
+        .filter((x) => x.restante.gt(0) && x.maxima.gt(x.actual))
+        .map(({ a, restante, actual, maxima }) => ({
+            activo_id: Number(a.id),
+            clase: a.clase,
+            descripcion: a.descripcion,
+            costo: aTexto(a.costo),
+            acumulada: aTexto(a.acumulada),
+            por_depreciar: aTexto(restante),
+            tasa_anual: aTexto(a.tasa_anual),
+            tasa_maxima: aTexto(tope[a.clase]!),
+            depreciacion_anual: aTexto(actual),
+            depreciacion_anual_maxima: aTexto(maxima),
+            diferencia_anual: aTexto(maxima.minus(actual)),
+        }))
     return {
         activos: activos.length,
         bajo_maximo: bajo.length,
