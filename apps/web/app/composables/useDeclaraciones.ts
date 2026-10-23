@@ -10,6 +10,11 @@ export type FiltrosDeclaraciones = Omit<NonNullable<paths['/api/v1/declaraciones
 export type CuerpoCalcularDeclaracion = paths['/api/v1/declaraciones/calcular']['post']['requestBody']['content']['application/json']
 export type CuerpoPresentarDeclaracion = paths['/api/v1/declaraciones/{id}/marcar-presentada']['post']['requestBody']['content']['application/json']
 export type CuerpoPagoDeclaracion = paths['/api/v1/declaraciones/{id}/registrar-pago']['post']['requestBody']['content']['application/json']
+export type CuerpoAnularPagoDeclaracion = paths['/api/v1/declaraciones/{id}/anular-pago']['post']['requestBody']['content']['application/json']
+export type PagoDeclaracionAnulado = Schema<'PagoDeclaracionAnulado'>
+export type RenglonCalculo = Schema<'RenglonCalculo'>
+export type AjusteFiscal = Schema<'AjusteFiscal'>
+export type CuerpoAjusteFiscal = paths['/api/v1/declaraciones/ajustes']['post']['requestBody']['content']['application/json']
 
 /**
  * Declaraciones de IVA y de pequeño contribuyente (A3, fase 7 PR B). Cada versión se calcula desde
@@ -58,5 +63,28 @@ export function useDeclaraciones() {
         return resolver(api.POST('/api/v1/declaraciones/{id}/registrar-pago', { params: { path: { id }, header: { 'Idempotency-Key': clave } }, body: cuerpo }))
     }
 
-    return { listar, ver, calcular, revisar, marcarPresentada, registrarPago }
+    /**
+     * `POST /declaraciones/:id/anular-pago` (`declaraciones.anular_pago`): revierte el pago vigente (el
+     * pago pasa a `pagos_anulados`) y deja registrar otro. 409 `declaracion_sin_pago`.
+     */
+    function anularPago(id: number, cuerpo: CuerpoAnularPagoDeclaracion, clave: string): Promise<Resultado<Declaracion>> {
+        return resolver(api.POST('/api/v1/declaraciones/{id}/anular-pago', { params: { path: { id }, header: { 'Idempotency-Key': clave } }, body: cuerpo }))
+    }
+
+    /** `GET /declaraciones/cuentas-pago` (`declaraciones.pagar`): los bancos del libro de donde sale el pago. */
+    function cuentasPago(): Promise<Resultado<BancoLibro[]>> {
+        return resolver(api.GET('/api/v1/declaraciones/cuentas-pago'))
+    }
+
+    /** `GET /declaraciones/ajustes?anio=&trimestre=` (`declaraciones.ver`): ajustes fiscales con sus anulaciones. */
+    function ajustes(anio: number, trimestre?: number | null): Promise<Resultado<AjusteFiscal[]>> {
+        return resolver(api.GET('/api/v1/declaraciones/ajustes', { params: { query: { anio, ...(trimestre ? { trimestre } : {}) } } }))
+    }
+
+    /** `POST /declaraciones/ajustes` (`declaraciones.ajustar`): alta, o anulación con `anula_a`. 409 `ajuste_anulado`, `ejercicio_cerrado`. */
+    function ajustar(cuerpo: CuerpoAjusteFiscal, clave: string): Promise<Resultado<AjusteFiscal>> {
+        return resolver(api.POST('/api/v1/declaraciones/ajustes', { params: { header: { 'Idempotency-Key': clave } }, body: cuerpo }))
+    }
+
+    return { listar, ver, calcular, revisar, marcarPresentada, registrarPago, anularPago, cuentasPago, ajustes, ajustar }
 }

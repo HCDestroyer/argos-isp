@@ -2,11 +2,11 @@
 import type { TableColumn } from '@nuxt/ui'
 
 /**
- * Declaraciones de IVA y de pequeño contribuyente (A3, fase 7 PR B; `GET /declaraciones`,
- * `declaraciones.ver`): cada versión con su estado, impuesto determinado, a pagar y pago, la más
+ * Declaraciones de los ocho impuestos (A3, fase 7 PR B y C; `GET /declaraciones`, `declaraciones.ver`):
+ * IVA, pequeño contribuyente, ISR opcional, ISR trimestral y anual, ISO y retenciones de IVA e ISR; cada versión con su estado, impuesto determinado, a pagar y pago, la más
  * reciente primero; filtros por impuesto, estado y mes; consolidable con «Todas». «Calcular
  * declaración» (`declaraciones.calcular`, con la empresa elegida) abre el formulario; el calendario
- * fiscal llega aquí con `?calcular=<impuesto>&periodo=AAAA-MM`.
+ * fiscal llega aquí con `?calcular=<impuesto>&periodo=` (`AAAA-MM`, `AAAA-Tn` o `AAAA`).
  */
 definePageMeta({ permiso: 'declaraciones.ver' })
 
@@ -20,7 +20,7 @@ const { conSelector, eleccion, empresaId, empresas, nombre: nombreEmpresa } = us
 const consolidado = computed(() => conSelector.value && eleccion.value === 'todas')
 const empresa = computed<number | null>(() => empresaId.value ?? (conSelector.value ? null : (empresas.value[0]?.id ?? null)))
 
-const PERIODO = /^\d{4}-(0[1-9]|1[0-2])$/
+const PERIODO = /^\d{4}(-(0[1-9]|1[0-2])|-T[1-4])?$/
 
 function texto(valor: unknown): string {
     return typeof valor === 'string' ? valor : ''
@@ -46,6 +46,9 @@ const lista = usePaginacionCursor(cursor => useDeclaraciones().listar({
 }, cursor))
 
 watch([impuestos, estados, periodo], () => {
+    if (periodo.value && !PERIODO.test(periodo.value)) {
+        return
+    }
     void router.replace({
         query: {
             ...route.query,
@@ -71,9 +74,9 @@ const columnas: TableColumn<Declaracion>[] = [
     { id: 'a_pagar', header: 'A pagar', meta: { class: { th: 'text-right', td: 'text-right' } } },
 ]
 
-/** Impuesto determinado: IVA (débito − crédito − retenciones) o el del pequeño contribuyente. */
+/** Impuesto determinado: IVA (débito − crédito − retenciones), el del PC o el ISO, el ISR, o lo retenido. */
 function determinado(d: Declaracion): string | null {
-    return totalDe(d, d.impuesto === 'pc_mensual' ? 'impuesto' : 'impuesto_determinado')
+    return totalDe(d, CLAVE_DETERMINADO[d.impuesto])
 }
 
 /* Calcular (también desde el calendario: `?calcular=&periodo=`). */
@@ -90,7 +93,7 @@ function abrirCalcular(impuesto: ImpuestoDeclarable = 'iva_mensual', mes?: strin
 function alCalcular(d: Declaracion) {
     toast.add({
         title: `Versión ${d.version} calculada`,
-        description: `${etiquetaImpuestoDeclaracion(d.impuesto)} de ${etiquetaPeriodo(periodoDeclaracion(d))}: borrador${d.sustitutiva ? ' sustitutivo' : ''}.`,
+        description: `${etiquetaImpuestoDeclaracion(d.impuesto)} de ${etiquetaPeriodoDeclaracion(d)}: borrador${d.sustitutiva ? ' sustitutivo' : ''}.`,
         icon: 'i-lucide-calculator',
         color: 'success',
     })
@@ -118,8 +121,8 @@ onMounted(() => {
                 color="neutral"
                 variant="subtle"
                 icon="i-lucide-info"
-                description="Borradores del IVA (SAT-2237) y del pequeño contribuyente (SAT-2046) calculados desde los libros del mes. Revisar registra la liquidación y bloquea los impuestos del mes. ArgosIsp no presenta nada a la SAT: solo registra la presentación y el pago."
-                :actions="[{ label: 'Calendario fiscal', icon: 'i-lucide-calendar-check', color: 'neutral', variant: 'outline', to: '/fiscal/calendario' }]"
+                description="Borradores de IVA, pequeño contribuyente, ISR, ISO y retenciones calculados desde los documentos y el libro del periodo. Revisar registra la liquidación (y, en IVA, pequeño contribuyente y retenciones, bloquea los impuestos del mes). ArgosIsp no presenta nada a la SAT: solo registra la presentación y el pago."
+                :actions="[{ label: 'Calendario fiscal', icon: 'i-lucide-calendar-check', color: 'neutral', variant: 'outline', to: '/fiscal/calendario' }, { label: 'Ajustes fiscales', icon: 'i-lucide-sliders-horizontal', color: 'neutral', variant: 'outline', to: '/declaraciones/ajustes' }]"
             />
 
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -147,10 +150,10 @@ onMounted(() => {
                         data-prueba="filtro-estados"
                     />
                     <UInput
-                        v-model="periodo"
-                        type="month"
-                        aria-label="Mes de la declaración"
-                        class="w-full lg:w-44"
+                        v-model.lazy="periodo"
+                        placeholder="AAAA-MM, AAAA-Tn o AAAA"
+                        aria-label="Periodo de la declaración (AAAA-MM, AAAA-Tn o AAAA)"
+                        class="w-full lg:w-52"
                         data-prueba="filtro-periodo"
                     />
                     <UButton
@@ -206,10 +209,10 @@ onMounted(() => {
                                 class="text-sm font-medium text-highlighted hover:text-primary"
                                 :class="{ 'line-through decoration-1': row.original.estado === 'sustituida' }"
                             >
-                                {{ etiquetaImpuestoDeclaracion(row.original.impuesto) }} · {{ etiquetaPeriodo(periodoDeclaracion(row.original)) }}
+                                {{ etiquetaImpuestoDeclaracion(row.original.impuesto) }} · {{ etiquetaPeriodoDeclaracion(row.original) }}
                             </ULink>
                             <span class="text-xs text-muted">
-                                Versión {{ row.original.version }}<template v-if="row.original.sustitutiva"> · sustitutiva</template> · {{ row.original.formulario ?? 'formulario por confirmar' }}<template v-if="consolidado"> · {{ nombreEmpresa(row.original.empresa_id) }}</template>
+                                Versión {{ row.original.version }}<template v-if="row.original.sustitutiva"> · sustitutiva</template> · {{ row.original.formulario ?? 'formulario por confirmar con contador' }}<template v-if="consolidado"> · {{ nombreEmpresa(row.original.empresa_id) }}</template>
                             </span>
                             <UBadge
                                 :label="ESTADOS_DECLARACION[row.original.estado].etiqueta"

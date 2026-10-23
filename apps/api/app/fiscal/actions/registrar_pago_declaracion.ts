@@ -7,12 +7,15 @@ import { CERO, aTexto, dec, redondear } from '#ledger/dinero'
 import { fechaValida } from '#ledger/fechas'
 import { resolverOrigenEgreso, type MetodoEgreso } from '#ledger/egresos'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import type { ImpuestoDeclarable } from '#fiscal/declaraciones'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { hoyFiscal } from '#fiscal/comun'
 import { valorParametro } from '#fiscal/parametros'
 import { payloadDeclaracion } from '#fiscal/actions/calcular_declaracion'
 import {
+    CUENTA_POR_PAGAR,
     LOCK_DECLARACIONES,
+    textoDePeriodo,
     ultimaVersion,
     verDeclaracion,
     type DeclaracionFila,
@@ -20,13 +23,13 @@ import {
 
 /**
  * `declaraciones.pagar` (`POST /declaraciones/:id/registrar-pago`, contrato §9.3; fase 7 PR B):
- * registra el pago de la última versión revisada o presentada. Asiento `pago_impuesto`:
- * `2.1.06 IVA por pagar` (o `2.1.09` del pequeño contribuyente) + `5.4.02 Multas y recargos` / Caja
- * o Banco.
+ * registra el pago de la última versión revisada o presentada. Asiento `pago_impuesto`: la cuenta por
+ * pagar del impuesto (`2.1.06` IVA, `2.1.09` pequeño contribuyente, `2.1.07` ISR, `2.1.08` ISO, `2.1.04`
+ * y `2.1.05` retenciones; §9.3) + `5.4.02 Multas y recargos` / Caja o Banco.
  *
- * - Monto = `a_pagar` del borrador menos lo pagado por versiones anteriores del periodo (una
- *   sustitutiva paga la diferencia); sin monto: 422 `sin_monto_a_pagar`. Un pago por versión (409
- *   `declaracion_pagada`).
+ * - Monto = `a_pagar` del borrador menos lo pagado (sin anular) por versiones anteriores del periodo
+ *   (una sustitutiva paga la diferencia); sin monto: 422 `sin_monto_a_pagar`. Un pago vigente por
+ *   versión (409 `declaracion_pagada`); anulado (`declaraciones.anular_pago`), se registra otro.
  * - Pago tardío (inv. E.2): mora = monto × `mora_tributaria` (por ciento diario) × días después del
  *   vencimiento; multa por presentación tardía = `multa_declaracion_tardia.por_dia` × días entre el
  *   vencimiento y la presentación, hasta su máximo (solo si ya se marcó presentada). Las dos a
@@ -100,12 +103,15 @@ export default class RegistrarPagoDeclaracion extends DomainAction<EntradaPagoDe
                 'x.impuesto': d.impuesto,
                 'x.periodo_desde': d.periodo_desde,
             })
+            .whereNotExists((q) =>
+                q.from('fiscal.declaraciones_pagos_anulaciones as n').whereRaw('n.pago_id = p.id'),
+            )
             .select(t.trx.raw('coalesce(sum(p.impuesto), 0)::text as pagado'))
             .first()) as { pagado: string }
         const monto = redondear(dec(d.totales.a_pagar ?? '0').minus(dec(previos.pagado)))
         if (monto.lte(0)) {
             throw new ReglaNegocio(
-                `No hay impuesto por pagar en ${d.impuesto} ${d.periodo_desde.slice(0, 7)} (a pagar ${d.totales.a_pagar ?? '0.00'}, ya pagado ${aTexto(previos.pagado)})`,
+                `No hay impuesto por pagar en ${d.impuesto} ${textoDePeriodo(d.impuesto, d.periodo_desde)} (a pagar ${d.totales.a_pagar ?? '0.00'}, ya pagado ${aTexto(previos.pagado)})`,
                 'sin_monto_a_pagar',
             )
         }
@@ -144,13 +150,12 @@ export default class RegistrarPagoDeclaracion extends DomainAction<EntradaPagoDe
                 },
             ])
         }
-        const cuentaImpuesto =
-            d.impuesto === 'pc_mensual' ? CUENTAS_GT.PC_POR_PAGAR : CUENTAS_GT.IVA_POR_PAGAR
+        const cuentaImpuesto = CUENTA_POR_PAGAR[d.impuesto as ImpuestoDeclarable]
         const asiento = await new RegistrarAsiento().execute(
             {
                 empresa_id: d.empresa_id,
                 fecha,
-                descripcion: `Pago ${d.impuesto} ${d.periodo_desde.slice(0, 7)} (declaración ${d.id})${input.boleta ? ` · boleta ${input.boleta}` : ''}`,
+                descripcion: `Pago ${d.impuesto} ${textoDePeriodo(d.impuesto, d.periodo_desde)} (declaración ${d.id})${input.boleta ? ` · boleta ${input.boleta}` : ''}`,
                 origen_tipo: 'pago_impuesto',
                 origen_id: d.id,
                 movimientos: [

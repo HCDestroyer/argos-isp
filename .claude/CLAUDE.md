@@ -182,6 +182,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `libro.emitido` | fiscal (libros) | emision_id, empresa_id, libro, desde, hasta, folio_inicial, folio_final, formato, sha256, reimpresion_de |
 | `fiscal.vencimiento_proximo` / `fiscal.limite_pc` | fiscal (cron calendario) | vencimiento_proximo: obligacion_id, empresa_id, impuesto, periodo_desde, periodo_hasta, formulario, vence_en, dias, umbral (7, 3, 1, 0); limite_pc: empresa_id, umbral_pct, acumulado, limite, anio |
 | `declaracion.calculada` / `declaracion.revisada` / `declaracion.presentada` / `declaracion.pagada` | fiscal (declaraciones) | declaracion_id, empresa_id, impuesto, periodo_desde, periodo_hasta, vence_en, monto, version |
+| `declaracion.pago_anulado` | fiscal (declaraciones) | declaracion_id, empresa_id, impuesto, periodo_desde, periodo_hasta, vence_en, monto, version, pago_id, asiento_id, motivo |
 | `dte.certificado` / `dte.rechazado` / `dte.anulado` | fiscal (FEL) | dte_id, empresa_id, documento_tipo, documento_id; certificado: tipo_dte, autorizacion, serie, numero, contingencia; rechazado: error, definitivo; anulado: motivo |
 | `fel.contingencia_cambiada` | fiscal (FEL) | empresa_id, activa, motivo |
 | `factura.sustituida` | billing | factura_id, nueva_factura_id, empresa_id, servicio_id, cliente_id, motivo |

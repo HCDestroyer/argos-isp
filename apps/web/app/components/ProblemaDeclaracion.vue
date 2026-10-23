@@ -6,7 +6,8 @@ import type { Problem } from '@argosisp/contracts'
  * `ncre_sin_certificar`) enlazadas a su nota o su DTE, los checks de impuestos que no pasan (422
  * `checks_pendientes`) con el botón a la lista de verificación, y «Recalcular» cuando los datos
  * cambiaron (409 `declaracion_desactualizada`); con 409 `cascada_bloqueada`, cada mes posterior y si se
- * podía rectificar o por qué no.
+ * podía rectificar o por qué no; con 422 `regla_no_soportada`, el parámetro y su valor que el sistema no
+ * calcula, y con `parametro_sin_confirmar` el enlace a los parámetros fiscales.
  */
 const props = defineProps<{
     problema: Problem
@@ -22,6 +23,7 @@ const legible = computed(() => problemaDeclaracionLegible(props.problema))
 const notas = computed(() => (codigo.value === 'ncre_sin_certificar' ? ncreDeProblema(props.problema) : []))
 const checks = computed(() => checksPendientesDe(props.problema))
 const meses = computed(() => cascadaBloqueadaDe(props.problema))
+const noSoportada = computed(() => reglaNoSoportadaDe(props.problema))
 </script>
 
 <template>
@@ -106,7 +108,25 @@ const meses = computed(() => cascadaBloqueadaDe(props.problema))
                 >{{ problemaDeclaracionLegible({ type: `urn:argosisp:problema:${m.causa}`, title: m.causa, status: 409 }).title }}: {{ m.mensaje }}</span>
             </li>
         </ul>
+        <div
+            v-if="noSoportada"
+            class="rounded-lg border border-default px-3 py-2 text-sm"
+            data-prueba="declaracion-regla-no-soportada"
+        >
+            Parámetro <span class="font-mono text-highlighted">{{ noSoportada.parametro }}</span><template v-if="noSoportada.valor">
+                = <span class="font-mono text-highlighted">{{ noSoportada.valor }}</span>
+            </template>: el contador debe confirmar si se puede usar el criterio que el sistema sí calcula.
+        </div>
         <div class="flex flex-wrap gap-2">
+            <UButton
+                v-if="(noSoportada || codigo === 'parametro_sin_confirmar') && puede('fiscal.ver')"
+                label="Parámetros fiscales"
+                icon="i-lucide-sliders-horizontal"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                to="/configuracion/fiscal?pestana=parametros"
+            />
             <UButton
                 v-if="checks.length && puede('libro.ver')"
                 label="Ver la lista de verificación"

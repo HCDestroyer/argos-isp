@@ -9,18 +9,27 @@ import {
     IMPUESTOS_DECLARABLES,
     LOCK_DECLARACIONES,
     calcularDatos,
+    finDePeriodo,
+    formatoPeriodo,
+    inicioDePeriodo,
     ultimaVersion,
     verDeclaracion,
     type DeclaracionFila,
     type ImpuestoDeclarable,
 } from '#fiscal/declaraciones'
+import { ejercicioCerrado } from '#fiscal/declaraciones_renta'
 
 /**
- * `declaraciones.calcular` (`POST /declaraciones/calcular`, contrato §9.3; fase 7 PR B): calcula un
- * borrador de IVA (`iva_mensual`) o de pequeño contribuyente (`pc_mensual`) del mes y lo guarda como
- * versión nueva (solo inserción de lo calculado). Nunca se envía a la SAT.
+ * `declaraciones.calcular` (`POST /declaraciones/calcular`, contrato §9.3; fase 7 PR B y C): calcula
+ * el borrador de una declaración del periodo y lo guarda como versión nueva (solo inserción de lo
+ * calculado). Nunca se envía a la SAT. IVA (`iva_mensual`) y pequeño contribuyente (`pc_mensual`) en
+ * `#fiscal/declaraciones`; ISR, ISO y retenciones en `#fiscal/declaraciones_renta`.
  *
- * - El mes no puede ser futuro; antes de `inicio_libros`: 422 `antes_de_inicio_libros`.
+ * - Periodo según la periodicidad: `AAAA-MM` (mensuales), `AAAA-Tn` (`isr_trimestral`,
+ *   `iso_trimestral`), `AAAA` (`isr_anual`).
+ * - El periodo no puede empezar en el futuro; antes de `inicio_libros`: 422 `antes_de_inicio_libros`.
+ * - El ISR anual de un ejercicio con cierre vigente: 409 `ejercicio_cerrado` (el cierre ya tomó su ISR;
+ *   reábralo para corregirlo).
  * - Exige la obligación del calendario (régimen y banderas del periodo): si no aplica, 422
  *   `obligacion_no_aplica` con su motivo.
  * - Con la última versión `revisada` o `presentada` (ya liquidada) solo se calcula una
@@ -33,7 +42,7 @@ import {
 export interface EntradaCalcularDeclaracion {
     empresa_id?: number | null
     impuesto: ImpuestoDeclarable
-    /** AAAA-MM */
+    /** AAAA-MM, AAAA-Tn (trimestrales) o AAAA (anual) */
     periodo: string
     sustitutiva?: boolean
 }
@@ -45,12 +54,16 @@ export default class CalcularDeclaracion extends DomainAction<EntradaCalcularDec
         if (!(IMPUESTOS_DECLARABLES as readonly string[]).includes(input.impuesto)) {
             throw new ReglaImpuesto(input.impuesto)
         }
-        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.periodo ?? '')) {
+        const desde = inicioDePeriodo(input.impuesto, input.periodo)
+        if (desde === null) {
             throw new ValidacionFallida([
-                { field: 'periodo', message: 'El periodo es AAAA-MM', rule: 'periodo' },
+                {
+                    field: 'periodo',
+                    message: `El periodo de ${input.impuesto} es ${formatoPeriodo(input.impuesto)}`,
+                    rule: 'periodo',
+                },
             ])
         }
-        const desde = `${input.periodo}-01`
         const hoy = hoyFiscal()
         if (desde > hoy) {
             throw new ValidacionFallida([
@@ -62,11 +75,17 @@ export default class CalcularDeclaracion extends DomainAction<EntradaCalcularDec
 
         const datos = await datosFiscales(empresaId, t.trx)
         const inicio = resolver(datos.filas, 'inicio_libros', hoy)?.valor
-        const hasta = (await t.trx.rawQuery(
-            `SELECT to_char((?::date + interval '1 month' - interval '1 day')::date, 'YYYY-MM-DD') AS f`,
-            [desde],
-        )) as { rows: Array<{ f: string }> }
-        const periodoHasta = hasta.rows[0]!.f
+        const periodoHasta = finDePeriodo(input.impuesto, desde)
+        if (
+            input.impuesto === 'isr_anual' &&
+            (await ejercicioCerrado(t.trx, empresaId, Number(desde.slice(0, 4))))
+        ) {
+            throw new Conflicto(
+                `El ejercicio ${desde.slice(0, 4)} está cerrado y su cierre tomó el ISR de la declaración anual: reábralo para corregirla`,
+                'ejercicio_cerrado',
+                'Ejercicio cerrado',
+            )
+        }
         if (typeof inicio === 'string' && periodoHasta < inicio) {
             throw new Problema(
                 422,
@@ -174,7 +193,7 @@ class ReglaImpuesto extends Problema {
             422,
             'impuesto_no_soportado',
             'Impuesto no soportado',
-            `${impuesto}: por ahora se declaran ${IMPUESTOS_DECLARABLES.join(' y ')} (ISR, ISO y retenciones llegan en la PR C)`,
+            `${impuesto}: se declaran ${IMPUESTOS_DECLARABLES.join(', ')}`,
             [{ field: 'impuesto', message: `Una de: ${IMPUESTOS_DECLARABLES.join(', ')}`, rule: 'enum' }],
         )
     }

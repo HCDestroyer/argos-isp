@@ -3,8 +3,9 @@ import type { Problem } from '@argosisp/contracts'
 
 /**
  * Revisar una declaración (`POST /declaraciones/:id/revisar`, `declaraciones.revisar`). Pide una
- * confirmación escrita porque revisar **registra la liquidación** (asiento en el diario de impuestos) y
- * **bloquea los impuestos del mes**. Los errores dicen qué hacer: NCRE sin certificar, checks de
+ * confirmación escrita porque, según el impuesto, revisar **registra la liquidación** y **bloquea los
+ * impuestos del mes** (IVA y PC), solo bloquea (retenciones), solo liquida (ISR e ISO) o fija el ISR
+ * que tomará el cierre anual (ISR anual). Los errores dicen qué hacer: NCRE sin certificar, checks de
  * impuestos en anomalía, datos que cambiaron, el mes en curso o un mes posterior que no se puede
  * rectificar (409 `cascada_bloqueada`). Una sustitutiva avisa que puede rectificar los meses posteriores
  * ya revisados (H34): la respuesta trae `cascada[]` y la ficha la muestra.
@@ -22,7 +23,12 @@ const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 let clave = nuevaClaveIdempotencia()
 
-const mes = computed(() => etiquetaPeriodo(periodoDeclaracion(props.declaracion)))
+const mes = computed(() => etiquetaPeriodoDeclaracion(props.declaracion))
+const ivaOPc = computed(() => esIvaOPc(props.declaracion.impuesto))
+const efecto = computed(() => efectoRevision(props.declaracion.impuesto, mes.value))
+const confirmacion = computed(() => (ivaOPc.value
+    ? `Entiendo que se registra la liquidación y se bloquean los impuestos de ${mes.value}`
+    : `Entiendo lo que hace revisar ${etiquetaImpuestoDeclaracion(props.declaracion.impuesto)} de ${mes.value}`))
 const fechaLiquidacion = computed(() => (props.declaracion.sustitutiva ? 'con fecha de hoy, por la diferencia con lo ya liquidado' : `con fecha ${formatearFecha(props.declaracion.periodo_hasta)}`))
 
 watch(abierto, (valor) => {
@@ -71,19 +77,33 @@ function aRecalcular() {
                     color="warning"
                     variant="subtle"
                     icon="i-lucide-lock"
-                    title="Revisar registra la liquidación y bloquea los impuestos del mes"
+                    :title="efecto.titulo"
                     data-prueba="revisar-aviso"
                 >
                     <template #description>
-                        <ul class="mt-1 list-disc space-y-1 ps-4">
+                        <ul
+                            v-if="ivaOPc"
+                            class="mt-1 list-disc space-y-1 ps-4"
+                        >
                             <li>Asiento de liquidación en el diario de impuestos {{ fechaLiquidacion }}.</li>
                             <li>Bloqueo de impuestos hasta el {{ formatearFecha(declaracion.periodo_hasta) }}: ningún asiento con impuesto podrá caer en {{ mes }} ni antes.</li>
                             <li>Antes verifica que el IVA de los libros cuadre con este borrador y que no haya NCRE sin certificar.</li>
                         </ul>
+                        <ul
+                            v-else
+                            class="mt-1 list-disc space-y-1 ps-4"
+                        >
+                            <li
+                                v-for="(punto, i) in efecto.puntos"
+                                :key="i"
+                            >
+                                {{ punto }}
+                            </li>
+                        </ul>
                     </template>
                 </UAlert>
                 <UAlert
-                    v-if="declaracion.sustitutiva"
+                    v-if="declaracion.sustitutiva && ivaOPc"
                     color="info"
                     variant="subtle"
                     icon="i-lucide-git-branch"
@@ -93,7 +113,7 @@ function aRecalcular() {
                 />
                 <UCheckbox
                     v-model="confirmo"
-                    :label="`Entiendo que se registra la liquidación y se bloquean los impuestos de ${mes}`"
+                    :label="confirmacion"
                     data-prueba="revisar-confirmo"
                 />
                 <ProblemaDeclaracion
@@ -115,7 +135,7 @@ function aRecalcular() {
                     @click="abierto = false"
                 />
                 <UButton
-                    label="Revisar y liquidar"
+                    :label="sinAsiento(declaracion.impuesto) ? 'Revisar' : 'Revisar y liquidar'"
                     icon="i-lucide-file-check"
                     :disabled="!confirmo || !puede('declaraciones.revisar')"
                     :loading="enviando"

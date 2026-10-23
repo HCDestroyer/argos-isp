@@ -68,7 +68,7 @@ const ejercicios: Ruta[] = [
         cuerpo: v.cerrarEjercicioValidator,
         idempotente: true,
         descripcion:
-            'Con fecha 31-dic y diario CIE: provisión del ISR (5.5.01 / 1.1.07 + 1.1.08 + 2.1.07), cancelación de ingresos y gastos contra 3.3.03, traslado 3.3.03 → 3.3.02 → 3.3.01 y reserva legal (reserva_legal_pct × la base de reserva_legal_base) si hubo utilidad; después cierra diciembre. El ISR lo escribe el usuario (obligatorio, 0.00 si no hay). 422 ejercicio_requisitos (rule: meses_abiertos, diciembre_cerrado, dte_pendientes, ejercicio_anterior_abierto), 422 isr_acreditable, 409 ejercicio_cerrado.',
+            'Con fecha 31-dic y diario CIE: ISO vencido sin acreditar a 5.3.03 (5.3.03 / 1.1.08), provisión del ISR (5.5.01 / 1.1.07 + 1.1.08 + 2.1.07), cancelación de ingresos y gastos contra 3.3.03, traslado 3.3.03 → 3.3.02 → 3.3.01 y reserva legal (reserva_legal_pct × la base de reserva_legal_base) si hubo utilidad; después cierra diciembre. Con declaración ISR anual del año, el ISR y lo acreditado salen de su versión revisada (isr en el cuerpo: 422 isr_de_declaracion; sin revisar: 422 declaracion_sin_revisar; desactualizada: 409 declaracion_desactualizada); sin ella, el ISR lo escribe el usuario (obligatorio, 0.00 si no hay). 422 ejercicio_requisitos (rule: meses_abiertos, diciembre_cerrado, dte_pendientes, ejercicio_anterior_abierto), 422 isr_acreditable, 409 ejercicio_cerrado.',
         respuesta: { status: 201, descripcion: 'Ejercicio cerrado', esquema: CierreAnual },
         handler: (ctx, { cuerpo }) => new CerrarEjercicio().execute(cuerpo, ctx.contextoAccion()),
     }),

@@ -20,6 +20,8 @@ import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
 import { LOCK_CIERRES } from '#ledger/cierres'
 import { exigirChecks } from '#ledger/checks'
+import { hashActual, ultimaVersion } from '#fiscal/declaraciones'
+import { isoPorVencer } from '#fiscal/declaraciones_renta'
 
 /**
  * `libro.cerrar_ejercicio` (`POST /libro/ejercicios/cerrar`, contrato de localización fiscal §9.1):
@@ -31,13 +33,20 @@ import { exigirChecks } from '#ledger/checks'
  * emitido en el año), `ejercicio_anterior_abierto` (un año anterior con ingresos o gastos sin
  * cerrar). 409 `ejercicio_cerrado` si ya tiene cierre vigente.
  *
- * ISR (decisión del líder): mientras no existan las declaraciones (fase 7), el monto lo escribe el
- * usuario: obligatorio (puede ser 0.00), con lo acreditado de `1.1.07` (pagos trimestrales) y
- * `1.1.08` (ISO), cada uno ≤ su saldo al 31-dic y juntos ≤ el ISR. Queda en el cierre y en la
- * auditoría. Cuando exista `fiscal.declaraciones` con la ISR anual del año, el dato manual se rechaza
- * (422 `isr_de_declaracion`): el ISR sale de la declaración.
+ * ISR (decisión del líder; fase 7 PR C): si el año tiene declaración ISR anual (`isr_anual`), el ISR y
+ * lo acreditado salen de su última versión, que debe estar revisada o presentada (422
+ * `declaracion_sin_revisar`) y al día (409 `declaracion_desactualizada`); el dato manual se rechaza (422
+ * `isr_de_declaracion`). Sin declaración (régimen sin ISR anual en el calendario, o años anteriores a
+ * la fase 7), el monto lo escribe el usuario: obligatorio (puede ser 0.00), con lo acreditado de
+ * `1.1.07` (pagos trimestrales) y `1.1.08` (ISO). Cada parte ≤ su saldo al 31-dic y juntas ≤ el ISR.
+ * Queda en el cierre y en la auditoría.
+ *
+ * ISO vencido (§9.3, inv. A.4): el ISO por acreditar cuya ventana termina a más tardar el 31-dic del
+ * año y sigue sin acreditar pasa a `5.3.03` (`5.3.03 / 1.1.08`) con su fila `vencido` en
+ * `fiscal.iso_acreditamientos`; es gasto del año y entra en el resultado.
  *
  * En una transacción, con fecha 31-dic, diario `CIE` y origen `cierre_anual` (origen_id = el cierre):
+ *  0. ISO vencido: `5.3.03 / 1.1.08` (si hay).
  *  1. ISR: `5.5.01 / 1.1.07 + 1.1.08 + 2.1.07` (si el ISR es mayor que cero).
  *  2. Cancelación de cada cuenta de ingreso y gasto del año contra `3.3.03`.
  *  3. Traslado `3.3.03 → 3.3.02` y 4. `3.3.02 → 3.3.01` (si el resultado no es cero).
@@ -55,12 +64,13 @@ import { exigirChecks } from '#ledger/checks'
 export interface EntradaCerrarEjercicio {
     empresa_id?: number | null
     anio: number
-    isr: {
+    /** sin declaración ISR anual del año: obligatorio; con ella, prohibido (sale de la declaración) */
+    isr?: {
         monto: string
         acreditado_trimestral?: string | null
         acreditado_iso?: string | null
         nota?: string | null
-    }
+    } | null
     /** instante de referencia (pruebas); por defecto ahora */
     ahora?: Date
 }
@@ -73,9 +83,6 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
     protected async handle(input: EntradaCerrarEjercicio, t: Transaccion): Promise<CierreAnualVista> {
         const anio = anioValido(input.anio)
         const fin = `${anio}-12-31`
-        const isr = montoIsr(input.isr?.monto, 'isr.monto')
-        const trimestral = montoIsr(input.isr?.acreditado_trimestral ?? '0', 'isr.acreditado_trimestral')
-        const iso = montoIsr(input.isr?.acreditado_iso ?? '0', 'isr.acreditado_iso')
         const empresaId = input.empresa_id ?? (await resolverEmpresaActiva(t.ctx, t.trx))
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
@@ -88,7 +95,12 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
                 'Ejercicio cerrado',
             )
         }
-        await rechazarSiHayDeclaracion(t, empresaId, anio)
+        const { isr, trimestral, iso, nota, declaracionId } = await isrDelEjercicio(
+            t,
+            empresaId,
+            anio,
+            input.isr,
+        )
         const errores = await requisitos(t, empresaId, anio)
         if (errores.length > 0) {
             throw new Problema(
@@ -104,6 +116,8 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
         const erroresIsr: ErrorCampo[] = []
         const saldoTrimestral = await saldoDeudor(t.trx, empresaId, CUENTAS_GT.ISR_PAGOS_TRIMESTRALES, fin)
         const saldoIso = await saldoDeudor(t.trx, empresaId, CUENTAS_GT.ISO_POR_ACREDITAR, fin)
+        const vencidos = await isoPorVencer(t.trx, empresaId, anio)
+        const isoVencido = vencidos.reduce((s, v) => s.plus(v.saldo), CERO)
         if (trimestral.gt(saldoTrimestral)) {
             erroresIsr.push({
                 field: 'isr.acreditado_trimestral',
@@ -111,10 +125,14 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
                 rule: 'isr_acreditable',
             })
         }
-        if (iso.gt(saldoIso)) {
+        if (iso.plus(isoVencido).gt(saldoIso)) {
             erroresIsr.push({
                 field: 'isr.acreditado_iso',
-                message: `Solo hay Q${aTexto(saldoIso)} de ISO por acreditar (1.1.08) al ${fin}`,
+                message: `Solo hay Q${aTexto(saldoIso)} de ISO por acreditar (1.1.08) al ${fin}${
+                    isoVencido.gt(0)
+                        ? ` para acreditar ${aTexto(iso)} y dar de baja ${aTexto(isoVencido)} vencido`
+                        : ''
+                }`,
                 rule: 'isr_acreditable',
             })
         }
@@ -130,7 +148,8 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
         // resultado del año sin el cierre; la provisión del ISR suma a 5.5.01
         const saldos = await saldosDeResultados(t.trx, empresaId, anio)
         const netoPrevio = saldos.reduce((s, c) => s.plus(c.neto), CERO)
-        const resultadoAntes = netoPrevio.negated()
+        // el ISO vencido es gasto del año (5.3.03): entra antes del ISR
+        const resultadoAntes = netoPrevio.negated().minus(isoVencido)
         const resultado = resultadoAntes.minus(isr)
 
         const pct = dec(String(await valorParametro<string>(empresaId, 'reserva_legal_pct', fin, t.trx)))
@@ -146,6 +165,13 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
                 .filter((c) => !c.neto.isZero())
                 .map((c) => ({ codigo: c.codigo, nombre: c.nombre, tipo: c.tipo, neto: aTexto(c.neto) })),
             isr_por_pagar: aTexto(isr.minus(trimestral).minus(iso)),
+            isr_declaracion_id: declaracionId,
+            iso_vencido: aTexto(isoVencido),
+            iso_vencido_detalle: vencidos.map((v) => ({
+                iso_periodo: v.iso_periodo,
+                vence_en: v.vence_en,
+                monto: aTexto(v.saldo),
+            })),
             reserva_legal_pct: pct.toString(),
             reserva_legal_base: base,
             base_reserva: aTexto(baseReserva),
@@ -159,7 +185,7 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
                 isr: aTexto(isr),
                 isr_acreditado_trimestral: aTexto(trimestral),
                 isr_acreditado_iso: aTexto(iso),
-                isr_nota: input.isr?.nota?.trim() || null,
+                isr_nota: nota,
                 resultado_antes_isr: aTexto(resultadoAntes),
                 resultado: aTexto(resultado),
                 reserva_legal: aTexto(reserva),
@@ -185,6 +211,28 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
                 { trx: t.trx },
             )
 
+        // 0. ISO vencido sin acreditar: 5.3.03 / 1.1.08 y su fila en fiscal.iso_acreditamientos
+        if (isoVencido.gt(0)) {
+            await asiento('ISO vencido sin acreditar', [
+                { cuenta: CUENTAS_GT.IMPUESTOS_DEDUCIBLES, debe: aTexto(isoVencido) },
+                { cuenta: CUENTAS_GT.ISO_POR_ACREDITAR, haber: aTexto(isoVencido) },
+            ])
+            for (const v of vencidos) {
+                await t.trx
+                    .insertQuery()
+                    .table('fiscal.iso_acreditamientos')
+                    .insert({
+                        empresa_id: empresaId,
+                        tipo: 'vencido',
+                        iso_periodo: v.iso_periodo,
+                        cierre_id: cierreId,
+                        monto: aTexto(v.saldo),
+                        acreditable_desde: v.acreditable_desde,
+                        vence_en: v.vence_en,
+                    })
+            }
+        }
+
         // 1. provisión del ISR
         if (isr.gt(0)) {
             const porPagar = isr.minus(trimestral).minus(iso)
@@ -201,6 +249,13 @@ export default class CerrarEjercicio extends DomainAction<EntradaCerrarEjercicio
         // 2. cancelación de ingresos y gastos contra 3.3.03
         const netos = new Map<string, { cuenta: number | string; neto: Dec }>()
         for (const c of saldos) netos.set(c.codigo, { cuenta: c.cuenta_id, neto: c.neto })
+        if (isoVencido.gt(0)) {
+            const actual = netos.get(CUENTAS_GT.IMPUESTOS_DEDUCIBLES)
+            netos.set(CUENTAS_GT.IMPUESTOS_DEDUCIBLES, {
+                cuenta: actual?.cuenta ?? CUENTAS_GT.IMPUESTOS_DEDUCIBLES,
+                neto: (actual?.neto ?? CERO).plus(isoVencido),
+            })
+        }
         if (isr.gt(0)) {
             const actual = netos.get(CUENTAS_GT.IMPUESTO_SOBRE_RENTA)
             netos.set(CUENTAS_GT.IMPUESTO_SOBRE_RENTA, {
@@ -293,16 +348,27 @@ function montoIsr(valor: string | null | undefined, campo: string): Dec {
     return dec(String(valor).trim())
 }
 
-/** Con la ISR anual del año en `fiscal.declaraciones` (fase 7), el ISR no se escribe a mano. */
-async function rechazarSiHayDeclaracion(t: Transaccion, empresaId: number, anio: number) {
-    const tabla = await t.trx.rawQuery(`SELECT to_regclass('fiscal.declaraciones') IS NOT NULL AS existe`)
-    if (!(tabla.rows[0] as { existe: boolean }).existe) return
-    const r = await t.trx.rawQuery(
-        `SELECT count(*)::int AS n FROM fiscal.declaraciones
-          WHERE empresa_id = ? AND impuesto = 'isr_anual' AND extract(year FROM periodo_desde)::int = ?`,
-        [empresaId, anio],
-    )
-    if (((r.rows[0] as { n: number }).n ?? 0) > 0) {
+/**
+ * ISR del cierre: de la declaración ISR anual del año si existe (fase 7 PR C), si no el dato manual. Con
+ * declaración, el dato manual se rechaza (422 `isr_de_declaracion`).
+ */
+async function isrDelEjercicio(
+    t: Transaccion,
+    empresaId: number,
+    anio: number,
+    manual: EntradaCerrarEjercicio['isr'],
+): Promise<{ isr: Dec; trimestral: Dec; iso: Dec; nota: string | null; declaracionId: number | null }> {
+    const anual = await ultimaVersion(t.trx, empresaId, 'isr_anual', `${anio}-01-01`)
+    if (!anual) {
+        return {
+            isr: montoIsr(manual?.monto, 'isr.monto'),
+            trimestral: montoIsr(manual?.acreditado_trimestral ?? '0', 'isr.acreditado_trimestral'),
+            iso: montoIsr(manual?.acreditado_iso ?? '0', 'isr.acreditado_iso'),
+            nota: manual?.nota?.trim() || null,
+            declaracionId: null,
+        }
+    }
+    if (manual) {
         throw new Problema(
             422,
             'isr_de_declaracion',
@@ -316,6 +382,36 @@ async function rechazarSiHayDeclaracion(t: Transaccion, empresaId: number, anio:
                 },
             ],
         )
+    }
+    if (anual.estado !== 'revisada' && anual.estado !== 'presentada') {
+        throw new Problema(
+            422,
+            'declaracion_sin_revisar',
+            'Declaración ISR anual sin revisar',
+            `La declaración ISR anual ${anio} (versión ${anual.version}) está en ${anual.estado}: revísela antes de cerrar el ejercicio`,
+            [
+                {
+                    field: 'anio',
+                    message: `Declaración ${anual.id} en ${anual.estado}`,
+                    rule: 'declaracion_sin_revisar',
+                },
+            ],
+        )
+    }
+    if ((await hashActual(t.trx, anual)) !== anual.datos_hash) {
+        throw new Conflicto(
+            `Los datos del ISR anual ${anio} cambiaron desde que se calculó la versión ${anual.version}: calcule y revise una sustitutiva antes de cerrar`,
+            'declaracion_desactualizada',
+            'Declaración desactualizada',
+        )
+    }
+    const tt = anual.totales
+    return {
+        isr: dec(tt.isr ?? '0'),
+        trimestral: dec(tt.trimestral_acreditado ?? '0'),
+        iso: dec(tt.iso_acreditado ?? '0'),
+        nota: `Declaración ISR anual ${anual.id} (versión ${anual.version})`,
+        declaracionId: anual.id,
     }
 }
 

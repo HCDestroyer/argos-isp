@@ -12830,7 +12830,13 @@
                 "type": "string",
                 "enum": [
                   "iva_mensual",
-                  "pc_mensual"
+                  "pc_mensual",
+                  "isr_opcional_mensual",
+                  "isr_trimestral",
+                  "iso_trimestral",
+                  "isr_anual",
+                  "retenciones_iva",
+                  "retenciones_isr"
                 ]
               }
             }
@@ -12856,10 +12862,10 @@
             "name": "periodo",
             "in": "query",
             "required": false,
-            "description": "Mes AAAA-MM",
+            "description": "Periodo que empieza ese mes (AAAA-MM), trimestre (AAAA-Tn) o año (AAAA): compara el primer día",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+              "pattern": "^\\d{4}(-(0[1-9]|1[0-2])|-T[1-4])?$"
             }
           }
         ],
@@ -12998,6 +13004,141 @@
           }
         },
         "x-permiso": "declaraciones.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/declaraciones/{id}/anular-pago": {
+      "post": {
+        "operationId": "declaracionAnularPago",
+        "summary": "Anular el pago vigente de una declaración (reverso de su asiento)",
+        "description": "Revierte el asiento pago_impuesto (fecha de hoy o la indicada, no anterior al pago) y guarda la anulación (solo inserción): el pago pasa a pagos_anulados y se puede registrar otro. 409 declaracion_sin_pago. Emite declaracion.pago_anulado.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Declaración (una versión)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del reverso; por defecto hoy (nunca anterior al pago)"
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Declaración sin el pago anulado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Declaracion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.anular_pago; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.anular_pago",
         "x-implementado": true
       }
     },
@@ -13144,7 +13285,7 @@
       "post": {
         "operationId": "declaracionRegistrarPago",
         "summary": "Registrar el pago de una declaración revisada o presentada",
-        "description": "Asiento pago_impuesto: 2.1.06 (o 2.1.09) + 5.4.02 (mora y multa si es tardío) / Caja o Banco. 422 sin_monto_a_pagar; 409 declaracion_pagada, declaracion_no_revisada, declaracion_sustituida. Emite declaracion.pagada.",
+        "description": "Asiento pago_impuesto: la cuenta por pagar del impuesto (2.1.06 IVA, 2.1.09 PC, 2.1.07 ISR, 2.1.08 ISO, 2.1.04 / 2.1.05 retenciones) + 5.4.02 (mora y multa si es tardío) / Caja o Banco (bancos: GET /declaraciones/cuentas-pago). 422 sin_monto_a_pagar; 409 declaracion_pagada (ya tiene un pago vigente), declaracion_no_revisada, declaracion_sustituida. Emite declaracion.pagada.",
         "tags": [
           "fiscal"
         ],
@@ -13309,8 +13450,8 @@
     "/api/v1/declaraciones/{id}/revisar": {
       "post": {
         "operationId": "declaracionRevisar",
-        "summary": "Revisar el borrador: liquidación obligatoria y bloqueo de impuestos",
-        "description": "Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Si cambia el remanente que deja, rectifica en la misma transacción cada mes posterior ya revisado (cascada[]; 409 cascada_bloqueada si uno no se puede). Emite declaracion.revisada (motivo cascada en los rectificados) y libro.bloqueo_cambiado.",
+        "summary": "Revisar el borrador: liquidación obligatoria (y bloqueo de impuestos en IVA, PC y retenciones)",
+        "description": "Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del periodo (sustitutiva: la diferencia, con fecha de hoy): IVA 2.1.02 / 1.1.04 + 1.1.05 + 2.1.06; PC 5.3.04 / 2.1.09; ISR opcional 5.5.01 / 1.1.06 + 2.1.07; ISR trimestral 1.1.07 / 2.1.07 + 1.1.08; ISO 1.1.08 / 2.1.08; ISR anual y retenciones sin asiento. Bloqueo impuestos al último día en IVA, PC y retenciones. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar, ejercicio_cerrado (ISR anual), iso_sin_saldo; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado, retenciones_cuadradas). IVA y PC: si cambia el remanente que deja, rectifica en la misma transacción cada mes posterior ya revisado (cascada[]; 409 cascada_bloqueada si uno no se puede). Emite declaracion.revisada (motivo cascada en los rectificados) y libro.bloqueo_cambiado.",
         "tags": [
           "fiscal"
         ],
@@ -13411,11 +13552,270 @@
         "x-implementado": true
       }
     },
+    "/api/v1/declaraciones/ajustes": {
+      "get": {
+        "operationId": "declaracionesAjustesListar",
+        "summary": "Ajustes fiscales del ISR de un año (con sus anulaciones)",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "anio",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          },
+          {
+            "name": "trimestre",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ajustes del año",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AjusteFiscal"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "declaracionesAjustesRegistrar",
+        "summary": "Registrar (o anular con anula_a) un ajuste fiscal del ISR",
+        "description": "Lleva el resultado contable a la renta imponible del ISR por cierre parcial (trimestre) o anual (trimestre null): suma o resta. Solo inserción; anula_a anula un ajuste (409 ajuste_anulado si ya lo estaba). 409 ejercicio_cerrado en un ajuste anual de un año cerrado. El borrador del periodo queda desactualizado.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "anio": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 2000,
+                    "maximum": 2100,
+                    "description": "Año del ajuste (obligatorio salvo con anula_a)"
+                  },
+                  "trimestre": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 4,
+                    "description": "Trimestre del cierre parcial (1 a 4); null o ausente = ajuste del ISR anual"
+                  },
+                  "efecto": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "suma",
+                          "resta"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "suma (no deducible) o resta (renta exenta) a la renta imponible; obligatorio salvo con anula_a"
+                  },
+                  "concepto": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "monto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Monto mayor que cero; obligatorio salvo con anula_a"
+                  },
+                  "anula_a": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Ajuste que esta fila anula (repite su año, trimestre, efecto y monto)"
+                  }
+                },
+                "required": [
+                  "concepto"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ajuste registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjusteFiscal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.ajustar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.ajustar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/declaraciones/calcular": {
       "post": {
         "operationId": "declaracionCalcular",
-        "summary": "Calcular el borrador de una declaración (IVA o pequeño contribuyente) del mes",
-        "description": "Versión nueva desde el libro de ventas, el de compras y las constancias de retención del mes. 422 antes_de_inicio_libros, obligacion_no_aplica, impuesto_no_soportado, parametro_sin_confirmar; 409 declaracion_revisada / declaracion_presentada sin sustitutiva. Emite declaracion.calculada.",
+        "summary": "Calcular el borrador de una declaración del periodo (IVA, PC, ISR, ISO o retenciones)",
+        "description": "Versión nueva desde los documentos y el libro del periodo (AAAA-MM, AAAA-Tn o AAAA según el impuesto). 422 periodo, antes_de_inicio_libros, obligacion_no_aplica, parametro_sin_confirmar, regla_no_soportada (iso_acreditamiento isr_a_iso, iso_base_periodo distinto de anio_anterior, iso_exencion_inicio); 409 declaracion_revisada / declaracion_presentada sin sustitutiva, ejercicio_cerrado (ISR anual de un año cerrado). Emite declaracion.calculada.",
         "tags": [
           "fiscal"
         ],
@@ -13451,14 +13851,20 @@
                     "type": "string",
                     "enum": [
                       "iva_mensual",
-                      "pc_mensual"
+                      "pc_mensual",
+                      "isr_opcional_mensual",
+                      "isr_trimestral",
+                      "iso_trimestral",
+                      "isr_anual",
+                      "retenciones_iva",
+                      "retenciones_isr"
                     ],
-                    "description": "iva_mensual (SAT-2237) o pc_mensual (SAT-2046); ISR, ISO y retenciones llegan después"
+                    "description": "iva_mensual (SAT-2237), pc_mensual (SAT-2046), isr_opcional_mensual (SAT-1311), isr_trimestral (SAT-1361), iso_trimestral (SAT-1608), isr_anual (SAT-1411), retenciones_iva (SAT-2340), retenciones_isr"
                   },
                   "periodo": {
                     "type": "string",
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-                    "description": "Mes AAAA-MM"
+                    "pattern": "^\\d{4}(-(0[1-9]|1[0-2])|-T[1-4])?$",
+                    "description": "AAAA-MM en las mensuales, AAAA-Tn (T1 a T4) en isr_trimestral e iso_trimestral, AAAA en isr_anual; otro formato para el impuesto: 422 periodo"
                   },
                   "sustitutiva": {
                     "description": "true para recalcular un periodo ya revisado o presentado (versión sustitutiva)",
@@ -13535,6 +13941,85 @@
           }
         },
         "x-permiso": "declaraciones.calcular",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/declaraciones/cuentas-pago": {
+      "get": {
+        "operationId": "declaracionesCuentasPago",
+        "summary": "Bancos del libro de los que puede salir el pago de una declaración",
+        "description": "Lo mismo que GET /libro/bancos (su id es el banco_id de registrar-pago con metodo banco) para quien paga declaraciones sin egresos.ver (pedido de A4). El número va enmascarado.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bancos del libro",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BancoLibro"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso declaraciones.pagar",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "declaraciones.pagar",
         "x-implementado": true
       }
     },
@@ -32303,7 +32788,7 @@
       "post": {
         "operationId": "libroCerrarEjercicio",
         "summary": "Cerrar el ejercicio anual (ISR, resultados a cero, traslado y reserva legal)",
-        "description": "Con fecha 31-dic y diario CIE: provisión del ISR (5.5.01 / 1.1.07 + 1.1.08 + 2.1.07), cancelación de ingresos y gastos contra 3.3.03, traslado 3.3.03 → 3.3.02 → 3.3.01 y reserva legal (reserva_legal_pct × la base de reserva_legal_base) si hubo utilidad; después cierra diciembre. El ISR lo escribe el usuario (obligatorio, 0.00 si no hay). 422 ejercicio_requisitos (rule: meses_abiertos, diciembre_cerrado, dte_pendientes, ejercicio_anterior_abierto), 422 isr_acreditable, 409 ejercicio_cerrado.",
+        "description": "Con fecha 31-dic y diario CIE: ISO vencido sin acreditar a 5.3.03 (5.3.03 / 1.1.08), provisión del ISR (5.5.01 / 1.1.07 + 1.1.08 + 2.1.07), cancelación de ingresos y gastos contra 3.3.03, traslado 3.3.03 → 3.3.02 → 3.3.01 y reserva legal (reserva_legal_pct × la base de reserva_legal_base) si hubo utilidad; después cierra diciembre. Con declaración ISR anual del año, el ISR y lo acreditado salen de su versión revisada (isr en el cuerpo: 422 isr_de_declaracion; sin revisar: 422 declaracion_sin_revisar; desactualizada: 409 declaracion_desactualizada); sin ella, el ISR lo escribe el usuario (obligatorio, 0.00 si no hay). 422 ejercicio_requisitos (rule: meses_abiertos, diciembre_cerrado, dte_pendientes, ejercicio_anterior_abierto), 422 isr_acreditable, 409 ejercicio_cerrado.",
         "tags": [
           "libro"
         ],
@@ -32349,7 +32834,10 @@
                     "maximum": 2100
                   },
                   "isr": {
-                    "type": "object",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
                     "properties": {
                       "monto": {
                         "type": "string",
@@ -32394,12 +32882,11 @@
                       "monto"
                     ],
                     "additionalProperties": false,
-                    "description": "ISR del cierre: monto obligatorio (0.00 si no hay); lo escribe el usuario hasta que existan las declaraciones. Queda en el cierre y en la auditoría"
+                    "description": "ISR del cierre escrito a mano: obligatorio (0.00 si no hay) cuando el año no tiene declaración ISR anual; con ella se omite (422 isr_de_declaracion) y el ISR y lo acreditado salen de su versión revisada. Queda en el cierre y en la auditoría"
                   }
                 },
                 "required": [
-                  "anio",
-                  "isr"
+                  "anio"
                 ],
                 "additionalProperties": false
               }
@@ -48198,6 +48685,8 @@
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
+                        "declaraciones.ajustar",
+                        "declaraciones.anular_pago",
                         "declaraciones.calcular",
                         "declaraciones.pagar",
                         "declaraciones.presentar",
@@ -48492,6 +48981,8 @@
                         "comprobantes.ver",
                         "cuentas_bancarias.editar",
                         "cuentas_bancarias.ver",
+                        "declaraciones.ajustar",
+                        "declaraciones.anular_pago",
                         "declaraciones.calcular",
                         "declaraciones.pagar",
                         "declaraciones.presentar",
@@ -54559,6 +55050,8 @@
                             "comprobantes.ver",
                             "cuentas_bancarias.editar",
                             "cuentas_bancarias.ver",
+                            "declaraciones.ajustar",
+                            "declaraciones.anular_pago",
                             "declaraciones.calcular",
                             "declaraciones.pagar",
                             "declaraciones.presentar",
@@ -56710,6 +57203,83 @@
           },
           "mensaje": {
             "type": "string"
+          }
+        }
+      },
+      "AjusteFiscal": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "anio",
+          "trimestre",
+          "efecto",
+          "concepto",
+          "monto",
+          "anula_a",
+          "anulado_por_ajuste",
+          "registrado_por",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "anio": {
+            "type": "integer"
+          },
+          "trimestre": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "1 a 4 (cierre parcial); null = ISR anual"
+          },
+          "efecto": {
+            "type": "string",
+            "enum": [
+              "suma",
+              "resta"
+            ]
+          },
+          "concepto": {
+            "type": "string"
+          },
+          "monto": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "anula_a": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Ajuste que esta fila anula"
+          },
+          "anulado_por_ajuste": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Ajuste que anuló esta fila (null = vigente)"
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -62412,17 +62982,21 @@
           "totales",
           "datos_hash",
           "calculada_por",
+          "calculada_por_nombre",
           "calculada_en",
           "estado",
           "revisada_por",
+          "revisada_por_nombre",
           "revisada_en",
           "asiento_id",
           "numero_formulario",
           "fecha_presentacion",
           "boleta",
           "presentada_por",
+          "presentada_por_nombre",
           "presentada_en",
           "pago",
+          "pagos_anulados",
           "created_at",
           "updated_at"
         ],
@@ -62541,6 +63115,20 @@
                 ],
                 "minimum": 1,
                 "description": "Declaración del mes anterior de la que salen los remanentes"
+              },
+              "notas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Criterios aplicados y los que debe confirmar el contador (ISR, ISO y retenciones; ausente en IVA y pequeño contribuyente)"
+              },
+              "calculo": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RenglonCalculo"
+                },
+                "description": "Renglones del cálculo de ISR e ISO: cuentas de resultados, ajustes fiscales, pagos trimestrales e ISO acreditado (ausente en IVA y pequeño contribuyente)"
               }
             }
           },
@@ -62550,7 +63138,7 @@
               "type": "string",
               "pattern": "^-?\\d+\\.\\d{2}$"
             },
-            "description": "IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas"
+            "description": "Todas llevan a_pagar. IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas. ISR opcional: base, retenciones, base_retenida, base_no_retenida, isr_art44, isr_art46, isr, retenciones_usadas. ISR trimestral: ingresos, gastos, no_deducibles, ajustes_suma, ajustes_resta, renta_imponible, isr, iso_disponible, iso_acreditado. ISO: activo_neto, ingresos_brutos, costo_ventas, margen_bruto (por ciento), base_activo, base_ingresos, base, impuesto. ISR anual: los del trimestral más pagos_trimestrales, trimestral_acreditado, saldo_a_favor, iso_por_vencer. Retenciones: base, retenido"
           },
           "datos_hash": {
             "type": "string",
@@ -62562,6 +63150,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "calculada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien calculó la versión"
           },
           "calculada_en": {
             "type": "string",
@@ -62582,6 +63177,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "revisada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien la revisó"
           },
           "revisada_en": {
             "type": [
@@ -62624,6 +63226,13 @@
             ],
             "minimum": 1
           },
+          "presentada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien la marcó presentada"
+          },
           "presentada_en": {
             "type": [
               "string",
@@ -62639,7 +63248,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Pago vigente (sin anular) de esta versión"
+          },
+          "pagos_anulados": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoDeclaracionAnulado"
+            },
+            "description": "Pagos anulados de esta versión con su anulación (declaraciones.anular_pago)"
           },
           "created_at": {
             "type": "string",
@@ -62670,17 +63287,21 @@
           "totales",
           "datos_hash",
           "calculada_por",
+          "calculada_por_nombre",
           "calculada_en",
           "estado",
           "revisada_por",
+          "revisada_por_nombre",
           "revisada_en",
           "asiento_id",
           "numero_formulario",
           "fecha_presentacion",
           "boleta",
           "presentada_por",
+          "presentada_por_nombre",
           "presentada_en",
           "pago",
+          "pagos_anulados",
           "created_at",
           "updated_at",
           "desactualizada"
@@ -62800,6 +63421,20 @@
                 ],
                 "minimum": 1,
                 "description": "Declaración del mes anterior de la que salen los remanentes"
+              },
+              "notas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Criterios aplicados y los que debe confirmar el contador (ISR, ISO y retenciones; ausente en IVA y pequeño contribuyente)"
+              },
+              "calculo": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RenglonCalculo"
+                },
+                "description": "Renglones del cálculo de ISR e ISO: cuentas de resultados, ajustes fiscales, pagos trimestrales e ISO acreditado (ausente en IVA y pequeño contribuyente)"
               }
             }
           },
@@ -62809,7 +63444,7 @@
               "type": "string",
               "pattern": "^-?\\d+\\.\\d{2}$"
             },
-            "description": "IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas"
+            "description": "Todas llevan a_pagar. IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas. ISR opcional: base, retenciones, base_retenida, base_no_retenida, isr_art44, isr_art46, isr, retenciones_usadas. ISR trimestral: ingresos, gastos, no_deducibles, ajustes_suma, ajustes_resta, renta_imponible, isr, iso_disponible, iso_acreditado. ISO: activo_neto, ingresos_brutos, costo_ventas, margen_bruto (por ciento), base_activo, base_ingresos, base, impuesto. ISR anual: los del trimestral más pagos_trimestrales, trimestral_acreditado, saldo_a_favor, iso_por_vencer. Retenciones: base, retenido"
           },
           "datos_hash": {
             "type": "string",
@@ -62821,6 +63456,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "calculada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien calculó la versión"
           },
           "calculada_en": {
             "type": "string",
@@ -62841,6 +63483,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "revisada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien la revisó"
           },
           "revisada_en": {
             "type": [
@@ -62883,6 +63532,13 @@
             ],
             "minimum": 1
           },
+          "presentada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien la marcó presentada"
+          },
           "presentada_en": {
             "type": [
               "string",
@@ -62898,7 +63554,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Pago vigente (sin anular) de esta versión"
+          },
+          "pagos_anulados": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoDeclaracionAnulado"
+            },
+            "description": "Pagos anulados de esta versión con su anulación (declaraciones.anular_pago)"
           },
           "created_at": {
             "type": "string",
@@ -62933,17 +63597,21 @@
           "totales",
           "datos_hash",
           "calculada_por",
+          "calculada_por_nombre",
           "calculada_en",
           "estado",
           "revisada_por",
+          "revisada_por_nombre",
           "revisada_en",
           "asiento_id",
           "numero_formulario",
           "fecha_presentacion",
           "boleta",
           "presentada_por",
+          "presentada_por_nombre",
           "presentada_en",
           "pago",
+          "pagos_anulados",
           "created_at",
           "updated_at",
           "cascada"
@@ -63063,6 +63731,20 @@
                 ],
                 "minimum": 1,
                 "description": "Declaración del mes anterior de la que salen los remanentes"
+              },
+              "notas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Criterios aplicados y los que debe confirmar el contador (ISR, ISO y retenciones; ausente en IVA y pequeño contribuyente)"
+              },
+              "calculo": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RenglonCalculo"
+                },
+                "description": "Renglones del cálculo de ISR e ISO: cuentas de resultados, ajustes fiscales, pagos trimestrales e ISO acreditado (ausente en IVA y pequeño contribuyente)"
               }
             }
           },
@@ -63072,7 +63754,7 @@
               "type": "string",
               "pattern": "^-?\\d+\\.\\d{2}$"
             },
-            "description": "IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas"
+            "description": "Todas llevan a_pagar. IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas. ISR opcional: base, retenciones, base_retenida, base_no_retenida, isr_art44, isr_art46, isr, retenciones_usadas. ISR trimestral: ingresos, gastos, no_deducibles, ajustes_suma, ajustes_resta, renta_imponible, isr, iso_disponible, iso_acreditado. ISO: activo_neto, ingresos_brutos, costo_ventas, margen_bruto (por ciento), base_activo, base_ingresos, base, impuesto. ISR anual: los del trimestral más pagos_trimestrales, trimestral_acreditado, saldo_a_favor, iso_por_vencer. Retenciones: base, retenido"
           },
           "datos_hash": {
             "type": "string",
@@ -63084,6 +63766,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "calculada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien calculó la versión"
           },
           "calculada_en": {
             "type": "string",
@@ -63104,6 +63793,13 @@
               "null"
             ],
             "minimum": 1
+          },
+          "revisada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien la revisó"
           },
           "revisada_en": {
             "type": [
@@ -63146,6 +63842,13 @@
             ],
             "minimum": 1
           },
+          "presentada_por_nombre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nombre de quien la marcó presentada"
+          },
           "presentada_en": {
             "type": [
               "string",
@@ -63161,7 +63864,15 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Pago vigente (sin anular) de esta versión"
+          },
+          "pagos_anulados": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoDeclaracionAnulado"
+            },
+            "description": "Pagos anulados de esta versión con su anulación (declaraciones.anular_pago)"
           },
           "created_at": {
             "type": "string",
@@ -69489,7 +70200,14 @@
           },
           "regla": {
             "type": "object",
-            "required": [],
+            "required": [
+              "parametro",
+              "valor",
+              "vigente_desde",
+              "nivel",
+              "vence_base",
+              "corrido_a_habil"
+            ],
             "properties": {
               "parametro": {
                 "type": "string",
@@ -69528,8 +70246,7 @@
                 "description": "vence_base caía en día inhábil"
               }
             },
-            "additionalProperties": true,
-            "description": "Cómo se calculó el vencimiento. La API envía siempre los seis campos; van opcionales en el tipo para no romper los fixtures que lo tenían como objeto libre"
+            "description": "Cómo se calculó el vencimiento (los seis campos, siempre)"
           },
           "version": {
             "type": "integer"
@@ -70001,6 +70718,115 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PagoDeclaracionAnulado": {
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "impuesto",
+          "mora",
+          "multa",
+          "total",
+          "dias_atraso",
+          "boleta",
+          "asiento_id",
+          "registrado_por",
+          "created_at",
+          "anulacion"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "impuesto": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "mora": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "multa": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$"
+          },
+          "dias_atraso": {
+            "type": "integer"
+          },
+          "boleta": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "registrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "anulacion": {
+            "type": "object",
+            "required": [
+              "id",
+              "motivo",
+              "asiento_id",
+              "anulado_por",
+              "anulado_por_nombre",
+              "created_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "motivo": {
+                "type": "string"
+              },
+              "asiento_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Reverso del asiento pago_impuesto"
+              },
+              "anulado_por": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "anulado_por_nombre": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           }
         }
       },
@@ -75553,6 +76379,79 @@
                 }
               }
             }
+          }
+        }
+      },
+      "RenglonCalculo": {
+        "type": "object",
+        "required": [
+          "seccion",
+          "origen",
+          "documento",
+          "fecha",
+          "tipo",
+          "nit",
+          "base",
+          "iva",
+          "total",
+          "estado"
+        ],
+        "properties": {
+          "seccion": {
+            "type": "string",
+            "enum": [
+              "resultados",
+              "ajustes",
+              "declaraciones",
+              "iso"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "description": "cuenta, ajuste_fiscal, declaracion o iso"
+          },
+          "documento": {
+            "type": "string",
+            "description": "Cuenta, ajuste, declaración trimestral o trimestre de ISO"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ingreso, gasto, no_deducible, suma, resta, isr_trimestral, ISO"
+          },
+          "nit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$",
+            "description": "Monto de la cuenta o del ajuste; renta del trimestre; saldo del ISO"
+          },
+          "iva": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$",
+            "description": "ISR del trimestre (declaraciones) o ISO acreditado (iso); 0.00 en resultados y ajustes"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$",
+            "description": "Con signo (ajuste que resta: negativo); ISO: saldo que queda"
+          },
+          "estado": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "iso: trimestre de ISO (primer día)"
           }
         }
       },

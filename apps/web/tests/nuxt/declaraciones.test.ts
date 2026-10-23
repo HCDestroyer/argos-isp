@@ -48,7 +48,7 @@ describe('declaraciones', () => {
         expect(seccionesTotales('iva_mensual').map(s => s.id)).toEqual(['debitos', 'creditos', 'retenciones', 'determinado', 'liquidacion'])
         expect(seccionesTotales('pc_mensual').flatMap(s => s.filas.map(f => f.clave))).toContain('iva_en_ventas')
         const base = { pago: null, totales: { a_pagar: '534.00' } }
-        expect(accionesDeclaracion({ ...base, estado: 'borrador' })).toEqual({ revisar: true, presentar: false, pagar: false, recalcular: true, sustitutiva: false })
+        expect(accionesDeclaracion({ ...base, estado: 'borrador' })).toEqual({ revisar: true, presentar: false, pagar: false, anularPago: false, recalcular: true, sustitutiva: false })
         expect(accionesDeclaracion({ ...base, estado: 'revisada' })).toMatchObject({ presentar: true, pagar: true, sustitutiva: true })
         expect(accionesDeclaracion({ ...base, estado: 'presentada', totales: { a_pagar: '0.00' } }).pagar).toBe(false)
         expect(accionesDeclaracion({ ...base, estado: 'sustituida' }).recalcular).toBe(false)
@@ -61,7 +61,7 @@ describe('declaraciones', () => {
 
         const calcular = esquemaCalcularDeclaracion('2026-10-15')
         expect(calcular.safeParse({ impuesto: 'iva_mensual', periodo: '2026-09', sustitutiva: false }).data).toEqual({ impuesto: 'iva_mensual', periodo: '2026-09' })
-        expect(calcular.safeParse({ impuesto: 'iva_mensual', periodo: '2026-11', sustitutiva: false }).error?.issues[0]?.message).toBe('El mes no puede ser futuro')
+        expect(calcular.safeParse({ impuesto: 'iva_mensual', periodo: '2026-11', sustitutiva: false }).error?.issues[0]?.message).toBe('El periodo no puede ser futuro')
         const presentar = esquemaPresentarDeclaracion('2026-10-15')
         expect(presentar.safeParse({ numero_formulario: '22', fecha_presentacion: '2026-10-15', boleta: '' }).error?.issues[0]?.path).toEqual(['numero_formulario'])
         expect(presentar.safeParse({ numero_formulario: '2237-1', fecha_presentacion: '2026-10-16', boleta: '' }).error?.issues[0]?.message).toBe('No puede ser futura')
@@ -98,7 +98,7 @@ describe('declaraciones', () => {
         expect(revisada.ok && [revisada.data.estado, revisada.data.asiento_id !== null]).toEqual(['revisada', true])
         expect(bd.bloqueosLibro.filter(b => b.empresa_id === 1 && b.tipo === 'impuestos').at(-1)?.hasta).toBe('2026-09-30')
         // Como la API: la verificación previa deja `iva_liquidado` sin liquidar; la posterior, en orden.
-        expect(bd.checksCierre.filter(c => c.tipo === 'impuestos' && c.periodo === '2026-09-01').map(c => [c.clave, c.resultado])).toEqual([['iva_cuadrado', 'ok'], ['iva_liquidado', 'anomalia'], ['iva_liquidado', 'ok']])
+        expect(bd.checksCierre.filter(c => c.tipo === 'impuestos' && c.periodo === '2026-09-01').map(c => [c.clave, c.resultado])).toEqual([['iva_cuadrado', 'ok'], ['iva_liquidado', 'anomalia'], ['retenciones_cuadradas', 'ok'], ['iva_liquidado', 'ok']])
         const otra = await d.calcular({ impuesto: 'iva_mensual', periodo: '2026-09' }, nuevaClaveIdempotencia())
         expect(!otra.ok && codigoProblema(otra.problema)).toBe('declaracion_revisada')
         const sustitutiva = await d.calcular({ impuesto: 'iva_mensual', periodo: '2026-09', sustitutiva: true }, nuevaClaveIdempotencia())
@@ -111,12 +111,12 @@ describe('declaraciones', () => {
         const desactualizada = sustitutiva.ok ? await d.revisar(sustitutiva.data.id, nuevaClaveIdempotencia()) : null
         expect(desactualizada && !desactualizada.ok && codigoProblema(desactualizada.problema)).toBe('declaracion_desactualizada')
 
-        // Octubre no ha terminado, junio es anterior al inicio de los libros y ArgosNet no es pequeño contribuyente.
+        // Octubre no ha terminado, diciembre de 2024 es anterior al inicio de los libros y ArgosNet no es pequeño contribuyente.
         const octubre = await d.calcular({ impuesto: 'iva_mensual', periodo: '2026-10' }, nuevaClaveIdempotencia())
         const enCurso = octubre.ok ? await d.revisar(octubre.data.id, nuevaClaveIdempotencia()) : null
         expect(enCurso && !enCurso.ok && codigoProblema(enCurso.problema)).toBe('periodo_en_curso')
-        const junio = await d.calcular({ impuesto: 'iva_mensual', periodo: '2026-06' }, nuevaClaveIdempotencia())
-        expect(!junio.ok && codigoProblema(junio.problema)).toBe('antes_de_inicio_libros')
+        const antes2025 = await d.calcular({ impuesto: 'iva_mensual', periodo: '2024-12' }, nuevaClaveIdempotencia())
+        expect(!antes2025.ok && codigoProblema(antes2025.problema)).toBe('antes_de_inicio_libros')
         const pc = await d.calcular({ impuesto: 'pc_mensual', periodo: '2026-09' }, nuevaClaveIdempotencia())
         expect(!pc.ok && codigoProblema(pc.problema)).toBe('obligacion_no_aplica')
 

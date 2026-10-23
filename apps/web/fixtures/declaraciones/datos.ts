@@ -1,6 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import { huellaFixture } from '../libros/datos'
+import { isrAnual, retencionEmitida, retenciones, RESULTADOS } from './renta'
 
 /**
  * Declaraciones de IVA y de pequeño contribuyente (A3, fase 7 PR B; contrato fiscal §21 PR B). Lo que
@@ -12,13 +13,16 @@ import { huellaFixture } from '../libros/datos'
  *
  * ArgosNet (1, IVA SAT-2237): julio revisada, presentada y pagada a tiempo; agosto v1 sustituida y v2
  * sustitutiva presentada el 02/10 (venció el 30/09) y sin pagar, así su pago lleva mora y multa;
- * septiembre y octubre sin calcular. Fibra del Sur (2, pequeño contribuyente SAT-2046, 5 %): agosto
- * presentada y pagada; septiembre sin calcular.
+ * septiembre y octubre sin calcular. ISR anual 2025 presentado y pagado (5; su cierre anual sale de
+ * él) y retenciones de IVA de agosto presentadas y pagadas (6). Fibra del Sur (2, pequeño
+ * contribuyente SAT-2046, 5 %): agosto presentada y pagada; septiembre sin calcular. ISR, ISO y
+ * retenciones: `renta.ts`.
  */
 
 export type Declaracion = Schema<'Declaracion'>
 type Renglon = Schema<'RenglonDeclaracion'>
 type ImpuestoDeclarable = 'iva_mensual' | 'pc_mensual'
+type Impuesto = Declaracion['impuesto']
 
 /** Lo que la API leería hoy de los libros de un mes. */
 export interface DatosMes {
@@ -26,6 +30,8 @@ export interface DatosMes {
     /** AAAA-MM */
     periodo: string
     renglones: Renglon[]
+    /** Retenciones hechas en las compras del mes (`RET_IVA_EMI`, `RET_ISR_EMI`): las declaraciones de retenciones. */
+    emitidas?: Renglon[]
 }
 
 function venta(documento: string, fecha: string, base: string, iva: string, tipo = 'FACT', nit: string | null = 'CF'): Renglon {
@@ -61,6 +67,10 @@ export function datosIniciales(): DatosMes[] {
                 compra(7, 'FACT C-90', '2026-08-10', '4000.00', '480.00', '3321456-1'),
                 retencion('Constancia R-131', '2026-08-29', '1500.00', '25.00', '4512378-9'),
             ],
+            emitidas: [
+                retencionEmitida(7, 'FACT C-90', '2026-08-10', 'RET_IVA_EMI', '480.00', '72.00', '3321456-1'),
+                retencionEmitida(7, 'FACT C-90', '2026-08-10', 'RET_ISR_EMI', '4000.00', '200.00', '3321456-1'),
+            ],
         },
         {
             empresa_id: 1,
@@ -71,6 +81,10 @@ export function datosIniciales(): DatosMes[] {
                 { ...venta('NCRE A-12', '2026-09-22', '-500.00', '-60.00', 'NCRE'), origen: 'dte' },
                 compra(9, 'FACT B-602', '2026-09-08', '6000.00', '720.00', '3321456-1'),
                 retencion('Constancia R-140', '2026-09-30', '2000.00', '30.00', '4512378-9'),
+            ],
+            emitidas: [
+                retencionEmitida(9, 'FACT B-602', '2026-09-08', 'RET_IVA_EMI', '720.00', '108.00', '3321456-1'),
+                retencionEmitida(9, 'FACT B-602', '2026-09-08', 'RET_ISR_EMI', '6000.00', '300.00', '3321456-1'),
             ],
         },
         {
@@ -145,19 +159,65 @@ export function calcularTotales(impuesto: ImpuestoDeclarable, renglones: readonl
     }
 }
 
-/** Parámetros que guarda el borrador: el plazo y formulario y, en pequeño contribuyente, la tasa. */
-export function parametrosDe(impuesto: ImpuestoDeclarable): Declaracion['parametros'] {
-    return impuesto === 'iva_mensual'
-        ? [{ clave: 'iva_declaracion', valor: { periodo: 'mensual', plazo: 'mes_siguiente', formulario: 'SAT-2237' }, vigente_desde: '2013-01-01', nivel: 'paquete' }]
-        : [
-                { clave: 'pc_declaracion', valor: { periodo: 'mensual', plazo: 'mes_siguiente', formulario: 'SAT-2046' }, vigente_desde: '2013-01-01', nivel: 'paquete' },
-                { clave: 'impuesto:IVA_PC', valor: '5.00', vigente_desde: '2013-01-01', nivel: 'paquete' },
-            ]
+const PLAZO_PAQUETE: Record<Impuesto, { clave: string, valor: Record<string, unknown> }> = {
+    iva_mensual: { clave: 'iva_declaracion', valor: { periodo: 'mensual', plazo: 'mes_siguiente', formulario: 'SAT-2237' } },
+    pc_mensual: { clave: 'pc_declaracion', valor: { periodo: 'mensual', plazo: 'mes_siguiente', formulario: 'SAT-2046' } },
+    isr_opcional_mensual: { clave: 'isr_opcional_plazo', valor: { dias: 10, dias_habiles: true, formulario: 'SAT-1311' } },
+    isr_trimestral: { clave: 'isr_trimestral_plazo', valor: { plazo: 'mes_siguiente', cuarto_trimestre: 'con_la_anual', formulario: 'SAT-1361' } },
+    iso_trimestral: { clave: 'iso_plazo', valor: { plazo: 'mes_siguiente', formulario: 'SAT-1608' } },
+    isr_anual: { clave: 'isr_anual_plazo', valor: { vence: '03-31', formulario: 'SAT-1411' } },
+    retenciones_iva: { clave: 'ret_iva_plazo', valor: { dias: 15, dias_habiles: true, formulario: 'SAT-2340' } },
+    retenciones_isr: { clave: 'isr_retenciones_plazo', valor: { dias: 10, formulario: null } },
+}
+
+/** Formulario del plazo del paquete (`null` = por confirmar con contador). */
+export function formularioDe(impuesto: Impuesto): string | null {
+    const formulario = PLAZO_PAQUETE[impuesto].valor.formulario
+    return typeof formulario === 'string' ? formulario : null
+}
+
+/** Parámetros que guarda el borrador: el plazo y formulario y los que usa el cálculo de cada impuesto. */
+export function parametrosDe(impuesto: Impuesto): Declaracion['parametros'] {
+    const paquete = (clave: string, valor: unknown) => ({ clave, valor, vigente_desde: '2013-01-01', nivel: 'paquete' })
+    const plazo = paquete(PLAZO_PAQUETE[impuesto].clave, PLAZO_PAQUETE[impuesto].valor)
+    switch (impuesto) {
+        case 'pc_mensual':
+            return [plazo, paquete('impuesto:IVA_PC', '5.00')]
+        case 'isr_trimestral':
+            return [plazo, paquete('isr_trimestral_metodo', 'renta_presunta'), paquete('isr_trimestral_presunta', '8.00'), paquete('isr_utilidades_tasa', '25.00'), paquete('iso_acreditamiento', 'iso_a_isr')]
+        case 'isr_anual':
+            return [plazo, paquete('isr_utilidades_tasa', '25.00'), paquete('iso_acreditamiento', 'iso_a_isr')]
+        default:
+            return [plazo]
+    }
 }
 
 /** `datos_hash`: huella canónica de renglones, totales, parámetros y la declaración anterior. */
-export function hashDatos(renglones: readonly Renglon[], totales: Record<string, string>, parametros: Declaracion['parametros'], anteriorId: number | null): string {
-    return huellaFixture(JSON.stringify({ renglones, totales, parametros, anterior: anteriorId }))
+export function hashDatos(renglones: readonly Renglon[], totales: Record<string, string>, parametros: Declaracion['parametros'], anteriorId: number | null, calculo: readonly Schema<'RenglonCalculo'>[] = []): string {
+    return huellaFixture(JSON.stringify({ renglones, calculo, totales, parametros, anterior: anteriorId }))
+}
+
+/** Nombre de los usuarios de los fixtures (`*_por_nombre`, `anulado_por_nombre`). */
+export function nombreUsuario(id: number | null): string | null {
+    return id === 1 ? 'Ana Administradora' : id === 2 ? 'Carlos Cajero' : null
+}
+
+/** `AAAA-MM`, `AAAA-Tn` o `AAAA` → primer y último día; `null` si el formato no es el del impuesto. */
+export function rangoPeriodo(impuesto: Impuesto, periodo: string): { desde: string, hasta: string } | null {
+    const anual = impuesto === 'isr_anual'
+    const trimestral = impuesto === 'isr_trimestral' || impuesto === 'iso_trimestral'
+    if (anual) {
+        return /^\d{4}$/.test(periodo) ? { desde: `${periodo}-01-01`, hasta: `${periodo}-12-31` } : null
+    }
+    if (trimestral) {
+        const m = /^(\d{4})-T([1-4])$/.exec(periodo)
+        if (!m) {
+            return null
+        }
+        const inicio = (Number(m[2]) - 1) * 3 + 1
+        return { desde: `${m[1]}-${String(inicio).padStart(2, '0')}-01`, hasta: finDeMes(`${m[1]}-${String(inicio + 2).padStart(2, '0')}`) }
+    }
+    return /^\d{4}-(0[1-9]|1[0-2])$/.test(periodo) ? { desde: `${periodo}-01`, hasta: finDeMes(periodo) } : null
 }
 
 export function finDeMes(periodo: string): string {
@@ -168,7 +228,7 @@ export function finDeMes(periodo: string): string {
 interface Semilla {
     id: number
     empresa_id: number
-    impuesto: ImpuestoDeclarable
+    impuesto: Impuesto
     periodo: string
     version: number
     obligacion_id: number
@@ -182,40 +242,51 @@ interface Semilla {
     presentada?: { numero: string, fecha: string, en: string } | null
     pago?: Schema<'PagoDeclaracion'> | null
     asiento_id?: number | null
+    /** Para ISR y retenciones: totales, cálculo y notas ya calculados (los de IVA y PC salen de los renglones). */
+    renta?: { totales: Record<string, string>, calculo: Schema<'RenglonCalculo'>[], notas: string[] }
+    hasta?: string
 }
 
 function semilla(s: Semilla): Declaracion {
     const parametros = parametrosDe(s.impuesto)
-    const totales = calcularTotales(s.impuesto, s.renglones, s.anterior)
-    const calculada = `${finDeMes(s.periodo)}T23:00:00.000Z`
+    const totales = s.renta?.totales ?? calcularTotales(s.impuesto === 'pc_mensual' ? 'pc_mensual' : 'iva_mensual', s.renglones, s.anterior)
+    const calculo = s.renta?.calculo ?? []
+    const hasta = s.hasta ?? finDeMes(s.periodo)
+    const calculada = `${hasta}T23:00:00.000Z`
     return {
         id: s.id,
         empresa_id: s.empresa_id,
         impuesto: s.impuesto,
         periodo_desde: `${s.periodo}-01`,
-        periodo_hasta: finDeMes(s.periodo),
+        periodo_hasta: hasta,
         version: s.version,
         sustitutiva: s.sustitutiva ?? false,
         sustituye_a: s.sustituye_a ?? null,
         obligacion_id: s.obligacion_id,
-        formulario: s.impuesto === 'iva_mensual' ? 'SAT-2237' : 'SAT-2046',
+        formulario: formularioDe(s.impuesto),
         vence_en: s.vence_en,
         parametros,
-        detalle: { renglones: s.renglones, libros: [], anterior_id: s.anterior.id },
+        detalle: s.renta
+            ? { renglones: s.renglones, libros: [], anterior_id: s.anterior.id, calculo, notas: s.renta.notas }
+            : { renglones: s.renglones, libros: [], anterior_id: s.anterior.id },
         totales,
-        datos_hash: hashDatos(s.renglones, totales, parametros, s.anterior.id),
+        datos_hash: hashDatos(s.renglones, totales, parametros, s.anterior.id, calculo),
         calculada_por: 1,
+        calculada_por_nombre: nombreUsuario(1),
         calculada_en: calculada,
         estado: s.estado,
         revisada_por: s.revisada_en ? 1 : null,
+        revisada_por_nombre: s.revisada_en ? nombreUsuario(1) : null,
         revisada_en: s.revisada_en ?? null,
         asiento_id: s.asiento_id ?? null,
         numero_formulario: s.presentada?.numero ?? null,
         fecha_presentacion: s.presentada?.fecha ?? null,
         boleta: null,
         presentada_por: s.presentada ? 1 : null,
+        presentada_por_nombre: s.presentada ? nombreUsuario(1) : null,
         presentada_en: s.presentada?.en ?? null,
         pago: s.pago ?? null,
+        pagos_anulados: [],
         created_at: calculada,
         updated_at: s.presentada?.en ?? s.revisada_en ?? calculada,
     }
@@ -291,5 +362,41 @@ export function declaracionesIniciales(datos: readonly DatosMes[]): Declaracion[
         presentada: { numero: '2046-0000981234', fecha: '2026-09-15', en: '2026-09-15T16:00:00.000Z' },
         pago: { id: 2, fecha: '2026-09-15', impuesto: '900.00', mora: '0.00', multa: '0.00', total: '900.00', dias_atraso: 0, boleta: 'BI-801144', asiento_id: 806, registrado_por: 1, created_at: '2026-09-15T16:10:00.000Z' },
     })
-    return [julio, agostoV1, agostoV2, pcAgosto]
+    // ISR anual 2025 (su cierre anual todavía no se hace: lo provisiona desde esta declaración).
+    const isr2025 = semilla({
+        id: 5,
+        empresa_id: 1,
+        impuesto: 'isr_anual',
+        periodo: '2025-01',
+        hasta: '2025-12-31',
+        version: 1,
+        obligacion_id: 20,
+        vence_en: '2026-03-31',
+        renglones: [],
+        anterior: SIN_ANTERIOR,
+        renta: isrAnual(2025, RESULTADOS['1-2025'] ?? [], [], []),
+        estado: 'presentada',
+        revisada_en: '2026-03-20T16:00:00.000Z',
+        presentada: { numero: '1411-0000771203', fecha: '2026-03-27', en: '2026-03-27T16:00:00.000Z' },
+        pago: { id: 3, fecha: '2026-03-27', impuesto: '12500.00', mora: '0.00', multa: '0.00', total: '12500.00', dias_atraso: 0, boleta: 'BI-650021', asiento_id: 807, registrado_por: 1, created_at: '2026-03-27T16:10:00.000Z' },
+    })
+    // Retenciones de IVA de agosto: revisadas, presentadas y pagadas (sin asiento de liquidación).
+    const emitidasAgosto = datos.find(d => d.empresa_id === 1 && d.periodo === '2026-08')?.emitidas?.filter(r => r.tipo === 'RET_IVA_EMI') ?? []
+    const retencionesIva = semilla({
+        id: 6,
+        empresa_id: 1,
+        impuesto: 'retenciones_iva',
+        periodo: '2026-08',
+        version: 1,
+        obligacion_id: 6,
+        vence_en: '2026-09-21',
+        renglones: emitidasAgosto,
+        anterior: SIN_ANTERIOR,
+        renta: { ...retenciones('iva', emitidasAgosto), calculo: [] },
+        estado: 'presentada',
+        revisada_en: '2026-09-15T16:00:00.000Z',
+        presentada: { numero: '2340-0000340112', fecha: '2026-09-18', en: '2026-09-18T16:00:00.000Z' },
+        pago: { id: 4, fecha: '2026-09-18', impuesto: '72.00', mora: '0.00', multa: '0.00', total: '72.00', dias_atraso: 0, boleta: 'BI-812210', asiento_id: 808, registrado_por: 1, created_at: '2026-09-18T16:10:00.000Z' },
+    })
+    return [julio, agostoV1, agostoV2, pcAgosto, isr2025, retencionesIva]
 }

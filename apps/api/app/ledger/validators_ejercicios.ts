@@ -28,9 +28,11 @@ export const cerrarEjercicioValidator = vine.compile(
                     description: 'De dónde sale el monto (formulario, cálculo del contador…)',
                 }),
             })
+            .nullable()
+            .optional()
             .meta({
                 description:
-                    'ISR del cierre: monto obligatorio (0.00 si no hay); lo escribe el usuario hasta que existan las declaraciones. Queda en el cierre y en la auditoría',
+                    'ISR del cierre escrito a mano: obligatorio (0.00 si no hay) cuando el año no tiene declaración ISR anual; con ella se omite (422 isr_de_declaracion) y el ISR y lo acreditado salen de su versión revisada. Queda en el cierre y en la auditoría',
             }),
     }),
 )

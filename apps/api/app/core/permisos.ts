@@ -184,6 +184,8 @@ export const PERMISOS = {
     'declaraciones.revisar': 'Marcar como revisado un borrador de declaración',
     'declaraciones.presentar': 'Marcar una declaración como presentada en la SAT (el sistema no la envía)',
     'declaraciones.pagar': 'Registrar el pago de una declaración',
+    'declaraciones.anular_pago': 'Anular el pago de una declaración (reverso de su asiento)',
+    'declaraciones.ajustar': 'Registrar o anular ajustes fiscales del ISR (cierre parcial y anual)',
     'empresa.ver': 'Ver la configuración de la empresa (contacto e instrucciones de pago)',
     'empresa.editar': 'Editar la configuración de la empresa (contacto e instrucciones de pago)',
     'documentos.ver': 'Ver plantillas de documentos (aviso de cobro) y sus PDF',
