@@ -2,27 +2,47 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Tarjeta de un bloque del tablero fiscal. Con `error` muestra el problema del bloque y «Reintentar»
- * (recarga el tablero), nunca cifras; con `no_aplica`, atenuada con su motivo; con `ok`, el contenido.
+ * Tarjeta de un bloque del tablero fiscal o del comparador. Con `error` muestra el problema del bloque y
+ * «Reintentar» (recarga la pantalla), nunca cifras; si el error es 422 `bloque_dependiente`, en lugar de
+ * la alerta dice de qué bloques depende (atenuada, sin reintento: se arregla el bloque del que depende);
+ * con `no_aplica`, atenuada con su motivo; con `ok`, el contenido.
  */
 const props = withDefaults(defineProps<{
-    nombre: NombreBloqueTablero
+    /** Clave del bloque (`data-bloque`); con un bloque del tablero, también su título e icono. */
+    nombre: string
+    titulo?: string
+    icono?: string
+    /** Nombre legible de cada bloque, para el motivo de un `bloque_dependiente`. */
+    etiquetas?: Record<string, string>
     bloque: { estado: 'ok' | 'error' | 'no_aplica', motivo: string | null, error: Problem | null }
     reintentar: () => void
     reintentando?: boolean
 }>(), {
+    titulo: undefined,
+    icono: undefined,
+    etiquetas: () => ({}),
     reintentando: false,
 })
 
-const info = computed(() => BLOQUES_TABLERO[props.nombre])
-const problema = computed(() => (props.bloque.error ? problemaDeclaracionLegible(props.bloque.error) : null))
+const info = computed(() => {
+    const delTablero = props.nombre in BLOQUES_TABLERO ? BLOQUES_TABLERO[props.nombre as NombreBloqueTablero] : null
+    return { titulo: props.titulo ?? delTablero?.titulo ?? props.nombre, icono: props.icono ?? delTablero?.icono ?? 'i-lucide-square' }
+})
+const dependeDe = computed(() => {
+    const error = props.bloque.error
+    if (!error || codigoProblema(error) !== 'bloque_dependiente') {
+        return null
+    }
+    return (error.errors ?? []).map(e => props.etiquetas[e.field] ?? e.field)
+})
+const problema = computed(() => (props.bloque.error && !dependeDe.value ? problemaDeclaracionLegible(props.bloque.error) : null))
 </script>
 
 <template>
     <UCard
         :data-bloque="nombre"
         :data-estado="bloque.estado"
-        :class="bloque.estado === 'no_aplica' ? 'bg-elevated/50' : ''"
+        :class="bloque.estado === 'no_aplica' || dependeDe ? 'bg-elevated/50' : ''"
         :ui="{
             header: 'px-4 py-3 sm:px-4',
             body: 'px-4 py-3 sm:px-4',
@@ -44,6 +64,13 @@ const problema = computed(() => (props.bloque.error ? problemaDeclaracionLegible
                     label="No aplica"
                 />
                 <UBadge
+                    v-else-if="dependeDe"
+                    color="neutral"
+                    variant="subtle"
+                    icon="i-lucide-link"
+                    label="Pendiente"
+                />
+                <UBadge
                     v-else-if="bloque.estado === 'error'"
                     color="error"
                     variant="subtle"
@@ -54,8 +81,15 @@ const problema = computed(() => (props.bloque.error ? problemaDeclaracionLegible
             </div>
         </template>
 
+        <p
+            v-if="bloque.estado === 'error' && dependeDe"
+            class="text-sm text-muted"
+            data-prueba="bloque-dependiente"
+        >
+            No se calcula: depende de {{ dependeDe.join(', ') }}, que no se pudo calcular.
+        </p>
         <ProblemaAlerta
-            v-if="bloque.estado === 'error' && problema"
+            v-else-if="bloque.estado === 'error' && problema"
             :problema="problema"
             :reintentar="reintentar"
             :reintentando="reintentando"
