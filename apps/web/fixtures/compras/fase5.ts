@@ -134,6 +134,8 @@ export function activosIniciales(): Activo[] {
             estado: 'dado_de_baja',
             baja: { fecha: '2026-08-20', tipo: 'venta', motivo: 'Vendida al técnico al cambiar de equipo', precio_venta: '3000.00', valor_libros: '3600.36', asiento_id: 9720 },
         }),
+        // Casi depreciado: a la tasa actual le queda menos de un año, así que la máxima no deduciría más (H38).
+        activo(5, { clase: 'computacion', descripcion: 'Switch de acceso del nodo norte', ubicacion: 'Nodo norte', fecha_alta: '2021-12-10', inicio_depreciacion: '2022-01-01', costo: '3000.00', tasa_anual: '20.00', cuota_mensual: '50.00', depreciacion_acumulada: '2900.00', valor_libros: '100.00', cuotas: 58, ultima_cuota: '2026-09-01' }),
         activo(4, { empresa_id: 2, clase: 'mobiliario', descripcion: 'Mostrador de atención', ubicacion: 'Oficina de Escuintla', fecha_alta: '2026-06-01', inicio_depreciacion: '2026-07-01', costo: '6000.00', tasa_anual: '10.00', cuota_mensual: '50.00', depreciacion_acumulada: '150.00', valor_libros: '5850.00', cuotas: 3, ultima_cuota: '2026-09-01' }),
     ]
 }

@@ -50,7 +50,7 @@ test('proveedor nuevo, compra al crédito con un activo fijo y su pago desde la 
     await page.locator('[data-prueba="guardar-compra"]').click()
     await expect(aviso(page, 'Compra #6 registrada')).toBeVisible()
     await expect(page).toHaveURL(/\/compras\/6/)
-    await expect(page.getByRole('link', { name: /Activo #5 · Switch de núcleo/ })).toBeVisible()
+    await expect(page.getByRole('link', { name: /Activo #6 · Switch de núcleo/ })).toBeVisible()
 
     // Pago total desde la ficha del proveedor.
     await page.getByRole('link', { name: 'Redes Totales, S.A.' }).click()
@@ -115,7 +115,7 @@ test('activos: alta, depreciación al día y baja por retiro', async ({ page }) 
     await expect(alta).toContainText('Hasta 10.00 %')
     await alta.locator('[data-prueba="activo-tasa"]').fill('')
     await alta.locator('[data-prueba="guardar-activo"]').click()
-    await expect(page).toHaveURL(/\/activos\/5/)
+    await expect(page).toHaveURL(/\/activos\/6/)
     await expect(page.locator('[data-prueba="valor-libros"]')).toContainText('24,000.00')
 
     await page.locator('[data-prueba="abrir-baja"]').click()

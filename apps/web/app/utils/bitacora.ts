@@ -150,6 +150,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'declaraciones.ajustar': 'Ajuste fiscal del ISR registrado o anulado',
     'fiscal.generar_calendario': 'Calendario fiscal generado',
     'fiscal.emitir_alertas': 'Alertas de vencimientos fiscales revisadas',
+    'fiscal.ocultar_consejo': 'Consejo fiscal ocultado o mostrado',
     'fel.configurar': 'Configuración FEL cambiada',
     'fel.guardar_credenciales': 'Credenciales FEL guardadas',
     'fel.probar_credenciales': 'Credenciales FEL probadas',
@@ -409,6 +410,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     declaracion: { etiqueta: 'Declaración', ruta: id => `/declaraciones/${id}` },
     ajuste_fiscal: { etiqueta: 'Ajuste fiscal', ruta: () => '/declaraciones/ajustes' },
     cierre_anual: { etiqueta: 'Cierre anual', ruta: () => '/libro?tab=ejercicios' },
+    // Consejos fiscales (A3, fase 8 PR C): preferencia de ocultar, en el tablero fiscal.
+    consejo_fiscal: { etiqueta: 'Consejo fiscal', ruta: () => '/fiscal/tablero' },
     // Fase 5 (A3): proveedores, compras, pagos a proveedores, activos fijos y diferimientos.
     proveedor: { etiqueta: 'Proveedor', ruta: id => `/proveedores/${id}` },
     compra: { etiqueta: 'Compra', ruta: id => `/compras/${id}` },

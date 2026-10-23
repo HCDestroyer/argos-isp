@@ -66,6 +66,7 @@ import SolicitarCertificacion from '#fiscal/actions/solicitar_certificacion'
 import CertificarLote from '#fiscal/actions/certificar_lote'
 import calendario from '#start/routes/calendario'
 import declaraciones from '#start/routes/declaraciones'
+import tablero from '#start/routes/tablero'
 
 /** Empresa de una consulta: `empresa_id` (con acceso) o la activa (o la única activa). */
 async function empresaConsulta(ctx: HttpContext, empresaId?: number | null): Promise<number> {
@@ -348,6 +349,7 @@ const fiscal: Ruta[] = [
     ...fel(),
     ...calendario,
     ...declaraciones,
+    ...tablero,
 ]
 
 /*

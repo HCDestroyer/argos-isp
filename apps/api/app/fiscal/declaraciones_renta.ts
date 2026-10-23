@@ -143,7 +143,7 @@ export async function calcularRenta(
 |--------------------------------------------------------------------------
 */
 
-interface Tramo {
+export interface Tramo {
     desde: string
     hasta: string | null
     fijo: string
@@ -600,7 +600,7 @@ async function isrTrimestral(
 |--------------------------------------------------------------------------
 */
 
-async function saldoActivo(c: QueryClientContract, empresaId: number, fecha: string) {
+export async function saldoActivo(c: QueryClientContract, empresaId: number, fecha: string) {
     const { rows } = (await c.rawQuery(
         `SELECT coalesce(sum(m.debe - m.haber), 0)::text AS saldo
            FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
