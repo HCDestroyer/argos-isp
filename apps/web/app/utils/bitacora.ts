@@ -409,6 +409,12 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     declaracion: { etiqueta: 'Declaración', ruta: id => `/declaraciones/${id}` },
     ajuste_fiscal: { etiqueta: 'Ajuste fiscal', ruta: () => '/declaraciones/ajustes' },
     cierre_anual: { etiqueta: 'Cierre anual', ruta: () => '/libro?tab=ejercicios' },
+    // Fase 5 (A3): proveedores, compras, pagos a proveedores, activos fijos y diferimientos.
+    proveedor: { etiqueta: 'Proveedor', ruta: id => `/proveedores/${id}` },
+    compra: { etiqueta: 'Compra', ruta: id => `/compras/${id}` },
+    pago_proveedor: { etiqueta: 'Pago a proveedor', ruta: () => '/pagos-proveedores' },
+    activo: { etiqueta: 'Activo fijo', ruta: id => `/activos/${id}` },
+    diferimiento: { etiqueta: 'Diferido', ruta: id => `/diferimientos/${id}` },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

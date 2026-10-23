@@ -31,6 +31,7 @@ export function useReportes() {
         'altas-bajas': query => resolver(api.GET('/api/v1/reportes/altas-bajas', { params: { query } })),
         'egresos': query => resolver(api.GET('/api/v1/reportes/egresos', { params: { query } })),
         'bonificaciones': query => resolver(api.GET('/api/v1/reportes/bonificaciones', { params: { query } })),
+        'cuentas-por-pagar': query => resolver(api.GET('/api/v1/reportes/cuentas-por-pagar', { params: { query } })),
     }
 
     const descargas: Descargar = {
@@ -44,6 +45,7 @@ export function useReportes() {
         'altas-bajas': query => resolver(api.GET('/api/v1/reportes/altas-bajas', { params: { query }, parseAs: 'blob' })),
         'egresos': query => resolver(api.GET('/api/v1/reportes/egresos', { params: { query }, parseAs: 'blob' })),
         'bonificaciones': query => resolver(api.GET('/api/v1/reportes/bonificaciones', { params: { query }, parseAs: 'blob' })),
+        'cuentas-por-pagar': query => resolver(api.GET('/api/v1/reportes/cuentas-por-pagar', { params: { query }, parseAs: 'blob' })),
     }
 
     /** `GET /reportes/:clave` con solo los filtros que ese reporte acepta. */

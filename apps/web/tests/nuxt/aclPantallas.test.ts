@@ -205,6 +205,13 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'SorteoAnularEntregaModal.vue': { permisos: ['sorteos.entregar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
     'SorteoEntregarModal.vue': { permisos: ['sorteos.entregar'], desde: ['pages/lealtad/sorteos/[id].vue'] },
     'SorteoMarcarRequisitoModal.vue': { permisos: ['sorteos.marcar_requisito'], desde: ['pages/lealtad/sorteos/[id].vue'] },
+    // Fase 5 (A3): proveedores, compras, pagos a proveedores, activos y diferidos.
+    'ProveedorModal.vue': { permisos: ['proveedores.editar'], desde: ['pages/proveedores/index.vue', 'pages/proveedores/[id].vue'] },
+    'PagoProveedorModal.vue': { permisos: ['compras.pagar'], desde: ['pages/proveedores/[id].vue'] },
+    'ConstanciaCompraModal.vue': { permisos: ['compras.registrar'], desde: ['pages/compras/[id].vue'] },
+    'DiferirLineaModal.vue': { permisos: ['libro.registrar_asiento'], desde: ['pages/compras/[id].vue'] },
+    'ActivoAltaModal.vue': { permisos: ['activos.registrar'], desde: ['pages/activos/index.vue'] },
+    'BajaActivoModal.vue': { permisos: ['activos.dar_de_baja'], desde: ['pages/activos/[id].vue'] },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {

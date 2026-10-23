@@ -75,6 +75,19 @@ const PANTALLAS = [
     ['declaración de retenciones', '/declaraciones/6'],
     ['ajustes fiscales', '/declaraciones/ajustes?anio=2026'],
     ['ejercicios anuales', '/libro?tab=ejercicios'],
+    // Fase 5 (compras, proveedores, activos y diferidos).
+    ['proveedores', '/proveedores'],
+    ['ficha de proveedor', '/proveedores/4'],
+    ['compras', '/compras'],
+    ['registrar compra', '/compras/nueva'],
+    ['ficha de compra', '/compras/5'],
+    ['pagos a proveedores', '/pagos-proveedores'],
+    ['constancias', '/constancias'],
+    ['activos fijos', '/activos'],
+    ['ficha de activo', '/activos/1'],
+    ['diferidos', '/diferimientos'],
+    ['ficha de diferido', '/diferimientos/1'],
+    ['cuentas por pagar', '/reportes/cuentas-por-pagar'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
@@ -111,8 +124,10 @@ for (const tema of ['light', 'dark'] as const) {
         })
 
         test('pantallas principales sin violaciones de axe', async ({ page }) => {
-            // ~40 pantallas; en frío la primera compilación de cada página se lleva varios segundos.
-            test.setTimeout(300_000)
+            // Más de 60 pantallas; en frío la primera compilación de cada página se lleva varios
+            // segundos. El plazo crece con la lista (con 300 s fijos, la primera pasada en frío se
+            // quedaba corta al sumar las pantallas de la fase 5); cada paso tiene además su espera acotada.
+            test.setTimeout(60_000 + PANTALLAS.length * 7_000)
             await entrar(page, 'admin@argos.test')
             for (const [nombre, ruta] of PANTALLAS) {
                 // Un paso por pantalla y esperas acotadas: si una no llega a estar lista, falla

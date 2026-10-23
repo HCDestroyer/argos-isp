@@ -69,6 +69,19 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         ],
     },
     {
+        id: 'compras',
+        etiqueta: 'Compras',
+        icono: 'i-lucide-shopping-cart',
+        secciones: [
+            { id: 'proveedores', etiqueta: 'Proveedores', descripcion: 'Proveedores con su estado de cuenta, lo que se les debe y su antigüedad.', icono: 'i-lucide-truck', ruta: '/proveedores', permiso: 'proveedores.ver' },
+            { id: 'compras', etiqueta: 'Compras', descripcion: 'Facturas de proveedores con crédito fiscal, retenciones, condición y saldo; también desde un egreso.', icono: 'i-lucide-shopping-cart', ruta: '/compras', permiso: 'compras.ver' },
+            { id: 'pagos-proveedores', etiqueta: 'Pagos a proveedores', descripcion: 'Pagos aplicados a sus compras, por caja, banco o cuenta; anular devuelve el saldo.', icono: 'i-lucide-banknote', ruta: '/pagos-proveedores', permiso: 'compras.ver' },
+            { id: 'constancias', etiqueta: 'Constancias de retención', descripcion: 'Retenciones recibidas de clientes y emitidas a proveedores.', icono: 'i-lucide-file-check-2', ruta: '/constancias', permiso: 'compras.ver' },
+            { id: 'activos', etiqueta: 'Activos fijos', descripcion: 'Alta, depreciación mensual y baja por venta o retiro.', icono: 'i-lucide-boxes', ruta: '/activos', permiso: 'activos.ver' },
+            { id: 'diferimientos', etiqueta: 'Diferidos', descripcion: 'Gastos pagados por anticipado e ingresos diferidos con sus cuotas.', icono: 'i-lucide-calendar-range', ruta: '/diferimientos', permiso: 'libro.ver' },
+        ],
+    },
+    {
         id: 'bancos',
         etiqueta: 'Bancos',
         icono: 'i-lucide-landmark',

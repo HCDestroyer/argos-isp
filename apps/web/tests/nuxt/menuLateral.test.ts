@@ -15,8 +15,8 @@ describe('menú lateral agrupado', () => {
         return GRUPOS_PANEL.filter(grupo => grupo.secciones.some(seccion => puede(seccion.permiso))).map(grupo => grupo.id)
     }
 
-    it('siete grupos con cada sección en uno solo (Bancos desde la fase 4)', () => {
-        expect(GRUPOS_PANEL.map(grupo => grupo.id)).toEqual(['operacion', 'cobros', 'contabilidad', 'bancos', 'red', 'control', 'configuracion'])
+    it('ocho grupos con cada sección en uno solo (Bancos desde la fase 4, Compras desde las pantallas de la fase 5)', () => {
+        expect(GRUPOS_PANEL.map(grupo => grupo.id)).toEqual(['operacion', 'cobros', 'contabilidad', 'compras', 'bancos', 'red', 'control', 'configuracion'])
         const ids = SECCIONES_PANEL.map(seccion => seccion.id)
         expect(new Set(ids).size).toBe(ids.length)
         expect(ids).toContain('migracion')
@@ -28,7 +28,7 @@ describe('menú lateral agrupado', () => {
         useUsuarioActual().value = { ...meCajero, permisos: meCajero.permisos.filter(p => !['cajas.ver', 'libro.ver', 'egresos.ver'].includes(p)) }
         expect(gruposVisibles()).not.toContain('contabilidad')
         useUsuarioActual().value = meAdmin
-        expect(gruposVisibles()).toHaveLength(7)
+        expect(gruposVisibles()).toHaveLength(8)
     })
 
     it('el grupo de la página actual: por prefijo, gana la ruta más larga', () => {

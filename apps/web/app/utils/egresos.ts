@@ -31,6 +31,15 @@ export const CATEGORIAS_EGRESO: Record<CategoriaEgreso, string> = {
  * anula desde el sorteo («Anular entrega»: la API responde 422 `egreso_de_premio_sorteo` aquí) y el de
  * una compra al contado, con la compra (409 `egreso_de_compra`).
  */
+/**
+ * Si el egreso se puede registrar como compra (`POST /compras/desde-egreso/:id`, fase 5): vigente, que no
+ * pague ya una compra al contado y que no sea la entrega de un premio. Si ya tiene su compra, la API
+ * responde 409 `egreso_con_compra`.
+ */
+export function registrableComoCompra(egreso: Pick<Egreso, 'estado' | 'categoria' | 'compra_id'>): boolean {
+    return egreso.estado === 'registrado' && egreso.categoria !== 'premios' && !egreso.compra_id
+}
+
 export function egresoAnulable(egreso: Pick<Egreso, 'estado' | 'categoria' | 'compra_id'>): boolean {
     return egreso.estado === 'registrado' && egreso.categoria !== 'premios' && !egreso.compra_id
 }
