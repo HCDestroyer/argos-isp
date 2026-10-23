@@ -4134,3 +4134,23 @@ export async function contarAsientos(empresas: number[]): Promise<number> {
     )
     return Number(fila!.n)
 }
+
+/**
+ * Huella (filas + md5 del contenido) de cada tabla de `ledger`, `fiscal` y `audit`: dos huellas
+ * iguales = nada se escribió (fase 8: tablero y comparador solo leen).
+ */
+export async function huellaTablas(): Promise<Record<string, string>> {
+    const tablas = await filas(
+        `SELECT table_schema || '.' || table_name AS t FROM information_schema.tables
+          WHERE table_schema IN ('ledger', 'fiscal', 'audit') AND table_type = 'BASE TABLE' ORDER BY 1`,
+    )
+    const huella: Record<string, string> = {}
+    for (const { t } of tablas) {
+        const [fila] = await filas(
+            `SELECT count(*)::text || ':' || coalesce(md5(string_agg(md5(x::text), '' ORDER BY md5(x::text))), '') AS h
+               FROM ${String(t)} x`,
+        )
+        huella[String(t)] = String(fila!.h)
+    }
+    return huella
+}

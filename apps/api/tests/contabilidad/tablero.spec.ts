@@ -4,7 +4,7 @@ import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
-import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
+import { afirmarLibro, huellaTablas } from '#tests/contabilidad/verificar_libro'
 import { llevarFacturasA } from '#tests/contabilidad/ayudas_libros'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
@@ -12,7 +12,8 @@ import { eventos } from '#tests/fiscal/ayudas_fiscal'
 import { relojFiscal } from '#fiscal/comun'
 import { libroVentasLegal } from '#fiscal/libros_legales'
 import { calcularDatos } from '#fiscal/declaraciones'
-import { tableroFiscal, BLOQUES_TABLERO, type Bloque, type TableroEmpresa } from '#fiscal/tablero'
+import { tableroFiscal, BLOQUES_TABLERO, type TableroEmpresa } from '#fiscal/tablero'
+import type { Bloque } from '#fiscal/bloques'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import EditarParametro from '#fiscal/actions/editar_parametro'
 import CalcularDeclaracion from '#fiscal/actions/calcular_declaracion'
@@ -71,23 +72,6 @@ const datos = (b: Bloque) => b.datos as Record<string, any>
 async function deEmpresa(empresaId: number) {
     const tablero = await tableroFiscal([empresaId])
     return tablero.empresas[0]!
-}
-
-/** Huella de cada tabla de `ledger`, `fiscal` y `audit` (filas y contenido). */
-async function huellaTablas() {
-    const { rows: tablas } = (await db.rawQuery(
-        `SELECT table_schema || '.' || table_name AS t FROM information_schema.tables
-          WHERE table_schema IN ('ledger', 'fiscal', 'audit') AND table_type = 'BASE TABLE' ORDER BY 1`,
-    )) as { rows: Array<{ t: string }> }
-    const huella: Record<string, string> = {}
-    for (const { t } of tablas) {
-        const { rows } = (await db.rawQuery(
-            `SELECT count(*)::text || ':' || coalesce(md5(string_agg(md5(x::text), '' ORDER BY md5(x::text))), '') AS h
-               FROM ${t} x`,
-        )) as { rows: Array<{ h: string }> }
-        huella[t] = rows[0]!.h
-    }
-    return huella
 }
 
 /** Suma independiente del libro de ventas legal (filas, no sus totales). */
