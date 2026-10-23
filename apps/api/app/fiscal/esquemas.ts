@@ -524,28 +524,24 @@ export const ObligacionFiscal = definirEsquema(
         },
         declaracion_id: { ...nulable(id), description: 'Borrador de la declaración (fase 7 PR B)' },
         regla: {
-            ...objeto(
-                {
-                    parametro: {
-                        ...texto,
-                        description: 'Parámetro del plazo (iva_declaracion, isr_opcional_plazo…)',
-                    },
-                    valor: {
-                        ...jsonLibre,
-                        description: 'Valor del parámetro: plazo, dias, dias_habiles, vence, formulario…',
-                    },
-                    vigente_desde: { ...nulable(fecha), description: 'Vigencia del valor usado' },
-                    nivel: enumerado(['empresa', 'instalacion', 'global', 'paquete', 'derivado']),
-                    vence_base: {
-                        ...fecha,
-                        description: 'Vencimiento según la regla, antes de correrlo al día hábil',
-                    },
-                    corrido_a_habil: { ...booleano, description: 'vence_base caía en día inhábil' },
+            ...objeto({
+                parametro: {
+                    ...texto,
+                    description: 'Parámetro del plazo (iva_declaracion, isr_opcional_plazo…)',
                 },
-                ['vigente_desde', 'nivel'],
-            ),
-            description:
-                'Cómo se calculó el vencimiento. La API envía siempre los seis campos; vigente_desde y nivel siguen opcionales en el tipo hasta que el panel ajuste tests/nuxt/calendarioFiscal.test.ts',
+                valor: {
+                    ...jsonLibre,
+                    description: 'Valor del parámetro: plazo, dias, dias_habiles, vence, formulario…',
+                },
+                vigente_desde: { ...nulable(fecha), description: 'Vigencia del valor usado' },
+                nivel: enumerado(['empresa', 'instalacion', 'global', 'paquete', 'derivado']),
+                vence_base: {
+                    ...fecha,
+                    description: 'Vencimiento según la regla, antes de correrlo al día hábil',
+                },
+                corrido_a_habil: { ...booleano, description: 'vence_base caía en día inhábil' },
+            }),
+            description: 'Cómo se calculó el vencimiento (los seis campos, siempre)',
         },
         version: entero,
         created_at: instante,
@@ -794,54 +790,45 @@ const camposDeclaracion: Record<string, EsquemaJson> = {
     updated_at: instante,
 }
 
-/** Campos nuevos de la PR C: la API los envía siempre; opcionales en el tipo hasta que el panel ajuste sus fixtures. */
-const NUEVOS_PR_C = ['calculada_por_nombre', 'revisada_por_nombre', 'presentada_por_nombre', 'pagos_anulados']
-
-export const Declaracion = definirEsquema('Declaracion', objeto(camposDeclaracion, NUEVOS_PR_C))
+export const Declaracion = definirEsquema('Declaracion', objeto(camposDeclaracion))
 
 export const DeclaracionDetalle = definirEsquema(
     'DeclaracionDetalle',
-    objeto(
-        {
-            ...camposDeclaracion,
-            desactualizada: {
-                ...booleano,
-                description:
-                    'Los datos cambiaron desde que se calculó (otro datos_hash): revisar o presentar responde 409',
-            },
+    objeto({
+        ...camposDeclaracion,
+        desactualizada: {
+            ...booleano,
+            description:
+                'Los datos cambiaron desde que se calculó (otro datos_hash): revisar o presentar responde 409',
         },
-        NUEVOS_PR_C,
-    ),
+    }),
 )
 
 export const DeclaracionRevisada = definirEsquema(
     'DeclaracionRevisada',
-    objeto(
-        {
-            ...camposDeclaracion,
-            cascada: {
-                ...lista(
-                    objeto({
-                        periodo: { ...texto, description: 'AAAA-MM' },
-                        declaracion_id: id,
-                        version: entero,
-                        sustituye_a: id,
-                        estaba_presentada: {
-                            ...booleano,
-                            description:
-                                'La versión sustituida estaba presentada: la obligación vuelve a «por presentar» (rectificativa)',
-                        },
-                        remanente_credito_anterior: dinero,
-                        remanente_credito: dinero,
-                        a_pagar: dinero,
-                    }),
-                ),
-                description:
-                    'Meses posteriores ya revisados que se rectificaron en la misma transacción porque cambió el remanente que arrastran (H34)',
-            },
+    objeto({
+        ...camposDeclaracion,
+        cascada: {
+            ...lista(
+                objeto({
+                    periodo: { ...texto, description: 'AAAA-MM' },
+                    declaracion_id: id,
+                    version: entero,
+                    sustituye_a: id,
+                    estaba_presentada: {
+                        ...booleano,
+                        description:
+                            'La versión sustituida estaba presentada: la obligación vuelve a «por presentar» (rectificativa)',
+                    },
+                    remanente_credito_anterior: dinero,
+                    remanente_credito: dinero,
+                    a_pagar: dinero,
+                }),
+            ),
+            description:
+                'Meses posteriores ya revisados que se rectificaron en la misma transacción porque cambió el remanente que arrastran (H34)',
         },
-        NUEVOS_PR_C,
-    ),
+    }),
 )
 
 export const AjusteFiscal = definirEsquema(
