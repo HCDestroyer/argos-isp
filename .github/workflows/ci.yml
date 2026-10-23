@@ -335,18 +335,19 @@ jobs:
   # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
   # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.
   #
-  # Escritorio y teléfono corren en paralelo y cada uno en dos mitades (--shard), cada parte en su
-  # runner: un proyecto entero ya pasaba los 25 minutos del trabajo. El trabajo «Playwright del
+  # Escritorio y teléfono corren en paralelo y cada uno en tres partes (--shard), cada parte en su
+  # runner: un proyecto entero ya pasaba los 25 minutos y una mitad llegó a 25 en un runner lento.
+  # El trabajo «Playwright del
   # panel (fixtures)» de abajo reúne todas las partes y conserva el nombre del chequeo de siempre.
   e2e-panel-proyecto:
-    name: Playwright del panel (${{ matrix.proyecto }} ${{ matrix.parte }}/2)
+    name: Playwright del panel (${{ matrix.proyecto }} ${{ matrix.parte }}/3)
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
         proyecto: [escritorio, telefono]
-        parte: [1, 2]
+        parte: [1, 2, 3]
     env:
       CI: "true"
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
@@ -384,7 +385,7 @@ jobs:
         run: pnpm --filter @argosisp/web exec playwright install-deps chromium
 
       - name: Playwright
-        run: pnpm --filter @argosisp/web test:e2e --project=${{ matrix.proyecto }} --shard=${{ matrix.parte }}/2
+        run: pnpm --filter @argosisp/web test:e2e --project=${{ matrix.proyecto }} --shard=${{ matrix.parte }}/3
 
       - name: Reporte de Playwright
         if: failure()
@@ -402,7 +403,7 @@ jobs:
     needs: e2e-panel-proyecto
     if: always()
     steps:
-      - name: Escritorio y teléfono en verde, las dos mitades
+      - name: Escritorio y teléfono en verde, las tres partes
         env:
           RESULTADO: ${{ needs.e2e-panel-proyecto.result }}
         run: |
