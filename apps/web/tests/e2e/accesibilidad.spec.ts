@@ -66,6 +66,10 @@ const PANTALLAS = [
     ['calendario fiscal en lista', '/fiscal/calendario?vista=lista'],
     ['obligación fiscal', '/fiscal/calendario?obligacion=8'],
     ['feriados', '/configuracion/fiscal?pestana=feriados'],
+    // Declaraciones de IVA y pequeño contribuyente (fase 7 PR B).
+    ['declaraciones', '/declaraciones'],
+    ['declaración de IVA', '/declaraciones/3'],
+    ['declaración sustituida', '/declaraciones/2'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']

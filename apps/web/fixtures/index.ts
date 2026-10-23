@@ -33,6 +33,7 @@ import { rutasEgresos } from './egresos/rutas'
 import { rutasEmpresas } from './empresas/rutas'
 import { rutasFiscal } from './fiscal/rutas'
 import { rutasCalendario } from './calendario/rutas'
+import { rutasDeclaraciones } from './declaraciones/rutas'
 import { rutasNotificaciones } from './notificaciones/rutas'
 import { rutasFacturacion } from './facturacion/rutas'
 import { rutasEstadosFinancieros } from './libro/estados'
@@ -500,6 +501,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasEmpresas,
     ...rutasFiscal,
     ...rutasCalendario,
+    ...rutasDeclaraciones,
     ...rutasNotificaciones,
     ...rutasZonas,
     ...rutasClientes,

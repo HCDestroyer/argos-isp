@@ -12,6 +12,7 @@ import type { Schema } from '@argosisp/contracts'
  * con el feriado del 20/10 corre al 22/10); sin aplicar las retenciones de julio (IVA: aún no era
  * agente; ISR: no retuvo). Las retenciones de ISR no tienen formulario confirmado (`formulario: null`).
  * Fibra del Sur (2, pequeño contribuyente): SAT-2046 mensual. `feriados` arranca vacía, como la tabla.
+ * Las presentadas enlazan su declaración (`declaracion_id`, `fixtures/declaraciones/datos.ts`).
  */
 
 export type ObligacionFila = Omit<Schema<'ObligacionFiscal'>, 'nombre' | 'periodicidad' | 'dias_restantes' | 'vencida'>
@@ -121,14 +122,14 @@ export function calcularVencimiento(periodoHasta: string, regla: ReglaPlazo, fer
 }
 
 /** `regla` como la guarda `generar_calendario`: parámetro, valor, vigencia, nivel y el vencimiento base. */
-export function reglaDe(impuesto: Impuesto, periodoHasta: string, feriados: ReadonlySet<string>): { vence_en: string, regla: Record<string, unknown> } {
+export function reglaDe(impuesto: Impuesto, periodoHasta: string, feriados: ReadonlySet<string>): Pick<ObligacionFila, 'vence_en' | 'regla'> {
     const valor = PLAZOS[impuesto]
     const { base, vence_en } = calcularVencimiento(periodoHasta, valor, feriados)
     return {
         vence_en,
         regla: {
             parametro: CATALOGO_OBLIGACIONES[impuesto].parametro,
-            valor,
+            valor: { ...valor },
             vigente_desde: '2013-01-01',
             nivel: 'paquete',
             vence_base: base,
@@ -162,10 +163,10 @@ const CAMBIO = { version: 2, updated_at: '2026-10-05T06:00:00.000Z' }
 
 export function obligacionesIniciales(): ObligacionFila[] {
     return [
-        obligacion(1, 1, 'iva_mensual', '2026-07-01', '2026-07-31', { estado: 'presentada', ...CAMBIO }),
+        obligacion(1, 1, 'iva_mensual', '2026-07-01', '2026-07-31', { estado: 'presentada', declaracion_id: 1, ...CAMBIO }),
         obligacion(2, 1, 'retenciones_isr', '2026-07-01', '2026-07-31', { estado: 'no_aplica', motivo_estado: 'sin_retenciones_isr', ...CAMBIO }),
         obligacion(3, 1, 'retenciones_iva', '2026-07-01', '2026-07-31', { estado: 'no_aplica', motivo_estado: 'no_es_agente_retencion_iva', ...CAMBIO }),
-        obligacion(4, 1, 'iva_mensual', '2026-08-01', '2026-08-31', { estado: 'presentada', ...CAMBIO }),
+        obligacion(4, 1, 'iva_mensual', '2026-08-01', '2026-08-31', { estado: 'presentada', declaracion_id: 3, ...CAMBIO }),
         obligacion(5, 1, 'retenciones_isr', '2026-08-01', '2026-08-31'),
         obligacion(6, 1, 'retenciones_iva', '2026-08-01', '2026-08-31', { estado: 'presentada', ...CAMBIO }),
         obligacion(7, 1, 'iva_mensual', '2026-09-01', '2026-09-30'),
@@ -178,7 +179,7 @@ export function obligacionesIniciales(): ObligacionFila[] {
         obligacion(14, 1, 'retenciones_iva', '2026-10-01', '2026-10-31'),
         obligacion(15, 1, 'iso_trimestral', '2026-10-01', '2026-12-31'),
         obligacion(16, 1, 'isr_anual', '2026-01-01', '2026-12-31'),
-        obligacion(17, 2, 'pc_mensual', '2026-08-01', '2026-08-31', { estado: 'presentada', ...CAMBIO }),
+        obligacion(17, 2, 'pc_mensual', '2026-08-01', '2026-08-31', { estado: 'presentada', declaracion_id: 4, ...CAMBIO }),
         obligacion(18, 2, 'pc_mensual', '2026-09-01', '2026-09-30'),
         obligacion(19, 2, 'pc_mensual', '2026-10-01', '2026-10-31'),
     ]

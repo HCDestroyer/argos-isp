@@ -129,6 +129,7 @@ function documentosDe(tipo: string): readonly { id: number, empresa_id?: number 
         case 'cuenta_bancaria': return bd.cuentasBancarias
         case 'asiento': return bd.asientos
         case 'nota_credito': return bd.notasCredito
+        case 'declaracion': return bd.declaraciones
         default: return null
     }
 }

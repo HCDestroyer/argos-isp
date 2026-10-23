@@ -3,17 +3,22 @@ import type { Problem } from '@argosisp/contracts'
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 
 /**
- * Lista de verificación de cierre de un mes (A3, fase 6 PR B y C): cada check con su estado, esperado
+ * Lista de verificación de cierre de un mes (A3, fase 6 PR B y C; con `tipo="impuestos"`, los checks
+ * del IVA de la fase 7 PR B): cada check con su estado, esperado
  * y obtenido; «Verificar» los corre (`cierres.verificar`) y una anomalía se supervisa con nota, o se
  * retira la supervisión (`cierres.revisar_check`), para que el mes se pueda cerrar. Leerla pide
  * `libro.ver`.
  * Cerrar el mes y el bloqueo duro exigen que todos pasen. Si la lista no se puede leer, se ve el error
  * con «Reintentar» y nada de «en orden».
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     /** Meses que se pueden elegir (AAAA-MM), el más reciente primero. */
     meses: string[]
-}>()
+    /** `impuestos`: los checks del IVA del mes (fase 7 PR B), en la ficha de la declaración. */
+    tipo?: 'mensual' | 'impuestos'
+}>(), {
+    tipo: 'mensual',
+})
 
 const mes = defineModel<string | undefined>('mes', { required: true })
 
@@ -32,7 +37,7 @@ async function cargar() {
         return
     }
     cargando.value = true
-    const resultado = await useChecksCierre().listar('mensual', periodo)
+    const resultado = await useChecksCierre().listar(props.tipo, periodo)
     // Otro mes elegido mientras tanto: esta respuesta ya no es la que se ve.
     if (periodo !== mes.value) {
         return
@@ -57,7 +62,7 @@ async function verificar() {
     }
     verificando.value = true
     problemaVerificar.value = null
-    const resultado = await useChecksCierre().verificar('mensual', mes.value, nuevaClaveIdempotencia())
+    const resultado = await useChecksCierre().verificar(props.tipo, mes.value, nuevaClaveIdempotencia())
     verificando.value = false
     if (!resultado.ok) {
         problemaVerificar.value = problemaCheckLegible(resultado.problema)
@@ -124,7 +129,7 @@ defineExpose({ cargar })
     >
         <div class="flex flex-wrap items-center gap-3">
             <h3 class="text-base font-semibold text-highlighted">
-                Lista de verificación
+                {{ tipo === 'impuestos' ? 'Checks de impuestos' : 'Lista de verificación' }}
             </h3>
             <USelect
                 v-model="mes"
@@ -154,7 +159,16 @@ defineExpose({ cargar })
                 @click="verificar"
             />
         </div>
-        <p class="text-sm text-muted">
+        <p
+            v-if="tipo === 'impuestos'"
+            class="text-sm text-muted"
+        >
+            Revisar la declaración exige que el IVA del libro cuadre con los libros de ventas y compras y con el borrador; después de liquidar, que el débito y el crédito del mes queden trasladados.
+        </p>
+        <p
+            v-else
+            class="text-sm text-muted"
+        >
             Cerrar el mes y el bloqueo duro verifican estos checks y exigen que todos estén en orden o supervisados. Un aviso nunca bloquea.
         </p>
 

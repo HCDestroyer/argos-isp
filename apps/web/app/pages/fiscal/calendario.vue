@@ -67,17 +67,16 @@ function limpiarFiltros() {
     hasta.value = ''
 }
 
-/* Vencidas sin presentar (de cualquier mes): pendientes o borradores que vencieron antes de hoy. */
+/* Vencidas sin presentar (de cualquier mes): `?vencida=true`. */
 const vencidas = shallowRef<ObligacionFiscal[] | null>(null)
 const problemaVencidas = ref<Problem | null>(null)
 const cargandoVencidas = ref(false)
 
 async function cargarVencidas() {
     cargandoVencidas.value = true
-    const ayer = new Date(Date.parse(`${hoy}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
-    const resultado = await useObligacionesFiscales().delRango('2000-01-01', ayer, { estado: ['pendiente', 'borrador'] })
+    const resultado = await useObligacionesFiscales().vencidas()
     cargandoVencidas.value = false
-    vencidas.value = resultado.ok ? resultado.data.filter(o => o.vencida) : null
+    vencidas.value = resultado.ok ? resultado.data : null
     problemaVencidas.value = resultado.ok ? null : resultado.problema
 }
 
@@ -467,6 +466,15 @@ onMounted(() => {
                                             size="sm"
                                         />
                                         <UBadge
+                                            v-if="esRectificativa(obligacion)"
+                                            label="Rectificativa por presentar"
+                                            icon="i-lucide-file-diff"
+                                            color="warning"
+                                            variant="outline"
+                                            size="sm"
+                                            data-prueba="agenda-rectificativa"
+                                        />
+                                        <UBadge
                                             v-if="!obligacion.formulario"
                                             label="Formulario por confirmar"
                                             icon="i-lucide-user-check"
@@ -555,6 +563,16 @@ onMounted(() => {
                                     variant="subtle"
                                     size="sm"
                                     class="mt-1 self-start sm:hidden"
+                                />
+                                <UBadge
+                                    v-if="esRectificativa(row.original)"
+                                    label="Rectificativa por presentar"
+                                    icon="i-lucide-file-diff"
+                                    color="warning"
+                                    variant="outline"
+                                    size="sm"
+                                    class="mt-1 self-start"
+                                    data-prueba="fila-rectificativa"
                                 />
                             </div>
                         </template>

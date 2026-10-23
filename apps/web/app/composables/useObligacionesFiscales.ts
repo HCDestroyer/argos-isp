@@ -1,7 +1,7 @@
 import type { Schema, paths } from '@argosisp/contracts'
 
 export type ObligacionFiscal = Schema<'ObligacionFiscal'>
-export type FiltrosObligaciones = Omit<NonNullable<paths['/api/v1/fiscal/obligaciones']['get']['parameters']['query']>, 'cursor' | 'empresas'>
+export type FiltrosObligaciones = Omit<NonNullable<paths['/api/v1/fiscal/obligaciones']['get']['parameters']['query']>, 'cursor' | 'empresas' | 'vencida'>
 
 /** Páginas que se leen como máximo para llenar un mes (200 obligaciones por página). */
 const PAGINAS_POR_RANGO = 10
@@ -37,10 +37,28 @@ export function useObligacionesFiscales() {
         return { ok: true, data: todas }
     }
 
+    /** Todas las vencidas sin presentar (`?vencida=true`, pendientes o borradores con el plazo pasado), siguiendo el cursor. */
+    async function vencidas(): Promise<Resultado<ObligacionFiscal[]>> {
+        const todas: ObligacionFiscal[] = []
+        let cursor: string | undefined
+        for (let pagina = 0; pagina < PAGINAS_POR_RANGO; pagina++) {
+            const resultado = await resolver(api.GET('/api/v1/fiscal/obligaciones', { params: { query: { vencida: true, limit: 200, ...(cursor ? { cursor } : {}) } } }))
+            if (!resultado.ok) {
+                return resultado
+            }
+            todas.push(...resultado.data.data)
+            if (!resultado.data.nextCursor) {
+                break
+            }
+            cursor = resultado.data.nextCursor
+        }
+        return { ok: true, data: todas }
+    }
+
     /** `GET /fiscal/obligaciones/:id`: con la regla del vencimiento (`regla`). */
     function ver(id: number): Promise<Resultado<ObligacionFiscal>> {
         return resolver(api.GET('/api/v1/fiscal/obligaciones/{id}', { params: { path: { id } } }))
     }
 
-    return { listar, delRango, ver }
+    return { listar, delRango, vencidas, ver }
 }
