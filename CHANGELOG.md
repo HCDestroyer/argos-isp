@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/HCDestroyer/argos-isp/compare/v0.9.2...v1.0.0) (2026-10-23)
+
+
+### Integración continua
+
+* comentario de las partes de Playwright en una sola frase ([#151](https://github.com/HCDestroyer/argos-isp/issues/151)) ([574926a](https://github.com/HCDestroyer/argos-isp/commit/574926aa8312a4f4c9874fde05efc791cd3d1e00))
+
 ## [0.9.2](https://github.com/HCDestroyer/argos-isp/compare/v0.9.1...v0.9.2) (2026-10-23)
 
 
