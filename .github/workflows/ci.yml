@@ -333,17 +333,18 @@ jobs:
   # Flujos críticos del panel con Playwright (A4), en modo fixtures (sin backend): el webServer de
   # apps/web/playwright.config.ts levanta `nuxt dev` con NUXT_PUBLIC_USE_FIXTURES=true.
   #
-  # Escritorio y teléfono corren en paralelo, cada uno en su runner: juntos pasaban los 25 minutos
-  # del trabajo. El trabajo «Playwright del panel (fixtures)» de abajo reúne los dos y conserva el
-  # nombre del chequeo de siempre.
+  # Escritorio y teléfono corren en paralelo y cada uno en dos mitades (--shard), cada parte en su
+  # runner: un proyecto entero ya pasaba los 25 minutos del trabajo. El trabajo «Playwright del
+  # panel (fixtures)» de abajo reúne todas las partes y conserva el nombre del chequeo de siempre.
   e2e-panel-proyecto:
-    name: Playwright del panel (${{ matrix.proyecto }})
+    name: Playwright del panel (${{ matrix.proyecto }} ${{ matrix.parte }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         proyecto: [escritorio, telefono]
+        parte: [1, 2]
     env:
       CI: "true"
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
@@ -381,13 +382,13 @@ jobs:
         run: pnpm --filter @argosisp/web exec playwright install-deps chromium
 
       - name: Playwright
-        run: pnpm --filter @argosisp/web test:e2e --project=${{ matrix.proyecto }}
+        run: pnpm --filter @argosisp/web test:e2e --project=${{ matrix.proyecto }} --shard=${{ matrix.parte }}/2
 
       - name: Reporte de Playwright
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.proyecto }}
+          name: playwright-report-${{ matrix.proyecto }}-${{ matrix.parte }}
           path: |
             apps/web/playwright-report
             apps/web/test-results
@@ -399,7 +400,7 @@ jobs:
     needs: e2e-panel-proyecto
     if: always()
     steps:
-      - name: Escritorio y teléfono en verde
+      - name: Escritorio y teléfono en verde, las dos mitades
         env:
           RESULTADO: ${{ needs.e2e-panel-proyecto.result }}
         run: |
