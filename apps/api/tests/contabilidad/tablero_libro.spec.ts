@@ -92,19 +92,32 @@ async function activosDelLibro(empresaId: number) {
         .from('ledger.activos as a')
         .where('a.empresa_id', empresaId)
         .whereNotExists((q) => q.from('ledger.activos_bajas as b').whereRaw('b.activo_id = a.id'))
-        .select('a.id', 'a.clase', 'a.costo', 'a.valor_residual', 'a.tasa_anual')) as Array<
-        Record<string, any>
-    >
-    const bajo = filas.filter((a) => Number(a.tasa_anual) < maximos[a.clase]!)
+        .select(
+            'a.id',
+            'a.clase',
+            'a.costo',
+            'a.valor_residual',
+            'a.tasa_anual',
+            db.raw(`a.depreciacion_inicial + coalesce((SELECT sum(c.monto) FROM ledger.activos_cuotas c
+                     WHERE c.activo_id = a.id
+                       AND NOT EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = c.asiento_id)), 0) AS acumulada`),
+        )) as Array<Record<string, any>>
     const r = (n: number) => Math.round(n * 100) / 100
-    const diferencia = bajo.reduce((s, a) => {
-        const dep = Number(a.costo) - Number(a.valor_residual)
-        return s + r((dep * maximos[a.clase]!) / 100) - r((dep * Number(a.tasa_anual)) / 100)
-    }, 0)
+    // H38: cada deducción anual acotada a lo que queda por depreciar; sin saldo o sin diferencia no se lista
+    const calculados = filas
+        .filter((a) => Number(a.tasa_anual) < maximos[a.clase]!)
+        .map((a) => {
+            const dep = Number(a.costo) - Number(a.valor_residual)
+            const resto = r(dep - Number(a.acumulada))
+            const actual = Math.min(r((dep * Number(a.tasa_anual)) / 100), resto)
+            const maxima = Math.min(r((dep * maximos[a.clase]!) / 100), resto)
+            return { id: Number(a.id), resto, diferencia: r(maxima - actual) }
+        })
+        .filter((x) => x.resto > 0 && x.diferencia > 0)
     return {
         activos: filas.length,
-        bajo: bajo.map((a) => Number(a.id)).sort(),
-        diferencia: diferencia.toFixed(2),
+        bajo: calculados.map((x) => x.id).sort(),
+        diferencia: calculados.reduce((s, x) => s + x.diferencia, 0).toFixed(2),
     }
 }
 
@@ -311,7 +324,7 @@ test.group('Auditor contable · bloques del libro del tablero', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H38: depreciación bajo el máximo promete gasto deducible de un activo ya depreciado por completo', async ({
+    test('H38 (arreglado en ca46938): depreciación bajo el máximo no promete gasto de un activo ya depreciado', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -329,11 +342,39 @@ test.group('Auditor contable · bloques del libro del tablero', (group) => {
             },
             e.ctx,
         )
+        // otro con lo que queda entre las dos deducciones: 10,000 − 7,500 = 2,500 por depreciar;
+        // al 20 % deduce 2,000 y al máximo (33.33 % = 3,333) solo los 2,500: diferencia 500
+        const parcial = await new RegistrarActivo().execute(
+            {
+                empresa_id: e.B,
+                clase: 'computacion',
+                descripcion: 'Servidor a medias',
+                fecha_alta: HOY,
+                costo: '10000.00',
+                depreciacion_inicial: '7500.00',
+                tasa_anual: '20.00',
+                contrapartida: '3.1.01',
+            },
+            e.ctx,
+        )
         const t = await tableroFiscal([e.B])
         const d = datos(t.empresas[0]!.bloques.depreciacion)
-        // hoy: diferencia_anual 2,833.00 = 10,000 × (33.33 % − 5 %); al máximo solo queda Q0.01 por deducir
-        assert.isAtMost(Number(d.diferencia_anual), 0.01, JSON.stringify(d.detalle))
-    }).fails(
-        'H38: la diferencia anual usa costo − residual sin restar la depreciación acumulada (inicial y registrada)',
-    )
+        const libro = await activosDelLibro(e.B)
+        assert.include(d, { activos: 2, bajo_maximo: 1, diferencia_anual: libro.diferencia })
+        assert.deepEqual(libro.bajo, [parcial.id])
+        assert.include(d.detalle[0], {
+            activo_id: parcial.id,
+            acumulada: '7500.00',
+            por_depreciar: '2500.00',
+            depreciacion_anual: '2000.00',
+            depreciacion_anual_maxima: '2500.00',
+            diferencia_anual: '500.00',
+        })
+        const k = await consejosFiscales([e.B], null)
+        assert.deepEqual(k.empresas[0]!.consejos.find((x) => x.clave === 'depreciacion_bajo_maximo')!.datos, {
+            activos: 1,
+            diferencia_anual: '500.00',
+        })
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 })

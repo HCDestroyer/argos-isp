@@ -20,6 +20,7 @@ import CalcularDeclaracion from '#fiscal/actions/calcular_declaracion'
 import RevisarDeclaracion from '#fiscal/actions/revisar_declaracion'
 import RegistrarPagoDeclaracion from '#fiscal/actions/registrar_pago_declaracion'
 import MarcarDeclaracionPresentada from '#fiscal/actions/marcar_declaracion_presentada'
+import AnularPagoDeclaracion from '#fiscal/actions/anular_pago_declaracion'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 
@@ -392,7 +393,7 @@ test.group('Auditor contable · tablero fiscal', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H36: vencimientos ignora el pago: a_pagar y mora sobre una declaración ya pagada a tiempo (sin marcar presentada)', async ({
+    test('H36 (arreglado en 2034f27): vencimientos resta el pago: una declaración pagada a tiempo queda con 0.00 pendiente y sin mora', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -419,13 +420,59 @@ test.group('Auditor contable · tablero fiscal', (group) => {
         relojFiscal.ahora = () => new Date(`${vence.plus({ days: 10 }).toISODate()}T18:00:00Z`)
         const tras = await deEmpresa(e.B)
         const fila = datos(tras.bloques.vencimientos).obligaciones.find((o: any) => o.declaracion_id === d.id)
-        // hoy: a_pagar '12.00' y mora_estimada '0.06' sobre un impuesto que ya está pagado
-        // lo correcto: o no aparece, o aparece con 0.00 por pagar y sin mora
+        // o no aparece, o aparece con 0.00 por pagar, lo pagado y sin mora
         assert.isTrue(
             !fila || (fila.a_pagar === '0.00' && [null, '0.00'].includes(fila.mora_estimada)),
             JSON.stringify(fila),
         )
-    }).fails(
-        'H36: vencimientos cobra a_pagar y mora sobre una declaración ya pagada (revisada y pagada a tiempo, sin marcar presentada)',
-    )
+        if (fila) assert.equal(fila.pagado, '12.00')
+        const deVencimientos = async () => {
+            const t = await deEmpresa(e.B)
+            return datos(t.bloques.vencimientos).obligaciones.find((o: any) => o.declaracion_id === d.id)
+        }
+        /** pendiente independiente: a_pagar de la última versión − Σ impuesto de los pagos sin anular */
+        const pendienteDelLibro = async () => {
+            const { rows } = (await db.rawQuery(
+                `SELECT (SELECT (totales ->> 'a_pagar')::numeric FROM fiscal.declaraciones
+                          WHERE empresa_id = ? AND impuesto = 'iva_mensual' AND periodo_desde = ?
+                          ORDER BY version DESC LIMIT 1)
+                      - coalesce((SELECT sum(p.impuesto) FROM fiscal.declaraciones_pagos p
+                                   JOIN fiscal.declaraciones x ON x.id = p.declaracion_id
+                                  WHERE x.empresa_id = ? AND x.impuesto = 'iva_mensual' AND x.periodo_desde = ?
+                                    AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos_anulaciones n WHERE n.pago_id = p.id)), 0)
+                        AS pendiente`,
+                [e.B, `${MES}-01`, e.B, `${MES}-01`],
+            )) as { rows: Array<{ pendiente: string }> }
+            return Number(rows[0]!.pendiente).toFixed(2)
+        }
+
+        // el pago se anula: vuelve el pendiente y su mora (12.00 × 0.05 % × 10 = 0.06)
+        await new AnularPagoDeclaracion().execute({ declaracion_id: d.id, motivo: 'Boleta rechazada' }, e.ctx)
+        const anulado = await deVencimientos()
+        assert.include(anulado, { a_pagar: await pendienteDelLibro(), pagado: '0.00', mora_estimada: '0.06' })
+        assert.equal(anulado.a_pagar, '12.00')
+        // presentada sin pagar: sigue en vencimientos (corre mora), con su estado
+        await new MarcarDeclaracionPresentada().execute(
+            { declaracion_id: d.id, numero_formulario: '2237-8', fecha_presentacion: `${SIGUIENTE}-05` },
+            e.ctx,
+        )
+        assert.include(await deVencimientos(), {
+            estado: 'presentada',
+            a_pagar: '12.00',
+            mora_estimada: '0.06',
+        })
+        // presentada y pagada: sale
+        await new RegistrarPagoDeclaracion().execute(
+            {
+                declaracion_id: d.id,
+                metodo: 'cuenta_bancaria',
+                cuenta_bancaria_id: e.cuentas.get(e.B)!,
+                fecha: HOY,
+            },
+            e.ctx,
+        )
+        assert.equal(await pendienteDelLibro(), '0.00')
+        assert.isUndefined(await deVencimientos())
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 })

@@ -202,7 +202,10 @@ test.group('Auditor contable · consejos fiscales', (group) => {
         const k = b.consejo('libros_atrasados')
         assert.equal(k.estado, atrasados.length > 0 ? 'aplica' : 'no_aplica')
         if (atrasados.length > 0) {
-            assert.deepEqual(k.datos, { libros: atrasados.length })
+            assert.deepEqual(k.datos, {
+                libros: atrasados.length,
+                detalle: atrasados.map((x) => `${x.libro}:${x.meses_atrasados}`).join(','),
+            })
             for (const x of atrasados) assert.include(k.texto!, `${x.libro} (${x.meses_atrasados})`)
         }
         const fel = b.consejo('fel_desactivada')
@@ -385,7 +388,9 @@ test.group('Auditor contable · consejos fiscales', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H36 en consejos: «pague lo vencido» con una declaración ya pagada a tiempo', async ({ assert }) => {
+    test('H36 (arreglado en 2034f27) en consejos: «pague lo vencido» no aplica a una declaración ya pagada a tiempo', async ({
+        assert,
+    }) => {
         const e = await prepararEmpresasGt()
         await servicioFacturado(e.B, `${MES}-01`, { precio: '224.00', instalacion: `${MES}-01` })
         await compra(e, e.B, '112.00')
@@ -410,7 +415,6 @@ test.group('Auditor contable · consejos fiscales', (group) => {
         const pago = k.empresas[0]!.consejos.find(
             (x) => x.clave === 'pago_antes_requerimiento',
         ) as ConsejoVista
-        // hoy: aplica con «1 declaración(es) vencida(s) … mora estimada Q0.06» sobre un impuesto pagado
         assert.equal(pago.estado, 'no_aplica', JSON.stringify(pago.datos))
-    }).fails('H36: el consejo «pague lo vencido» hereda el a_pagar y la mora sin restar el pago')
+    })
 })

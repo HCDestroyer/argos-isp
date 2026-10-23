@@ -135,11 +135,12 @@ function esperado(
     const m = R > 0 ? renta / R : 0
     const op = meses.reduce((s, x) => s + Number(q(escala(Number(x.ventas)))), 0)
     const ut = Number(q(Math.max(renta, 0) * 0.25))
-    const iso = Number(q(Math.max(activo, R, 0) * 0.01))
     const anual = (v: number) => (n === 12 ? v : Number(q((v * 12) / n)))
     const opAnual = anual(op)
     const utAnual = anual(ut)
     const RAnual = anual(R)
+    // H37 (2034f27, 91033d7): el ISO de un año usa los ingresos anualizados como el resto
+    const iso = Number(q(Math.max(activo, RAnual, 0) * 0.01))
     let ventas = Number(meses.at(-1)!.ventas)
     const proyectados = []
     for (let i = 0; i < 12; i++) {
@@ -164,7 +165,13 @@ function esperado(
             tasa_efectiva: R > 0 ? q((op / R) * 100) : '0.00',
         },
         utilidades: { tasa: '25.00', renta_imponible: q(renta), isr: q(ut), perdida: renta < 0 },
-        iso_piso: { activo_neto: q(activo), ingresos_brutos: q(R), iso_anual: q(iso) },
+        iso_piso: {
+            activo_neto: q(activo),
+            ingresos_brutos: q(R),
+            ingresos_anuales: q(RAnual),
+            ingresos_anualizados: n !== 12,
+            iso_anual: q(iso),
+        },
         comparacion: {
             meses_base: n,
             anualizado: n !== 12,
@@ -397,7 +404,7 @@ test.group('Auditor contable · comparador de regímenes', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H37: con menos de 12 meses el ISO como piso usa R sin anualizar (el ISR de los dos regímenes sí se anualiza)', async ({
+    test('H37 (arreglado en 2034f27 y 91033d7): con menos de 12 meses el ISO como piso usa R anualizado, como el ISR de los dos regímenes', async ({
         assert,
     }) => {
         const e = await escenario()
@@ -407,7 +414,7 @@ test.group('Auditor contable · comparador de regímenes', (group) => {
         // activo al cierre < R: la base del ISO de un año es R anual = 90,000 × 12 / 9 = 120,000
         assert.isBelow(Number(iso.activo_neto), Number(cmp.ventas_anuales))
         assert.equal(cmp.iso_anual, q(Number(cmp.ventas_anuales) * 0.01))
-    }).fails(
-        'H37: iso_piso toma ingresos_brutos = R de los meses leídos (90,000 → 900.00) en vez de R anual (1,200.00)',
-    )
+        assert.include(iso, { ingresos_brutos: '90000.00', ingresos_anualizados: true })
+        assert.equal(iso.ingresos_anuales, cmp.ventas_anuales)
+    })
 })
