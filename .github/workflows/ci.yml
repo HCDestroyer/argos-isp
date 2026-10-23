@@ -17,7 +17,9 @@ jobs:
   verificar:
     name: lint, typecheck, pruebas, build y contratos
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # La suite de apps/api (más de 1400 pruebas contra Postgres) ya tarda ~24 min en el runner y el
+    # trabajo completo ~35 min con el panel, el respaldo, el build y los contratos.
+    timeout-minutes: 50
 
     services:
       postgres:
