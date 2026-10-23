@@ -195,6 +195,60 @@ test.group('Fase 8 · consejos fiscales', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
+    test('evaluación pura: sin mora_tributaria el consejo de lo vencido queda sin datos; libros atrasados distingue los libros', ({
+        assert,
+    }) => {
+        const def = (clave: string) => CONSEJOS_GT.find((c) => c.clave === clave)!
+        const entrada = (bloques: Record<string, any>) => ({
+            hoy: HOY,
+            regimen: 'utilidades',
+            bloques,
+            parametro: () => null,
+        })
+        const sinMora = def('pago_antes_requerimiento').evaluar(
+            entrada({
+                'tablero.vencimientos': {
+                    mora_tributaria: null,
+                    obligaciones: [{ vencida: true, a_pagar: '12.00', mora_estimada: null }],
+                },
+            }),
+        )
+        assert.isFalse(sinMora.aplica)
+        assert.isUndefined(sinMora.texto)
+        assert.match(sinMora.sin_datos!.type, /parametro_sin_confirmar$/)
+        // pagada (pendiente 0.00): no aplica aunque esté vencida
+        const pagada = def('pago_antes_requerimiento').evaluar(
+            entrada({
+                'tablero.vencimientos': {
+                    mora_tributaria: '0.05',
+                    obligaciones: [{ vencida: true, a_pagar: '0.00', mora_estimada: null }],
+                },
+            }),
+        )
+        assert.deepEqual([pagada.aplica, pagada.sin_datos], [false, undefined])
+        const libros = (lista: Array<[string, number]>) =>
+            def('libros_atrasados').evaluar(
+                entrada({
+                    'tablero.libros': {
+                        ventana_meses: 2,
+                        libros: lista.map(([libro, meses]) => ({
+                            libro,
+                            al_dia: false,
+                            meses_atrasados: meses,
+                        })),
+                    },
+                }),
+            ).datos
+        assert.notDeepEqual(libros([['ventas', 3]]), libros([['compras', 3]]))
+        assert.deepEqual(
+            libros([
+                ['ventas', 3],
+                ['diario', 1],
+            ]),
+            { libros: 2, detalle: 'ventas:3,diario:1' },
+        )
+    })
+
     test('API: esquema, permisos fiscal.ver y fiscal.configurar', async ({ assert, client }) => {
         const e = await prepararEmpresasGt()
         await parametro(e.ctx, e.B, 'inicio_libros', '2026-01-01')

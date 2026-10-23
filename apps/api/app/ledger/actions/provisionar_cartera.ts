@@ -3,12 +3,11 @@ import { usuarioDelActor } from '#shared/contexto'
 import { Problema, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { resolverEmpresaActiva } from '#core/empresas'
-import { CERO, aTexto, dec, redondear } from '#ledger/dinero'
+import { CERO, aTexto } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
-import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
-import { valorParametro } from '#fiscal/parametros'
 import { verProvision, type ProvisionVista } from '#ledger/cartera'
+import { reservaIncobrables } from '#ledger/checks'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 
 /**
@@ -75,29 +74,12 @@ export default class ProvisionarCartera extends DomainAction<EntradaProvisionarC
             )
         }
 
-        const base = (await t.trx.rawQuery(
-            `SELECT coalesce(sum(s), 0)::text AS base FROM (
-                 SELECT m.cliente_id, sum(m.debe - m.haber) AS s
-                   FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
-                   JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                  WHERE c.codigo = ? AND a.empresa_id = ? AND a.fecha <= ?
-                  GROUP BY m.cliente_id
-             ) x WHERE s > 0`,
-            [CUENTAS.CXC_CLIENTES, empresaId, fecha],
-        )) as { rows: Array<{ base: string }> }
-        const saldo = (await t.trx.rawQuery(
-            `SELECT coalesce(sum(m.haber - m.debe), 0)::text AS saldo
-               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
-               JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE c.codigo = ? AND a.empresa_id = ? AND a.fecha <= ?`,
-            [CUENTAS_GT.ESTIMACION_INCOBRABLES, empresaId, fecha],
-        )) as { rows: Array<{ saldo: string }> }
-        const porcentaje = dec(
-            String(await valorParametro<string>(empresaId, 'reserva_incobrables_max', fecha, t.trx)),
-        )
-        const baseDec = dec(base.rows[0]!.base)
-        const tope = redondear(baseDec.times(porcentaje).div(100))
-        const anterior = dec(saldo.rows[0]!.saldo)
+        // la misma cuenta que el check `incobrables` y el tablero (observación del auditor, fase 8)
+        const reserva = await reservaIncobrables(t.trx, empresaId, fecha)
+        const baseDec = reserva.base
+        const porcentaje = reserva.porcentaje
+        const tope = reserva.tope
+        const anterior = reserva.estimacion
         const falta = tope.minus(anterior)
         const monto = falta.gt(0) ? falta : CERO
 

@@ -141,12 +141,24 @@ const DatosVencimientos = objeto({
             vence_en: fecha,
             dias_restantes: { ...entero, description: 'Negativo si venció' },
             vencida: booleano,
-            estado: enumerado(['pendiente', 'borrador']),
+            estado: {
+                ...enumerado(['pendiente', 'borrador', 'presentada']),
+                description: 'presentada solo si le queda impuesto pendiente de pagar',
+            },
             declaracion_id: nulable(id),
-            a_pagar: { ...nulable(dinero), description: 'De la última versión; null sin borrador' },
+            a_pagar: {
+                ...nulable(dinero),
+                description:
+                    'Pendiente: a_pagar de la última versión − lo pagado sin anular del periodo; null sin borrador',
+            },
+            pagado: {
+                ...nulable(dinero),
+                description: 'Impuesto pagado sin anular por las versiones del periodo; null sin borrador',
+            },
             mora_estimada: {
                 ...nulable(dinero),
-                description: 'Vencida: a pagar × mora_tributaria × días; null sin borrador o sin vencer',
+                description:
+                    'Vencida con pendiente: pendiente × mora_tributaria × días; null sin pendiente o sin vencer',
             },
         }),
     ),
@@ -223,10 +235,18 @@ const DatosDepreciacion = objeto({
                 clase: texto,
                 descripcion: texto,
                 costo: dinero,
+                acumulada: { ...dinero, description: 'Depreciación inicial + cuotas vigentes' },
+                por_depreciar: { ...dinero, description: 'Costo − residual − acumulada' },
                 tasa_anual: dinero,
                 tasa_maxima: dinero,
-                depreciacion_anual: dinero,
-                depreciacion_anual_maxima: dinero,
+                depreciacion_anual: {
+                    ...dinero,
+                    description: 'Con la tasa actual, acotada a lo que queda por depreciar',
+                },
+                depreciacion_anual_maxima: {
+                    ...dinero,
+                    description: 'Con la tasa máxima, acotada a lo que queda (H38)',
+                },
                 diferencia_anual: dinero,
             }),
         ),
@@ -315,7 +335,12 @@ const DatosUtilidades = objeto({
 
 const DatosIsoPiso = objeto({
     activo_neto: dinero,
-    ingresos_brutos: dinero,
+    ingresos_brutos: { ...dinero, description: 'R de los meses leídos' },
+    ingresos_anuales: {
+        ...dinero,
+        description: 'R de un año (anualizado × 12 / meses con menos de 12; H37): el que entra en la base',
+    },
+    ingresos_anualizados: booleano,
     base: dinero,
     tasa: porciento,
     iso_anual: dinero,
