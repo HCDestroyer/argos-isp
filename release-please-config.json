@@ -24,7 +24,7 @@
         ".": {
             "package-name": "argosisp",
             "changelog-path": "CHANGELOG.md",
-            "release-as": "0.9.2"
+            "release-as": "1.0.0"
         }
     }
 }
