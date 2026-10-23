@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.9.2](https://github.com/HCDestroyer/argos-isp/compare/v0.9.1...v0.9.2) (2026-10-23)
+
+
+### Funcionalidades
+
+* **fiscal:** fase 6 PR D, libros legales con folio y sus pantallas (auditado) ([#142](https://github.com/HCDestroyer/argos-isp/issues/142)) ([4db64fb](https://github.com/HCDestroyer/argos-isp/commit/4db64fbaacf0fd6ea5a809ad1cf912b49759f079))
+* **fiscal:** fase 7 PR A, calendario fiscal, feriados y alertas de vencimiento (auditado) ([#143](https://github.com/HCDestroyer/argos-isp/issues/143)) ([3493836](https://github.com/HCDestroyer/argos-isp/commit/3493836f7e6201d7d4721a1f6610a20243ad7315))
+* **fiscal:** fase 7 PR B, declaraciones de IVA y pequeño contribuyente con liquidación obligatoria (auditado) ([#144](https://github.com/HCDestroyer/argos-isp/issues/144)) ([f218b3e](https://github.com/HCDestroyer/argos-isp/commit/f218b3e3aa447f1d0fe85fe615fa13da3c13da72))
+* **fiscal:** fase 7 PR C, ISR, ISO, retenciones y anulación del pago de declaraciones (auditado) ([#145](https://github.com/HCDestroyer/argos-isp/issues/145)) ([cf9699c](https://github.com/HCDestroyer/argos-isp/commit/cf9699cda425b26e3fde73afef802d3b0ae4f455))
+* **fiscal:** fase 8, tablero fiscal, comparador de regímenes y consejos (auditado) ([#147](https://github.com/HCDestroyer/argos-isp/issues/147)) ([afd9bd8](https://github.com/HCDestroyer/argos-isp/commit/afd9bd846ab66a6869cebeebe41be96f1301e6b0))
+* **lealtad:** sorteos completos, contabilidad auditada, panel y portal ([#130](https://github.com/HCDestroyer/argos-isp/issues/130)) ([78edaef](https://github.com/HCDestroyer/argos-isp/commit/78edaef5f9c7c4670a2d1af666b6bdd5fa0d1927))
+* **ledger:** fase 6 PR A, bloqueos del libro por tipo, bloqueo duro y excepciones (auditado) ([#128](https://github.com/HCDestroyer/argos-isp/issues/128)) ([461af38](https://github.com/HCDestroyer/argos-isp/commit/461af386e9bc98563e8e4b932272a9c71cc993a8))
+* **ledger:** fase 6 PR B, checks de cierre mensual y anual (auditado) ([#137](https://github.com/HCDestroyer/argos-isp/issues/137)) ([d4c05ac](https://github.com/HCDestroyer/argos-isp/commit/d4c05ac3ab3a5b2be7823ed848ef0cdb0335d227))
+* **ledger:** fase 6 PR C, cierre anual del ejercicio (auditado) ([#140](https://github.com/HCDestroyer/argos-isp/issues/140)) ([23875bc](https://github.com/HCDestroyer/argos-isp/commit/23875bc9df07d6f6f817f832bb0e8af819d2da09))
+* **portal:** meses bonificados en las facturas y el estado de cuenta ([#125](https://github.com/HCDestroyer/argos-isp/issues/125)) ([838201d](https://github.com/HCDestroyer/argos-isp/commit/838201d746806aedaf0a781c6f24de3009923c20))
+* **web:** bonificaciones en lugar de facturas de Q0 y cargo único ([#127](https://github.com/HCDestroyer/argos-isp/issues/127)) ([9ae5c49](https://github.com/HCDestroyer/argos-isp/commit/9ae5c4986a3f6ecf91f72668a2224069a8744323))
+* **web:** lista de verificación de cierre y procesos detenidos por un bloqueo (fase 6 PR B) ([#138](https://github.com/HCDestroyer/argos-isp/issues/138)) ([a7bad5e](https://github.com/HCDestroyer/argos-isp/commit/a7bad5e03bcd38c8ef4c96f96a4e398ce8923215))
+* **web:** pantallas de bloqueos del libro (fase 6 PR A) ([#131](https://github.com/HCDestroyer/argos-isp/issues/131)) ([9a175ea](https://github.com/HCDestroyer/argos-isp/commit/9a175ea30106c35d062717df8946afeb19b3bdbf))
+* **web:** pantallas de la fase 5, proveedores, compras, activos fijos y diferidos ([#146](https://github.com/HCDestroyer/argos-isp/issues/146)) ([26321c7](https://github.com/HCDestroyer/argos-isp/commit/26321c7546a01f06cfaffd0bc4a20310e434254b))
+
+
+### Correcciones
+
+* **billing:** generar, vencer y cortar a mano solo en las empresas del usuario; pruebas estables (auditado) ([#133](https://github.com/HCDestroyer/argos-isp/issues/133)) ([f729fc9](https://github.com/HCDestroyer/argos-isp/commit/f729fc9d3e6355381fbb49fd3c7a6bf4db334720))
+* **web:** fecha de Guatemala en los pagos del estado de cuenta de las fixtures ([#136](https://github.com/HCDestroyer/argos-isp/issues/136)) ([28b22bb](https://github.com/HCDestroyer/argos-isp/commit/28b22bb74a89e5fbbae718a529404ed88a69fd45))
+
 ## [0.9.1](https://github.com/HCDestroyer/argos-isp/compare/v0.9.0...v0.9.1) (2026-10-19)
 
 
