@@ -34,7 +34,8 @@ test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; 
     await expect(pc.locator('[data-prueba="bloque-motivo"]')).toHaveText('No aplica al régimen Sobre utilidades')
 
     // Alertas destacadas y vencidas en rojo.
-    await expect(argos.locator('[data-alerta="vencidas"]')).toContainText('2 obligaciones vencidas sin presentar')
+    await expect(argos.locator('[data-alerta="vencidas"]')).toContainText('2 obligaciones vencidas sin presentar y 1 presentada con impuesto vencido sin pagar')
+    await expect(argos.locator('[data-obligacion="4"] [data-prueba="vencimiento-pendiente"]')).toContainText('755.00')
     await expect(argos.locator('[data-alerta="libros"]')).toContainText('Q5,000 por libro')
     await expect(argos.locator('[data-obligacion="8"]')).toHaveAttribute('data-vencida', 'si')
     await expect(argos.locator('[data-obligacion="8"]')).toContainText('Venció hace 3 días')
@@ -44,6 +45,8 @@ test('bloques con error, no aplica, alertas y vencidas; «Reintentar» recarga; 
     // Bloques del libro (PR D): ninguna compra sin NIT, el servidor bajo el máximo de su clase.
     await expect(argos.locator('[data-prueba="compras-sin-nit-resumen"]')).toContainText('Ninguna compra de 2026')
     await expect(argos.locator('[data-bloque="depreciacion"] [data-activo="2"]')).toContainText('Servidor del RADIUS')
+    await expect(argos.locator('[data-bloque="depreciacion"] [data-activo="2"] [data-prueba="por-depreciar"]')).toContainText('9,720.00')
+    await expect(argos.locator('[data-bloque="depreciacion"] [data-activo="5"]')).toHaveCount(0)
     await expect(argos.locator('[data-bloque="incobrables"]')).toHaveAttribute('data-estado', 'ok')
 
     // «Reintentar» del bloque recarga el tablero entero (los fixtures responden en el navegador; que

@@ -46,11 +46,13 @@ const PAQUETE: Record<string, unknown> = {
  * Activos fijos del fixture (`ledger.activos` sin bajas; el panel aún no tiene pantalla de activos): el
  * servidor de ArgosNet y el mostrador de Fibra del Sur se deprecian por debajo del máximo de su clase.
  */
-const ACTIVOS: { id: number, empresa_id: number, clase: string, descripcion: string, costo: string, valor_residual: string, tasa_anual: string }[] = [
-    { id: 1, empresa_id: 1, clase: 'equipo_red', descripcion: 'Router de borde MikroTik CCR2116', costo: '18500.00', valor_residual: '0.00', tasa_anual: '10.00' },
-    { id: 2, empresa_id: 1, clase: 'computacion', descripcion: 'Servidor del RADIUS', costo: '12000.00', valor_residual: '1200.00', tasa_anual: '20.00' },
-    { id: 3, empresa_id: 1, clase: 'vehiculos', descripcion: 'Pickup de instalaciones', costo: '95000.00', valor_residual: '15000.00', tasa_anual: '20.00' },
-    { id: 4, empresa_id: 2, clase: 'mobiliario', descripcion: 'Mostrador de atención', costo: '6000.00', valor_residual: '0.00', tasa_anual: '10.00' },
+const ACTIVOS: { id: number, empresa_id: number, clase: string, descripcion: string, costo: string, valor_residual: string, tasa_anual: string, acumulada: string }[] = [
+    { id: 1, empresa_id: 1, clase: 'equipo_red', descripcion: 'Router de borde MikroTik CCR2116', costo: '18500.00', valor_residual: '0.00', tasa_anual: '10.00', acumulada: '1233.36' },
+    { id: 2, empresa_id: 1, clase: 'computacion', descripcion: 'Servidor del RADIUS', costo: '12000.00', valor_residual: '1200.00', tasa_anual: '20.00', acumulada: '1080.00' },
+    { id: 3, empresa_id: 1, clase: 'vehiculos', descripcion: 'Pickup de instalaciones', costo: '95000.00', valor_residual: '15000.00', tasa_anual: '20.00', acumulada: '24000.00' },
+    { id: 4, empresa_id: 2, clase: 'mobiliario', descripcion: 'Mostrador de atención', costo: '6000.00', valor_residual: '0.00', tasa_anual: '10.00', acumulada: '150.00' },
+    // Ya casi depreciada: a la tasa actual le queda menos de un año, así que la máxima no deduciría más (H38).
+    { id: 5, empresa_id: 1, clase: 'computacion', descripcion: 'Switch de acceso del nodo norte', costo: '3000.00', valor_residual: '0.00', tasa_anual: '20.00', acumulada: '2900.00' },
 ]
 
 /** Proveedor no identificado con NIT: sin NIT o «CF» (consumidor final). */
@@ -123,6 +125,13 @@ function ultimaVersion(empresaId: number, impuesto: string, desde: string): Sche
         .filter(d => d.empresa_id === empresaId && d.impuesto === impuesto && d.periodo_desde === desde)
         .sort((a, b) => a.version - b.version)
         .at(-1) ?? null
+}
+
+/** Σ impuesto de los pagos vigentes (sin anulación) de las versiones del periodo (H36). */
+function pagadoDelPeriodo(empresaId: number, impuesto: string, desde: string): Decimal {
+    return bd.declaraciones
+        .filter(d => d.empresa_id === empresaId && d.impuesto === impuesto && d.periodo_desde === desde && d.pago)
+        .reduce((s, d) => s.plus(d.pago?.impuesto ?? '0'), new Decimal(0))
 }
 
 interface Contexto {
@@ -258,18 +267,24 @@ const CALCULOS: { [N in Nombre]: (ctx: Contexto) => NonNullable<Bloques[N]['dato
     vencimientos: (ctx) => {
         const limite = new Date(Date.parse(`${ctx.hoy}T00:00:00Z`) + DIAS_VENCIMIENTOS * 86_400_000).toISOString().slice(0, 10)
         const mora = valor(ctx.empresaId, 'mora_tributaria', ctx.hoy)
+        // H36: abiertas y, con impuesto pendiente de pagar, también las presentadas (corre mora); el
+        // pendiente descuenta lo pagado sin anular por cualquier versión del periodo.
         const obligaciones = bd.obligacionesFiscales
-            .filter(o => o.empresa_id === ctx.empresaId && (o.estado === 'pendiente' || o.estado === 'borrador') && o.vence_en <= limite)
+            .filter(o => o.empresa_id === ctx.empresaId && (o.estado === 'pendiente' || o.estado === 'borrador' || o.estado === 'presentada') && o.vence_en <= limite)
             .sort((a, b) => a.vence_en.localeCompare(b.vence_en) || a.id - b.id)
-            .map((fila) => {
+            .flatMap((fila) => {
                 const o = vistaObligacion(fila, ctx.hoy)
                 const dias = diasEntre(ctx.hoy, o.vence_en)
                 const declaracion = o.declaracion_id !== null ? ultimaVersion(ctx.empresaId, o.impuesto, o.periodo_desde) : null
-                const aPagar = declaracion ? texto(new Decimal(declaracion.totales.a_pagar ?? '0')) : null
-                const moraEstimada = dias < 0 && aPagar !== null && typeof mora === 'string'
-                    ? texto(new Decimal(aPagar).times(mora).dividedBy(100).times(-dias))
+                const pagado = declaracion ? pagadoDelPeriodo(ctx.empresaId, o.impuesto, o.periodo_desde) : null
+                const pendiente = declaracion && pagado ? Decimal.max(new Decimal(declaracion.totales.a_pagar ?? '0').minus(pagado), 0) : null
+                if (fila.estado === 'presentada' && (pendiente === null || !pendiente.gt(0))) {
+                    return []
+                }
+                const moraEstimada = dias < 0 && pendiente !== null && pendiente.gt(0) && typeof mora === 'string'
+                    ? texto(pendiente.times(mora).dividedBy(100).times(-dias))
                     : null
-                return {
+                return [{
                     obligacion_id: o.id,
                     impuesto: o.impuesto,
                     nombre: o.nombre,
@@ -279,11 +294,12 @@ const CALCULOS: { [N in Nombre]: (ctx: Contexto) => NonNullable<Bloques[N]['dato
                     vence_en: o.vence_en,
                     dias_restantes: dias,
                     vencida: dias < 0,
-                    estado: o.estado === 'borrador' ? 'borrador' as const : 'pendiente' as const,
+                    estado: fila.estado === 'presentada' ? 'presentada' as const : fila.estado === 'borrador' ? 'borrador' as const : 'pendiente' as const,
                     declaracion_id: o.declaracion_id,
-                    a_pagar: aPagar,
+                    a_pagar: pendiente === null ? null : texto(pendiente),
+                    pagado: pagado === null ? null : texto(pagado),
                     mora_estimada: moraEstimada,
-                }
+                }]
             })
         return {
             hasta: limite,
@@ -415,24 +431,31 @@ const CALCULOS: { [N in Nombre]: (ctx: Contexto) => NonNullable<Bloques[N]['dato
         }
         const tope = topes as Record<string, string>
         const activos = ACTIVOS.filter(a => a.empresa_id === ctx.empresaId)
+        const acotar = (v: Decimal, limite: Decimal) => (v.gt(limite) ? limite : v)
+        // H38: cada deducción se acota a lo que queda por depreciar; sin saldo o sin diferencia, no se lista.
         const bajo = activos
             .filter(a => tope[a.clase] !== undefined && new Decimal(a.tasa_anual).lt(tope[a.clase]!))
             .map((a) => {
                 const depreciable = new Decimal(a.costo).minus(a.valor_residual)
-                const actual = depreciable.times(a.tasa_anual).dividedBy(100).toDecimalPlaces(2)
-                const maxima = depreciable.times(tope[a.clase]!).dividedBy(100).toDecimalPlaces(2)
-                return {
-                    activo_id: a.id,
-                    clase: a.clase,
-                    descripcion: a.descripcion,
-                    costo: texto(new Decimal(a.costo)),
-                    tasa_anual: texto(new Decimal(a.tasa_anual)),
-                    tasa_maxima: texto(new Decimal(tope[a.clase]!)),
-                    depreciacion_anual: texto(actual),
-                    depreciacion_anual_maxima: texto(maxima),
-                    diferencia_anual: texto(maxima.minus(actual)),
-                }
+                const restante = depreciable.minus(a.acumulada)
+                const actual = acotar(depreciable.times(a.tasa_anual).dividedBy(100).toDecimalPlaces(2), restante)
+                const maxima = acotar(depreciable.times(tope[a.clase]!).dividedBy(100).toDecimalPlaces(2), restante)
+                return { a, restante, actual, maxima }
             })
+            .filter(x => x.restante.gt(0) && x.maxima.gt(x.actual))
+            .map(({ a, restante, actual, maxima }) => ({
+                activo_id: a.id,
+                clase: a.clase,
+                descripcion: a.descripcion,
+                costo: texto(new Decimal(a.costo)),
+                acumulada: texto(new Decimal(a.acumulada)),
+                por_depreciar: texto(restante),
+                tasa_anual: texto(new Decimal(a.tasa_anual)),
+                tasa_maxima: texto(new Decimal(tope[a.clase]!)),
+                depreciacion_anual: texto(actual),
+                depreciacion_anual_maxima: texto(maxima),
+                diferencia_anual: texto(maxima.minus(actual)),
+            }))
         return {
             activos: activos.length,
             bajo_maximo: bajo.length,

@@ -228,11 +228,14 @@ const CALCULOS: { [N in Nombre]: (ctx: Contexto) => NonNullable<Bloques[N]['dato
         const tasa = new Decimal(leer<string>(ctx.empresaId, 'iso_tasa', ctx.hoy)).dividedBy(100)
         leer(ctx.empresaId, 'iso_base', ctx.hoy)
         const activo = new Decimal(ACTIVO_NETO[ctx.empresaId] ?? '0')
-        const mayor = activo.gt(base.R) ? activo : base.R
+        // H37: los ingresos de un año, anualizados como el resto con menos de 12 meses leídos.
+        const n = base.meses.length
+        const ingresos = n === 12 ? base.R : base.R.times(12).dividedBy(n).toDecimalPlaces(2)
+        const mayor = activo.gt(ingresos) ? activo : ingresos
         const positivo = mayor.isNegative() ? CERO : mayor
         const iso = positivo.times(tasa).toDecimalPlaces(2)
         ctx.iso = { iso }
-        return { activo_neto: texto(activo), ingresos_brutos: texto(base.R), base: texto(positivo), tasa: pct(tasa), iso_anual: texto(iso) }
+        return { activo_neto: texto(activo), ingresos_brutos: texto(base.R), ingresos_anuales: texto(ingresos), ingresos_anualizados: n !== 12, base: texto(positivo), tasa: pct(tasa), iso_anual: texto(iso) }
     },
 
     comparacion: (ctx) => {

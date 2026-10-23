@@ -95,11 +95,18 @@ export function alertasTablero(empresa: Empresa): AlertaTablero[] {
     const alertas: AlertaTablero[] = []
     const { pequeno_contribuyente: pc, fel, libros, vencimientos } = empresa.bloques
     if (vencimientos.estado === 'ok' && vencimientos.datos && vencimientos.datos.vencidas > 0) {
-        const n = vencimientos.datos.vencidas
+        // H36: una presentada con impuesto pendiente también corre mora: se cuenta aparte.
+        const vencidas = vencimientos.datos.obligaciones.filter(o => o.vencida)
+        const sinPresentar = vencidas.filter(o => o.estado !== 'presentada').length
+        const sinPagar = vencidas.length - sinPresentar
+        const partes = [
+            sinPresentar ? (sinPresentar === 1 ? '1 obligación vencida sin presentar' : `${sinPresentar} obligaciones vencidas sin presentar`) : null,
+            sinPagar ? (sinPagar === 1 ? '1 presentada con impuesto vencido sin pagar' : `${sinPagar} presentadas con impuesto vencido sin pagar`) : null,
+        ].filter((p): p is string => p !== null)
         alertas.push({
             clave: 'vencidas',
-            titulo: n === 1 ? '1 obligación vencida sin presentar' : `${n} obligaciones vencidas sin presentar`,
-            descripcion: `${n === 1 ? 'Preséntela' : 'Preséntelas'} cuanto antes: la mora y la multa crecen cada día. La mora del tablero es una estimación; confirmar con contador.`,
+            titulo: partes.join(' y '),
+            descripcion: 'Preséntelas y páguelas cuanto antes: la mora y la multa crecen cada día. La mora del tablero es una estimación; confirmar con contador.',
             icono: 'i-lucide-alarm-clock-off',
             enlace: { etiqueta: 'Ver calendario', ruta: '/fiscal/calendario', permiso: 'declaraciones.ver' },
         })

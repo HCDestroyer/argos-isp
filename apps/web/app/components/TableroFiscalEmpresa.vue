@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Schema } from '@argosisp/contracts'
+import Decimal from 'decimal.js'
 
 /**
  * Sección de una empresa en el tablero fiscal: sus alertas destacadas y una tarjeta por bloque. Las
@@ -139,7 +140,7 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                                     {{ o.nombre }}, {{ periodoVencimiento(o) }}
                                 </span>
                                 <span class="text-xs text-muted">
-                                    Vence el {{ formatearFecha(o.vence_en) }} · {{ o.formulario ?? 'formulario por confirmar' }} · {{ o.estado === 'borrador' ? 'en borrador' : 'sin borrador' }}
+                                    Vence el {{ formatearFecha(o.vence_en) }} · {{ o.formulario ?? 'formulario por confirmar' }} · {{ o.estado === 'presentada' ? 'presentada, con impuesto por pagar' : o.estado === 'borrador' ? 'en borrador' : 'sin borrador' }}
                                 </span>
                             </div>
                             <div class="flex flex-col gap-0.5 sm:items-end">
@@ -153,8 +154,9 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                                 <span
                                     v-if="o.a_pagar !== null"
                                     class="text-xs tabular-nums text-muted"
+                                    data-prueba="vencimiento-pendiente"
                                 >
-                                    A pagar {{ formatearQuetzales(o.a_pagar) }}
+                                    <template v-if="o.pagado !== null && !new Decimal(o.pagado).isZero()">Pagado {{ formatearQuetzales(o.pagado) }} · </template>Pendiente {{ formatearQuetzales(o.a_pagar) }}
                                 </span>
                                 <span
                                     v-if="o.mora_estimada !== null"
@@ -185,7 +187,7 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                         v-if="bloques.vencimientos.datos.mora_tributaria"
                         class="mt-2 text-xs text-muted"
                     >
-                        Mora estimada con {{ bloques.vencimientos.datos.mora_tributaria }} % diario sobre lo que hay que pagar, por cada día de atraso.
+                        Mora estimada con {{ bloques.vencimientos.datos.mora_tributaria }} % diario sobre lo pendiente (lo declarado menos lo pagado), por cada día de atraso.
                     </p>
                 </template>
             </TableroBloque>
@@ -652,6 +654,10 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                             <div class="flex min-w-0 flex-col gap-0.5">
                                 <span class="text-sm font-medium text-highlighted">{{ a.descripcion }}</span>
                                 <span class="text-xs text-muted">{{ CLASES_ACTIVO[a.clase] ?? a.clase }} · activo #{{ a.activo_id }} · costo {{ formatearQuetzales(a.costo) }} · {{ a.tasa_anual }} % de un máximo de {{ a.tasa_maxima }} %</span>
+                                <span
+                                    class="text-xs text-muted"
+                                    data-prueba="por-depreciar"
+                                >Depreciado {{ formatearQuetzales(a.acumulada) }} · por depreciar {{ formatearQuetzales(a.por_depreciar) }}</span>
                             </div>
                             <div class="flex flex-col gap-0.5 text-xs sm:items-end">
                                 <span class="tabular-nums text-muted">Anual {{ formatearQuetzales(a.depreciacion_anual) }} · máxima {{ formatearQuetzales(a.depreciacion_anual_maxima) }}</span>
@@ -660,7 +666,7 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                         </li>
                     </ul>
                     <p class="text-xs text-muted">
-                        La tasa se fija al dar de alta el activo. Máximos del parámetro «depreciacion»: confirmar con contador.
+                        Cada deducción se acota a lo que le queda por depreciar al activo. La tasa se fija al dar de alta el activo. Máximos del parámetro «depreciacion»: confirmar con contador.
                     </p>
                 </div>
             </TableroBloque>
