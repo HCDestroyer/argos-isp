@@ -13,6 +13,7 @@ import { resolverImpuesto } from '#fiscal/impuestos'
 import { ParametroSinConfirmar } from '#fiscal/errores'
 import { libroVentasLegal } from '#fiscal/libros_legales'
 import { filasLibroCompras } from '#fiscal/libros'
+import { calcularRenta } from '#fiscal/declaraciones_renta'
 
 /**
  * Declaraciones de IVA y de pequeño contribuyente (contrato §9.3, §10.2 y §10.6; fase 7 PR B).
@@ -31,23 +32,118 @@ import { filasLibroCompras } from '#fiscal/libros'
  *
  * Pequeño contribuyente: `IVA_PC` (5 %) sobre el total del libro de ventas del mes, menos las
  * retenciones del 5 % recibidas (y su remanente).
+ *
+ * ISR (opcional mensual, trimestral y anual), ISO trimestral y retenciones (fase 7 PR C) se calculan
+ * en `#fiscal/declaraciones_renta`; este módulo los despacha y comparte versiones, hash y lecturas.
  */
 
-export const IMPUESTOS_DECLARABLES = ['iva_mensual', 'pc_mensual'] as const
+export const IMPUESTOS_DECLARABLES = [
+    'iva_mensual',
+    'pc_mensual',
+    'isr_opcional_mensual',
+    'isr_trimestral',
+    'iso_trimestral',
+    'isr_anual',
+    'retenciones_iva',
+    'retenciones_isr',
+] as const
 export type ImpuestoDeclarable = (typeof IMPUESTOS_DECLARABLES)[number]
+/** Las del IVA: remanentes de un mes al siguiente, cascada (H34) y checks `iva_cuadrado`/`iva_liquidado`. */
+export const IMPUESTOS_IVA = ['iva_mensual', 'pc_mensual'] as const
+export const IMPUESTOS_RETENCIONES = ['retenciones_iva', 'retenciones_isr'] as const
 export const ESTADOS_DECLARACION = ['borrador', 'revisada', 'presentada', 'sustituida'] as const
 export type EstadoDeclaracion = (typeof ESTADOS_DECLARACION)[number]
 
+export const esDeIva = (impuesto: string) => (IMPUESTOS_IVA as readonly string[]).includes(impuesto)
+export const esDeRetenciones = (impuesto: string) =>
+    (IMPUESTOS_RETENCIONES as readonly string[]).includes(impuesto)
+
+/** Parámetro del plazo y formulario (el del calendario, `l10n/gt/obligaciones.ts`). */
 export const FORMULARIOS: Record<ImpuestoDeclarable, { parametro: string }> = {
     iva_mensual: { parametro: 'iva_declaracion' },
     pc_mensual: { parametro: 'pc_declaracion' },
+    isr_opcional_mensual: { parametro: 'isr_opcional_plazo' },
+    isr_trimestral: { parametro: 'isr_trimestral_plazo' },
+    iso_trimestral: { parametro: 'iso_plazo' },
+    isr_anual: { parametro: 'isr_anual_plazo' },
+    retenciones_iva: { parametro: 'ret_iva_plazo' },
+    retenciones_isr: { parametro: 'isr_retenciones_plazo' },
+}
+
+export type PeriodicidadDeclaracion = 'mensual' | 'trimestral' | 'anual'
+export const PERIODICIDAD: Record<ImpuestoDeclarable, PeriodicidadDeclaracion> = {
+    iva_mensual: 'mensual',
+    pc_mensual: 'mensual',
+    isr_opcional_mensual: 'mensual',
+    isr_trimestral: 'trimestral',
+    iso_trimestral: 'trimestral',
+    isr_anual: 'anual',
+    retenciones_iva: 'mensual',
+    retenciones_isr: 'mensual',
+}
+
+/** Cuenta por pagar que salda el pago de la declaración (§9.3). */
+export const CUENTA_POR_PAGAR: Record<ImpuestoDeclarable, string> = {
+    iva_mensual: CUENTAS_GT.IVA_POR_PAGAR,
+    pc_mensual: CUENTAS_GT.PC_POR_PAGAR,
+    isr_opcional_mensual: CUENTAS_GT.ISR_POR_PAGAR,
+    isr_trimestral: CUENTAS_GT.ISR_POR_PAGAR,
+    isr_anual: CUENTAS_GT.ISR_POR_PAGAR,
+    iso_trimestral: CUENTAS_GT.ISO_POR_PAGAR,
+    retenciones_iva: CUENTAS_GT.RETENCIONES_IVA_POR_PAGAR,
+    retenciones_isr: CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR,
+}
+
+const FORMATO_PERIODO: Record<PeriodicidadDeclaracion, { regex: RegExp; texto: string }> = {
+    mensual: { regex: /^(\d{4})-(0[1-9]|1[0-2])$/, texto: 'AAAA-MM' },
+    trimestral: { regex: /^(\d{4})-T([1-4])$/, texto: 'AAAA-Tn (T1 a T4)' },
+    anual: { regex: /^(\d{4})$/, texto: 'AAAA' },
+}
+
+/** Formato del periodo de un impuesto (`AAAA-MM`, `AAAA-Tn`, `AAAA`). */
+export function formatoPeriodo(impuesto: ImpuestoDeclarable): string {
+    return FORMATO_PERIODO[PERIODICIDAD[impuesto]].texto
+}
+
+/** Primer día del periodo escrito como texto, o null si no tiene el formato de su periodicidad. */
+export function inicioDePeriodo(impuesto: ImpuestoDeclarable, texto: string): string | null {
+    const periodicidad = PERIODICIDAD[impuesto]
+    const m = FORMATO_PERIODO[periodicidad].regex.exec(texto ?? '')
+    if (!m) return null
+    if (periodicidad === 'mensual') return `${m[1]}-${m[2]}-01`
+    if (periodicidad === 'trimestral') return `${m[1]}-${String(Number(m[2]) * 3 - 2).padStart(2, '0')}-01`
+    return `${m[1]}-01-01`
+}
+
+/** Último día del periodo que empieza en `desde`. */
+export function finDePeriodo(impuesto: ImpuestoDeclarable | string, desde: string): string {
+    const inicio = DateTime.fromISO(desde, { zone: 'utc' })
+    const periodicidad = PERIODICIDAD[impuesto as ImpuestoDeclarable] ?? 'mensual'
+    if (periodicidad === 'trimestral') return inicio.plus({ months: 2 }).endOf('month').toISODate()!
+    if (periodicidad === 'anual') return inicio.endOf('year').toISODate()!
+    return inicio.endOf('month').toISODate()!
+}
+
+/** Texto del periodo (`2026-03`, `2026-T1`, `2026`) para mensajes y eventos. */
+export function textoDePeriodo(impuesto: ImpuestoDeclarable | string, desde: string): string {
+    const periodicidad = PERIODICIDAD[impuesto as ImpuestoDeclarable] ?? 'mensual'
+    if (periodicidad === 'trimestral') {
+        return `${desde.slice(0, 4)}-T${Math.floor((Number(desde.slice(5, 7)) - 1) / 3) + 1}`
+    }
+    if (periodicidad === 'anual') return desde.slice(0, 4)
+    return desde.slice(0, 7)
 }
 
 /** Advisory lock de las declaraciones de una empresa (calcular, revisar, presentar, pagar). */
 export const LOCK_DECLARACIONES = 3043
 
+export type SeccionRenglon =
+    'ventas' | 'compras' | 'retenciones' | 'resultados' | 'ajustes' | 'declaraciones' | 'iso'
+
+const SECCIONES_DOCUMENTOS: ReadonlySet<SeccionRenglon> = new Set(['ventas', 'compras', 'retenciones'])
+
 export interface RenglonDeclaracion {
-    seccion: 'ventas' | 'compras' | 'retenciones'
+    seccion: SeccionRenglon
     origen: string
     documento: string
     fecha: string
@@ -82,7 +178,18 @@ export interface LibroEnlazado {
 
 export interface DatosDeclaracion {
     parametros: ParametroUsado[]
-    detalle: { renglones: RenglonDeclaracion[]; libros: LibroEnlazado[]; anterior_id: number | null }
+    detalle: {
+        renglones: RenglonDeclaracion[]
+        libros: LibroEnlazado[]
+        anterior_id: number | null
+        /** criterios aplicados o sin confirmar (ISR, ISO; fase 7 PR C) */
+        notas?: string[]
+        /**
+         * renglones del cálculo de ISR e ISO (secciones resultados, ajustes, declaraciones, iso; PR C), aparte
+         * de los de documentos (`renglones`: ventas, compras, retenciones)
+         */
+        calculo?: RenglonDeclaracion[]
+    }
     totales: Record<string, string>
     datos_hash: string
     formulario: string | null
@@ -105,19 +212,25 @@ export function canonico(valor: unknown): string {
     return JSON.stringify(valor ?? null)
 }
 
-function hash(datos: unknown): string {
+export function hash(datos: unknown): string {
     return createHash('sha256').update(canonico(datos)).digest('hex')
 }
 
-/** Constancias de retención de IVA recibidas: + en el mes del asiento del pago, − en el de su reverso. */
-async function retencionesDelMes(c: QueryClientContract, empresaId: number, desde: string, hasta: string) {
+/** Constancias de retención recibidas: + en el mes del asiento del pago, − en el de su reverso. */
+export async function retencionesDelMes(
+    c: QueryClientContract,
+    empresaId: number,
+    desde: string,
+    hasta: string,
+    impuesto: 'iva' | 'isr' = 'iva',
+) {
     const { rows } = (await c.rawQuery(
         `WITH k AS (
              SELECT cr.id, cr.numero, cr.monto, cr.pago_id, cl.nit_cui AS nit,
                     (SELECT min(a.id) FROM ledger.asientos a
                       WHERE a.origen_tipo = 'pago' AND a.origen_id = cr.pago_id AND a.reversa_de IS NULL) AS asiento_id
                FROM ledger.constancias_retencion cr LEFT JOIN core.clientes cl ON cl.id = cr.cliente_id
-              WHERE cr.empresa_id = ? AND cr.direccion = 'recibida' AND cr.impuesto = 'iva'
+              WHERE cr.empresa_id = ? AND cr.direccion = 'recibida' AND cr.impuesto = ?
          )
          SELECT k.id, k.numero, k.nit, k.pago_id, k.monto::text AS monto, to_char(a.fecha, 'YYYY-MM-DD') AS fecha,
                 'registro' AS movimiento
@@ -128,7 +241,7 @@ async function retencionesDelMes(c: QueryClientContract, empresaId: number, desd
            FROM k JOIN ledger.asientos r ON r.reversa_de = k.asiento_id
           WHERE r.fecha BETWEEN ? AND ?
           ORDER BY 6, 1, 7 DESC`,
-        [empresaId, desde, hasta, desde, hasta],
+        [empresaId, impuesto, desde, hasta, desde, hasta],
     )) as {
         rows: Array<{
             id: number
@@ -145,7 +258,7 @@ async function retencionesDelMes(c: QueryClientContract, empresaId: number, desd
         origen: 'constancia',
         documento: `Constancia ${r.numero} · pago ${r.pago_id}${r.movimiento === 'anulacion' ? ' (anulación)' : ''}`,
         fecha: r.fecha,
-        tipo: 'RET_IVA',
+        tipo: impuesto === 'iva' ? 'RET_IVA' : 'RET_ISR',
         nit: r.nit,
         base: '0.00',
         iva: aTexto(r.monto),
@@ -155,7 +268,12 @@ async function retencionesDelMes(c: QueryClientContract, empresaId: number, desd
 }
 
 /** Libros de ventas y compras emitidos con folio que cubren el mes (fase 6 PR D). */
-async function librosEmitidos(c: QueryClientContract, empresaId: number, desde: string, hasta: string) {
+export async function librosEmitidos(
+    c: QueryClientContract,
+    empresaId: number,
+    desde: string,
+    hasta: string,
+) {
     const filas = (await c
         .from('fiscal.libros_emisiones')
         .where('empresa_id', empresaId)
@@ -213,7 +331,7 @@ async function remanentesAnteriores(
     }
 }
 
-function parametroUsado(
+export function parametroUsado(
     filas: Parameters<typeof resolver>[0],
     clave: string,
     fecha: string,
@@ -222,29 +340,16 @@ function parametroUsado(
     return v ? { clave, valor: v.valor, vigente_desde: v.vigente_desde, nivel: v.nivel } : null
 }
 
-const min = (a: Dec, b: Dec) => (a.lt(b) ? a : b)
-const max0 = (a: Dec) => (a.isNegative() ? CERO : a)
+export const min = (a: Dec, b: Dec) => (a.lt(b) ? a : b)
+export const max0 = (a: Dec) => (a.isNegative() ? CERO : a)
 
-/**
- * Calcula el borrador de `impuesto` del mes que empieza en `desde` con los datos de hoy. Mismos datos
- * ⇒ mismo `datos_hash` (no entra la hora ni los libros emitidos, que son solo un enlace).
- */
-export async function calcularDatos(
+/** Renglones del libro de ventas legal del rango (DTE certificados y documentos sin FEL). */
+export async function ventasDelRango(
     c: QueryClientContract,
     empresaId: number,
-    impuesto: ImpuestoDeclarable,
     desde: string,
-): Promise<DatosDeclaracion> {
-    const hasta = fin(desde)
-    const datos = await datosFiscales(empresaId, c)
-    const parametros: ParametroUsado[] = []
-    const plazo = parametroUsado(datos.filas, FORMULARIOS[impuesto].parametro, hasta)
-    if (plazo) parametros.push(plazo)
-    const formulario =
-        plazo && typeof plazo.valor === 'object' && plazo.valor !== null
-            ? ((plazo.valor as { formulario?: string | null }).formulario ?? null)
-            : null
-
+    hasta: string,
+) {
     const ventas = await libroVentasLegal(empresaId, { desde, hasta }, c)
     const renglones: RenglonDeclaracion[] = ventas.reporte.filas.map((f: Record<string, any>) => ({
         seccion: 'ventas',
@@ -263,10 +368,68 @@ export async function calcularDatos(
         total: aTexto(f.total ?? '0'),
         estado: f.estado ?? null,
     }))
+    const t = ventas.reporte.totales as Record<string, unknown>
+    const suma = (clave: string) => redondear(dec(String(t[clave] ?? '0')))
+    return {
+        renglones,
+        iva: suma('iva'),
+        total: suma('total'),
+        /** bienes + servicios + exportación (sin exentas) */
+        gravado: suma('bienes').plus(suma('servicios')).plus(suma('exportacion')),
+        exento: suma('exento'),
+    }
+}
+
+/**
+ * Calcula el borrador de `impuesto` del mes que empieza en `desde` con los datos de hoy. Mismos datos
+ * ⇒ mismo `datos_hash` (no entra la hora ni los libros emitidos, que son solo un enlace).
+ */
+export async function calcularDatos(
+    c: QueryClientContract,
+    empresaId: number,
+    impuesto: ImpuestoDeclarable,
+    desde: string,
+): Promise<DatosDeclaracion> {
+    const hasta = finDePeriodo(impuesto, desde)
+    const datos = await datosFiscales(empresaId, c)
+    const parametros: ParametroUsado[] = []
+    const plazo = parametroUsado(datos.filas, FORMULARIOS[impuesto].parametro, hasta)
+    if (plazo) parametros.push(plazo)
+    const formulario =
+        plazo && typeof plazo.valor === 'object' && plazo.valor !== null
+            ? ((plazo.valor as { formulario?: string | null }).formulario ?? null)
+            : null
+
+    if (!esDeIva(impuesto)) {
+        const renta = await calcularRenta(c, empresaId, impuesto, desde, hasta, datos)
+        parametros.push(...renta.parametros)
+        const libros = renta.conLibros ? await librosEmitidos(c, empresaId, desde, hasta) : []
+        return {
+            parametros,
+            detalle: {
+                renglones: renta.renglones.filter((r) => SECCIONES_DOCUMENTOS.has(r.seccion)),
+                libros,
+                anterior_id: null,
+                notas: renta.notas,
+                calculo: renta.renglones.filter((r) => !SECCIONES_DOCUMENTOS.has(r.seccion)),
+            },
+            totales: renta.totales,
+            formulario,
+            datos_hash: hash({
+                renglones: renta.renglones,
+                totales: renta.totales,
+                parametros,
+                anterior: null,
+            }),
+        }
+    }
+
+    const ventas = await ventasDelRango(c, empresaId, desde, hasta)
+    const renglones: RenglonDeclaracion[] = [...ventas.renglones]
     const retenciones = await retencionesDelMes(c, empresaId, desde, hasta)
     const anterior = await remanentesAnteriores(c, empresaId, impuesto, desde)
-    const D = redondear(dec(String(ventas.reporte.totales.iva ?? '0')))
-    const totalVentas = redondear(dec(String(ventas.reporte.totales.total ?? '0')))
+    const D = ventas.iva
+    const totalVentas = ventas.total
     const R = retenciones.reduce((s, r) => s.plus(dec(r.iva)), CERO)
 
     let totales: Record<string, string>
@@ -389,11 +552,27 @@ export function netoLiquidacion(impuesto: ImpuestoDeclarable, t: Record<string, 
         sumar(CUENTAS_GT.IVA_CREDITO, dec(t.credito_usado ?? '0').negated())
         sumar(CUENTAS_GT.IVA_RETENIDO_CLIENTES, dec(t.retenciones_usadas ?? '0').negated())
         sumar(CUENTAS_GT.IVA_POR_PAGAR, dec(t.a_pagar ?? '0').negated())
-    } else {
+    } else if (impuesto === 'pc_mensual') {
         sumar(CUENTAS_GT.IMPUESTO_PC, dec(t.impuesto ?? '0'))
         sumar(CUENTAS_GT.PC_POR_PAGAR, dec(t.a_pagar ?? '0').negated())
         sumar(CUENTAS_GT.IVA_RETENIDO_CLIENTES, dec(t.retenciones_usadas ?? '0').negated())
+    } else if (impuesto === 'isr_opcional_mensual') {
+        // 5.5.01 / 1.1.06 + 2.1.07 (§10.6)
+        sumar(CUENTAS_GT.IMPUESTO_SOBRE_RENTA, dec(t.isr ?? '0'))
+        sumar(CUENTAS_GT.ISR_RETENIDO_CLIENTES, dec(t.retenciones_usadas ?? '0').negated())
+        sumar(CUENTAS_GT.ISR_POR_PAGAR, dec(t.a_pagar ?? '0').negated())
+    } else if (impuesto === 'isr_trimestral') {
+        // 1.1.07 / 2.1.07 (§10.6), con el ISO acreditado desde 1.1.08
+        sumar(CUENTAS_GT.ISR_PAGOS_TRIMESTRALES, dec(t.isr ?? '0'))
+        sumar(CUENTAS_GT.ISO_POR_ACREDITAR, dec(t.iso_acreditado ?? '0').negated())
+        sumar(CUENTAS_GT.ISR_POR_PAGAR, dec(t.a_pagar ?? '0').negated())
+    } else if (impuesto === 'iso_trimestral') {
+        // 1.1.08 / 2.1.08 (§10.6)
+        sumar(CUENTAS_GT.ISO_POR_ACREDITAR, dec(t.impuesto ?? '0'))
+        sumar(CUENTAS_GT.ISO_POR_PAGAR, dec(t.a_pagar ?? '0').negated())
     }
+    // isr_anual: lo provisiona el cierre anual; retenciones: ya están en 2.1.04 y 2.1.05 (sin asiento)
+    for (const [cuenta, monto] of neto) if (monto.isZero()) neto.delete(cuenta)
     return neto
 }
 
@@ -466,6 +645,8 @@ export async function cuadriculasDelMes(c: QueryClientContract, empresaId: numbe
         V_IVA_sin_etiqueta: sinEtiqueta,
         C_IVA: por.get('C_IVA') ?? CERO,
         RET_IVA_REC: por.get('RET_IVA_REC') ?? CERO,
+        RET_IVA_EMI: por.get('RET_IVA_EMI') ?? CERO,
+        RET_ISR_EMI: por.get('RET_ISR_EMI') ?? CERO,
     }
 }
 
@@ -497,12 +678,29 @@ export async function impuestoDelMes(
         .from('fiscal.obligaciones')
         .where('empresa_id', empresaId)
         .where('periodo_desde', desde)
-        .whereIn('impuesto', IMPUESTOS_DECLARABLES as unknown as string[])
+        .whereIn('impuesto', IMPUESTOS_IVA as unknown as string[])
         .whereNot('estado', 'no_aplica')
         .orderBy('impuesto', 'asc')
         .select('impuesto')
         .first()) as { impuesto: ImpuestoDeclarable } | null
     return fila?.impuesto ?? null
+}
+
+/** Obligaciones de retenciones del mes que aplican (`retenciones_iva`, `retenciones_isr`). */
+export async function retencionesDelCalendario(
+    c: QueryClientContract,
+    empresaId: number,
+    desde: string,
+): Promise<ImpuestoDeclarable[]> {
+    const filas = (await c
+        .from('fiscal.obligaciones')
+        .where('empresa_id', empresaId)
+        .where('periodo_desde', desde)
+        .whereIn('impuesto', IMPUESTOS_RETENCIONES as unknown as string[])
+        .whereNot('estado', 'no_aplica')
+        .orderBy('impuesto', 'asc')
+        .select('impuesto')) as Array<{ impuesto: ImpuestoDeclarable }>
+    return filas.map((f) => f.impuesto)
 }
 
 /*
@@ -528,19 +726,36 @@ export interface DeclaracionFila {
     totales: Record<string, string>
     datos_hash: string
     calculada_por: number | null
+    calculada_por_nombre: string | null
     calculada_en: Date
     estado: EstadoDeclaracion
     revisada_por: number | null
+    revisada_por_nombre: string | null
     revisada_en: Date | null
     asiento_id: number | null
     numero_formulario: string | null
     fecha_presentacion: string | null
     boleta: string | null
     presentada_por: number | null
+    presentada_por_nombre: string | null
     presentada_en: Date | null
+    /** el pago vigente (sin anulación) de esta versión */
     pago: PagoDeclaracion | null
+    /** pagos anulados de esta versión (fase 7 PR C), del más antiguo al más reciente */
+    pagos_anulados: PagoAnulado[]
     created_at: Date
     updated_at: Date
+}
+
+export interface PagoAnulado extends PagoDeclaracion {
+    anulacion: {
+        id: number
+        motivo: string
+        asiento_id: number
+        anulado_por: number | null
+        anulado_por_nombre: string | null
+        created_at: Date
+    }
 }
 
 export interface PagoDeclaracion {
@@ -557,7 +772,20 @@ export interface PagoDeclaracion {
     created_at: Date
 }
 
+/** `fiscal.declaraciones as d` con los nombres de quien calculó, revisó y presentó (pedido de A4). */
+function consultaDeclaraciones(c: QueryClientContract) {
+    return c
+        .from('fiscal.declaraciones as d')
+        .leftJoin('core.usuarios as uc', 'uc.id', 'd.calculada_por')
+        .leftJoin('core.usuarios as ur', 'ur.id', 'd.revisada_por')
+        .leftJoin('core.usuarios as up', 'up.id', 'd.presentada_por')
+        .select(COLUMNAS(c))
+}
+
 const COLUMNAS = (c: QueryClientContract) => [
+    'uc.nombre as calculada_por_nombre',
+    'ur.nombre as revisada_por_nombre',
+    'up.nombre as presentada_por_nombre',
     'd.id',
     'd.empresa_id',
     'd.impuesto',
@@ -597,26 +825,63 @@ async function conPagos(
     const ids = filas.map((f) => Number(f.id))
     const pagos = ids.length
         ? ((await c
-              .from('fiscal.declaraciones_pagos')
-              .whereIn('declaracion_id', ids)
+              .from('fiscal.declaraciones_pagos as p')
+              .leftJoin('fiscal.declaraciones_pagos_anulaciones as x', 'x.pago_id', 'p.id')
+              .leftJoin('core.usuarios as ux', 'ux.id', 'x.anulado_por')
+              .whereIn('p.declaracion_id', ids)
+              .orderBy('p.id', 'asc')
               .select(
-                  'id',
-                  'declaracion_id',
-                  c.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`),
-                  c.raw('impuesto::text as impuesto'),
-                  c.raw('mora::text as mora'),
-                  c.raw('multa::text as multa'),
-                  c.raw('total::text as total'),
-                  'dias_atraso',
-                  'boleta',
-                  'asiento_id',
-                  'registrado_por',
-                  'created_at',
+                  'p.id',
+                  'p.declaracion_id',
+                  c.raw(`to_char(p.fecha, 'YYYY-MM-DD') as fecha`),
+                  c.raw('p.impuesto::text as impuesto'),
+                  c.raw('p.mora::text as mora'),
+                  c.raw('p.multa::text as multa'),
+                  c.raw('p.total::text as total'),
+                  'p.dias_atraso',
+                  'p.boleta',
+                  'p.asiento_id',
+                  'p.registrado_por',
+                  'p.created_at',
+                  'x.id as anulacion_id',
+                  'x.motivo as anulacion_motivo',
+                  'x.asiento_id as anulacion_asiento_id',
+                  'x.anulado_por',
+                  'ux.nombre as anulado_por_nombre',
+                  'x.created_at as anulado_en',
               )) as Array<Record<string, any>>)
         : []
-    const pagoDe = new Map(pagos.map((p) => [Number(p.declaracion_id), p]))
+    const pago = (p: Record<string, any>): PagoDeclaracion => ({
+        id: Number(p.id),
+        fecha: p.fecha,
+        impuesto: aTexto(p.impuesto),
+        mora: aTexto(p.mora),
+        multa: aTexto(p.multa),
+        total: aTexto(p.total),
+        dias_atraso: Number(p.dias_atraso),
+        boleta: p.boleta ?? null,
+        asiento_id: Number(p.asiento_id),
+        registrado_por: n(p.registrado_por),
+        created_at: p.created_at,
+    })
+    const pagoDe = new Map(
+        pagos.filter((p) => p.anulacion_id === null).map((p) => [Number(p.declaracion_id), p]),
+    )
     return filas.map((f) => {
         const p = pagoDe.get(Number(f.id))
+        const anulados = pagos
+            .filter((x) => Number(x.declaracion_id) === Number(f.id) && x.anulacion_id !== null)
+            .map((x): PagoAnulado => ({
+                ...pago(x),
+                anulacion: {
+                    id: Number(x.anulacion_id),
+                    motivo: x.anulacion_motivo,
+                    asiento_id: Number(x.anulacion_asiento_id),
+                    anulado_por: n(x.anulado_por),
+                    anulado_por_nombre: x.anulado_por_nombre ?? null,
+                    created_at: x.anulado_en,
+                },
+            }))
         return {
             ...(f as DeclaracionFila),
             id: Number(f.id),
@@ -628,21 +893,11 @@ async function conPagos(
             revisada_por: n(f.revisada_por),
             asiento_id: n(f.asiento_id),
             presentada_por: n(f.presentada_por),
-            pago: p
-                ? {
-                      id: Number(p.id),
-                      fecha: p.fecha,
-                      impuesto: aTexto(p.impuesto),
-                      mora: aTexto(p.mora),
-                      multa: aTexto(p.multa),
-                      total: aTexto(p.total),
-                      dias_atraso: Number(p.dias_atraso),
-                      boleta: p.boleta ?? null,
-                      asiento_id: Number(p.asiento_id),
-                      registrado_por: n(p.registrado_por),
-                      created_at: p.created_at,
-                  }
-                : null,
+            calculada_por_nombre: f.calculada_por_nombre ?? null,
+            revisada_por_nombre: f.revisada_por_nombre ?? null,
+            presentada_por_nombre: f.presentada_por_nombre ?? null,
+            pago: p ? pago(p) : null,
+            pagos_anulados: anulados,
         }
     })
 }
@@ -651,11 +906,7 @@ export async function verDeclaracion(
     id: number,
     c: QueryClientContract = db.connection(),
 ): Promise<DeclaracionFila> {
-    const fila = (await c
-        .from('fiscal.declaraciones as d')
-        .where('d.id', id)
-        .select(COLUMNAS(c))
-        .first()) as Record<string, any> | null
+    const fila = (await consultaDeclaraciones(c).where('d.id', id).first()) as Record<string, any> | null
     if (!fila) throw new NoEncontrado(`La declaración ${id} no existe`)
     const [d] = await conPagos(c, [fila])
     return d!
@@ -668,11 +919,9 @@ export async function ultimaVersion(
     impuesto: string,
     desde: string,
 ): Promise<DeclaracionFila | null> {
-    const fila = (await c
-        .from('fiscal.declaraciones as d')
+    const fila = (await consultaDeclaraciones(c)
         .where({ 'd.empresa_id': empresaId, 'd.impuesto': impuesto, 'd.periodo_desde': desde })
         .orderBy('d.version', 'desc')
-        .select(COLUMNAS(c))
         .first()) as Record<string, any> | null
     if (!fila) return null
     const [d] = await conPagos(c, [fila])
@@ -684,20 +933,26 @@ export interface FiltrosDeclaraciones {
     limit?: number | null
     impuesto?: string[] | null
     estado?: string[] | null
-    /** AAAA-MM */
+    /** AAAA-MM, AAAA-Tn o AAAA: el periodo que empieza ese mes, trimestre o año */
     periodo?: string | null
+}
+
+/** Primer día del periodo del filtro (`AAAA-MM`, `AAAA-Tn`, `AAAA`). */
+function inicioDelFiltro(texto: string): string {
+    const t = /^(\d{4})-T([1-4])$/.exec(texto)
+    if (t) return `${t[1]}-${String(Number(t[2]) * 3 - 2).padStart(2, '0')}-01`
+    if (/^\d{4}$/.test(texto)) return `${texto}-01-01`
+    return `${texto}-01`
 }
 
 export async function listarDeclaraciones(filtros: FiltrosDeclaraciones, empresas: number[] | null) {
     const c = db.connection()
-    const consulta = c
-        .from('fiscal.declaraciones as d')
-        .select(COLUMNAS(c))
+    const consulta = consultaDeclaraciones(c)
         .if(filtros.impuesto && filtros.impuesto.length > 0, (q) =>
             q.whereIn('d.impuesto', filtros.impuesto!),
         )
         .if(filtros.estado && filtros.estado.length > 0, (q) => q.whereIn('d.estado', filtros.estado!))
-        .if(filtros.periodo, (q) => q.where('d.periodo_desde', `${filtros.periodo}-01`))
+        .if(filtros.periodo, (q) => q.where('d.periodo_desde', inicioDelFiltro(filtros.periodo!)))
     filtrarPorEmpresa(consulta, empresas, (q, ids) => q.whereIn('d.empresa_id', ids))
     const pagina = await paginar<Record<string, any>>(consulta, filtros, { columna: 'd.id' })
     return { ...pagina, data: await conPagos(c, pagina.data) }

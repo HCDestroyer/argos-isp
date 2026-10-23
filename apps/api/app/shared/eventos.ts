@@ -518,6 +518,7 @@ export interface CatalogoEventos {
     'declaracion.revisada': PayloadDeclaracion
     'declaracion.presentada': PayloadDeclaracion
     'declaracion.pagada': PayloadDeclaracion
+    'declaracion.pago_anulado': PayloadPagoDeclaracionAnulado
     // FEL (A3, `contratos/localizacion-fiscal.md` §11.3)
     'dte.certificado': {
         dte_id: number
@@ -856,6 +857,14 @@ export interface PayloadDeclaracion {
     cascada_de?: number
 }
 
+/** `declaracion.pago_anulado` (fase 7 PR C): `monto` = total del pago anulado (impuesto, mora y multa). */
+export interface PayloadPagoDeclaracionAnulado extends Omit<PayloadDeclaracion, 'motivo' | 'cascada_de'> {
+    pago_id: number
+    /** reverso del asiento `pago_impuesto` */
+    asiento_id: number
+    motivo: string
+}
+
 export type NombreEvento = keyof CatalogoEventos
 export type PayloadEvento<E extends NombreEvento> = CatalogoEventos[E]
 
@@ -914,6 +923,7 @@ export const EVENTOS = [
     'declaracion.revisada',
     'declaracion.presentada',
     'declaracion.pagada',
+    'declaracion.pago_anulado',
     'dte.certificado',
     'dte.rechazado',
     'dte.anulado',

@@ -317,17 +317,30 @@ export const agregarFeriadoValidator = vine.compile(
 // Declaraciones (fase 7 PR B)
 // ---------------------------------------------------------------------------------------------
 
+const IMPUESTOS_DECLARACION = [
+    'iva_mensual',
+    'pc_mensual',
+    'isr_opcional_mensual',
+    'isr_trimestral',
+    'iso_trimestral',
+    'isr_anual',
+    'retenciones_iva',
+    'retenciones_isr',
+] as const
+
+/** AAAA-MM (mensuales), AAAA-Tn (trimestrales) o AAAA (anual) */
+const PERIODO_DECLARACION = /^\d{4}(-(0[1-9]|1[0-2])|-T[1-4])?$/
+
 export const calcularDeclaracionValidator = vine.compile(
     vine.object({
-        impuesto: vine.enum(['iva_mensual', 'pc_mensual'] as const).meta({
+        impuesto: vine.enum(IMPUESTOS_DECLARACION).meta({
             description:
-                'iva_mensual (SAT-2237) o pc_mensual (SAT-2046); ISR, ISO y retenciones llegan después',
+                'iva_mensual (SAT-2237), pc_mensual (SAT-2046), isr_opcional_mensual (SAT-1311), isr_trimestral (SAT-1361), iso_trimestral (SAT-1608), isr_anual (SAT-1411), retenciones_iva (SAT-2340), retenciones_isr',
         }),
-        periodo: vine
-            .string()
-            .trim()
-            .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-            .meta({ description: 'Mes AAAA-MM' }),
+        periodo: vine.string().trim().regex(PERIODO_DECLARACION).meta({
+            description:
+                'AAAA-MM en las mensuales, AAAA-Tn (T1 a T4) en isr_trimestral e iso_trimestral, AAAA en isr_anual; otro formato para el impuesto: 422 periodo',
+        }),
         sustitutiva: vine.boolean().optional().meta({
             description: 'true para recalcular un periodo ya revisado o presentado (versión sustitutiva)',
         }),
@@ -339,20 +352,15 @@ export const listarDeclaracionesValidator = vine.compile(
     vine.object({
         empresas: empresasConsulta(),
         ...reglasPaginacion,
-        impuesto: vine
-            .array(vine.enum(['iva_mensual', 'pc_mensual'] as const))
-            .parse(repetible)
-            .optional(),
+        impuesto: vine.array(vine.enum(IMPUESTOS_DECLARACION)).parse(repetible).optional(),
         estado: vine
             .array(vine.enum(['borrador', 'revisada', 'presentada', 'sustituida'] as const))
             .parse(repetible)
             .optional(),
-        periodo: vine
-            .string()
-            .trim()
-            .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-            .optional()
-            .meta({ description: 'Mes AAAA-MM' }),
+        periodo: vine.string().trim().regex(PERIODO_DECLARACION).optional().meta({
+            description:
+                'Periodo que empieza ese mes (AAAA-MM), trimestre (AAAA-Tn) o año (AAAA): compara el primer día',
+        }),
     }),
 )
 
@@ -372,5 +380,54 @@ export const pagoDeclaracionValidator = vine.compile(
         cuenta_bancaria_id: idEntidad().nullable().optional(),
         fecha: fechaIso().nullable().optional().meta({ description: 'Fecha del pago; por defecto hoy' }),
         boleta: vine.string().trim().maxLength(60).nullable().optional(),
+    }),
+)
+
+export const anularPagoDeclaracionValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        fecha: fechaIso()
+            .nullable()
+            .optional()
+            .meta({ description: 'Fecha del reverso; por defecto hoy (nunca anterior al pago)' }),
+    }),
+)
+
+export const ajusteFiscalValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        anio: vine.number().withoutDecimals().min(2000).max(2100).nullable().optional().meta({
+            description: 'Año del ajuste (obligatorio salvo con anula_a)',
+        }),
+        trimestre: vine.number().withoutDecimals().min(1).max(4).nullable().optional().meta({
+            description: 'Trimestre del cierre parcial (1 a 4); null o ausente = ajuste del ISR anual',
+        }),
+        efecto: vine
+            .enum(['suma', 'resta'] as const)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'suma (no deducible) o resta (renta exenta) a la renta imponible; obligatorio salvo con anula_a',
+            }),
+        concepto: vine.string().trim().minLength(3).maxLength(300),
+        monto: vine
+            .string()
+            .trim()
+            .regex(/^\d{1,12}(\.\d{1,2})?$/)
+            .nullable()
+            .optional()
+            .meta({ description: 'Monto mayor que cero; obligatorio salvo con anula_a' }),
+        anula_a: idEntidad().nullable().optional().meta({
+            description: 'Ajuste que esta fila anula (repite su año, trimestre, efecto y monto)',
+        }),
+    }),
+)
+
+export const listarAjustesValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        anio: vine.number().withoutDecimals().min(2000).max(2100),
+        trimestre: vine.number().withoutDecimals().min(1).max(4).optional(),
     }),
 )

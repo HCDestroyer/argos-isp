@@ -33,7 +33,9 @@ import { balanceComprobacion } from '#ledger/comprobacion'
  *   constancias = última versión del borrador; pequeño contribuyente: ventas y retenciones) e
  *   iva_liquidado (con la versión revisada: el neto del mes de `2.1.02` en cero y el de `1.1.04` =
  *   lo que dejó la liquidación; pequeño contribuyente: `2.1.09` = a pagar). `declaraciones.revisar`
- *   exige iva_cuadrado antes de liquidar y los dos después.
+ *   exige iva_cuadrado antes de liquidar y los dos después. retenciones_cuadradas (PR C): con
+ *   obligación de retenciones en el mes (si no, no deja fila), Σ `RET_IVA_EMI` / `RET_ISR_EMI` =
+ *   retenciones de las compras; la revisión de una declaración de retenciones lo exige antes y después.
  * - Los que comparan saldos con documentos (cartera, proveedores, 2.1.11, tránsito, cobros por
  *   liquidar) miran el estado al verificar, como los reportes que comparan; los demás, el periodo.
  */
@@ -105,6 +107,11 @@ export const CHECKS: readonly DefinicionCheck[] = [
         clave: 'iva_liquidado',
         tipo: 'impuestos',
         titulo: 'Débito y crédito del periodo trasladados por la liquidación',
+    },
+    {
+        clave: 'retenciones_cuadradas',
+        tipo: 'impuestos',
+        titulo: 'Retenciones emitidas del mes: cuadrículas del libro = retenciones de las compras',
     },
     { clave: 'incobrables', tipo: 'anual', titulo: 'Estimación de incobrables (1.1.12) dentro del tope' },
     {
@@ -182,7 +189,7 @@ type Calculo = (
     empresaId: number,
     periodo: string,
     fin: string,
-) => Promise<CheckCalculado>
+) => Promise<CheckCalculado | null>
 
 const CALCULOS: Record<string, Calculo> = {
     async cxc_antiguedad(c, empresaId) {
@@ -676,6 +683,37 @@ CALCULOS.iva_liquidado = async (c, empresaId, periodo) => {
     }
 }
 
+CALCULOS.retenciones_cuadradas = async (c, empresaId, periodo) => {
+    const d = await import('#fiscal/declaraciones')
+    const impuestos = await d.retencionesDelCalendario(c, empresaId, periodo)
+    // sin obligación de retenciones en el mes no deja fila (no aplica, como un check que no existe)
+    if (impuestos.length === 0) return null
+    const etiquetas = await d.cuadriculasDelMes(c, empresaId, periodo)
+    const esperado: Array<[string, string]> = []
+    const obtenido: Array<[string, string]> = []
+    const borradores: Array<{ impuesto: string; declaracion_id: number | null; al_dia: boolean }> = []
+    for (const impuesto of impuestos) {
+        const cuadricula = impuesto === 'retenciones_iva' ? 'RET_IVA_EMI' : 'RET_ISR_EMI'
+        const libros = await d.calcularDatos(c, empresaId, impuesto, periodo)
+        const borrador = await d.ultimaVersion(c, empresaId, impuesto, periodo)
+        const alDia = borrador !== null && borrador.datos_hash === libros.datos_hash
+        // el borrador al día lo exige la revisión de cada una (datos_hash): aquí solo se informa, para que
+        // revisar las retenciones de IVA no espere el borrador de las de ISR
+        esperado.push([cuadricula, libros.totales.retenido ?? '0.00'])
+        obtenido.push([cuadricula, aTexto(etiquetas[cuadricula])])
+        borradores.push({ impuesto, declaracion_id: borrador?.id ?? null, al_dia: alDia })
+    }
+    const e = resumen(esperado)
+    const o = resumen(obtenido)
+    return {
+        clave: 'retenciones_cuadradas',
+        esperado: e,
+        obtenido: o,
+        resultado: igual(e, o),
+        detalle: { borradores },
+    }
+}
+
 /** Corre los checks automáticos del tipo (sin escribir). */
 export async function calcularChecks(
     c: QueryClientContract,
@@ -687,7 +725,8 @@ export async function calcularChecks(
     const salida: CheckCalculado[] = []
     for (const def of checksDelTipo(tipo)) {
         const calculo = CALCULOS[def.clave]
-        if (calculo) salida.push(await calculo(c, empresaId, periodo, fin))
+        const calculado = calculo ? await calculo(c, empresaId, periodo, fin) : null
+        if (calculado) salida.push(calculado)
     }
     return salida
 }

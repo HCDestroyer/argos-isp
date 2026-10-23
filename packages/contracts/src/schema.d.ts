@@ -1566,6 +1566,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/declaraciones/{id}/anular-pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular el pago vigente de una declaración (reverso de su asiento)
+         * @description Revierte el asiento pago_impuesto (fecha de hoy o la indicada, no anterior al pago) y guarda la anulación (solo inserción): el pago pasa a pagos_anulados y se puede registrar otro. 409 declaracion_sin_pago. Emite declaracion.pago_anulado.
+         */
+        post: operations["declaracionAnularPago"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/declaraciones/{id}/marcar-presentada": {
         parameters: {
             query?: never;
@@ -1597,7 +1617,7 @@ export interface paths {
         put?: never;
         /**
          * Registrar el pago de una declaración revisada o presentada
-         * @description Asiento pago_impuesto: 2.1.06 (o 2.1.09) + 5.4.02 (mora y multa si es tardío) / Caja o Banco. 422 sin_monto_a_pagar; 409 declaracion_pagada, declaracion_no_revisada, declaracion_sustituida. Emite declaracion.pagada.
+         * @description Asiento pago_impuesto: la cuenta por pagar del impuesto (2.1.06 IVA, 2.1.09 PC, 2.1.07 ISR, 2.1.08 ISO, 2.1.04 / 2.1.05 retenciones) + 5.4.02 (mora y multa si es tardío) / Caja o Banco (bancos: GET /declaraciones/cuentas-pago). 422 sin_monto_a_pagar; 409 declaracion_pagada (ya tiene un pago vigente), declaracion_no_revisada, declaracion_sustituida. Emite declaracion.pagada.
          */
         post: operations["declaracionRegistrarPago"];
         delete?: never;
@@ -1616,10 +1636,31 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Revisar el borrador: liquidación obligatoria y bloqueo de impuestos
-         * @description Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del mes (sustitutiva: la diferencia, con fecha de hoy) y bloqueo impuestos en ese día, en la misma transacción. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado). Si cambia el remanente que deja, rectifica en la misma transacción cada mes posterior ya revisado (cascada[]; 409 cascada_bloqueada si uno no se puede). Emite declaracion.revisada (motivo cascada en los rectificados) y libro.bloqueo_cambiado.
+         * Revisar el borrador: liquidación obligatoria (y bloqueo de impuestos en IVA, PC y retenciones)
+         * @description Asiento de liquidación (liquidacion_impuesto, diario IMP) con fecha del último día del periodo (sustitutiva: la diferencia, con fecha de hoy): IVA 2.1.02 / 1.1.04 + 1.1.05 + 2.1.06; PC 5.3.04 / 2.1.09; ISR opcional 5.5.01 / 1.1.06 + 2.1.07; ISR trimestral 1.1.07 / 2.1.07 + 1.1.08; ISO 1.1.08 / 2.1.08; ISR anual y retenciones sin asiento. Bloqueo impuestos al último día en IVA, PC y retenciones. 409 declaracion_desactualizada, declaracion_sustituida, declaracion_revisada, ncre_sin_certificar, ejercicio_cerrado (ISR anual), iso_sin_saldo; 422 periodo_en_curso, checks_pendientes (iva_cuadrado, iva_liquidado, retenciones_cuadradas). IVA y PC: si cambia el remanente que deja, rectifica en la misma transacción cada mes posterior ya revisado (cascada[]; 409 cascada_bloqueada si uno no se puede). Emite declaracion.revisada (motivo cascada en los rectificados) y libro.bloqueo_cambiado.
          */
         post: operations["declaracionRevisar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/declaraciones/ajustes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ajustes fiscales del ISR de un año (con sus anulaciones) */
+        get: operations["declaracionesAjustesListar"];
+        put?: never;
+        /**
+         * Registrar (o anular con anula_a) un ajuste fiscal del ISR
+         * @description Lleva el resultado contable a la renta imponible del ISR por cierre parcial (trimestre) o anual (trimestre null): suma o resta. Solo inserción; anula_a anula un ajuste (409 ajuste_anulado si ya lo estaba). 409 ejercicio_cerrado en un ajuste anual de un año cerrado. El borrador del periodo queda desactualizado.
+         */
+        post: operations["declaracionesAjustesRegistrar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1636,10 +1677,30 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Calcular el borrador de una declaración (IVA o pequeño contribuyente) del mes
-         * @description Versión nueva desde el libro de ventas, el de compras y las constancias de retención del mes. 422 antes_de_inicio_libros, obligacion_no_aplica, impuesto_no_soportado, parametro_sin_confirmar; 409 declaracion_revisada / declaracion_presentada sin sustitutiva. Emite declaracion.calculada.
+         * Calcular el borrador de una declaración del periodo (IVA, PC, ISR, ISO o retenciones)
+         * @description Versión nueva desde los documentos y el libro del periodo (AAAA-MM, AAAA-Tn o AAAA según el impuesto). 422 periodo, antes_de_inicio_libros, obligacion_no_aplica, parametro_sin_confirmar, regla_no_soportada (iso_acreditamiento isr_a_iso, iso_base_periodo distinto de anio_anterior, iso_exencion_inicio); 409 declaracion_revisada / declaracion_presentada sin sustitutiva, ejercicio_cerrado (ISR anual de un año cerrado). Emite declaracion.calculada.
          */
         post: operations["declaracionCalcular"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/declaraciones/cuentas-pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bancos del libro de los que puede salir el pago de una declaración
+         * @description Lo mismo que GET /libro/bancos (su id es el banco_id de registrar-pago con metodo banco) para quien paga declaraciones sin egresos.ver (pedido de A4). El número va enmascarado.
+         */
+        get: operations["declaracionesCuentasPago"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4376,7 +4437,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar el ejercicio anual (ISR, resultados a cero, traslado y reserva legal)
-         * @description Con fecha 31-dic y diario CIE: provisión del ISR (5.5.01 / 1.1.07 + 1.1.08 + 2.1.07), cancelación de ingresos y gastos contra 3.3.03, traslado 3.3.03 → 3.3.02 → 3.3.01 y reserva legal (reserva_legal_pct × la base de reserva_legal_base) si hubo utilidad; después cierra diciembre. El ISR lo escribe el usuario (obligatorio, 0.00 si no hay). 422 ejercicio_requisitos (rule: meses_abiertos, diciembre_cerrado, dte_pendientes, ejercicio_anterior_abierto), 422 isr_acreditable, 409 ejercicio_cerrado.
+         * @description Con fecha 31-dic y diario CIE: ISO vencido sin acreditar a 5.3.03 (5.3.03 / 1.1.08), provisión del ISR (5.5.01 / 1.1.07 + 1.1.08 + 2.1.07), cancelación de ingresos y gastos contra 3.3.03, traslado 3.3.03 → 3.3.02 → 3.3.01 y reserva legal (reserva_legal_pct × la base de reserva_legal_base) si hubo utilidad; después cierra diciembre. Con declaración ISR anual del año, el ISR y lo acreditado salen de su versión revisada (isr en el cuerpo: 422 isr_de_declaracion; sin revisar: 422 declaracion_sin_revisar; desactualizada: 409 declaracion_desactualizada); sin ella, el ISR lo escribe el usuario (obligatorio, 0.00 si no hay). 422 ejercicio_requisitos (rule: meses_abiertos, diciembre_cerrado, dte_pendientes, ejercicio_anterior_abierto), 422 isr_acreditable, 409 ejercicio_cerrado.
          */
         post: operations["libroCerrarEjercicio"];
         delete?: never;
@@ -7848,6 +7909,24 @@ export interface components {
             codigo: "plan_dedicado_asimetrico" | "plan_dedicado_compartido" | "servicio_cliente_cf";
             mensaje: string;
         };
+        AjusteFiscal: {
+            id: number;
+            empresa_id: number;
+            anio: number;
+            /** @description 1 a 4 (cierre parcial); null = ISR anual */
+            trimestre: number | null;
+            /** @enum {string} */
+            efecto: "suma" | "resta";
+            concepto: string;
+            monto: string;
+            /** @description Ajuste que esta fila anula */
+            anula_a: number | null;
+            /** @description Ajuste que anuló esta fila (null = vigente) */
+            anulado_por_ajuste: number | null;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         AjustePuntos: {
             movimiento: components["schemas"]["MovimientoPuntos"];
             saldo: number;
@@ -9363,19 +9442,27 @@ export interface components {
                 libros: components["schemas"]["LibroEnlazado"][];
                 /** @description Declaración del mes anterior de la que salen los remanentes */
                 anterior_id: number | null;
+                /** @description Criterios aplicados y los que debe confirmar el contador (ISR, ISO y retenciones; ausente en IVA y pequeño contribuyente) */
+                notas?: string[];
+                /** @description Renglones del cálculo de ISR e ISO: cuentas de resultados, ajustes fiscales, pagos trimestrales e ISO acreditado (ausente en IVA y pequeño contribuyente) */
+                calculo?: components["schemas"]["RenglonCalculo"][];
             };
-            /** @description IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas */
+            /** @description Todas llevan a_pagar. IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas. ISR opcional: base, retenciones, base_retenida, base_no_retenida, isr_art44, isr_art46, isr, retenciones_usadas. ISR trimestral: ingresos, gastos, no_deducibles, ajustes_suma, ajustes_resta, renta_imponible, isr, iso_disponible, iso_acreditado. ISO: activo_neto, ingresos_brutos, costo_ventas, margen_bruto (por ciento), base_activo, base_ingresos, base, impuesto. ISR anual: los del trimestral más pagos_trimestrales, trimestral_acreditado, saldo_a_favor, iso_por_vencer. Retenciones: base, retenido */
             totales: {
                 [key: string]: string;
             };
             /** @description sha256 de lo leído (renglones, totales, parámetros y el mes anterior) */
             datos_hash: string;
             calculada_por: number | null;
+            /** @description Nombre de quien calculó la versión */
+            calculada_por_nombre?: string | null;
             /** Format: date-time */
             calculada_en: string;
             /** @enum {string} */
             estado: "borrador" | "revisada" | "presentada" | "sustituida";
             revisada_por: number | null;
+            /** @description Nombre de quien la revisó */
+            revisada_por_nombre?: string | null;
             /** Format: date-time */
             revisada_en: string | null;
             /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
@@ -9385,9 +9472,14 @@ export interface components {
             fecha_presentacion: string | null;
             boleta: string | null;
             presentada_por: number | null;
+            /** @description Nombre de quien la marcó presentada */
+            presentada_por_nombre?: string | null;
             /** Format: date-time */
             presentada_en: string | null;
+            /** @description Pago vigente (sin anular) de esta versión */
             pago: components["schemas"]["PagoDeclaracion"] | null;
+            /** @description Pagos anulados de esta versión con su anulación (declaraciones.anular_pago) */
+            pagos_anulados?: components["schemas"]["PagoDeclaracionAnulado"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9423,19 +9515,27 @@ export interface components {
                 libros: components["schemas"]["LibroEnlazado"][];
                 /** @description Declaración del mes anterior de la que salen los remanentes */
                 anterior_id: number | null;
+                /** @description Criterios aplicados y los que debe confirmar el contador (ISR, ISO y retenciones; ausente en IVA y pequeño contribuyente) */
+                notas?: string[];
+                /** @description Renglones del cálculo de ISR e ISO: cuentas de resultados, ajustes fiscales, pagos trimestrales e ISO acreditado (ausente en IVA y pequeño contribuyente) */
+                calculo?: components["schemas"]["RenglonCalculo"][];
             };
-            /** @description IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas */
+            /** @description Todas llevan a_pagar. IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas. ISR opcional: base, retenciones, base_retenida, base_no_retenida, isr_art44, isr_art46, isr, retenciones_usadas. ISR trimestral: ingresos, gastos, no_deducibles, ajustes_suma, ajustes_resta, renta_imponible, isr, iso_disponible, iso_acreditado. ISO: activo_neto, ingresos_brutos, costo_ventas, margen_bruto (por ciento), base_activo, base_ingresos, base, impuesto. ISR anual: los del trimestral más pagos_trimestrales, trimestral_acreditado, saldo_a_favor, iso_por_vencer. Retenciones: base, retenido */
             totales: {
                 [key: string]: string;
             };
             /** @description sha256 de lo leído (renglones, totales, parámetros y el mes anterior) */
             datos_hash: string;
             calculada_por: number | null;
+            /** @description Nombre de quien calculó la versión */
+            calculada_por_nombre?: string | null;
             /** Format: date-time */
             calculada_en: string;
             /** @enum {string} */
             estado: "borrador" | "revisada" | "presentada" | "sustituida";
             revisada_por: number | null;
+            /** @description Nombre de quien la revisó */
+            revisada_por_nombre?: string | null;
             /** Format: date-time */
             revisada_en: string | null;
             /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
@@ -9445,9 +9545,14 @@ export interface components {
             fecha_presentacion: string | null;
             boleta: string | null;
             presentada_por: number | null;
+            /** @description Nombre de quien la marcó presentada */
+            presentada_por_nombre?: string | null;
             /** Format: date-time */
             presentada_en: string | null;
+            /** @description Pago vigente (sin anular) de esta versión */
             pago: components["schemas"]["PagoDeclaracion"] | null;
+            /** @description Pagos anulados de esta versión con su anulación (declaraciones.anular_pago) */
+            pagos_anulados?: components["schemas"]["PagoDeclaracionAnulado"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9485,19 +9590,27 @@ export interface components {
                 libros: components["schemas"]["LibroEnlazado"][];
                 /** @description Declaración del mes anterior de la que salen los remanentes */
                 anterior_id: number | null;
+                /** @description Criterios aplicados y los que debe confirmar el contador (ISR, ISO y retenciones; ausente en IVA y pequeño contribuyente) */
+                notas?: string[];
+                /** @description Renglones del cálculo de ISR e ISO: cuentas de resultados, ajustes fiscales, pagos trimestrales e ISO acreditado (ausente en IVA y pequeño contribuyente) */
+                calculo?: components["schemas"]["RenglonCalculo"][];
             };
-            /** @description IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas */
+            /** @description Todas llevan a_pagar. IVA: debito, credito, retenciones, remanente_credito_anterior, remanente_retenciones_anterior, impuesto_determinado, credito_usado, retenciones_usadas, a_pagar, remanente_credito, remanente_retenciones, base_ventas, base_compras, total_ventas. Pequeño contribuyente (la tasa va en parametros): ventas, base, impuesto, retenciones, remanente_retenciones_anterior, retenciones_usadas, a_pagar, remanente_retenciones, iva_en_ventas. ISR opcional: base, retenciones, base_retenida, base_no_retenida, isr_art44, isr_art46, isr, retenciones_usadas. ISR trimestral: ingresos, gastos, no_deducibles, ajustes_suma, ajustes_resta, renta_imponible, isr, iso_disponible, iso_acreditado. ISO: activo_neto, ingresos_brutos, costo_ventas, margen_bruto (por ciento), base_activo, base_ingresos, base, impuesto. ISR anual: los del trimestral más pagos_trimestrales, trimestral_acreditado, saldo_a_favor, iso_por_vencer. Retenciones: base, retenido */
             totales: {
                 [key: string]: string;
             };
             /** @description sha256 de lo leído (renglones, totales, parámetros y el mes anterior) */
             datos_hash: string;
             calculada_por: number | null;
+            /** @description Nombre de quien calculó la versión */
+            calculada_por_nombre?: string | null;
             /** Format: date-time */
             calculada_en: string;
             /** @enum {string} */
             estado: "borrador" | "revisada" | "presentada" | "sustituida";
             revisada_por: number | null;
+            /** @description Nombre de quien la revisó */
+            revisada_por_nombre?: string | null;
             /** Format: date-time */
             revisada_en: string | null;
             /** @description Asiento de liquidación de esta versión (null si no hubo diferencia) */
@@ -9507,9 +9620,14 @@ export interface components {
             fecha_presentacion: string | null;
             boleta: string | null;
             presentada_por: number | null;
+            /** @description Nombre de quien la marcó presentada */
+            presentada_por_nombre?: string | null;
             /** Format: date-time */
             presentada_en: string | null;
+            /** @description Pago vigente (sin anular) de esta versión */
             pago: components["schemas"]["PagoDeclaracion"] | null;
+            /** @description Pagos anulados de esta versión con su anulación (declaraciones.anular_pago) */
+            pagos_anulados?: components["schemas"]["PagoDeclaracionAnulado"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -11152,12 +11270,12 @@ export interface components {
             motivo_estado: string | null;
             /** @description Borrador de la declaración (fase 7 PR B) */
             declaracion_id: number | null;
-            /** @description Cómo se calculó el vencimiento. La API envía siempre los seis campos; van opcionales en el tipo para no romper los fixtures que lo tenían como objeto libre */
+            /** @description Cómo se calculó el vencimiento. La API envía siempre los seis campos; vigente_desde y nivel siguen opcionales en el tipo hasta que el panel ajuste tests/nuxt/calendarioFiscal.test.ts */
             regla: {
                 /** @description Parámetro del plazo (iva_declaracion, isr_opcional_plazo…) */
-                parametro?: string;
+                parametro: string;
                 /** @description Valor del parámetro: plazo, dias, dias_habiles, vence, formulario… */
-                valor?: {
+                valor: {
                     [key: string]: unknown;
                 };
                 /**
@@ -11171,11 +11289,9 @@ export interface components {
                  * Format: date
                  * @description Vencimiento según la regla, antes de correrlo al día hábil
                  */
-                vence_base?: string;
+                vence_base: string;
                 /** @description vence_base caía en día inhábil */
-                corrido_a_habil?: boolean;
-            } & {
-                [key: string]: unknown;
+                corrido_a_habil: boolean;
             };
             version: number;
             /** Format: date-time */
@@ -11292,6 +11408,31 @@ export interface components {
             registrado_por: number | null;
             /** Format: date-time */
             created_at: string;
+        };
+        PagoDeclaracionAnulado: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            impuesto: string;
+            mora: string;
+            multa: string;
+            total: string;
+            dias_atraso: number;
+            boleta: string | null;
+            asiento_id: number;
+            registrado_por: number | null;
+            /** Format: date-time */
+            created_at: string;
+            anulacion: {
+                id: number;
+                motivo: string;
+                /** @description Reverso del asiento pago_impuesto */
+                asiento_id: number;
+                anulado_por: number | null;
+                anulado_por_nombre: string | null;
+                /** Format: date-time */
+                created_at: string;
+            };
         };
         PagoPorLiquidar: {
             pago_id: number;
@@ -12722,6 +12863,27 @@ export interface components {
                     deuda_maxima: components["schemas"]["Dinero"] | null;
                 };
             };
+        };
+        RenglonCalculo: {
+            /** @enum {string} */
+            seccion: "resultados" | "ajustes" | "declaraciones" | "iso";
+            /** @description cuenta, ajuste_fiscal, declaracion o iso */
+            origen: string;
+            /** @description Cuenta, ajuste, declaración trimestral o trimestre de ISO */
+            documento: string;
+            /** Format: date */
+            fecha: string;
+            /** @description ingreso, gasto, no_deducible, suma, resta, isr_trimestral, ISO */
+            tipo: string | null;
+            nit: string | null;
+            /** @description Monto de la cuenta o del ajuste; renta del trimestre; saldo del ISO */
+            base: string;
+            /** @description ISR del trimestre (declaraciones) o ISO acreditado (iso); 0.00 en resultados y ajustes */
+            iva: string;
+            /** @description Con signo (ajuste que resta: negativo); ISO: saldo que queda */
+            total: string;
+            /** @description iso: trimestre de ISO (primer día) */
+            estado: string | null;
         };
         RenglonDeclaracion: {
             /** @enum {string} */
@@ -21331,9 +21493,9 @@ export interface operations {
                 cursor?: string;
                 /** @description Tamaño de página (por defecto 50) */
                 limit?: number;
-                impuesto?: ("iva_mensual" | "pc_mensual")[];
+                impuesto?: ("iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr")[];
                 estado?: ("borrador" | "revisada" | "presentada" | "sustituida")[];
-                /** @description Mes AAAA-MM */
+                /** @description Periodo que empieza ese mes (AAAA-MM), trimestre (AAAA-Tn) o año (AAAA): compara el primer día */
                 periodo?: string;
             };
             header?: never;
@@ -21423,6 +21585,87 @@ export interface operations {
             };
             /** @description No encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionAnularPago: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    motivo: string;
+                    /**
+                     * Format: date
+                     * @description Fecha del reverso; por defecto hoy (nunca anterior al pago)
+                     */
+                    fecha?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Declaración sin el pago anulado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Declaracion"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.anular_pago; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21667,6 +21910,135 @@ export interface operations {
             };
         };
     };
+    declaracionesAjustesListar: {
+        parameters: {
+            query: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+                anio: number;
+                trimestre?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ajustes del año */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AjusteFiscal"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionesAjustesRegistrar: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Empresa; por defecto la activa (X-Empresa-Id) */
+                    empresa_id?: number | null;
+                    /** @description Año del ajuste (obligatorio salvo con anula_a) */
+                    anio?: number | null;
+                    /** @description Trimestre del cierre parcial (1 a 4); null o ausente = ajuste del ISR anual */
+                    trimestre?: number | null;
+                    /** @description suma (no deducible) o resta (renta exenta) a la renta imponible; obligatorio salvo con anula_a */
+                    efecto?: ("suma" | "resta") | null;
+                    concepto: string;
+                    /** @description Monto mayor que cero; obligatorio salvo con anula_a */
+                    monto?: string | null;
+                    /** @description Ajuste que esta fila anula (repite su año, trimestre, efecto y monto) */
+                    anula_a?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Ajuste registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AjusteFiscal"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.ajustar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Petición idempotente en curso */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     declaracionCalcular: {
         parameters: {
             query?: never;
@@ -21681,11 +22053,11 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
-                     * @description iva_mensual (SAT-2237) o pc_mensual (SAT-2046); ISR, ISO y retenciones llegan después
+                     * @description iva_mensual (SAT-2237), pc_mensual (SAT-2046), isr_opcional_mensual (SAT-1311), isr_trimestral (SAT-1361), iso_trimestral (SAT-1608), isr_anual (SAT-1411), retenciones_iva (SAT-2340), retenciones_isr
                      * @enum {string}
                      */
-                    impuesto: "iva_mensual" | "pc_mensual";
-                    /** @description Mes AAAA-MM */
+                    impuesto: "iva_mensual" | "pc_mensual" | "isr_opcional_mensual" | "isr_trimestral" | "iso_trimestral" | "isr_anual" | "retenciones_iva" | "retenciones_isr";
+                    /** @description AAAA-MM en las mensuales, AAAA-Tn (T1 a T4) en isr_trimestral e iso_trimestral, AAAA en isr_anual; otro formato para el impuesto: 422 periodo */
                     periodo: string;
                     /** @description true para recalcular un periodo ya revisado o presentado (versión sustitutiva) */
                     sustitutiva?: boolean;
@@ -21724,6 +22096,56 @@ export interface operations {
             };
             /** @description Petición idempotente en curso */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declaracionesCuentasPago: {
+        parameters: {
+            query?: {
+                /** @description todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa */
+                empresas?: "todas";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bancos del libro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BancoLibro"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso declaraciones.pagar */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -32166,8 +32588,8 @@ export interface operations {
                     /** @description Empresa cuyo ejercicio se cierra o reabre; por defecto la activa (X-Empresa-Id) */
                     empresa_id?: number | null;
                     anio: number;
-                    /** @description ISR del cierre: monto obligatorio (0.00 si no hay); lo escribe el usuario hasta que existan las declaraciones. Queda en el cierre y en la auditoría */
-                    isr: {
+                    /** @description ISR del cierre escrito a mano: obligatorio (0.00 si no hay) cuando el año no tiene declaración ISR anual; con ella se omite (422 isr_de_declaracion) y el ISR y lo acreditado salen de su versión revisada. Queda en el cierre y en la auditoría */
+                    isr?: {
                         /**
                          * @description Monto con hasta 2 decimales, como string
                          * @example 150.00
@@ -32185,7 +32607,7 @@ export interface operations {
                         acreditado_iso?: string | null;
                         /** @description De dónde sale el monto (formulario, cálculo del contador…) */
                         nota?: string | null;
-                    };
+                    } | null;
                 };
             };
         };
@@ -40644,7 +41066,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -40702,7 +41124,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -43833,7 +44255,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

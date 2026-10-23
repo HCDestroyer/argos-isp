@@ -111,11 +111,24 @@ Borradores calculados: el sistema **nunca** presenta nada a la SAT.
 
 Lecturas (`declaraciones.ver`): `GET /declaraciones` y `GET /declaraciones/:id` (con `desactualizada`).
 
+## ISR, ISO y retenciones; anulación del pago (fase 7 PR C, contrato §9.1, §9.3, §10.6 y §21)
+
+- `declaraciones_renta.ts`: ISR opcional mensual (escala del art. 44 y art. 46, liquidación `5.5.01 / 1.1.06 + 2.1.07`), ISR trimestral (renta presunta o cierre parcial con `fiscal.ajustes_fiscales`; `1.1.07 / 2.1.07` + `1.1.08` por el ISO acreditado), ISO trimestral (base del año anterior; `1.1.08 / 2.1.08`), ISR anual (sin asiento: lo usa el cierre anual) y retenciones de IVA e ISR desde las compras (sin asiento; bloqueo y check `retenciones_cuadradas`). Periodos `AAAA-MM`, `AAAA-Tn`, `AAAA`. Criterios por confirmar en `detalle.notas`, renglones de cálculo en `detalle.calculo`.
+- `fiscal.iso_acreditamientos` (solo inserción): origen, acreditado y vencido del ISO por acreditar; cuenta la fila de una declaración vigente o de un cierre sin reabrir. El cierre anual pasa el ISO vencido a `5.3.03` y toma el ISR de la declaración anual revisada (422 `isr_de_declaracion` al dato manual).
+- `fiscal.declaraciones_pagos_anulaciones` (solo inserción): anular el pago revierte su `pago_impuesto`; un pago vigente por versión.
+
+| Acción (permiso)            | Ruta                                  | Qué hace                                                                         |
+| --------------------------- | ------------------------------------- | -------------------------------------------------------------------------------- |
+| `declaraciones.anular_pago` | `POST /declaraciones/:id/anular-pago` | Reverso del `pago_impuesto` vigente y fila de anulación; se puede pagar otra vez |
+| `declaraciones.ajustar`     | `POST /declaraciones/ajustes`         | Ajuste fiscal del ISR (trimestre o año); `anula_a` lo anula                      |
+
+Lecturas: `GET /declaraciones/ajustes?anio=` (`declaraciones.ver`), `GET /declaraciones/cuentas-pago` (`declaraciones.pagar`: los bancos del libro).
+
 ## Eventos
 
 - Emite `fiscal.localizacion_instalada`, `fiscal.parametros_cambiados` (claves de parámetros o `impuesto:<codigo>`) y `fiscal.config_cambiada` (`regimen`, `fel_modo`, `proveedor`, `credenciales`, `establecimientos`, `frases`).
 - Libros: `libro.emitido` (emisión oficial con folio).
-- Declaraciones: `declaracion.calculada`, `declaracion.revisada` (con `libro.bloqueo_cambiado`), `declaracion.presentada` y `declaracion.pagada`.
+- Declaraciones: `declaracion.calculada`, `declaracion.revisada` (con `libro.bloqueo_cambiado` en IVA, PC y retenciones), `declaracion.presentada`, `declaracion.pagada` y `declaracion.pago_anulado`.
 - Calendario: `fiscal.vencimiento_proximo` y `fiscal.limite_pc` (cron); `fiscal.parametros_cambiados` con `claves: ['feriados']` al cambiar un feriado.
 - FEL: `dte.certificado`, `dte.rechazado` (`definitivo`), `dte.anulado`, `fel.contingencia_cambiada` y `factura.sustituida`. En `obligatoria` con `emitir`, `factura.emitida` sale al certificarse.
 - Consume `fiscal.parametros_cambiados` (grupo `billing`) para regenerar el calendario (`ConsumidorCalendario`) y para invalidar la caché y `pago.registrado` (`ConsumidorFel`) para pedir la certificación de los avisos cubiertos.

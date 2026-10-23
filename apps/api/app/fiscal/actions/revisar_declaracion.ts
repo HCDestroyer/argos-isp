@@ -9,20 +9,26 @@ import { exigirNcreCertificadas } from '#ledger/ncre_pendientes'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
 import { hoyFiscal } from '#fiscal/comun'
+import { aTexto, dec } from '#ledger/dinero'
 import CalcularDeclaracion, { payloadDeclaracion } from '#fiscal/actions/calcular_declaracion'
 import { actualizarObligacion } from '#fiscal/actions/generar_calendario'
 import { COLUMNAS_OBLIGACION, normalizarObligacion } from '#fiscal/calendario'
 import {
     LOCK_DECLARACIONES,
+    esDeIva,
+    esDeRetenciones,
     hashActual,
     liquidadoDelPeriodo,
     netoLiquidacion,
     partidasDiferencia,
+    textoDePeriodo,
     verDeclaracion,
     ultimaVersion,
     type DeclaracionFila,
     type ImpuestoDeclarable,
 } from '#fiscal/declaraciones'
+import { ejercicioCerrado, exigirSaldoIso, usoIsoDe, ventanaIso } from '#fiscal/declaraciones_renta'
+import { inicioDeMes } from '#ledger/fechas'
 
 /**
  * `declaraciones.revisar` (`POST /declaraciones/:id/revisar`, contrato §9.3 y §10.6; fase 7 PR B):
@@ -42,6 +48,16 @@ import {
  * 7. Vuelve a verificar y exige `iva_cuadrado` e `iva_liquidado`; un error revierte todo.
  *
  * Estado `revisada`; emite `declaracion.revisada` (y `libro.bloqueo_cambiado` por el bloqueo).
+ *
+ * Fase 7 PR C, según el impuesto (§10.6):
+ * - ISR opcional `5.5.01 / 1.1.06 + 2.1.07`, ISR trimestral `1.1.07 / 2.1.07` (+ `1.1.08` haber por el
+ *   ISO acreditado) e ISO `1.1.08 / 2.1.08`: la liquidación con fecha del fin del periodo (al primer día
+ *   abierto si está cerrado), sin checks ni bloqueo de impuestos (el bloqueo lo fijan IVA, pequeño
+ *   contribuyente y retenciones).
+ * - ISR anual: sin asiento (lo provisiona el cierre anual) y 409 `ejercicio_cerrado` con cierre vigente.
+ * - Retenciones: sin asiento; exige `retenciones_cuadradas` antes y después y fija el bloqueo.
+ * - ISO: fila `origen` en `fiscal.iso_acreditamientos`; ISR trimestral y anual: filas `acreditado` por
+ *   lo que acreditan (409 `iso_sin_saldo` si un trimestre de ISO queda en negativo).
  */
 
 export interface EntradaRevisarDeclaracion {
@@ -78,22 +94,48 @@ export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDecla
         await t.trx.rawQuery('SELECT pg_advisory_xact_lock(?, ?)', [LOCK_DECLARACIONES, previa.empresa_id])
         const d = await verDeclaracion(input.declaracion_id, t.trx)
         await exigirBorradorVigente(t, d)
+        const periodo = textoDePeriodo(d.impuesto, d.periodo_desde)
         if (d.periodo_hasta >= hoyFiscal()) {
             throw new ReglaNegocio(
-                `El mes ${d.periodo_desde.slice(0, 7)} no ha terminado: se revisa y liquida después de su último día`,
+                `El periodo ${periodo} no ha terminado: se revisa y liquida después de su último día`,
                 'periodo_en_curso',
             )
         }
+        if (d.impuesto === 'isr_anual' && (await ejercicioCerrado(t.trx, d.empresa_id, Number(periodo)))) {
+            throw new Conflicto(
+                `El ejercicio ${periodo} está cerrado: su ISR ya salió de la declaración anual revisada; reábralo para corregirla`,
+                'ejercicio_cerrado',
+                'Ejercicio cerrado',
+            )
+        }
         if ((await hashActual(t.trx, d)) !== d.datos_hash) throw new Desactualizada(d)
-        await exigirNcreCertificadas(t.trx, d.empresa_id, d.periodo_desde, 'antes de liquidar el IVA')
+        const iva = esDeIva(d.impuesto)
+        const retenciones = esDeRetenciones(d.impuesto)
+        if (iva || d.impuesto === 'isr_opcional_mensual' || d.impuesto === 'isr_trimestral') {
+            // las que leen el libro de ventas: ninguna NCRE del periodo o anterior sin certificar
+            await exigirNcreCertificadas(
+                t.trx,
+                d.empresa_id,
+                inicioDeMes(d.periodo_hasta),
+                iva ? 'antes de liquidar el IVA' : `antes de liquidar ${d.impuesto}`,
+            )
+        }
 
-        const periodo = d.periodo_desde.slice(0, 7)
+        // checks de impuestos del mes: los del IVA o los de retenciones
+        const claves = iva ? ['iva_cuadrado', 'iva_liquidado'] : retenciones ? ['retenciones_cuadradas'] : []
+        const mes = d.periodo_desde.slice(0, 7)
         const verificar = () =>
-            new VerificarCierre().execute({ empresa_id: d.empresa_id, tipo: 'impuestos', periodo }, t.ctx, {
-                trx: t.trx,
-            })
-        await verificar()
-        await exigirChecks(t.trx, d.empresa_id, 'impuestos', d.periodo_desde, ['iva_cuadrado'])
+            new VerificarCierre().execute(
+                { empresa_id: d.empresa_id, tipo: 'impuestos', periodo: mes },
+                t.ctx,
+                {
+                    trx: t.trx,
+                },
+            )
+        if (claves.length > 0) {
+            await verificar()
+            await exigirChecks(t.trx, d.empresa_id, 'impuestos', d.periodo_desde, [claves[0]!])
+        }
 
         // liquidación: lo que falta para llegar al neto del borrador
         const objetivo = netoLiquidacion(d.impuesto as ImpuestoDeclarable, d.totales)
@@ -110,6 +152,8 @@ export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDecla
                     origen_id: d.id,
                     diario: 'IMP',
                     movimientos: partidas,
+                    // ISR e ISO vencen un mes después del trimestre: el último día puede estar ya cerrado
+                    ...(iva ? {} : { trasladar_si_bloqueado: true }),
                 },
                 t.ctx,
                 { trx: t.trx },
@@ -117,10 +161,13 @@ export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDecla
             asientoId = asiento.id
         }
 
+        // ISO por acreditar: el origen (ISO) o lo que acredita (ISR trimestral y anual)
+        const periodosIso = await registrarIso(t, d)
+
         // bloqueo automático de impuestos (§10.4): el del sistema, sin el límite de «no futuro» del manual
         await bloquearBloqueos(t.trx, d.empresa_id)
         const vigente = await bloqueoVigente(t.trx, d.empresa_id, 'impuestos')
-        if (vigente === null || vigente < d.periodo_hasta) {
+        if ((iva || retenciones) && (vigente === null || vigente < d.periodo_hasta)) {
             await guardarBloqueo(t, {
                 empresaId: d.empresa_id,
                 tipo: 'impuestos',
@@ -144,19 +191,64 @@ export default class RevisarDeclaracion extends DomainAction<EntradaRevisarDecla
             { estado: 'borrador', asiento_id: null },
             { estado: 'revisada', asiento_id: asientoId },
         )
-        await verificar()
-        await exigirChecks(t.trx, d.empresa_id, 'impuestos', d.periodo_desde)
+        if (claves.length > 0) {
+            await verificar()
+            await exigirChecks(t.trx, d.empresa_id, 'impuestos', d.periodo_desde, claves)
+        }
+        await exigirSaldoIso(t.trx, d.empresa_id, periodosIso)
 
         const revisada = await verDeclaracion(d.id, t.trx)
         await t.emit('declaracion.revisada', {
             ...payloadDeclaracion(revisada),
             ...(input.cascada_de ? { motivo: 'cascada' as const, cascada_de: input.cascada_de } : {}),
         })
-        const cascada = input.cascada_de ? [] : await cascadaDeRemanentes(t, revisada)
+        const cascada = input.cascada_de || !iva ? [] : await cascadaDeRemanentes(t, revisada)
         if (cascada.length > 0) t.anotarAuditoria({ cascada })
         t.fijarEntidad('declaracion', d.id)
         return { ...revisada, cascada }
     }
+}
+
+/** Filas de `fiscal.iso_acreditamientos` de la revisión; devuelve los trimestres de ISO que tocó. */
+async function registrarIso(t: Transaccion, d: DeclaracionFila): Promise<string[]> {
+    if (d.impuesto === 'iso_trimestral') {
+        const monto = dec(d.totales.impuesto ?? '0')
+        if (monto.lte(0)) return [d.periodo_desde]
+        await t.trx
+            .insertQuery()
+            .table('fiscal.iso_acreditamientos')
+            .insert({
+                empresa_id: d.empresa_id,
+                tipo: 'origen',
+                iso_periodo: d.periodo_desde,
+                declaracion_id: d.id,
+                monto: aTexto(monto),
+                ...ventanaIso(d.periodo_desde),
+            })
+        return [d.periodo_desde]
+    }
+    if (d.impuesto !== 'isr_trimestral' && d.impuesto !== 'isr_anual') return []
+    const uso = await usoIsoDe(t.trx, d)
+    for (const a of uso) {
+        await t.trx
+            .insertQuery()
+            .table('fiscal.iso_acreditamientos')
+            .insert({
+                empresa_id: d.empresa_id,
+                tipo: 'acreditado',
+                iso_periodo: a.iso_periodo,
+                declaracion_id: d.id,
+                monto: aTexto(a.asignado),
+                acreditable_desde: a.acreditable_desde,
+                vence_en: a.vence_en,
+            })
+    }
+    if (uso.length > 0) {
+        t.anotarAuditoria({
+            iso_acreditado: uso.map((a) => ({ iso_periodo: a.iso_periodo, monto: aTexto(a.asignado) })),
+        })
+    }
+    return uso.map((a) => a.iso_periodo)
 }
 
 const remanentes = (totales: Record<string, string>, sufijo = '') => [

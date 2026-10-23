@@ -584,10 +584,11 @@ export default class RegistrarAsiento extends DomainAction<EntradaAsiento, Asien
     ): Promise<{ fecha: string; fechaDocumento: string | null; excepcionId: number | null }> {
         const usuarioId = usuarioDelActor(t.ctx.actor)
         // §10.4 (fase 7 PR B): el bloqueo de impuestos alcanza a todo asiento con alguna partida etiquetada
-        // y, salvo la liquidación y su pago, con una partida sin etiqueta en una cuenta de impuesto (un ajuste manual)
+        // y, salvo la liquidación, su pago y el cierre anual (PR C), con una partida sin etiqueta en una
+        // cuenta de impuesto (un ajuste manual)
         const conImpuesto =
             d.lineas.some((l) => l.impuesto_codigo !== null) ||
-            (!['liquidacion_impuesto', 'pago_impuesto'].includes(d.origen) &&
+            (!['liquidacion_impuesto', 'pago_impuesto', 'cierre_anual'].includes(d.origen) &&
                 (await tocaCuentaDeImpuesto(
                     t.trx,
                     d.lineas.map((l) => l.cuenta.id),
