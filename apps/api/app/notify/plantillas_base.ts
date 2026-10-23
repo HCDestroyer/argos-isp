@@ -184,6 +184,29 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
             '{{#alerta.supera}}\nLa empresa superó el límite: {{empresa.nombre}} debe pasar al régimen general del IVA. Coordina con el contador la actualización ante la SAT y, ya hecha, cambia el régimen en la configuración fiscal del panel. ArgosIsp no cambia el régimen por su cuenta.{{/alerta.supera}}' +
             '{{^alerta.supera}}{{#alerta.disponible_q}}\nQuedan {{alerta.disponible_q}} antes del límite.{{/alerta.disponible_q}} Al llegar al 100 % la empresa debe pasar al régimen general del IVA: revisa con el contador desde cuándo hacer el cambio.{{/alerta.supera}}',
     ),
+    // Declaraciones (fase 7 PR C): cascada de remanentes (H34), pago y anulación del pago.
+    ...alertaFiscal(
+        'alerta.declaracion.rectificativa',
+        '{{#alerta.presentada}}Rectificativa por presentar{{/alerta.presentada}}{{^alerta.presentada}}Declaración rectificada{{/alerta.presentada}}: {{alerta.impuesto}}, {{alerta.periodo}} ({{empresa.nombre}})',
+        'La revisión de {{alerta.causa_impuesto}} {{alerta.causa_periodo}}{{#alerta.causa_version}} (versión {{alerta.causa_version}}){{/alerta.causa_version}} de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}} cambió el remanente que arrastra {{alerta.periodo}}, y el sistema recalculó y revisó ese mes en la versión {{alerta.version}}{{#alerta.version_anterior}} (sustituye a la versión {{alerta.version_anterior}}){{/alerta.version_anterior}}.' +
+            '\nNuevo monto a pagar: {{alerta.a_pagar_q}}.' +
+            '{{#alerta.presentada}}\n{{alerta.periodo}} ya estaba presentado{{#alerta.formulario_anterior}} (formulario {{alerta.formulario_anterior}}{{#alerta.presentada_el}}, presentado el {{alerta.presentada_el}}{{/alerta.presentada_el}}){{/alerta.formulario_anterior}}: quedó como «rectificativa por presentar» en el calendario fiscal. Presenta la rectificativa ante la SAT y registra su presentación en el panel. Los pagos ya registrados no cambian.{{/alerta.presentada}}' +
+            '{{^alerta.presentada}}\nEse mes no estaba presentado: presenta la versión {{alerta.version}}. Los pagos ya registrados no cambian.{{/alerta.presentada}}',
+    ),
+    ...alertaFiscal(
+        'alerta.declaracion.pagada',
+        'Pago registrado: {{alerta.impuesto}}, {{alerta.periodo}} ({{empresa.nombre}})',
+        'Se registró el pago de la declaración {{alerta.impuesto}} del periodo {{alerta.periodo}} (versión {{alerta.version}}) de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}}: {{alerta.total_q}}{{#alerta.fecha}} el {{alerta.fecha}}{{/alerta.fecha}}.' +
+            '{{#alerta.impuesto_q}}\nImpuesto: {{alerta.impuesto_q}}{{/alerta.impuesto_q}}{{#alerta.mora_q}}\nMora: {{alerta.mora_q}}{{#alerta.dias_atraso}} ({{alerta.dias_atraso}} días de atraso){{/alerta.dias_atraso}}{{/alerta.mora_q}}{{#alerta.multa_q}}\nMulta: {{alerta.multa_q}}{{/alerta.multa_q}}' +
+            '{{#alerta.boleta}}\nBoleta: {{alerta.boleta}}{{/alerta.boleta}}\nVencía el {{alerta.vence}}.',
+    ),
+    ...alertaFiscal(
+        'alerta.declaracion.pago_anulado',
+        'Pago anulado: {{alerta.impuesto}}, {{alerta.periodo}} ({{empresa.nombre}})',
+        'Se anuló el pago{{#alerta.boleta}} con boleta {{alerta.boleta}}{{/alerta.boleta}}{{#alerta.fecha}} del {{alerta.fecha}}{{/alerta.fecha}} de la declaración {{alerta.impuesto}} del periodo {{alerta.periodo}} (versión {{alerta.version}}) de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}}, por {{alerta.total_q}}.' +
+            '{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
+            '\nSu asiento se revirtió{{#alerta.asiento_id}} (asiento {{alerta.asiento_id}}){{/alerta.asiento_id}} y la declaración quedó sin pago registrado: si el pago se hizo, regístralo de nuevo con los datos correctos.',
+    ),
     // Horus Flow (contratos/horus.md §3.4): avisos, nunca cortes.
     {
         evento: 'alerta.horus.hallazgo',

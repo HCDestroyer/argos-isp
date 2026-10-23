@@ -14,6 +14,7 @@ import {
 import { quetzales } from '#notify/formato'
 import { numeroDeFactura } from '#notify/variables'
 import { variablesLimitePc, variablesVencimiento } from '#notify/calendario_fiscal'
+import { variablesCascada, variablesPagada, variablesPagoAnulado } from '#notify/declaraciones_fiscales'
 
 /** Eventos del catálogo que generan alertas internas. */
 export const EVENTOS_ALERTA = [
@@ -30,6 +31,10 @@ export const EVENTOS_ALERTA = [
     // Calendario fiscal (fase 7 PR A, contrato §14 y §21)
     'fiscal.vencimiento_proximo',
     'fiscal.limite_pc',
+    // Declaraciones (fase 7 PR C): solo la revisión en cascada (H34), el pago y su anulación
+    'declaracion.revisada',
+    'declaracion.pagada',
+    'declaracion.pago_anulado',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',
     'horus.router_estado_cambiado',
@@ -94,6 +99,9 @@ function texto(valor: unknown): string {
  * | `nota_credito.anulada` | `nota-credito:<nota_credito_id>`, puntual, una vez por nota | siempre |
  * | `fiscal.vencimiento_proximo` | `fiscal-vence:<obligacion_id>:<umbral>`, puntual, una vez por obligación y umbral | siempre |
  * | `fiscal.limite_pc` | `fiscal-pc:<empresa_id>:<anio>:<umbral_pct>`, puntual, una vez por umbral y año | siempre |
+ * | `declaracion.revisada` con `motivo: 'cascada'` | `declaracion-cascada:<declaracion_id>`, puntual, una vez por versión | siempre (sin cascada: nada) |
+ * | `declaracion.pagada` | `declaracion-pago:<declaracion_id>`, puntual | cada pago |
+ * | `declaracion.pago_anulado` | `declaracion-pago-anulado:<pago_id>`, puntual, una vez por pago | siempre |
  *
  * Los fiscales usan la configuración de canales de la empresa del evento (`empresa_id`): Telegram
  * al chat del equipo y correo a `correo.contabilidad`.
@@ -346,6 +354,71 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                 })
                 if (!nuevo) return sinAlerta(incidente)
                 return avisarFiscal(incidente, 'abierto', 'alerta.fiscal.limite_pc', variables)
+            }
+            case 'declaracion.revisada': {
+                // Solo la rectificación en cascada avisa; una revisión normal la hizo la persona.
+                if (p.motivo !== 'cascada') return sinAlerta(null)
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `declaracion-cascada:${texto(p.declaracion_id)}`,
+                    tipo: 'declaracion_cascada',
+                    detalle: {
+                        empresa_id: empresaId,
+                        declaracion_id: p.declaracion_id ?? null,
+                        cascada_de: p.cascada_de ?? null,
+                    },
+                    ahora,
+                    puntual: true,
+                    unico: true,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    'alerta.declaracion.rectificativa',
+                    await variablesCascada(t.trx, p),
+                )
+            }
+            case 'declaracion.pagada': {
+                // Cada pago es un hecho (anulado, se puede registrar otro); la reentrega la frena el origen.
+                const { incidente } = await abrirIncidente(t.trx, {
+                    clave: `declaracion-pago:${texto(p.declaracion_id)}`,
+                    tipo: 'declaracion_pago',
+                    detalle: {
+                        empresa_id: empresaId,
+                        declaracion_id: p.declaracion_id ?? null,
+                        monto: p.monto ?? null,
+                    },
+                    ahora,
+                    puntual: true,
+                })
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    'alerta.declaracion.pagada',
+                    await variablesPagada(t.trx, p),
+                )
+            }
+            case 'declaracion.pago_anulado': {
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `declaracion-pago-anulado:${texto(p.pago_id)}`,
+                    tipo: 'declaracion_pago_anulado',
+                    detalle: {
+                        empresa_id: empresaId,
+                        declaracion_id: p.declaracion_id ?? null,
+                        pago_id: p.pago_id ?? null,
+                        motivo: texto(p.motivo) || null,
+                    },
+                    ahora,
+                    puntual: true,
+                    unico: true,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    'alerta.declaracion.pago_anulado',
+                    await variablesPagoAnulado(t.trx, p),
+                )
             }
             case 'aaa.caido': {
                 const nodo = texto(p.nodo) || 'aaa'
