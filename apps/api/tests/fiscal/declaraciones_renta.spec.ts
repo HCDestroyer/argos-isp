@@ -7,7 +7,7 @@ import { errorDe, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayu
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { hacerAgenteRetencion, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
 import { eventos, esquemas, exigirCampos } from '#tests/fiscal/ayudas_fiscal'
-import { afirmarLibroPrC } from '#tests/fiscal/ayudas_renta'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { relojFiscal } from '#fiscal/comun'
 import { bloqueoVigente } from '#ledger/bloqueos'
 import { checksVigentes } from '#ledger/checks'
@@ -34,7 +34,7 @@ import type { ContextoAccion } from '#shared/contexto'
  * ISR trimestral (renta presunta y cierre parcial con ajustes fiscales), ISO con
  * `fiscal.iso_acreditamientos`, ISR anual enlazado al cierre anual (y el ISO vencido a `5.3.03`),
  * declaraciones de retenciones y la anulación del pago de una declaración. Cada prueba termina en
- * `afirmarLibroPrC` (los invariantes del auditor, con la tolerancia temporal de `ayudas_renta.ts`).
+ * `afirmarLibro` (los invariantes del auditor).
  */
 
 const HOY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' })
@@ -299,7 +299,7 @@ test.group('Fase 7 · ISR opcional, retenciones y anulación del pago', (group) 
             ),
         )
         assert.equal(repetido.codigo, 'declaracion_pagada')
-        await afirmarLibroPrC(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('retenciones de IVA (SAT-2340) e ISR desde las compras: sin asiento, bloqueo y check; el pago sale de 2.1.04', async ({
@@ -385,7 +385,7 @@ test.group('Fase 7 · ISR opcional, retenciones y anulación del pago', (group) 
         const pagoRetenciones = await partidas('pago_impuesto', iva.id)
         assert.deepEqual(pagoRetenciones.map((p) => [p[0], p[1], p[2]])[0], ['2.1.04', '54.00', '0.00'])
         assert.equal(await saldoCuenta(e.B, '2.1.04'), '0.00')
-        await afirmarLibroPrC(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 
     test('periodos por periodicidad, renta presunta del trimestre y reglas del ISO sin confirmar', async ({
@@ -445,7 +445,7 @@ test.group('Fase 7 · ISR opcional, retenciones y anulación del pago', (group) 
         await parametro(e.ctx, e.B, 'iso_acreditamiento', 'isr_a_iso')
         const otroModo = await errorDe(calcular(e.ctx, e.B, 'iso_trimestral', periodoTrimestre))
         assert.deepEqual([otroModo.codigo, otroModo.reglas], ['regla_no_soportada', ['regla_no_soportada']])
-        await afirmarLibroPrC(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })
 
@@ -643,7 +643,7 @@ test.group('Fase 7 · ISO, ISR trimestral y anual con el cierre anual', (group) 
             ['165.00'],
         )
         assert.equal(await saldoCuenta(e.B, '1.1.08'), '165.00')
-        await afirmarLibroPrC(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })
 
@@ -785,6 +785,6 @@ test.group('Fase 7 · PR C por la API', (group) => {
         assert.sameMembers(regla.required, ['parametro', 'valor', 'vence_base', 'corrido_a_habil'])
         assert.includeMembers(Object.keys(regla.properties), ['vigente_desde', 'nivel'])
         assert.notProperty(regla, 'additionalProperties')
-        await afirmarLibroPrC(assert, [e.B, e.C])
+        await afirmarLibro(assert, [e.B, e.C])
     })
 })
