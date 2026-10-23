@@ -433,3 +433,18 @@ export const listarAjustesValidator = vine.compile(
 )
 
 export const tableroValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const comparadorValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        crecimiento: vine
+            .string()
+            .trim()
+            .regex(/^-?\d{1,3}(\.\d{1,2})?$/)
+            .optional()
+            .meta({
+                description:
+                    'Crecimiento mensual de las ventas para la proyección, en por ciento (p. ej. 1.50); por defecto la tendencia de los meses leídos',
+            }),
+    }),
+)
