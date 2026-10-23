@@ -1161,6 +1161,12 @@ async function verificarLibroCon(
                    JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas c ON c.id = m.cuenta_id
                   WHERE ${E('a.empresa_id')} AND ${CAJA_O_BANCO('c.codigo')}
                  UNION ALL
+                 -- fase 7 PR C: el reverso de un pago anulado devuelve el total a su caja o banco
+                 SELECT a.empresa_id, m.debe - m.haber, m.cuenta_id
+                   FROM fiscal.declaraciones_pagos_anulaciones x JOIN ledger.asientos a ON a.id = x.asiento_id
+                   JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                  WHERE ${E('a.empresa_id')} AND ${CAJA_O_BANCO('c.codigo')}
+                 UNION ALL
                  -- venta de un activo: su precio (sin IVA) a la cuenta bancaria de la baja
                  SELECT ac.empresa_id, b.precio_venta, b.cuenta_cobro_id
                    FROM ledger.activos_bajas b JOIN ledger.activos ac ON ac.id = b.activo_id
@@ -2271,7 +2277,7 @@ async function verificarLibroCon(
             AND EXISTS (SELECT 1 FROM ledger.asientos a WHERE a.origen_tipo = 'egreso' AND a.origen_id = e.id)`,
     )
     await revisar(
-        '15.retenciones_por_pagar_distintas (2.1.04 = Σ retención de IVA, 2.1.05 = Σ retención de ISR de las compras vigentes + Σ ISR de los premios de sorteo entregados)',
+        '15.retenciones_por_pagar_distintas (2.1.04 = Σ retención de IVA, 2.1.05 = Σ retención de ISR de las compras vigentes + Σ ISR de los premios de sorteo entregados − los pagos vigentes de sus declaraciones)',
         `WITH docs AS (
              SELECT empresa_id, sum(iva) AS iva, sum(isr) AS isr FROM (
                  SELECT c.empresa_id, c.retencion_iva AS iva, c.retencion_isr AS isr
@@ -2280,6 +2286,13 @@ async function verificarLibroCon(
                  SELECT s.empresa_id, 0, g.retencion_isr
                    FROM lealtad.sorteos_ganadores g JOIN lealtad.sorteos s ON s.id = g.sorteo_id
                   WHERE ${E('s.empresa_id')} AND g.estado = 'entregado'
+                 UNION ALL
+                 -- fase 7 PR C: el pago vigente de una declaración de retenciones las salda
+                 SELECT dp.empresa_id, CASE WHEN d.impuesto = 'retenciones_iva' THEN -dp.impuesto ELSE 0 END,
+                        CASE WHEN d.impuesto = 'retenciones_isr' THEN -dp.impuesto ELSE 0 END
+                   FROM fiscal.declaraciones_pagos dp JOIN fiscal.declaraciones d ON d.id = dp.declaracion_id
+                  WHERE ${E('dp.empresa_id')} AND d.impuesto IN ('retenciones_iva', 'retenciones_isr')
+                    AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos_anulaciones x WHERE x.pago_id = dp.id)
              ) x GROUP BY 1
          ), libro AS (
              SELECT a.empresa_id,
@@ -3030,7 +3043,7 @@ async function verificarLibroCon(
         'depreciacion_al_dia',
     ]
     const CHECKS_ANUALES = ['incobrables', 'resultados_cero', 'comprobacion_cuadra']
-    const CHECKS_IMPUESTOS = ['iva_cuadrado', 'iva_liquidado']
+    const CHECKS_IMPUESTOS = ['iva_cuadrado', 'iva_liquidado', 'retenciones_cuadradas']
     const listaSql = (claves: string[]) => `(${claves.map((c) => `'${c}'`).join(', ')})`
     /** claves de `tipo` sin un check vigente que pase para la empresa `e` y el periodo `p` en el instante `t` */
     const checksQueNoPasan = (tipo: string, claves: string[], e: string, p: string, t: string) =>
@@ -3501,7 +3514,7 @@ async function verificarLibroCon(
                      OR o.id IS NULL OR o.empresa_id <> d.empresa_id OR o.impuesto <> d.impuesto)`,
         )
         await revisar(
-            '22.liquidacion_distinta_de_la_declaracion (por periodo, Σ asientos liquidacion_impuesto = el neto de la última versión revisada: IVA 2.1.02 = D, 1.1.04 = −crédito usado (+|D| si D < 0), 1.1.05 = −retenciones usadas, 2.1.06 = −a pagar; PC 5.3.04 = impuesto, 2.1.09 = −a pagar, 1.1.05 = −retenciones usadas; nada más; cada asiento de una declaración revisada de su empresa, el primero al último día del mes)',
+            '22.liquidacion_distinta_de_la_declaracion (por periodo, Σ asientos liquidacion_impuesto = el neto de la última versión revisada: IVA 2.1.02 = D, 1.1.04 = −crédito usado (+|D| si D < 0), 1.1.05 = −retenciones usadas, 2.1.06 = −a pagar; PC 5.3.04 = impuesto, 2.1.09 = −a pagar, 1.1.05 = −retenciones usadas; ISR opcional 5.5.01 = isr, 1.1.06 = −retenciones usadas, 2.1.07 = −a pagar; ISR trimestral 1.1.07 = isr, 1.1.08 = −ISO acreditado, 2.1.07 = −a pagar; ISO 1.1.08 = impuesto, 2.1.08 = −a pagar; ISR anual y retenciones sin asiento; solo esas cuentas; cada asiento de una declaración revisada de su empresa, IVA y PC el primero al último día del mes, ISR e ISO desde él)',
             `WITH r AS ${revisadas}
              SELECT 'periodo' AS que, r.id, r.empresa_id, r.impuesto, to_char(r.periodo_desde, 'YYYY-MM') AS periodo
                FROM r
@@ -3514,6 +3527,18 @@ async function verificarLibroCon(
                         ${liquidado('r', CUENTAS_GT.IMPUESTO_PC)} <> ${t('r', 'impuesto')}
                      OR ${liquidado('r', CUENTAS_GT.PC_POR_PAGAR)} <> -${t('r', 'a_pagar')}
                      OR ${liquidado('r', CUENTAS_GT.IVA_RETENIDO_CLIENTES)} <> -${t('r', 'retenciones_usadas')}))
+                 -- fase 7 PR C
+                 OR (r.impuesto = 'isr_opcional_mensual' AND (
+                        ${liquidado('r', CUENTAS_GT.IMPUESTO_SOBRE_RENTA)} <> ${t('r', 'isr')}
+                     OR ${liquidado('r', CUENTAS_GT.ISR_RETENIDO_CLIENTES)} <> -${t('r', 'retenciones_usadas')}
+                     OR ${liquidado('r', CUENTAS_GT.ISR_POR_PAGAR)} <> -${t('r', 'a_pagar')}))
+                 OR (r.impuesto = 'isr_trimestral' AND (
+                        ${liquidado('r', CUENTAS_GT.ISR_PAGOS_TRIMESTRALES)} <> ${t('r', 'isr')}
+                     OR ${liquidado('r', CUENTAS_GT.ISO_POR_ACREDITAR)} <> -${t('r', 'iso_acreditado')}
+                     OR ${liquidado('r', CUENTAS_GT.ISR_POR_PAGAR)} <> -${t('r', 'a_pagar')}))
+                 OR (r.impuesto = 'iso_trimestral' AND (
+                        ${liquidado('r', CUENTAS_GT.ISO_POR_ACREDITAR)} <> ${t('r', 'impuesto')}
+                     OR ${liquidado('r', CUENTAS_GT.ISO_POR_PAGAR)} <> -${t('r', 'a_pagar')}))
              UNION ALL
              SELECT 'asiento', a.id, a.empresa_id, cu.codigo, to_char(a.fecha, 'YYYY-MM-DD')
                FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
@@ -3521,9 +3546,15 @@ async function verificarLibroCon(
               WHERE a.origen_tipo = 'liquidacion_impuesto' AND ${E('a.empresa_id')}
                 AND (d.id IS NULL OR d.empresa_id <> a.empresa_id OR d.revisada_en IS NULL OR d.asiento_id IS DISTINCT FROM a.id
                      OR a.reversa_de IS NOT NULL OR m.cuadricula IS NOT NULL
-                     OR cu.codigo NOT IN ('${IVA}', '${IVA_CREDITO}', '${CUENTAS_GT.IVA_RETENIDO_CLIENTES}',
-                                          '${CUENTAS_GT.IVA_POR_PAGAR}', '${CUENTAS_GT.IMPUESTO_PC}', '${CUENTAS_GT.PC_POR_PAGAR}')
-                     OR (a.fecha <> d.periodo_hasta AND NOT EXISTS (
+                     OR NOT (cu.codigo = ANY (CASE d.impuesto
+                            WHEN 'iva_mensual' THEN ARRAY['${IVA}', '${IVA_CREDITO}', '${CUENTAS_GT.IVA_RETENIDO_CLIENTES}', '${CUENTAS_GT.IVA_POR_PAGAR}']
+                            WHEN 'pc_mensual' THEN ARRAY['${CUENTAS_GT.IMPUESTO_PC}', '${CUENTAS_GT.PC_POR_PAGAR}', '${CUENTAS_GT.IVA_RETENIDO_CLIENTES}']
+                            WHEN 'isr_opcional_mensual' THEN ARRAY['${CUENTAS_GT.IMPUESTO_SOBRE_RENTA}', '${CUENTAS_GT.ISR_RETENIDO_CLIENTES}', '${CUENTAS_GT.ISR_POR_PAGAR}']
+                            WHEN 'isr_trimestral' THEN ARRAY['${CUENTAS_GT.ISR_PAGOS_TRIMESTRALES}', '${CUENTAS_GT.ISO_POR_ACREDITAR}', '${CUENTAS_GT.ISR_POR_PAGAR}']
+                            WHEN 'iso_trimestral' THEN ARRAY['${CUENTAS_GT.ISO_POR_ACREDITAR}', '${CUENTAS_GT.ISO_POR_PAGAR}']
+                            ELSE ARRAY[]::text[] END))
+                     -- el IVA y el PC liquidan al último día del mes; ISR e ISO al primer día abierto desde él
+                     OR (d.impuesto IN ('iva_mensual', 'pc_mensual') AND a.fecha <> d.periodo_hasta AND NOT EXISTS (
                             SELECT 1 FROM fiscal.declaraciones x JOIN ledger.asientos xa ON xa.id = x.asiento_id
                              WHERE x.empresa_id = d.empresa_id AND x.impuesto = d.impuesto AND x.periodo_desde = d.periodo_desde
                                AND x.version < d.version))
@@ -3577,18 +3608,22 @@ async function verificarLibroCon(
                  OR (r.impuesto = 'pc_mensual' AND (q.ret <> ${t('r', 'retenciones')} OR ${delMes('r', IVA)} <> 0))`,
         )
         await revisar(
-            '22.pago_de_declaracion_mal_contabilizado (pago_impuesto de una declaración revisada de su empresa: 2.1.06 (o 2.1.09) debe = impuesto, 5.4.02 debe = mora + multa, caja o banco haber = total; impuesto = a pagar de su versión − lo pagado antes en el periodo)',
+            '22.pago_de_declaracion_mal_contabilizado (pago_impuesto de una declaración revisada de su empresa: su cuenta por pagar (2.1.04–2.1.09 según el impuesto) debe = impuesto, 5.4.02 debe = mora + multa, caja o banco haber = total; impuesto = a pagar de su versión − lo pagado antes (vigente) en el periodo; un pago anulado con su reverso pago_impuesto; un pago vigente por versión)',
             `SELECT 'pago' AS que, dp.id, dp.empresa_id, dp.declaracion_id, dp.total::text,
                     (SELECT json_agg(json_build_object('cuenta', cu.codigo, 'debe', m.debe, 'haber', m.haber))
                        FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id WHERE m.asiento_id = dp.asiento_id) AS partidas
                FROM fiscal.declaraciones_pagos dp JOIN fiscal.declaraciones d ON d.id = dp.declaracion_id
                JOIN ledger.asientos a ON a.id = dp.asiento_id
+               LEFT JOIN fiscal.declaraciones_pagos_anulaciones an ON an.pago_id = dp.id
+               LEFT JOIN ledger.asientos ra ON ra.id = an.asiento_id
               WHERE ${E('dp.empresa_id')}
                 AND (d.empresa_id <> dp.empresa_id OR a.empresa_id <> dp.empresa_id OR a.origen_tipo <> 'pago_impuesto'
                      OR a.origen_id <> d.id OR d.revisada_en IS NULL OR a.fecha <> dp.fecha
                      OR (SELECT coalesce(sum(m.debe), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
                           WHERE m.asiento_id = a.id
-                            AND cu.codigo = CASE WHEN d.impuesto = 'pc_mensual' THEN '${CUENTAS_GT.PC_POR_PAGAR}' ELSE '${CUENTAS_GT.IVA_POR_PAGAR}' END) <> dp.impuesto
+                            AND cu.codigo = CASE d.impuesto WHEN 'pc_mensual' THEN '${CUENTAS_GT.PC_POR_PAGAR}' WHEN 'iva_mensual' THEN '${CUENTAS_GT.IVA_POR_PAGAR}'
+                                  WHEN 'iso_trimestral' THEN '${CUENTAS_GT.ISO_POR_PAGAR}' WHEN 'retenciones_iva' THEN '${CUENTAS_GT.RETENCIONES_IVA_POR_PAGAR}'
+                                  WHEN 'retenciones_isr' THEN '${CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR}' ELSE '${CUENTAS_GT.ISR_POR_PAGAR}' END) <> dp.impuesto
                      OR (SELECT coalesce(sum(m.debe), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
                           WHERE m.asiento_id = a.id AND cu.codigo = '${CUENTAS_GT.MULTAS_TRIBUTARIAS}') <> dp.mora + dp.multa
                      OR (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
@@ -3597,7 +3632,9 @@ async function verificarLibroCon(
                      -- e3bfefd: el pago queda fuera del bloqueo de impuestos; solo puede tocar su deuda, 5.4.02 y caja o banco
                      OR EXISTS (SELECT 1 FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
                                  WHERE m.asiento_id = a.id AND m.cuadricula IS NULL
-                                   AND NOT (cu.codigo IN ('${CUENTAS_GT.IVA_POR_PAGAR}', '${CUENTAS_GT.PC_POR_PAGAR}', '${CUENTAS_GT.MULTAS_TRIBUTARIAS}')
+                                   AND NOT (cu.codigo IN (CASE d.impuesto WHEN 'pc_mensual' THEN '${CUENTAS_GT.PC_POR_PAGAR}' WHEN 'iva_mensual' THEN '${CUENTAS_GT.IVA_POR_PAGAR}'
+                                  WHEN 'iso_trimestral' THEN '${CUENTAS_GT.ISO_POR_PAGAR}' WHEN 'retenciones_iva' THEN '${CUENTAS_GT.RETENCIONES_IVA_POR_PAGAR}'
+                                  WHEN 'retenciones_isr' THEN '${CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR}' ELSE '${CUENTAS_GT.ISR_POR_PAGAR}' END, '${CUENTAS_GT.MULTAS_TRIBUTARIAS}')
                                             OR ${CAJA_O_BANCO('cu.codigo')}))
                      OR EXISTS (SELECT 1 FROM ledger.movimientos m WHERE m.asiento_id = a.id AND m.cuadricula IS NOT NULL)
                      -- el pago es lo que su versión dejó por pagar menos lo pagado antes en el periodo; una
@@ -3605,19 +3642,29 @@ async function verificarLibroCon(
                      OR dp.impuesto <> ${t('d', 'a_pagar')} - coalesce((SELECT sum(x.impuesto) FROM fiscal.declaraciones_pagos x
                           JOIN fiscal.declaraciones y ON y.id = x.declaracion_id
                          WHERE y.empresa_id = d.empresa_id AND y.impuesto = d.impuesto AND y.periodo_desde = d.periodo_desde
-                           AND x.id < dp.id), 0))
+                           AND x.id < dp.id
+                           AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos_anulaciones z WHERE z.pago_id = x.id)), 0)
+                     -- un pago anulado tiene su reverso pago_impuesto de la misma declaración; un pago vigente por versión
+                     OR (an.id IS NOT NULL AND (ra.id IS NULL OR ra.reversa_de IS DISTINCT FROM a.id OR ra.origen_tipo <> 'pago_impuesto'
+                                                OR ra.empresa_id <> dp.empresa_id OR an.empresa_id <> dp.empresa_id))
+                     OR (an.id IS NULL AND (EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)
+                                            OR EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos o WHERE o.declaracion_id = dp.declaracion_id
+                                                         AND o.id <> dp.id
+                                                         AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos_anulaciones z WHERE z.pago_id = o.id)))))
              UNION ALL
              SELECT 'asiento_sin_pago', a.id, a.empresa_id, a.origen_id, NULL, NULL
                FROM ledger.asientos a
               WHERE a.origen_tipo = 'pago_impuesto' AND ${E('a.empresa_id')}
-                AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos dp WHERE dp.asiento_id = a.id)`,
+                AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos dp WHERE dp.asiento_id = a.id)
+                AND NOT EXISTS (SELECT 1 FROM fiscal.declaraciones_pagos_anulaciones x WHERE x.asiento_id = a.id)`,
         )
         await revisar(
-            '22.revisada_sin_bloqueo_de_impuestos (al revisar una declaración el bloqueo de impuestos de su empresa llega al último día de su mes, y no retrocede)',
+            '22.revisada_sin_bloqueo_de_impuestos (al revisar una declaración de IVA, PC o retenciones el bloqueo de impuestos de su empresa llega al último día de su mes, y no retrocede; ISR e ISO no lo fijan)',
             `SELECT d.id, d.empresa_id, to_char(d.periodo_hasta, 'YYYY-MM-DD') AS hasta,
                     to_char(ledger.bloqueo_vigente(d.empresa_id, 'impuestos'), 'YYYY-MM-DD') AS bloqueo
                FROM fiscal.declaraciones d
               WHERE ${E('d.empresa_id')} AND d.revisada_en IS NOT NULL
+                AND d.impuesto IN ('iva_mensual', 'pc_mensual', 'retenciones_iva', 'retenciones_isr')
                 AND coalesce(ledger.bloqueo_vigente(d.empresa_id, 'impuestos') < d.periodo_hasta, true)`,
         )
         const [migracion] = await filas(
@@ -3666,6 +3713,113 @@ async function verificarLibroCon(
                          AND a.created_at > '${desdeEtiquetas}'::timestamptz
                          AND NOT EXISTS (SELECT 1 FROM ledger.movimientos o WHERE o.asiento_id = a.reversa_de
                                           AND o.cuenta_id = m.cuenta_id AND o.cuadricula IS NULL)))`,
+        )
+    }
+
+    /*
+    | 23 · ISO por acreditar y cierre anual con la declaración (fase 7 PR C; contrato §9.1, §9.3 y §21,
+    | §15 #75–#83): cada ISO trimestral vigente con su fila `origen`; nada acreditado dos veces, de más,
+    | fuera de su ventana o por quien no es ISR; 1.1.08 = Σ orígenes − acreditado − vencido; el cierre
+    | anual con declaración ISR anual toma sus montos.
+    */
+    const [hayIso] = await filas(`SELECT to_regclass('fiscal.iso_acreditamientos') IS NOT NULL AS existe`)
+    if (hayIso?.existe) {
+        const tt = (d: string, k: string) => `coalesce((${d}.totales ->> '${k}')::numeric, 0)`
+        const isoVigente = `(SELECT ia.*, d.impuesto AS d_impuesto, d.periodo_desde AS d_desde, d.periodo_hasta AS d_hasta
+                             FROM fiscal.iso_acreditamientos ia
+                             LEFT JOIN fiscal.declaraciones d ON d.id = ia.declaracion_id
+                            WHERE ${E('ia.empresa_id')}
+                              AND ((ia.declaracion_id IS NOT NULL AND d.estado IN ('revisada', 'presentada'))
+                                   OR (ia.cierre_id IS NOT NULL AND NOT EXISTS (
+                                        SELECT 1 FROM ledger.reaperturas_anuales r WHERE r.cierre_id = ia.cierre_id))))`
+        await revisar(
+            '23.iso_por_acreditar_mal_llevado (cada ISO trimestral revisado o presentado con impuesto > 0 tiene una fila origen = su impuesto, del trimestre y con la ventana del 1-ene siguiente al 31-dic del tercer año; por trimestre Σ acreditado + vencido ≤ origen; lo acreditado es de un ISR trimestral o anual cuyo periodo cae en la ventana, Σ por declaración = su iso_acreditado; lo vencido, de un cierre de un año ≥ el fin de la ventana)',
+            `WITH v AS ${isoVigente}
+             SELECT 'iso_sin_origen' AS que, d.id, d.empresa_id, to_char(d.periodo_desde, 'YYYY-MM-DD') AS periodo, NULL::text AS detalle
+               FROM fiscal.declaraciones d
+              WHERE ${E('d.empresa_id')} AND d.impuesto = 'iso_trimestral' AND d.estado IN ('revisada', 'presentada')
+                AND ${tt('d', 'impuesto')} > 0
+                AND (SELECT count(*) FROM fiscal.iso_acreditamientos o WHERE o.declaracion_id = d.id AND o.tipo = 'origen'
+                        AND o.monto = ${tt('d', 'impuesto')} AND o.iso_periodo = d.periodo_desde AND o.empresa_id = d.empresa_id
+                        AND o.acreditable_desde = make_date(extract(year FROM d.periodo_desde)::int + 1, 1, 1)
+                        AND o.vence_en = make_date(extract(year FROM d.periodo_desde)::int + 3, 12, 31)) <> 1
+             UNION ALL
+             SELECT 'origen_ajeno', v.id, v.empresa_id, to_char(v.iso_periodo, 'YYYY-MM-DD'), v.d_impuesto
+               FROM v WHERE v.tipo = 'origen' AND (v.d_impuesto <> 'iso_trimestral' OR v.d_desde <> v.iso_periodo)
+             UNION ALL
+             SELECT 'saldo_negativo', NULL, v.empresa_id, to_char(v.iso_periodo, 'YYYY-MM-DD'),
+                    sum(CASE WHEN v.tipo = 'origen' THEN v.monto ELSE -v.monto END)::text
+               FROM v GROUP BY v.empresa_id, v.iso_periodo
+             HAVING sum(CASE WHEN v.tipo = 'origen' THEN v.monto ELSE -v.monto END) < 0
+             UNION ALL
+             SELECT 'acreditado_mal', v.id, v.empresa_id, to_char(v.iso_periodo, 'YYYY-MM-DD'), v.d_impuesto
+               FROM v LEFT JOIN v o ON o.tipo = 'origen' AND o.empresa_id = v.empresa_id AND o.iso_periodo = v.iso_periodo
+              WHERE v.tipo = 'acreditado'
+                AND (v.d_impuesto NOT IN ('isr_trimestral', 'isr_anual') OR o.id IS NULL
+                     OR v.d_hasta < o.acreditable_desde OR v.d_desde > o.vence_en)
+             UNION ALL
+             SELECT 'acreditado_distinto_de_la_declaracion', d.id, d.empresa_id, to_char(d.periodo_desde, 'YYYY-MM-DD'),
+                    ${tt('d', 'iso_acreditado')}::text
+               FROM fiscal.declaraciones d
+              WHERE ${E('d.empresa_id')} AND d.impuesto IN ('isr_trimestral', 'isr_anual') AND d.estado IN ('revisada', 'presentada')
+                AND ${tt('d', 'iso_acreditado')} <> coalesce((SELECT sum(a.monto) FROM fiscal.iso_acreditamientos a
+                                                              WHERE a.declaracion_id = d.id AND a.tipo = 'acreditado'), 0)
+             UNION ALL
+             SELECT 'vencido_antes_de_tiempo', v.id, v.empresa_id, to_char(v.iso_periodo, 'YYYY-MM-DD'), ca.anio::text
+               FROM v JOIN ledger.cierres_anuales ca ON ca.id = v.cierre_id
+              WHERE v.tipo = 'vencido' AND (make_date(ca.anio, 12, 31) < v.vence_en OR ca.empresa_id <> v.empresa_id)`,
+        )
+        await revisar(
+            '23.iso_por_acreditar_distinto_de_1.1.08 (por empresa: 1.1.08 = Σ orígenes vigentes − lo acreditado por los ISR trimestrales vigentes − lo acreditado en los cierres anuales vigentes − lo vencido; más los ajustes manuales a 1.1.08, que traen el saldo de antes de ArgosIsp)',
+            `WITH v AS ${isoVigente}, e AS (
+                 SELECT x.empresa_id FROM (
+                     SELECT empresa_id FROM v
+                     UNION SELECT a.empresa_id FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                             JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                            WHERE ${E('a.empresa_id')} AND cu.codigo = '${CUENTAS_GT.ISO_POR_ACREDITAR}') x
+             )
+             SELECT e.empresa_id,
+                    (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                      WHERE a.empresa_id = e.empresa_id AND cu.codigo = '${CUENTAS_GT.ISO_POR_ACREDITAR}')::text AS libro,
+                    ((SELECT coalesce(sum(monto), 0) FROM v WHERE v.empresa_id = e.empresa_id AND v.tipo = 'origen')
+                     - (SELECT coalesce(sum(monto), 0) FROM v WHERE v.empresa_id = e.empresa_id AND v.tipo = 'acreditado'
+                         AND v.d_impuesto = 'isr_trimestral')
+                     - (SELECT coalesce(sum(ca.isr_acreditado_iso), 0) FROM ledger.cierres_anuales ca
+                         WHERE ca.empresa_id = e.empresa_id
+                           AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales r WHERE r.cierre_id = ca.id))
+                     - (SELECT coalesce(sum(monto), 0) FROM v WHERE v.empresa_id = e.empresa_id AND v.tipo = 'vencido')
+                     + (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                          JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                         WHERE a.empresa_id = e.empresa_id AND cu.codigo = '${CUENTAS_GT.ISO_POR_ACREDITAR}' AND a.origen_tipo = 'ajuste'))::text AS documentos
+               FROM e
+              WHERE (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                       JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                      WHERE a.empresa_id = e.empresa_id AND cu.codigo = '${CUENTAS_GT.ISO_POR_ACREDITAR}')
+                    <> (SELECT coalesce(sum(monto), 0) FROM v WHERE v.empresa_id = e.empresa_id AND v.tipo = 'origen')
+                     - (SELECT coalesce(sum(monto), 0) FROM v WHERE v.empresa_id = e.empresa_id AND v.tipo = 'acreditado'
+                         AND v.d_impuesto = 'isr_trimestral')
+                     - (SELECT coalesce(sum(ca.isr_acreditado_iso), 0) FROM ledger.cierres_anuales ca
+                         WHERE ca.empresa_id = e.empresa_id
+                           AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales r WHERE r.cierre_id = ca.id))
+                     - (SELECT coalesce(sum(monto), 0) FROM v WHERE v.empresa_id = e.empresa_id AND v.tipo = 'vencido')
+                     + (SELECT coalesce(sum(m.debe - m.haber), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                          JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                         WHERE a.empresa_id = e.empresa_id AND cu.codigo = '${CUENTAS_GT.ISO_POR_ACREDITAR}' AND a.origen_tipo = 'ajuste')`,
+        )
+        await revisar(
+            '23.cierre_anual_distinto_de_la_declaracion (un cierre vigente de un año con declaración ISR anual revisada o presentada toma su ISR, el trimestral acreditado y el ISO acreditado de su última versión, que es la que tiene filas de ISO acreditado)',
+            `SELECT ca.id, ca.empresa_id, ca.anio, ca.isr::text, ca.isr_acreditado_trimestral::text AS trimestral,
+                    ca.isr_acreditado_iso::text AS iso, d.id AS declaracion_id, d.totales
+               FROM ledger.cierres_anuales ca
+               JOIN LATERAL (SELECT d.* FROM fiscal.declaraciones d WHERE d.empresa_id = ca.empresa_id AND d.impuesto = 'isr_anual'
+                               AND d.periodo_desde = make_date(ca.anio, 1, 1) ORDER BY d.version DESC LIMIT 1) d ON true
+              WHERE ${E('ca.empresa_id')}
+                AND NOT EXISTS (SELECT 1 FROM ledger.reaperturas_anuales r WHERE r.cierre_id = ca.id)
+                AND d.created_at <= ca.created_at
+                AND (d.estado NOT IN ('revisada', 'presentada') OR ca.isr <> ${tt('d', 'isr')}
+                     OR ca.isr_acreditado_trimestral <> ${tt('d', 'trimestral_acreditado')}
+                     OR ca.isr_acreditado_iso <> ${tt('d', 'iso_acreditado')})`,
         )
     }
 

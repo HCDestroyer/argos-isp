@@ -64,6 +64,15 @@ export const INMUTABLES: Record<string, string> = {
     'fiscal.feriados': 'día inhábil global; retirarlo = fila nueva con activo false (§3.2)',
     'fiscal.alertas':
         'alerta de vencimiento o del límite PC; clave única por obligación (o año) y umbral (§11.3)',
+    // fase 7 PR B y C (A3): pagos de declaraciones, su anulación, ajustes fiscales e ISO por acreditar (§21)
+    'fiscal.declaraciones_pagos':
+        'pago de una declaración con su asiento; un pago vigente por versión (trigger)',
+    'fiscal.declaraciones_pagos_anulaciones':
+        'anulación del pago de una declaración con su reverso (§21 PR C)',
+    'fiscal.ajustes_fiscales':
+        'ajuste del resultado contable a la renta imponible; se anula con otra fila (§9.3)',
+    'fiscal.iso_acreditamientos':
+        'ISO por acreditar: origen, acreditado y vencido; cuenta la fila de un documento vigente (§9.3)',
     // §10.3 conciliación bancaria
     'ledger.extractos': 'extracto bancario (§10.3)',
     'ledger.extractos_lineas': 'línea de extracto (§10.3)',
@@ -149,6 +158,8 @@ export const MUTABLES: Record<string, string> = {
     // fase 7 PR A (A3): el calendario lo concilia el cron con version + 1 y audit.cambios; nunca DELETE ni TRUNCATE
     'fiscal.obligaciones':
         'calendario fiscal: vence_en, formulario, regla, estado y declaracion_id con version y audit.cambios (§3.7)',
+    'fiscal.declaraciones':
+        'versión de una declaración: lo calculado no cambia (trigger); el estado solo avanza y se registra la revisión y la presentación (§3.7)',
 }
 
 /** Texto para el mensaje de una tabla sin clasificar. */

@@ -264,6 +264,32 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
                     ),
             ],
         ]
+        // fase 7 PR C: una anulación del pago cuyo «reverso» no lo es, y un segundo pago vigente de la misma versión
+        casos.push(
+            [
+                '22.pago_de_declaracion_mal_contabilizado',
+                (trx) =>
+                    sinTriggers(
+                        trx,
+                        'fiscal.declaraciones_pagos_anulaciones',
+                        `INSERT INTO fiscal.declaraciones_pagos_anulaciones (pago_id, empresa_id, motivo, asiento_id)
+                         VALUES (?, ?, 'auditor', (SELECT asiento_id FROM fiscal.declaraciones WHERE id = ?))`,
+                        [pagoB.id, e.B, iva.id],
+                    ),
+            ],
+            [
+                '22.pago_de_declaracion_mal_contabilizado',
+                (trx) =>
+                    sinTriggers(
+                        trx,
+                        'fiscal.declaraciones_pagos',
+                        `INSERT INTO fiscal.declaraciones_pagos (declaracion_id, empresa_id, fecha, impuesto, mora, multa, total, asiento_id)
+                         SELECT declaracion_id, empresa_id, fecha, impuesto, mora, multa, total, asiento_id
+                           FROM fiscal.declaraciones_pagos WHERE id = ?`,
+                        [pagoB.id],
+                    ),
+            ],
+        )
         for (const [invariante, paso] of casos) {
             assert.include(await fabricado(empresas, paso), invariante, invariante)
         }
