@@ -183,6 +183,8 @@
       "declaraciones.revisar",
       "declaraciones.presentar",
       "declaraciones.pagar",
+      "declaraciones.anular_pago",
+      "declaraciones.ajustar",
       "lealtad.canjear",
       "lealtad.revertir_canje",
       "lealtad.entregar",

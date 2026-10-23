@@ -4,7 +4,8 @@ import type { TableColumn, TabsItem } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
 /**
- * Ficha de una declaración (`GET /declaraciones/:id`, `declaraciones.ver`): totales por secciones
+ * Ficha de una declaración (`GET /declaraciones/:id`, `declaraciones.ver`) de cualquiera de los ocho
+ * impuestos (fase 7 PR B y C): totales por secciones
  * (débitos, créditos, retenciones, remanentes e impuesto determinado; en pequeño contribuyente el
  * porcentaje sobre ventas), los renglones de cada sección, las versiones del periodo, los libros
  * emitidos con folio que cubren el mes, la obligación del calendario, el pago y los checks de
@@ -27,10 +28,10 @@ const problema = ref<Problem | null>(null)
 const versiones = shallowRef<Declaracion[]>([])
 const problemaVersiones = ref<Problem | null>(null)
 
-useHead({ title: computed(() => (declaracion.value ? `${etiquetaImpuestoDeclaracion(declaracion.value.impuesto)} ${periodoDeclaracion(declaracion.value)} · ArgosIsp` : 'Declaración · ArgosIsp')) })
+useHead({ title: computed(() => (declaracion.value ? `${etiquetaImpuestoDeclaracion(declaracion.value.impuesto)} ${etiquetaPeriodoDeclaracion(declaracion.value)} · ArgosIsp` : 'Declaración · ArgosIsp')) })
 
 async function cargarVersiones(d: Declaracion) {
-    const resultado = await useDeclaraciones().listar({ impuesto: [d.impuesto === 'pc_mensual' ? 'pc_mensual' : 'iva_mensual'], periodo: periodoDeclaracion(d), limit: 50 })
+    const resultado = await useDeclaraciones().listar({ impuesto: [d.impuesto], periodo: periodoDeclaracion(d), limit: 50 })
     versiones.value = resultado.ok ? resultado.data.data.filter(v => v.empresa_id === d.empresa_id).sort((a, b) => b.version - a.version) : []
     problemaVersiones.value = resultado.ok ? null : resultado.problema
 }
@@ -53,6 +54,20 @@ watch(id, () => void cargar())
 onMounted(cargar)
 
 const periodo = computed(() => (declaracion.value ? periodoDeclaracion(declaracion.value) : ''))
+/** El periodo para los textos: «septiembre 2026», «3.er trimestre 2026», «año 2025». */
+const etiquetaDelPeriodo = computed(() => (declaracion.value ? etiquetaPeriodoDeclaracion(declaracion.value) : ''))
+/** IVA, PC y retenciones fijan el bloqueo de impuestos y tienen checks del mes (los de ISR e ISO no). */
+const conChecks = computed(() => declaracion.value !== null && (esIvaOPc(declaracion.value.impuesto) || declaracion.value.impuesto === 'retenciones_iva' || declaracion.value.impuesto === 'retenciones_isr'))
+const notas = computed(() => declaracion.value?.detalle.notas ?? [])
+/** ISR trimestral y anual: sus ajustes fiscales (año y trimestre). */
+const enlaceAjustes = computed(() => {
+    const d = declaracion.value
+    if (!d || (d.impuesto !== 'isr_trimestral' && d.impuesto !== 'isr_anual')) {
+        return null
+    }
+    const trimestre = d.impuesto === 'isr_trimestral' ? `&trimestre=${Math.floor((Number(d.periodo_desde.slice(5, 7)) - 1) / 3) + 1}` : ''
+    return `/declaraciones/ajustes?anio=${d.periodo_desde.slice(0, 4)}${trimestre}`
+})
 const acciones = computed(() => (declaracion.value ? accionesDeclaracion(declaracion.value) : null))
 const vigente = computed(() => versionVigente(versiones.value))
 const secciones = computed(() => (declaracion.value ? seccionesTotales(declaracion.value.impuesto) : []))
@@ -64,19 +79,41 @@ const pagadoAntes = computed(() => versiones.value
     .toFixed(2))
 
 /* Renglones por sección. */
-const seccion = ref<SeccionRenglon>('ventas')
+/* Renglones (ventas, compras, retenciones) y, en ISR e ISO, el cálculo (resultados, ajustes, pagos trimestrales e ISO). */
+const seccion = ref<SeccionRenglon | SeccionCalculo>('ventas')
+const esCalculo = (s: string): s is SeccionCalculo => s in SECCIONES_CALCULO
 const renglones = computed(() => (declaracion.value?.detalle.renglones ?? []).filter(r => r.seccion === seccion.value))
-const itemsSeccion = computed<TabsItem[]>(() => (Object.keys(SECCIONES_RENGLON) as SeccionRenglon[])
-    .filter(s => s !== 'compras' || declaracion.value?.impuesto !== 'pc_mensual')
-    .map(s => ({
-        label: `${SECCIONES_RENGLON[s].etiqueta} (${(declaracion.value?.detalle.renglones ?? []).filter(r => r.seccion === s).length})`,
-        value: s,
-        icon: SECCIONES_RENGLON[s].icono,
-    })))
+const calculo = computed(() => (declaracion.value?.detalle.calculo ?? []).filter(r => r.seccion === seccion.value))
+const itemsSeccion = computed<TabsItem[]>(() => {
+    const d = declaracion.value
+    if (!d) {
+        return []
+    }
+    const deRenglones = (Object.keys(SECCIONES_RENGLON) as SeccionRenglon[])
+        .filter(s => (esIvaOPc(d.impuesto) && (s !== 'compras' || d.impuesto !== 'pc_mensual')) || d.detalle.renglones.some(r => r.seccion === s))
+        .map(s => ({ label: `${SECCIONES_RENGLON[s].etiqueta} (${d.detalle.renglones.filter(r => r.seccion === s).length})`, value: s, icon: SECCIONES_RENGLON[s].icono }))
+    const deCalculo = (Object.keys(SECCIONES_CALCULO) as SeccionCalculo[])
+        .filter(s => (d.detalle.calculo ?? []).some(r => r.seccion === s))
+        .map(s => ({ label: `${SECCIONES_CALCULO[s].etiqueta} (${(d.detalle.calculo ?? []).filter(r => r.seccion === s).length})`, value: s, icon: SECCIONES_CALCULO[s].icono }))
+    return [...deRenglones, ...deCalculo]
+})
+// La primera sección con datos al cambiar de declaración.
+watch(itemsSeccion, (items) => {
+    if (items.length && !items.some(i => i.value === seccion.value)) {
+        seccion.value = items[0]?.value as SeccionRenglon
+    }
+}, { immediate: true })
+const columnasCalculo = computed<TableColumn<RenglonCalculo>[]>(() => [
+    { accessorKey: 'documento', header: seccion.value === 'declaraciones' ? 'Declaración' : seccion.value === 'iso' ? 'Trimestre de ISO' : 'Concepto', meta: { class: { td: 'whitespace-normal' } } },
+    ...(seccion.value === 'declaraciones' || seccion.value === 'iso'
+        ? [{ accessorKey: 'iva', header: seccion.value === 'iso' ? 'Acreditado' : 'ISR', meta: { class: { th: 'text-right', td: 'text-right tabular-nums' } } }]
+        : [{ accessorKey: 'base', header: 'Monto', meta: { class: { th: 'hidden sm:table-cell text-right', td: 'hidden sm:table-cell text-right tabular-nums' } } }]),
+    { accessorKey: 'total', header: seccion.value === 'iso' ? 'Saldo' : 'Efecto', meta: { class: { th: 'text-right', td: 'text-right tabular-nums' } } },
+])
 const columnasRenglones = computed<TableColumn<RenglonDeclaracion>[]>(() => [
     { accessorKey: 'documento', header: 'Documento', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'base', header: 'Base', meta: { class: { th: 'hidden sm:table-cell text-right', td: 'hidden sm:table-cell text-right tabular-nums' } } },
-    { accessorKey: 'iva', header: SECCIONES_RENGLON[seccion.value].columnaIva, meta: { class: { th: 'text-right', td: 'text-right tabular-nums' } } },
+    { accessorKey: 'iva', header: esCalculo(seccion.value) ? 'Monto' : SECCIONES_RENGLON[seccion.value].columnaIva, meta: { class: { th: 'text-right', td: 'text-right tabular-nums' } } },
     { accessorKey: 'total', header: 'Total', meta: { class: { th: 'hidden md:table-cell text-right', td: 'hidden md:table-cell text-right tabular-nums' } } },
 ])
 
@@ -86,6 +123,7 @@ const rectificados = shallowRef<MesRectificado[]>([])
 const revisando = ref(false)
 const presentando = ref(false)
 const pagando = ref(false)
+const anulandoPago = ref(false)
 const recalculando = ref(false)
 
 function alTerminar(d: Declaracion, titulo: string, descripcion: string) {
@@ -101,7 +139,7 @@ function alTerminar(d: Declaracion, titulo: string, descripcion: string) {
 function alRevisar(d: DeclaracionRevisada) {
     rectificados.value = d.cascada
     const extra = d.cascada.length ? ` Se rectificaron también: ${d.cascada.map(textoMesRectificado).join('; ')}.` : ''
-    alTerminar(d, 'Declaración revisada', `Liquidación registrada y los impuestos de ${etiquetaPeriodo(periodo.value)} bloqueados.${extra}`)
+    alTerminar(d, 'Declaración revisada', `${efectoRevision(d.impuesto, etiquetaDelPeriodo.value).resumen}${extra}`)
 }
 
 function alPagar(d: Declaracion) {
@@ -115,7 +153,7 @@ function recalcular(): Promise<Resultado<Declaracion>> {
         return Promise.resolve({ ok: false, problema: { type: 'about:blank', title: 'Sin declaración', status: 0 } })
     }
     return useDeclaraciones().calcular({
-        impuesto: d.impuesto === 'pc_mensual' ? 'pc_mensual' : 'iva_mensual',
+        impuesto: d.impuesto,
         periodo: periodoDeclaracion(d),
         empresa_id: d.empresa_id,
         ...(acciones.value?.sustitutiva ? { sustitutiva: true } : {}),
@@ -138,7 +176,7 @@ function verChecklist() {
 <template>
     <PanelPagina
         id="declaracion"
-        :titulo="declaracion ? `${etiquetaImpuestoDeclaracion(declaracion.impuesto)} · ${etiquetaPeriodo(periodo)}` : 'Declaración'"
+        :titulo="declaracion ? `${etiquetaImpuestoDeclaracion(declaracion.impuesto)} · ${etiquetaDelPeriodo}` : 'Declaración'"
         icono="i-lucide-file-spreadsheet"
     >
         <ProblemaAlerta
@@ -211,7 +249,7 @@ function verChecklist() {
                 variant="subtle"
                 icon="i-lucide-refresh-cw"
                 title="Los datos cambiaron desde que se calculó"
-                :description="`Los libros o las constancias de ${etiquetaPeriodo(periodo)} ya no dan este borrador: revisar o marcar presentada responderá que está desactualizada. Calcule otra versión${acciones?.sustitutiva ? ' (sustitutiva)' : ''}.`"
+                :description="`Los datos de ${etiquetaDelPeriodo} ya no dan este borrador: revisar o marcar presentada responderá que está desactualizada. Calcule otra versión${acciones?.sustitutiva ? ' (sustitutiva)' : ''}.`"
                 :actions="puede('declaraciones.calcular') ? [{ label: acciones?.sustitutiva ? 'Calcular sustitutiva' : 'Recalcular', icon: 'i-lucide-refresh-cw', color: 'warning', variant: 'outline', onClick: () => { recalculando = true } }] : undefined"
                 data-prueba="declaracion-desactualizada"
             />
@@ -244,6 +282,28 @@ function verChecklist() {
                                 {{ textoMesRectificado(m) }}
                             </ULink>
                             · remanente {{ formatearQuetzales(m.remanente_credito_anterior) }} → {{ formatearQuetzales(m.remanente_credito) }} · a pagar {{ formatearQuetzales(m.a_pagar) }}
+                        </li>
+                    </ul>
+                </template>
+            </UAlert>
+
+            <UAlert
+                v-if="notas.length"
+                color="warning"
+                variant="subtle"
+                icon="i-lucide-user-check"
+                title="Criterios del cálculo · confirmar con el contador"
+                data-prueba="declaracion-notas"
+            >
+                <template #description>
+                    <ul class="mt-1 list-disc space-y-1 ps-4">
+                        <li
+                            v-for="(nota, i) in notas"
+                            :key="i"
+                            :class="{ 'font-medium': /contador/i.test(nota) }"
+                            data-prueba="declaracion-nota"
+                        >
+                            {{ nota }}
                         </li>
                     </ul>
                 </template>
@@ -285,6 +345,15 @@ function verChecklist() {
                     variant="outline"
                     data-prueba="abrir-recalcular"
                     @click="recalculando = true"
+                />
+                <UButton
+                    v-if="enlaceAjustes"
+                    label="Ajustes fiscales"
+                    icon="i-lucide-sliders-horizontal"
+                    color="neutral"
+                    variant="ghost"
+                    :to="enlaceAjustes"
+                    data-prueba="declaracion-ajustes"
                 />
             </div>
 
@@ -338,7 +407,7 @@ function verChecklist() {
                                             class="shrink-0 tabular-nums"
                                             :class="f.destacado ? 'text-base font-semibold text-highlighted' : 'text-default'"
                                         >
-                                            {{ totalDe(declaracion, f.clave) === null ? '—' : formatearQuetzales(totalDe(declaracion, f.clave)) }}
+                                            {{ totalDe(declaracion, f.clave) === null ? '—' : TOTALES_PORCENTAJE.includes(f.clave) ? `${totalDe(declaracion, f.clave)} %` : formatearQuetzales(totalDe(declaracion, f.clave)) }}
                                         </dd>
                                     </div>
                                 </dl>
@@ -360,6 +429,29 @@ function verChecklist() {
                             data-prueba="declaracion-secciones"
                         />
                         <UTable
+                            v-if="esCalculo(seccion)"
+                            :data="calculo"
+                            :columns="columnasCalculo"
+                            data-prueba="tabla-calculo"
+                        >
+                            <template #documento-cell="{ row }">
+                                <div class="flex min-w-0 flex-col">
+                                    <span class="text-sm text-highlighted">{{ row.original.documento }}</span>
+                                    <span class="text-xs text-muted">{{ formatearFecha(row.original.fecha) }}<template v-if="row.original.tipo"> · {{ row.original.tipo.replace(/_/g, ' ') }}</template></span>
+                                </div>
+                            </template>
+                            <template #base-cell="{ row }">
+                                {{ formatearQuetzales(row.original.base) }}
+                            </template>
+                            <template #iva-cell="{ row }">
+                                {{ formatearQuetzales(row.original.iva) }}
+                            </template>
+                            <template #total-cell="{ row }">
+                                <span :class="row.original.total.startsWith('-') ? 'text-error' : ''">{{ formatearQuetzales(row.original.total) }}</span>
+                            </template>
+                        </UTable>
+                        <UTable
+                            v-else
                             :data="renglones"
                             :columns="columnasRenglones"
                             data-prueba="tabla-renglones"
@@ -385,7 +477,7 @@ function verChecklist() {
                             <template #empty>
                                 <UEmpty
                                     :icon="SECCIONES_RENGLON[seccion].icono"
-                                    :title="`Sin ${SECCIONES_RENGLON[seccion].etiqueta.toLowerCase()} en el mes`"
+                                    :title="`Sin ${SECCIONES_RENGLON[seccion].etiqueta.toLowerCase()} en el periodo`"
                                     variant="naked"
                                 />
                             </template>
@@ -409,20 +501,22 @@ function verChecklist() {
                             />
                             <DatoFicha
                                 etiqueta="Calculada"
-                                :valor="formatearFechaHora(declaracion.calculada_en)"
+                                :valor="`${formatearFechaHora(declaracion.calculada_en)}${declaracion.calculada_por_nombre ? ` · ${declaracion.calculada_por_nombre}` : ''}`"
+                                data-prueba="declaracion-calculada"
                             />
                             <DatoFicha
                                 etiqueta="Revisada"
-                                :valor="declaracion.revisada_en ? formatearFechaHora(declaracion.revisada_en) : null"
+                                :valor="declaracion.revisada_en ? `${formatearFechaHora(declaracion.revisada_en)}${declaracion.revisada_por_nombre ? ` · ${declaracion.revisada_por_nombre}` : ''}` : null"
+                                data-prueba="declaracion-revisada"
                             />
                             <DatoFicha
                                 etiqueta="Asiento de liquidación"
-                                :valor="declaracion.asiento_id ? `#${declaracion.asiento_id}` : (declaracion.revisada_en ? 'Sin diferencia' : null)"
+                                :valor="declaracion.asiento_id ? `#${declaracion.asiento_id}` : (declaracion.revisada_en ? (sinAsiento(declaracion.impuesto) ? 'Sin asiento' : 'Sin diferencia') : null)"
                             />
                             <DatoFicha
                                 v-if="declaracion.numero_formulario"
                                 etiqueta="Presentada"
-                                :valor="`${declaracion.numero_formulario} · ${formatearFecha(declaracion.fecha_presentacion)}${declaracion.boleta ? ` · boleta ${declaracion.boleta}` : ''}`"
+                                :valor="`${declaracion.numero_formulario} · ${formatearFecha(declaracion.fecha_presentacion)}${declaracion.boleta ? ` · boleta ${declaracion.boleta}` : ''}${declaracion.presentada_por_nombre ? ` · ${declaracion.presentada_por_nombre}` : ''}`"
                             />
                         </dl>
                         <UButton
@@ -487,10 +581,38 @@ function verChecklist() {
                         >
                             {{ acciones?.pagar ? 'Sin pago registrado.' : declaracion.estado === 'borrador' ? 'Se paga después de revisarla.' : 'Sin impuesto por pagar en esta versión.' }}
                         </p>
+                        <UButton
+                            v-if="acciones?.anularPago && puede('declaraciones.anular_pago')"
+                            label="Anular pago"
+                            icon="i-lucide-undo-2"
+                            color="error"
+                            variant="outline"
+                            size="sm"
+                            class="mt-3"
+                            data-prueba="abrir-anular-pago"
+                            @click="anulandoPago = true"
+                        />
+                        <div
+                            v-if="declaracion.pagos_anulados?.length"
+                            class="mt-4 flex flex-col gap-2 border-t border-default pt-3"
+                            data-prueba="declaracion-pagos-anulados"
+                        >
+                            <span class="text-xs font-medium text-muted">Pagos anulados</span>
+                            <div
+                                v-for="p in declaracion.pagos_anulados"
+                                :key="p.id"
+                                class="flex flex-col gap-0.5 text-sm"
+                                :data-pago-anulado="p.id"
+                            >
+                                <span class="text-default line-through decoration-1">{{ formatearFecha(p.fecha) }} · {{ formatearQuetzales(p.total) }}<template v-if="p.boleta"> · boleta {{ p.boleta }}</template></span>
+                                <span class="text-xs text-muted">Anulado {{ formatearFechaHora(p.anulacion.created_at) }}<template v-if="p.anulacion.anulado_por_nombre"> por {{ p.anulacion.anulado_por_nombre }}</template> · reverso #{{ p.anulacion.asiento_id }}: {{ p.anulacion.motivo }}</span>
+                            </div>
+                        </div>
                     </UPageCard>
 
                     <UPageCard
-                        title="Libros emitidos del mes"
+                        v-if="esIvaOPc(declaracion.impuesto) || declaracion.detalle.libros.length"
+                        title="Libros emitidos del periodo"
                         variant="outline"
                         data-prueba="declaracion-libros"
                     >
@@ -521,7 +643,7 @@ function verChecklist() {
                             v-else
                             class="text-sm text-muted"
                         >
-                            Ningún libro de ventas o compras emitido con folio cubre el mes.
+                            Ningún libro de ventas o compras emitido con folio cubre el periodo.
                             <ULink
                                 v-if="puede('libros.ver')"
                                 to="/libros"
@@ -572,7 +694,7 @@ function verChecklist() {
             </div>
 
             <div
-                v-if="puede('libro.ver')"
+                v-if="puede('libro.ver') && conChecks"
                 id="declaracion-checks"
                 class="scroll-mt-20"
             >
@@ -600,6 +722,13 @@ function verChecklist() {
                 :declaracion="declaracion"
                 @hecho="alTerminar($event, 'Presentación registrada', 'La obligación del calendario queda como presentada.')"
                 @recalcular="recalculando = true"
+            />
+            <AnularPagoDeclaracionModal
+                v-if="puede('declaraciones.anular_pago') && declaracion.pago"
+                v-model:open="anulandoPago"
+                :declaracion="declaracion"
+                :pago="declaracion.pago"
+                @hecho="alTerminar($event, 'Pago anulado', 'Se revirtió el asiento del pago; puede registrar otro.')"
             />
             <PagarDeclaracionModal
                 v-if="puede('declaraciones.pagar')"

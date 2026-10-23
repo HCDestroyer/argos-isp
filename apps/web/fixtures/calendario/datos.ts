@@ -12,7 +12,8 @@ import type { Schema } from '@argosisp/contracts'
  * con el feriado del 20/10 corre al 22/10); sin aplicar las retenciones de julio (IVA: aún no era
  * agente; ISR: no retuvo). Las retenciones de ISR no tienen formulario confirmado (`formulario: null`).
  * Fibra del Sur (2, pequeño contribuyente): SAT-2046 mensual. `feriados` arranca vacía, como la tabla.
- * Las presentadas enlazan su declaración (`declaracion_id`, `fixtures/declaraciones/datos.ts`).
+ * Las presentadas enlazan su declaración (`declaracion_id`, `fixtures/declaraciones/datos.ts`); el ISR
+ * anual de 2025 (20) va presentado.
  */
 
 export type ObligacionFila = Omit<Schema<'ObligacionFiscal'>, 'nombre' | 'periodicidad' | 'dias_restantes' | 'vencida'>
@@ -168,7 +169,7 @@ export function obligacionesIniciales(): ObligacionFila[] {
         obligacion(3, 1, 'retenciones_iva', '2026-07-01', '2026-07-31', { estado: 'no_aplica', motivo_estado: 'no_es_agente_retencion_iva', ...CAMBIO }),
         obligacion(4, 1, 'iva_mensual', '2026-08-01', '2026-08-31', { estado: 'presentada', declaracion_id: 3, ...CAMBIO }),
         obligacion(5, 1, 'retenciones_isr', '2026-08-01', '2026-08-31'),
-        obligacion(6, 1, 'retenciones_iva', '2026-08-01', '2026-08-31', { estado: 'presentada', ...CAMBIO }),
+        obligacion(6, 1, 'retenciones_iva', '2026-08-01', '2026-08-31', { estado: 'presentada', declaracion_id: 6, ...CAMBIO }),
         obligacion(7, 1, 'iva_mensual', '2026-09-01', '2026-09-30'),
         obligacion(8, 1, 'retenciones_isr', '2026-09-01', '2026-09-30'),
         obligacion(9, 1, 'retenciones_iva', '2026-09-01', '2026-09-30'),
@@ -182,5 +183,6 @@ export function obligacionesIniciales(): ObligacionFila[] {
         obligacion(17, 2, 'pc_mensual', '2026-08-01', '2026-08-31', { estado: 'presentada', declaracion_id: 4, ...CAMBIO }),
         obligacion(18, 2, 'pc_mensual', '2026-09-01', '2026-09-30'),
         obligacion(19, 2, 'pc_mensual', '2026-10-01', '2026-10-31'),
+        obligacion(20, 1, 'isr_anual', '2025-01-01', '2025-12-31', { estado: 'presentada', declaracion_id: 5, ...CAMBIO }),
     ]
 }

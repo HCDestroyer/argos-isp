@@ -146,6 +146,8 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'declaraciones.revisar': 'Declaración revisada y liquidada',
     'declaraciones.presentar': 'Declaración marcada como presentada',
     'declaraciones.pagar': 'Pago de la declaración registrado',
+    'declaraciones.anular_pago': 'Pago de la declaración anulado',
+    'declaraciones.ajustar': 'Ajuste fiscal del ISR registrado o anulado',
     'fiscal.generar_calendario': 'Calendario fiscal generado',
     'fiscal.emitir_alertas': 'Alertas de vencimientos fiscales revisadas',
     'fel.configurar': 'Configuración FEL cambiada',
@@ -405,6 +407,8 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     feriado: { etiqueta: 'Feriado', ruta: () => '/configuracion/fiscal?pestana=feriados' },
     // Declaraciones de IVA y pequeño contribuyente (A3, fase 7 PR B).
     declaracion: { etiqueta: 'Declaración', ruta: id => `/declaraciones/${id}` },
+    ajuste_fiscal: { etiqueta: 'Ajuste fiscal', ruta: () => '/declaraciones/ajustes' },
+    cierre_anual: { etiqueta: 'Cierre anual', ruta: () => '/libro?tab=ejercicios' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

@@ -61,7 +61,7 @@ function aRecalcular() {
     <UModal
         v-model:open="abierto"
         title="Marcar presentada"
-        :description="`${etiquetaImpuestoDeclaracion(declaracion.impuesto)} de ${etiquetaPeriodo(periodoDeclaracion(declaracion))} · versión ${declaracion.version}`"
+        :description="`${etiquetaImpuestoDeclaracion(declaracion.impuesto)} de ${etiquetaPeriodoDeclaracion(declaracion)} · versión ${declaracion.version}`"
         :dismissible="!enviando"
     >
         <template #body>

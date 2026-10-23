@@ -24,6 +24,8 @@ import { acciones } from './bitacora/datos'
 import { emisionesLibros, habilitacionesLibros } from './libros/datos'
 import { obligacionesIniciales, type ObligacionFila } from './calendario/datos'
 import { datosIniciales, declaracionesIniciales, type DatosMes } from './declaraciones/datos'
+import { ajustesIniciales } from './declaraciones/ajustes'
+import { ejerciciosIniciales } from './libro/ejercicios'
 import { accionesCorridas, calculosChecks, checksCierre, type CalculoCheck } from './libro/checks'
 import { clientes } from './clientes/datos'
 import { empresa, plantillaAvisoCobro, plantillaNotaCredito } from './documentos/datos'
@@ -125,6 +127,9 @@ interface BaseFixtures {
     /** Declaraciones de IVA y pequeño contribuyente (A3, fase 7 PR B) y lo que la API leería hoy de los libros de cada mes. */
     declaraciones: Schema<'Declaracion'>[]
     datosDeclaraciones: DatosMes[]
+    /** Ajustes fiscales (solo inserción; anular = otra fila con `anula_a`) y cierres anuales (fase 7 PR C). */
+    ajustesFiscales: Schema<'AjusteFiscal'>[]
+    ejercicios: Schema<'CierreAnual'>[]
     bancos: Schema<'Banco'>[]
     cuentasBancarias: Schema<'CuentaBancaria'>[]
     empresa: Schema<'Empresa'>
@@ -269,6 +274,8 @@ function inicial(): BaseFixtures {
         feriadosFiscales: [],
         declaraciones: declaracionesIniciales(datosIniciales()),
         datosDeclaraciones: datosIniciales(),
+        ajustesFiscales: ajustesIniciales(),
+        ejercicios: ejerciciosIniciales(),
         bancos,
         cuentasBancarias,
         empresa,

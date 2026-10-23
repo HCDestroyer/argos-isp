@@ -63,7 +63,7 @@ describe('calendario fiscal', () => {
         expect(textoPlazo({ dias: 10 })).toBe('Día 10 del mes siguiente')
         expect(textoPlazo({ vence: '03-31' })).toBe('El 31 de marzo del año siguiente')
         expect(textoPlazo({ plazo: 'mes_siguiente' })).toBe('Último día del mes siguiente al periodo')
-        expect(reglaVencimiento({ vence_en: '2026-10-12', regla: { parametro: 'isr_retenciones_plazo', valor: { dias: 10 }, vence_base: '2026-10-10', corrido_a_habil: true } })).toMatchObject({ corrido: true, venceBase: '2026-10-10', parametro: 'isr_retenciones_plazo' })
+        expect(reglaVencimiento({ vence_en: '2026-10-12', regla: { parametro: 'isr_retenciones_plazo', valor: { dias: 10 }, vigente_desde: '2013-01-01', nivel: 'paquete', vence_base: '2026-10-10', corrido_a_habil: true } })).toMatchObject({ corrido: true, venceBase: '2026-10-10', parametro: 'isr_retenciones_plazo' })
 
         const octubre = semanasDelMes('2026-10')
         expect(octubre.length).toBe(5)
