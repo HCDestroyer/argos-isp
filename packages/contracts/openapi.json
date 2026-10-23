@@ -19817,6 +19817,92 @@
         "x-implementado": true
       }
     },
+    "/api/v1/fiscal/comparador": {
+      "get": {
+        "operationId": "fiscalComparador",
+        "summary": "Comparador de regímenes (simulación; no cambia el régimen)",
+        "description": "Con los datos del libro de los últimos 12 meses terminados (desde inicio_libros) y los parámetros vigentes: R, margen fiscal m, ISR del régimen opcional (escala del art. 44 y 7 % plano), sobre utilidades, ISO como piso, margen de equilibrio m* y proyección a 12 meses con crecimiento (por ciento mensual; por defecto la tendencia). Cada parte es un bloque: si falta un parámetro trae su error sin cifras y las que dependen de él, 422 bloque_dependiente. supuestos marca lo que debe confirmar el contador; matices son las advertencias fijas. Sin «aplicar»: el cambio de régimen es POST /fiscal/regimen.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "crecimiento",
+            "in": "query",
+            "required": false,
+            "description": "Crecimiento mensual de las ventas para la proyección, en por ciento (p. ej. 1.50); por defecto la tendencia de los meses leídos",
+            "schema": {
+              "type": "string",
+              "pattern": "^-?\\d{1,3}(\\.\\d{1,2})?$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comparación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparadorRegimenes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fiscal.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fiscal.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/fiscal/empresas/{id}/actualizar-localizacion": {
       "post": {
         "operationId": "fiscalActualizarLocalizacion",
@@ -58711,6 +58797,614 @@
           }
         }
       },
+      "BloqueComparadorComparacion": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "meses_base",
+              "anualizado",
+              "ventas_anuales",
+              "isr_opcional_anual",
+              "isr_utilidades_anual",
+              "iso_anual",
+              "utilidades_con_iso",
+              "iso_es_piso",
+              "diferencia",
+              "menor",
+              "margen_fiscal",
+              "margen_equilibrio",
+              "margen_equilibrio_art46",
+              "regimen_actual",
+              "nota"
+            ],
+            "properties": {
+              "meses_base": {
+                "type": "integer"
+              },
+              "anualizado": {
+                "type": "boolean",
+                "description": "Menos de 12 meses leídos: anualizado × 12 / meses"
+              },
+              "ventas_anuales": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "isr_opcional_anual": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "isr_utilidades_anual": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "iso_anual": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "utilidades_con_iso": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "El mayor entre el ISR y el ISO (piso)"
+              },
+              "iso_es_piso": {
+                "type": "boolean"
+              },
+              "diferencia": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Utilidades con ISO − opcional (positiva: el opcional paga menos)"
+              },
+              "menor": {
+                "type": "string",
+                "enum": [
+                  "opcional_simplificado",
+                  "utilidades",
+                  "iguales"
+                ]
+              },
+              "margen_fiscal": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Por ciento con 2 decimales"
+              },
+              "margen_equilibrio": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "m* = opcional / (tasa × R)"
+              },
+              "margen_equilibrio_art46": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "m* con el 7 % plano (28 %)"
+              },
+              "regimen_actual": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "nota": {
+                "type": "string"
+              }
+            },
+            "description": "Comparación anual (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueComparadorDatos": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "desde",
+              "hasta",
+              "meses_con_datos",
+              "meses",
+              "ventas_sin_iva",
+              "ventas_mensual_promedio",
+              "ingresos",
+              "gastos",
+              "no_deducibles",
+              "renta_fiscal",
+              "margen_fiscal"
+            ],
+            "properties": {
+              "desde": {
+                "type": "string",
+                "format": "date"
+              },
+              "hasta": {
+                "type": "string",
+                "format": "date"
+              },
+              "meses_con_datos": {
+                "type": "integer"
+              },
+              "meses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "mes",
+                    "ventas"
+                  ],
+                  "properties": {
+                    "mes": {
+                      "type": "string",
+                      "description": "AAAA-MM"
+                    },
+                    "ventas": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    }
+                  }
+                }
+              },
+              "ventas_sin_iva": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "R: ventas sin IVA del libro de ventas"
+              },
+              "ventas_mensual_promedio": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "ingresos": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "gastos": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "no_deducibles": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "renta_fiscal": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Ingresos − gastos + no deducibles"
+              },
+              "margen_fiscal": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "m = renta fiscal / R"
+              }
+            },
+            "description": "R y margen de los meses leídos (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueComparadorIso": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "activo_neto",
+              "ingresos_brutos",
+              "base",
+              "tasa",
+              "iso_anual"
+            ],
+            "properties": {
+              "activo_neto": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "ingresos_brutos": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "base": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "tasa": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Por ciento con 2 decimales"
+              },
+              "iso_anual": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              }
+            },
+            "description": "ISO anual como piso (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueComparadorOpcional": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "isr_escala",
+              "isr_plano_art46",
+              "por_mes",
+              "tasa_efectiva"
+            ],
+            "properties": {
+              "isr_escala": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Σ por mes de la escala del art. 44"
+              },
+              "isr_plano_art46": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "7 % plano de R (clientes que no retienen; NO VERIFICADO 14)"
+              },
+              "por_mes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "mes",
+                    "isr"
+                  ],
+                  "properties": {
+                    "mes": {
+                      "type": "string"
+                    },
+                    "isr": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    }
+                  }
+                }
+              },
+              "tasa_efectiva": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Por ciento con 2 decimales"
+              }
+            },
+            "description": "ISR del régimen opcional (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueComparadorProyeccion": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "crecimiento_mensual",
+              "crecimiento_supuesto",
+              "margen_fiscal",
+              "meses",
+              "ventas",
+              "isr_opcional",
+              "isr_utilidades",
+              "utilidades_con_iso",
+              "diferencia",
+              "nota"
+            ],
+            "properties": {
+              "crecimiento_mensual": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Por ciento con 2 decimales"
+              },
+              "crecimiento_supuesto": {
+                "type": "string",
+                "enum": [
+                  "tendencia",
+                  "usuario"
+                ]
+              },
+              "margen_fiscal": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Por ciento con 2 decimales"
+              },
+              "meses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "mes",
+                    "ventas",
+                    "isr_opcional"
+                  ],
+                  "properties": {
+                    "mes": {
+                      "type": "string"
+                    },
+                    "ventas": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    },
+                    "isr_opcional": {
+                      "type": "string",
+                      "pattern": "^-?\\d+\\.\\d{2}$"
+                    }
+                  }
+                }
+              },
+              "ventas": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "isr_opcional": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "isr_utilidades": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "utilidades_con_iso": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "diferencia": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "nota": {
+                "type": "string"
+              }
+            },
+            "description": "Proyección a 12 meses (solo con estado ok)"
+          }
+        }
+      },
+      "BloqueComparadorUtilidades": {
+        "type": "object",
+        "required": [
+          "estado",
+          "motivo",
+          "error",
+          "datos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "no_aplica"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Por qué no aplica (régimen); null con ok o error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema RFC 9457 del bloque (solo con estado error)"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "tasa",
+              "renta_imponible",
+              "isr",
+              "perdida"
+            ],
+            "properties": {
+              "tasa": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Por ciento con 2 decimales"
+              },
+              "renta_imponible": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "isr": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$"
+              },
+              "perdida": {
+                "type": "boolean"
+              }
+            },
+            "description": "ISR sobre utilidades (solo con estado ok)"
+          }
+        }
+      },
       "BloqueFacturado": {
         "type": "object",
         "required": [
@@ -61666,6 +62360,163 @@
           "nulable": {
             "type": "boolean",
             "description": "Solo viene (en true) si la celda puede ser null (p. ej. \"Sin zona\"); ausente = nunca null"
+          }
+        }
+      },
+      "ComparadorRegimenes": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "aviso",
+          "empresas"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "aviso": {
+            "type": "string",
+            "description": "Simulación de referencia; no cambia el régimen"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "regimen",
+                "desde",
+                "hasta",
+                "crecimiento",
+                "supuestos",
+                "matices",
+                "bloques"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "regimen": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "desde": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "hasta": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "crecimiento": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Crecimiento mensual usado en la proyección"
+                },
+                "supuestos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "clave",
+                      "valor",
+                      "vigente_desde",
+                      "confianza",
+                      "confirmar_contador"
+                    ],
+                    "properties": {
+                      "clave": {
+                        "type": "string"
+                      },
+                      "valor": {
+                        "description": "Valor vigente del parámetro (null si no tiene)"
+                      },
+                      "vigente_desde": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "date"
+                      },
+                      "confianza": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "confirmar_contador": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "matices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "clave",
+                      "texto",
+                      "confirmar_contador"
+                    ],
+                    "properties": {
+                      "clave": {
+                        "type": "string"
+                      },
+                      "texto": {
+                        "type": "string"
+                      },
+                      "confirmar_contador": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "bloques": {
+                  "type": "object",
+                  "required": [
+                    "datos",
+                    "opcional",
+                    "utilidades",
+                    "iso_piso",
+                    "comparacion",
+                    "proyeccion"
+                  ],
+                  "properties": {
+                    "datos": {
+                      "$ref": "#/components/schemas/BloqueComparadorDatos"
+                    },
+                    "opcional": {
+                      "$ref": "#/components/schemas/BloqueComparadorOpcional"
+                    },
+                    "utilidades": {
+                      "$ref": "#/components/schemas/BloqueComparadorUtilidades"
+                    },
+                    "iso_piso": {
+                      "$ref": "#/components/schemas/BloqueComparadorIso"
+                    },
+                    "comparacion": {
+                      "$ref": "#/components/schemas/BloqueComparadorComparacion"
+                    },
+                    "proyeccion": {
+                      "$ref": "#/components/schemas/BloqueComparadorProyeccion"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
