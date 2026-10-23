@@ -326,8 +326,11 @@ const verMeses = ref(false)
                     <DatoFicha etiqueta="Activo neto">
                         <span class="tabular-nums">{{ formatearQuetzales(bloques.iso_piso.datos.activo_neto) }}</span>
                     </DatoFicha>
-                    <DatoFicha etiqueta="Ingresos brutos">
-                        <span class="tabular-nums">{{ formatearQuetzales(bloques.iso_piso.datos.ingresos_brutos) }}</span>
+                    <DatoFicha :etiqueta="bloques.iso_piso.datos.ingresos_anualizados ? 'Ingresos del año (anualizados)' : 'Ingresos del año'">
+                        <span
+                            class="tabular-nums"
+                            data-prueba="iso-ingresos-anuales"
+                        >{{ formatearQuetzales(bloques.iso_piso.datos.ingresos_anuales) }}</span>
                     </DatoFicha>
                     <DatoFicha etiqueta="Base (la mayor)">
                         <span class="tabular-nums">{{ formatearQuetzales(bloques.iso_piso.datos.base) }}</span>
@@ -336,6 +339,13 @@ const verMeses = ref(false)
                         <span class="tabular-nums">{{ formatearQuetzales(bloques.iso_piso.datos.iso_anual) }}</span>
                     </DatoFicha>
                 </dl>
+                <p
+                    v-if="bloques.iso_piso.datos?.ingresos_anualizados"
+                    class="mt-2 text-xs text-muted"
+                    data-prueba="iso-anualizado"
+                >
+                    Con menos de 12 meses leídos, los ingresos ({{ formatearQuetzales(bloques.iso_piso.datos.ingresos_brutos) }}) se anualizan × 12 ÷ meses, como el ISR de los dos regímenes.
+                </p>
             </TableroBloque>
         </div>
 

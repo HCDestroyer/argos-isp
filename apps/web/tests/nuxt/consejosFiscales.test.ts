@@ -54,7 +54,7 @@ describe('consejos fiscales', () => {
         const argos = empresas[0]!
         const estados = Object.fromEntries(argos.consejos.map(c => [c.clave, c.estado]))
         expect(estados).toEqual({
-            pago_antes_requerimiento: 'no_aplica',
+            pago_antes_requerimiento: 'aplica',
             retenciones_sin_enterar: 'no_aplica',
             iso_por_vencer: 'no_aplica',
             forma_pago_trimestral: 'no_aplica',
@@ -77,7 +77,8 @@ describe('consejos fiscales', () => {
         // Con lo vencido calculado: pago antes del requerimiento (mora del tablero) y retenciones por enterar.
         await useDeclaraciones().calcular({ impuesto: 'retenciones_isr', periodo: '2026-09', sustitutiva: false }, 'consejos-ret')
         const conMora = (await listar()).empresas[0]!.consejos
-        expect(conMora.find(c => c.clave === 'pago_antes_requerimiento')).toMatchObject({ estado: 'aplica', datos: { vencidas: 1, mora_estimada: '0.45' } })
+        // H36: el IVA de agosto presentado sin pagar ya contaba (Q5.66); se suma la de septiembre (Q0.45).
+        expect(conMora.find(c => c.clave === 'pago_antes_requerimiento')).toMatchObject({ estado: 'aplica', datos: { vencidas: 2, mora_estimada: '6.11' } })
         expect(conMora.find(c => c.clave === 'retenciones_sin_enterar')?.texto).toContain('Q300.00 de retenciones por enterar')
 
         // Un bloque fuente en error: sin_datos con su problema y sin texto.
@@ -103,7 +104,7 @@ describe('consejos fiscales', () => {
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-consejos="1"]')).not.toBeNull())
         const seccion = dentro(raiz, '[data-consejos="1"]')
-        expect([...seccion.querySelectorAll<HTMLElement>('[data-consejo]')].map(e => e.dataset.consejo)).toEqual(['regimen_simulado', 'libros_atrasados', 'depreciacion_bajo_maximo'])
+        expect([...seccion.querySelectorAll<HTMLElement>('[data-consejo]')].map(e => e.dataset.consejo)).toEqual(['pago_antes_requerimiento', 'regimen_simulado', 'libros_atrasados', 'depreciacion_bajo_maximo'])
         const simulado = dentro(seccion, '[data-consejo="regimen_simulado"]')
         expect(simulado.textContent).toContain('Confirmar con contador')
         expect(simulado.textContent).toContain('Fuente: inv. E.1 (comparador de regímenes)')

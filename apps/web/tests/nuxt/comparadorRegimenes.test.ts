@@ -1,5 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import Decimal from 'decimal.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import meAdmin from '~~/fixtures/auth/me.admin.json'
 import { bd } from '~~/fixtures/bd'
@@ -138,5 +139,23 @@ describe('comparador de regímenes', () => {
         expect(dentro(raiz, '[data-bloque="opcional"]').dataset.estado).toBe('ok')
         expect(dentro(raiz, '[data-supuesto="iso_tasa"]').textContent).toContain('Sin valor vigente')
         expect(dentro(raiz, '[data-supuesto="iso_tasa"]').textContent).toContain('Confirmar con contador')
+    })
+
+    it('con menos de 12 meses leídos, el ISO como piso usa los ingresos anualizados (H37) y lo dice', async () => {
+        // Al 15/08/2025 solo hay enero a julio de 2025 desde inicio_libros: 7 meses.
+        vi.setSystemTime(new Date('2025-08-15T18:00:00.000Z'))
+        const resultado = await useComparadorRegimenes().comparar()
+        const iso = resultado.ok ? resultado.data.empresas[0]!.bloques.iso_piso.datos : null
+        expect(iso).toMatchObject({ ingresos_anualizados: true })
+        expect(iso?.ingresos_anuales).toBe(new Decimal(iso?.ingresos_brutos ?? '0').times(12).dividedBy(7).toDecimalPlaces(2).toFixed(2))
+        const pagina = await mountSuspended(PaginaComparador)
+        const raiz = pagina.element as HTMLElement
+        await esperar(() => expect(raiz.querySelector('[data-prueba="iso-anualizado"]')).not.toBeNull())
+        expect(dentro(raiz, '[data-bloque="iso_piso"]').textContent).toContain('Ingresos del año (anualizados)')
+
+        // Con los 12 meses no se anualiza.
+        vi.setSystemTime(new Date('2026-10-15T18:00:00.000Z'))
+        const doce = await useComparadorRegimenes().comparar()
+        expect(doce.ok && doce.data.empresas[0]!.bloques.iso_piso.datos).toMatchObject({ ingresos_anualizados: false, ingresos_anuales: '126510.71', ingresos_brutos: '126510.71' })
     })
 })

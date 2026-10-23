@@ -20,7 +20,7 @@ test('consejos que aplican con fuente y aviso; ocultar solo para mí, verlos y m
     await elegirEmpresa(page, /ArgosNet/)
 
     const consejos = page.locator('[data-consejos="1"]')
-    await expect(consejos.locator('[data-consejo]')).toHaveCount(3)
+    await expect(consejos.locator('[data-consejo]')).toHaveCount(4)
     await expect(consejos.locator('[data-consejo="depreciacion_bajo_maximo"]')).toContainText('Q1439.64')
     const simulado = consejos.locator('[data-consejo="regimen_simulado"]')
     await expect(simulado).toContainText('pagaría Q3099.46 menos')

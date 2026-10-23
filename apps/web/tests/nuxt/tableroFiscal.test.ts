@@ -64,7 +64,7 @@ describe('tablero fiscal', () => {
                 isr: { estado: 'no_aplica', motivo: 'regimen_pequeno_contribuyente', error: null, datos: null },
                 iso: { estado: 'no_aplica', motivo: 'regimen_pequeno_contribuyente', error: null, datos: null },
                 pequeno_contribuyente: { ...ok, datos: { anio: 2026, acumulado: '510000.00', limite: '500285.00', porcentaje: '101.94', disponible: '0.00', umbrales: ['80.00', '100.00'], umbral_alcanzado: '100.00', supera_limite: true, mensaje: 'Superó el límite anual del pequeño contribuyente: debe pasar al régimen general (inv. A.3).' } },
-                vencimientos: { ...ok, datos: { hasta: '2026-11-14', mora_tributaria: '0.05', vencidas: 1, obligaciones: [] } },
+                vencimientos: { ...ok, datos: { hasta: '2026-11-14', mora_tributaria: '0.05', vencidas: 2, obligaciones: [{ obligacion_id: 19, impuesto: 'pc_mensual', nombre: 'PC', periodo_desde: '2026-09-01', periodo_hasta: '2026-09-30', formulario: 'SAT-2046', vence_en: '2026-10-01', dias_restantes: -14, vencida: true, estado: 'pendiente', declaracion_id: null, a_pagar: null, pagado: null, mora_estimada: null }, { obligacion_id: 17, impuesto: 'pc_mensual', nombre: 'PC', periodo_desde: '2026-08-01', periodo_hasta: '2026-08-31', formulario: 'SAT-2046', vence_en: '2026-09-01', dias_restantes: -44, vencida: true, estado: 'presentada', declaracion_id: 4, a_pagar: '100.00', pagado: '800.00', mora_estimada: '2.20' }] } },
                 libros: { ...ok, datos: { ventana_meses: 2, inicio_libros: '2025-01-01', libros: [], alerta: 'Libros sin emitir fuera del plazo (2 meses): ventas.' } },
                 fel: { ...ok, datos: { modo: 'desactivada', obligacion_legal: 'obligatoria', proveedor: null, contingencia_activa: false, dte_pendientes: [], alerta: 'FEL es obligatoria para su régimen: la empresa emite sin DTE (FEL desactivada)' } },
                 compras_sin_nit: { ...ok, datos: { anio: 2026, limite: '2500.00', cantidad: 0, total: '0.00', compras: [] } },
@@ -73,7 +73,7 @@ describe('tablero fiscal', () => {
             },
         }
         expect(alertasTablero(empresa).map(a => [a.clave, a.titulo])).toEqual([
-            ['vencidas', '1 obligación vencida sin presentar'],
+            ['vencidas', '1 obligación vencida sin presentar y 1 presentada con impuesto vencido sin pagar'],
             ['pequeno_contribuyente', 'Debe pasar al régimen general'],
             ['fel', 'FEL obligatoria desactivada'],
             ['libros', 'Libros atrasados'],
@@ -105,9 +105,12 @@ describe('tablero fiscal', () => {
         expect(bloques.iso).toMatchObject({ estado: 'error', datos: null, error: { status: 422, type: 'urn:argosisp:problema:parametro_sin_confirmar' } })
         expect(bloques.pequeno_contribuyente).toEqual({ estado: 'no_aplica', motivo: 'regimen_utilidades', error: null, datos: null })
 
-        // Vencimientos: las retenciones de ISR de agosto y septiembre vencidas, sin borrador (sin mora).
-        expect(bloques.vencimientos.datos?.vencidas).toBe(2)
-        expect(bloques.vencimientos.datos?.obligaciones.filter(o => o.vencida).map(o => [o.obligacion_id, o.dias_restantes, o.mora_estimada])).toEqual([[5, -35, null], [8, -3, null]])
+        // Vencimientos: las retenciones de ISR de agosto y septiembre vencidas, sin borrador (sin mora), y el
+        // IVA de agosto presentado sin pagar (H36): pendiente = a pagar − pagado, con su mora (755 × 0.05 % × 15).
+        expect(bloques.vencimientos.datos?.vencidas).toBe(3)
+        expect(bloques.vencimientos.datos?.obligaciones.filter(o => o.vencida).map(o => [o.obligacion_id, o.estado, o.dias_restantes, o.a_pagar, o.pagado, o.mora_estimada])).toEqual([[5, 'pendiente', -35, null, null, null], [4, 'presentada', -15, '755.00', '0.00', '5.66'], [8, 'pendiente', -3, null, null, null]])
+        // Las presentadas y pagadas no aparecen (IVA de julio, retenciones de IVA de agosto).
+        expect(bloques.vencimientos.datos?.obligaciones.some(o => o.obligacion_id === 1 || o.obligacion_id === 6)).toBe(false)
 
         // Libros desde el 1/1/2025 con ventana de 2 meses: atrasados (multa de referencia).
         expect(bloques.libros.datos?.libros.find(l => l.libro === 'diario')).toMatchObject({ habilitado: true, ultimo_emitido_hasta: '2026-06-30', meses_atrasados: 13, al_dia: false })
@@ -148,7 +151,8 @@ describe('tablero fiscal', () => {
         expect(pc.querySelector('[data-prueba="bloque-motivo"]')?.textContent?.trim()).toBe('No aplica al régimen Sobre utilidades')
         expect(pc.textContent).not.toMatch(/Q\s?\d/)
 
-        expect(raiz.querySelector('[data-alerta="vencidas"]')?.textContent).toContain('2 obligaciones vencidas sin presentar')
+        expect(raiz.querySelector('[data-alerta="vencidas"]')?.textContent).toContain('2 obligaciones vencidas sin presentar y 1 presentada con impuesto vencido sin pagar')
+        expect(raiz.querySelector('[data-obligacion="4"] [data-prueba="vencimiento-pendiente"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Pendiente Q 755.00'.replace(/\s+/g, ' '))
         expect(raiz.querySelector('[data-alerta="libros"]')?.textContent).toContain('Libros atrasados')
         expect(raiz.querySelector('[data-alerta="fel"]')).toBeNull()
         const vencida = raiz.querySelector<HTMLElement>('[data-obligacion="8"]')
@@ -165,7 +169,7 @@ describe('tablero fiscal', () => {
         const boton = [...iso.querySelectorAll('button')].find(b => b.textContent?.includes('Reintentar'))
         boton?.click()
         await esperar(() => expect(raiz.querySelector('[data-obligacion="8"] [data-prueba="mora-estimada"]')?.textContent).toContain('0.45'))
-        expect(raiz.querySelector('[data-obligacion="8"]')?.textContent).toContain('A pagar Q')
+        expect(raiz.querySelector('[data-obligacion="8"]')?.textContent).toContain('Pendiente Q')
         expect(raiz.querySelector('[data-obligacion="8"]')?.textContent).toContain('confirmar con contador')
     })
 
@@ -206,7 +210,8 @@ describe('tablero fiscal', () => {
         const resultado = await useTableroFiscal().ver()
         const bloques = resultado.ok ? resultado.data.empresas[0]!.bloques : null
         expect(bloques?.compras_sin_nit.datos).toMatchObject({ anio: 2026, limite: '2500.00', cantidad: 1, total: '3150.00', compras: [{ compra_id: 90, fecha: '2026-09-21', proveedor: 'Ferretería El Tornillo', identificacion: 'nit: CF' }] })
-        expect(bloques?.depreciacion.datos).toMatchObject({ activos: 3, bajo_maximo: 1, diferencia_anual: '1439.64', detalle: [{ activo_id: 2, clase: 'computacion', tasa_maxima: '33.33', depreciacion_anual: '2160.00', depreciacion_anual_maxima: '3599.64' }] })
+        // H38: el switch casi depreciado (le quedan Q100) no se lista: a las dos tasas deduciría lo mismo.
+        expect(bloques?.depreciacion.datos).toMatchObject({ activos: 4, bajo_maximo: 1, diferencia_anual: '1439.64', detalle: [{ activo_id: 2, clase: 'computacion', acumulada: '1080.00', por_depreciar: '9720.00', tasa_maxima: '33.33', depreciacion_anual: '2160.00', depreciacion_anual_maxima: '3599.64' }] })
         const inc = bloques?.incobrables.datos
         expect(inc?.porcentaje).toBe('3.00')
         expect(inc?.tope).toBe(new Decimal(inc?.base ?? '0').times('0.03').toDecimalPlaces(2).toFixed(2))
@@ -217,6 +222,7 @@ describe('tablero fiscal', () => {
         await esperar(() => expect(raiz.querySelector('[data-bloque="compras_sin_nit"] [data-compra="90"]')).not.toBeNull())
         expect(bloqueDe(raiz, 'compras_sin_nit').querySelector('[data-prueba="compra-libro"]')?.getAttribute('href')).toBe('/libros?libro=compras&desde=2026-09-01&hasta=2026-09-30')
         expect(bloqueDe(raiz, 'depreciacion').querySelector('[data-activo="2"]')?.textContent).toContain('Equipo de cómputo')
+        expect(bloqueDe(raiz, 'depreciacion').querySelector('[data-activo="2"] [data-prueba="por-depreciar"]')?.textContent).toContain('9,720.00')
         expect(bloqueDe(raiz, 'incobrables').textContent).toContain('Por provisionar')
 
         // Un parámetro sin valor deja su bloque en error, sin cifras, y el resto sigue.

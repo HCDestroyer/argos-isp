@@ -26,6 +26,7 @@ const AVISO = 'Referencia; valídelo con su contador'
 const PAQUETE: Record<string, unknown> = { isr_trimestral_metodo: 'renta_presunta', isr_trimestral_presunta: '8.00' }
 
 interface Entrada {
+    hoy: string
     regimen: string | null
     // Los bloques fuente en `ok`, tal como los da la API (objetos de su esquema).
     bloques: Partial<Record<Fuente, Record<string, unknown>>>
@@ -34,6 +35,8 @@ interface Entrada {
 
 interface Resultado {
     aplica: boolean
+    /** El consejo no se puede evaluar (falta un parámetro): su problema, sin texto ni cifras. */
+    sin_datos?: Problem
     texto?: string
     datos?: Datos
     no_aplica?: string
@@ -68,7 +71,12 @@ const CATALOGO: Definicion[] = [
         confirmar_contador: true,
         fuentes: ['tablero.vencimientos'],
         evaluar: (e) => {
-            const obligaciones = e.bloques['tablero.vencimientos']?.obligaciones as ObligacionVencimiento[]
+            const bloque = e.bloques['tablero.vencimientos']!
+            // Sin mora_tributaria el tablero no estima la mora: nunca «Q0.00» (observación del auditor).
+            if (bloque.mora_tributaria === null) {
+                return { aplica: false, sin_datos: problemaTipado(422, 'parametro_sin_confirmar', 'Parámetro sin confirmar', `El parámetro mora_tributaria no tiene valor vigente al ${e.hoy}; debe confirmarlo el contador`, [{ field: 'mora_tributaria', message: `Sin valor vigente al ${e.hoy}`, rule: 'parametro_sin_confirmar' }]).cuerpo as Problem }
+            }
+            const obligaciones = bloque.obligaciones as ObligacionVencimiento[]
             const vencidas = obligaciones.filter(o => o.vencida && o.a_pagar !== null && num(o.a_pagar).gt(0))
             if (!vencidas.length) {
                 return { aplica: false }
@@ -211,7 +219,7 @@ const CATALOGO: Definicion[] = [
             return {
                 aplica: true,
                 texto: `Libros con meses sin emitir fuera del plazo de ${String(l.ventana_meses)} meses: ${atrasados.map(x => `${x.libro} (${x.meses_atrasados})`).join(', ')}. Emítalos con folio para evitar la multa`,
-                datos: { libros: atrasados.length },
+                datos: { libros: atrasados.length, detalle: atrasados.map(x => `${x.libro}:${x.meses_atrasados}`).join(',') },
             }
         },
     },
@@ -331,7 +339,10 @@ function consejosEmpresa(empresaId: number, hoy: string, usuarioId: number | nul
         if (noAplica) {
             return { ...base, estado: 'no_aplica', texto: null, datos: null, motivo: noAplica[1].motivo, error: null }
         }
-        const r = def.evaluar({ regimen: tablero.regimen, bloques: Object.fromEntries(bloques.map(([f, b]) => [f, b.datos as Record<string, unknown>])), parametro })
+        const r = def.evaluar({ hoy, regimen: tablero.regimen, bloques: Object.fromEntries(bloques.map(([f, b]) => [f, b.datos as Record<string, unknown>])), parametro })
+        if (r.sin_datos) {
+            return { ...base, estado: 'sin_datos', texto: null, datos: null, motivo: 'Falta un parámetro para evaluarlo', error: r.sin_datos }
+        }
         return r.aplica
             ? { ...base, estado: 'aplica', texto: r.texto ?? null, datos: r.datos ?? null, motivo: null, error: null }
             : { ...base, estado: 'no_aplica', texto: null, datos: null, motivo: r.no_aplica ?? null, error: null }
