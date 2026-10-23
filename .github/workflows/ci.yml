@@ -337,8 +337,8 @@ jobs:
   #
   # Escritorio y teléfono corren en paralelo y cada uno en tres partes (--shard), cada parte en su
   # runner: un proyecto entero ya pasaba los 25 minutos y una mitad llegó a 25 en un runner lento.
-  # El trabajo «Playwright del
-  # panel (fixtures)» de abajo reúne todas las partes y conserva el nombre del chequeo de siempre.
+  # El trabajo «Playwright del panel (fixtures)» de abajo reúne todas las partes y conserva el
+  # nombre del chequeo de siempre.
   e2e-panel-proyecto:
     name: Playwright del panel (${{ matrix.proyecto }} ${{ matrix.parte }}/3)
     runs-on: ubuntu-24.04
