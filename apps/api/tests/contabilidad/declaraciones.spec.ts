@@ -19,6 +19,9 @@ import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import CrearExcepcionBloqueo from '#ledger/actions/crear_excepcion_bloqueo'
 import AnularFactura from '#billing/actions/anular_factura'
+import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
+import { cola, datosNit, empresasFel, servicioFel } from '#tests/fiscal/ayudas_fel'
+import { crearClienteFila } from '#tests/core/fabricas'
 
 /**
  * Auditor contable · declaraciones de IVA y de pequeño contribuyente (fase 7 PR B; contrato de
@@ -397,10 +400,10 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         )
     })
 
-    test('cascada con el mes siguiente ya pagado y presentado: saldo a favor en 2.1.06, obligación por rectificar; cascada_bloqueada no guarda nada', async ({
+    test('cascada con el mes siguiente ya presentado y pagado: saldo a favor en 2.1.06, obligación por rectificar; una NCRE sin certificar la bloquea sin guardar nada; un ajuste sin etiqueta a una cuenta de impuesto ya no entra', async ({
         assert,
     }) => {
-        const e = await prepararEmpresasGt()
+        const e = await empresasFel('obligatoria')
         await new EditarParametro().execute(
             {
                 empresa_id: e.B,
@@ -426,14 +429,15 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
                 e.ctx,
             )
         }
-        // mes anterior: crédito 36; este mes: débito 48 → usa 36, paga 12
+        // mes anterior: crédito 36; este mes: factura FEL con débito 48 → usa 36, paga 12
         await compraEn(`${ANTERIOR}-10`, '336.00')
-        const anterior = await declarar(e, e.B, 'iva_mensual', ANTERIOR)
+        const anterior = await declarar(e as EmpresasGt, e.B, 'iva_mensual', ANTERIOR)
         await new RevisarDeclaracion().execute({ declaracion_id: anterior.id }, e.ctx)
-        await venta(e.B, '448.00')
+        const s = await servicioFel(e, 'emitir', '448.00', await crearClienteFila(datosNit()))
+        await cola(e)
         relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
-        const mes = await declarar(e, e.B, 'iva_mensual')
-        assert.include(mes.totales, { credito_usado: '36.00', a_pagar: '12.00' })
+        const mes = await declarar(e as EmpresasGt, e.B, 'iva_mensual')
+        assert.include(mes.totales, { debito: '48.00', credito_usado: '36.00', a_pagar: '12.00' })
         await new RevisarDeclaracion().execute({ declaracion_id: mes.id }, e.ctx)
         await new MarcarDeclaracionPresentada().execute(
             { declaracion_id: mes.id, numero_formulario: '2237-1', fecha_presentacion: `${SIGUIENTE}-05` },
@@ -450,32 +454,45 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         )
         assert.equal(await saldoCuenta(e.B, '2.1.06'), '0.00')
 
-        // un ajuste manual a 2.1.02 sin etiqueta en el mes liquidado (el bloqueo de impuestos no lo alcanza)
-        const ajuste = await new RegistrarAsiento().execute(
-            {
-                empresa_id: e.B,
-                fecha: HOY,
-                descripcion: 'Ajuste manual al IVA (auditor)',
-                origen_tipo: 'ajuste',
-                movimientos: [
-                    { cuenta: '1.1.02.01', debe: '5.00' },
-                    { cuenta: '2.1.02', haber: '5.00' },
-                ],
-            },
-            e.ctx,
-        )
-        // compra tardía del mes anterior (con excepción): su sustitutiva cambia el remanente de 36 a 42
+        // e3bfefd: un ajuste manual sin etiqueta a una cuenta de impuesto ya no entra en el mes liquidado
+        for (const cuenta of ['2.1.02', '1.1.04', '2.1.11']) {
+            const ajuste = await errorDe(
+                new RegistrarAsiento().execute(
+                    {
+                        empresa_id: e.B,
+                        fecha: HOY,
+                        descripcion: 'Ajuste manual al IVA (auditor)',
+                        origen_tipo: 'ajuste',
+                        movimientos: [
+                            { cuenta: '1.1.02.01', debe: '5.00' },
+                            { cuenta, haber: '5.00' },
+                        ],
+                    },
+                    e.ctx,
+                ),
+            )
+            assert.deepEqual([ajuste.codigo, ajuste.reglas], ['periodo_bloqueado', ['impuestos']], cuenta)
+        }
+
+        // con una excepción autorizada: una nota de crédito del mes (su NCRE queda en cola) y una compra
+        // tardía del mes anterior, cuya sustitutiva cambia el remanente de 36 a 42
         await new CrearExcepcionBloqueo().execute(
             {
                 empresa_id: e.B,
                 tipo: 'impuestos',
-                motivo: 'Factura recibida tarde',
+                motivo: 'Documentos recibidos tarde',
                 hasta_en: new Date(Date.now() + 3_600_000).toISOString(),
             },
             e.ctx,
         )
+        await new EmitirNotaCredito().execute(
+            { factura_id: s.facturas[0]!.id, monto: '56.00', motivo: 'auditoría: descuento' },
+            e.ctx,
+        )
         await compraEn(`${ANTERIOR}-20`, '56.00')
-        const sustitutiva = await declarar(e, e.B, 'iva_mensual', ANTERIOR, { sustitutiva: true })
+        const sustitutiva = await declarar(e as EmpresasGt, e.B, 'iva_mensual', ANTERIOR, {
+            sustitutiva: true,
+        })
         const foto = async () => {
             const { rows } = await db.rawQuery(
                 `SELECT (SELECT count(*) FROM fiscal.declaraciones WHERE empresa_id = ?)::int AS declaraciones,
@@ -493,22 +510,23 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
             new RevisarDeclaracion().execute({ declaracion_id: sustitutiva.id }, e.ctx),
         )
         assert.deepEqual([bloqueada.status, bloqueada.codigo], [409, 'cascada_bloqueada'])
+        assert.include(bloqueada.reglas, 'ncre_sin_certificar')
         assert.deepEqual(
             await foto(),
             antes,
             'nada se guardó: ni versiones, ni asientos, ni bloqueos, ni eventos',
         )
 
-        // se corrige el ajuste y la cascada pasa: el mes ya pagado queda con 6 a favor en 2.1.06
-        await new RevertirAsiento().execute({ asiento_id: ajuste.id, motivo: 'Ajuste indebido' }, e.ctx)
+        // la NCRE se certifica y la cascada pasa: el mes ya pagado queda con 12 a favor en 2.1.06
+        await cola(e)
         const revisada = await new RevisarDeclaracion().execute({ declaracion_id: sustitutiva.id }, e.ctx)
         assert.lengthOf(revisada.cascada, 1)
         assert.include(revisada.cascada[0]!, {
             estaba_presentada: true,
             remanente_credito_anterior: '42.00',
-            a_pagar: '6.00',
+            a_pagar: '0.00',
         })
-        assert.equal(await saldoCuenta(e.B, '2.1.06'), '6.00')
+        assert.equal(await saldoCuenta(e.B, '2.1.06'), '12.00')
         const obligacion = await db
             .from('fiscal.obligaciones')
             .where({ empresa_id: e.B, impuesto: 'iva_mensual', periodo_desde: `${MES}-01` })
@@ -519,4 +537,36 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
         assert.lengthOf(await db.from('fiscal.declaraciones_pagos').where('empresa_id', e.B), 1)
         await afirmarLibro(assert, [e.B, e.C])
     })
+
+    test('H35: la liquidación y el pago de una declaración se revierten directo (POST /libro/asientos/:id/revertir) y deshacen lo declarado', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        await venta(e.B, '224.00')
+        await compra(e, e.B, '112.00')
+        relojFiscal.ahora = () => new Date(`${SIGUIENTE}-05T18:00:00Z`)
+        const d = await declarar(e, e.B, 'iva_mensual')
+        const revisada = await new RevisarDeclaracion().execute({ declaracion_id: d.id }, e.ctx)
+        const pagada = await new RegistrarPagoDeclaracion().execute(
+            {
+                declaracion_id: d.id,
+                metodo: 'cuenta_bancaria',
+                cuenta_bancaria_id: e.cuentas.get(e.B)!,
+                fecha: HOY,
+            },
+            e.ctx,
+        )
+        const intentos = []
+        for (const asientoId of [revisada.asiento_id!, pagada.pago!.asiento_id]) {
+            intentos.push(
+                await new RevertirAsiento()
+                    .execute({ asiento_id: asientoId, motivo: 'auditoría: revertir directo' }, e.ctx)
+                    .then(
+                        () => 'revertido',
+                        (error: { tipo?: string }) => error.tipo?.split(':').pop() ?? 'error',
+                    ),
+            )
+        }
+        assert.deepEqual(intentos, ['reverso_por_documento', 'reverso_por_documento'])
+    }).fails('H35: liquidacion_impuesto y pago_impuesto no están en POR_DOCUMENTO de #ledger/reversos')
 })

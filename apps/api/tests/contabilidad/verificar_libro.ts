@@ -3594,6 +3594,12 @@ async function verificarLibroCon(
                      OR (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
                           WHERE m.asiento_id = a.id AND ${CAJA_O_BANCO('cu.codigo')}) <> dp.total
                      OR (SELECT count(*) FROM ledger.movimientos m WHERE m.asiento_id = a.id) > 3
+                     -- e3bfefd: el pago queda fuera del bloqueo de impuestos; solo puede tocar su deuda, 5.4.02 y caja o banco
+                     OR EXISTS (SELECT 1 FROM ledger.movimientos m JOIN ledger.cuentas cu ON cu.id = m.cuenta_id
+                                 WHERE m.asiento_id = a.id AND m.cuadricula IS NULL
+                                   AND NOT (cu.codigo IN ('${CUENTAS_GT.IVA_POR_PAGAR}', '${CUENTAS_GT.PC_POR_PAGAR}', '${CUENTAS_GT.MULTAS_TRIBUTARIAS}')
+                                            OR ${CAJA_O_BANCO('cu.codigo')}))
+                     OR EXISTS (SELECT 1 FROM ledger.movimientos m WHERE m.asiento_id = a.id AND m.cuadricula IS NOT NULL)
                      -- el pago es lo que su versión dejó por pagar menos lo pagado antes en el periodo; una
                      -- sustitutiva posterior (cascada H34) puede dejar saldo a favor en 2.1.06 sin tocar el pago
                      OR dp.impuesto <> ${t('d', 'a_pagar')} - coalesce((SELECT sum(x.impuesto) FROM fiscal.declaraciones_pagos x
