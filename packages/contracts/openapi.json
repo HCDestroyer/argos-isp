@@ -19903,6 +19903,366 @@
         "x-implementado": true
       }
     },
+    "/api/v1/fiscal/consejos": {
+      "get": {
+        "operationId": "fiscalConsejos",
+        "summary": "Consejos fiscales desde las cifras del tablero y del comparador",
+        "description": "Catálogo del paquete (l10n/gt/consejos.ts) evaluado con los bloques del tablero y del comparador y los parámetros vigentes: aplica (texto y las cifras de los bloques), no_aplica o sin_datos (un bloque fuente en error: va su problema y ningún texto). Todos con fuente, confirmar_contador y el aviso «Referencia; valídelo con su contador»; oculto según fiscal.consejos_ocultos (el del usuario manda sobre el de la empresa). Solo lectura.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consejos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsejosFiscales"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fiscal.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fiscal.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fiscal/consejos/{clave}/mostrar": {
+      "post": {
+        "operationId": "fiscalConsejoMostrar",
+        "summary": "Volver a mostrar un consejo fiscal (empresa o solo para mí)",
+        "description": "Solo inserción en fiscal.consejos_ocultos (auditado); alcance empresa (por defecto) o usuario (el del usuario manda sobre el de la empresa). No toca nada contable. 404 si la clave no está en el catálogo.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]+$",
+              "description": "Clave del consejo"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "alcance": {
+                    "type": "string",
+                    "enum": [
+                      "empresa",
+                      "usuario"
+                    ],
+                    "description": "empresa (por defecto): para todos; usuario: solo para quien lo pide"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Estado registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsejoOcultado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fiscal.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/fiscal/consejos/{clave}/ocultar": {
+      "post": {
+        "operationId": "fiscalConsejoOcultar",
+        "summary": "Ocultar un consejo fiscal (empresa o solo para mí)",
+        "description": "Solo inserción en fiscal.consejos_ocultos (auditado); alcance empresa (por defecto) o usuario (el del usuario manda sobre el de la empresa). No toca nada contable. 404 si la clave no está en el catálogo.",
+        "tags": [
+          "fiscal"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]+$",
+              "description": "Clave del consejo"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "alcance": {
+                    "type": "string",
+                    "enum": [
+                      "empresa",
+                      "usuario"
+                    ],
+                    "description": "empresa (por defecto): para todos; usuario: solo para quien lo pide"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Estado registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsejoOcultado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso fiscal.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "fiscal.configurar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/fiscal/empresas/{id}/actualizar-localizacion": {
       "post": {
         "operationId": "fiscalActualizarLocalizacion",
@@ -64058,6 +64418,198 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "ConsejoFiscal": {
+        "type": "object",
+        "required": [
+          "clave",
+          "titulo",
+          "fuente",
+          "confirmar_contador",
+          "aviso",
+          "fuentes",
+          "estado",
+          "texto",
+          "datos",
+          "motivo",
+          "error",
+          "oculto",
+          "oculto_por"
+        ],
+        "properties": {
+          "clave": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "fuente": {
+            "type": "string",
+            "description": "Artículo e investigación de los que sale"
+          },
+          "confirmar_contador": {
+            "type": "boolean"
+          },
+          "aviso": {
+            "type": "string",
+            "description": "Referencia; valídelo con su contador"
+          },
+          "fuentes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Bloques del tablero o del comparador de los que salen sus cifras"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "aplica",
+              "no_aplica",
+              "sin_datos"
+            ]
+          },
+          "texto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Solo con aplica"
+          },
+          "datos": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            },
+            "description": "Las cifras de los bloques fuente que usó (solo con aplica)"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El problema del bloque fuente en error (solo con sin_datos)"
+          },
+          "oculto": {
+            "type": "boolean"
+          },
+          "oculto_por": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "empresa",
+              "usuario"
+            ],
+            "description": "null si está visible"
+          }
+        }
+      },
+      "ConsejoOcultado": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "clave",
+          "oculto",
+          "alcance",
+          "usuario_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "clave": {
+            "type": "string"
+          },
+          "oculto": {
+            "type": "boolean"
+          },
+          "alcance": {
+            "type": "string",
+            "enum": [
+              "empresa",
+              "usuario"
+            ]
+          },
+          "usuario_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          }
+        }
+      },
+      "ConsejosFiscales": {
+        "type": "object",
+        "required": [
+          "hoy",
+          "aviso",
+          "empresas"
+        ],
+        "properties": {
+          "hoy": {
+            "type": "string",
+            "format": "date"
+          },
+          "aviso": {
+            "type": "string"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "regimen",
+                "consejos"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "regimen": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "consejos": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConsejoFiscal"
+                  }
+                }
+              }
+            }
           }
         }
       },

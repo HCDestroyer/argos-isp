@@ -448,3 +448,18 @@ export const comparadorValidator = vine.compile(
             }),
     }),
 )
+
+export const consejosValidator = vine.compile(vine.object({ empresas: empresasConsulta() }))
+
+export const ocultarConsejoValidator = vine.compile(
+    vine.object({
+        empresa_id: empresaOpcional(),
+        alcance: vine
+            .enum(['empresa', 'usuario'] as const)
+            .optional()
+            .meta({
+                description: 'empresa (por defecto): para todos; usuario: solo para quien lo pide',
+            }),
+        motivo: vine.string().trim().maxLength(500).nullable().optional(),
+    }),
+)
