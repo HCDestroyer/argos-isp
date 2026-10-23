@@ -379,8 +379,6 @@ const verMeses = ref(false)
                 <UTable
                     :data="bloques.proyeccion.datos.meses"
                     :columns="columnasProyeccion"
-                    class="max-h-80"
-                    sticky
                     data-prueba="tabla-proyeccion"
                 >
                     <template #mes-cell="{ row }">
