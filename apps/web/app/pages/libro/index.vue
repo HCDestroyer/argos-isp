@@ -33,10 +33,11 @@ const pestanas: TabsItem[] = [
     { label: 'Cierres', value: 'cierres', icon: 'i-lucide-lock' },
     { label: 'Integridad', value: 'integridad', icon: 'i-lucide-shield-check' },
     { label: 'Diarios', value: 'diarios', icon: 'i-lucide-list-ordered' },
+    { label: 'Ejercicios', value: 'ejercicios', icon: 'i-lucide-calendar-range' },
 ]
 
 /** Pestañas con su propio filtro (balance, resultados y cierres no usan los del diario y el mayor). */
-const PROPIAS = ['balance', 'resultados', 'cierres', 'integridad', 'diarios']
+const PROPIAS = ['balance', 'resultados', 'cierres', 'integridad', 'diarios', 'ejercicios']
 
 const pestana = ref(['mayor', ...PROPIAS].includes(textoQuery(route.query.tab)) ? textoQuery(route.query.tab) : 'diario')
 const desde = ref(FECHA.test(textoQuery(route.query.desde)) ? textoQuery(route.query.desde) : '')
@@ -236,6 +237,7 @@ onMounted(async () => {
             <LibroCierres v-if="pestana === 'cierres'" />
             <LibroIntegridad v-else-if="pestana === 'integridad'" />
             <LibroDiarios v-else-if="pestana === 'diarios'" />
+            <LibroEjercicios v-else-if="pestana === 'ejercicios'" />
             <LibroEstadoFinanciero
                 v-else-if="pestana === 'balance' || pestana === 'resultados'"
                 :key="pestana"

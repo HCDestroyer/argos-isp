@@ -62,6 +62,7 @@ const CATALOGO: readonly DefinicionCheck[] = [
     { clave: 'depreciacion_al_dia', tipo: 'mensual', titulo: 'Cuotas de activos y diferidos del periodo contabilizadas', cuadra: ['0', '0'] },
     { clave: 'iva_cuadrado', tipo: 'impuestos', titulo: 'Cuadrículas del libro = libros de IVA = borrador de la declaración', cuadra: ['sin obligación', 'sin obligación'] },
     { clave: 'iva_liquidado', tipo: 'impuestos', titulo: 'Débito y crédito del periodo trasladados por la liquidación', cuadra: ['sin obligación', 'sin obligación'] },
+    { clave: 'retenciones_cuadradas', tipo: 'impuestos', titulo: 'Retenciones emitidas del mes: cuadrículas del libro = retenciones de las compras', cuadra: ['sin obligación', 'sin obligación'] },
     { clave: 'incobrables', tipo: 'anual', titulo: 'Estimación de incobrables (1.1.12) dentro del tope', cuadra: ['<= 2260.53', '1800.00'] },
 ]
 

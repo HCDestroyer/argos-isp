@@ -52,7 +52,7 @@ async function cargarCatalogos() {
     const [rCajas, rCuentas, rBancos] = await Promise.all([
         puede('cajas.ver') ? useCajas().listar() : null,
         puede('cuentas_bancarias.ver') ? useCuentasBancarias().listar({ activa: true }) : null,
-        puede('egresos.ver') ? useLibro().bancos() : null,
+        puede('declaraciones.pagar') ? useDeclaraciones().cuentasPago() : null,
     ])
     cajas.value = rCajas?.ok ? rCajas.data : []
     cuentas.value = rCuentas?.ok ? rCuentas.data : []
@@ -98,7 +98,7 @@ async function enviar(evento: FormSubmitEvent<CuerpoPagoDeclaracion>) {
     <UModal
         v-model:open="abierto"
         title="Registrar pago"
-        :description="`${etiquetaImpuestoDeclaracion(declaracion.impuesto)} de ${etiquetaPeriodo(periodoDeclaracion(declaracion))} · versión ${declaracion.version}`"
+        :description="`${etiquetaImpuestoDeclaracion(declaracion.impuesto)} de ${etiquetaPeriodoDeclaracion(declaracion)} · versión ${declaracion.version}`"
         :dismissible="!enviando"
     >
         <template #body>

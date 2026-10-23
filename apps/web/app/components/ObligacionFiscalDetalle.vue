@@ -16,7 +16,8 @@ const regla = computed(() => reglaVencimiento(props.obligacion))
 const dias = computed(() => textoDiasRestantes(props.obligacion))
 const motivo = computed(() => motivoObligacion(props.obligacion.motivo_estado))
 const { puede } = usePermisos()
-const periodo = computed(() => props.obligacion.periodo_desde.slice(0, 7))
+/** El periodo como lo pide `POST /declaraciones/calcular`: `AAAA-MM`, `AAAA-Tn` o `AAAA`. */
+const periodo = computed(() => periodoDeclaracion({ impuesto: props.obligacion.impuesto, periodo_desde: props.obligacion.periodo_desde }))
 const calculable = computed(() => esImpuestoDeclarable(props.obligacion.impuesto) && props.obligacion.estado !== 'no_aplica' && props.obligacion.declaracion_id === null)
 const nivel = computed(() => {
     const valor = regla.value.nivel

@@ -70,6 +70,11 @@ const PANTALLAS = [
     ['declaraciones', '/declaraciones'],
     ['declaración de IVA', '/declaraciones/3'],
     ['declaración sustituida', '/declaraciones/2'],
+    // ISR, ISO, retenciones, ajustes y cierre anual (fase 7 PR C).
+    ['declaración de ISR anual', '/declaraciones/5'],
+    ['declaración de retenciones', '/declaraciones/6'],
+    ['ajustes fiscales', '/declaraciones/ajustes?anio=2026'],
+    ['ejercicios anuales', '/libro?tab=ejercicios'],
 ] as const
 
 const ETIQUETAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']

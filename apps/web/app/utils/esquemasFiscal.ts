@@ -284,12 +284,36 @@ type CuerpoCalcular = paths['/api/v1/declaraciones/calcular']['post']['requestBo
 type CuerpoPresentar = paths['/api/v1/declaraciones/{id}/marcar-presentada']['post']['requestBody']['content']['application/json']
 type CuerpoPago = paths['/api/v1/declaraciones/{id}/registrar-pago']['post']['requestBody']['content']['application/json']
 
-/** Calcular una declaración (`POST /declaraciones/calcular`): impuesto y mes AAAA-MM, no futuro. */
+const IMPUESTOS_DECLARACION = ['iva_mensual', 'pc_mensual', 'isr_opcional_mensual', 'isr_trimestral', 'iso_trimestral', 'isr_anual', 'retenciones_iva', 'retenciones_isr'] as const
+
+/** Primer día de un `AAAA-MM`, `AAAA-Tn` o `AAAA`. */
+function primerDiaPeriodo(periodo: string): string {
+    const trimestre = /^(\d{4})-T([1-4])$/.exec(periodo)
+    if (trimestre) {
+        return `${trimestre[1]}-${String((Number(trimestre[2]) - 1) * 3 + 1).padStart(2, '0')}-01`
+    }
+    return /^\d{4}$/.test(periodo) ? `${periodo}-01-01` : `${periodo}-01`
+}
+
+/**
+ * Calcular una declaración (`POST /declaraciones/calcular`): impuesto y periodo con el formato de su
+ * periodicidad (`AAAA-MM` las mensuales, `AAAA-Tn` ISR e ISO trimestrales, `AAAA` el ISR anual), no futuro.
+ */
 export function esquemaCalcularDeclaracion(hoy: string) {
     return z.object({
-        impuesto: z.enum(['iva_mensual', 'pc_mensual'], { message: 'Elige el impuesto' }),
-        periodo: z.string().trim().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Elige el mes (AAAA-MM)').refine(p => `${p}-01` <= hoy, 'El mes no puede ser futuro'),
+        impuesto: z.enum(IMPUESTOS_DECLARACION, { message: 'Elige el impuesto' }),
+        periodo: z.string().trim(),
         sustitutiva: z.boolean(),
+    }).superRefine((datos, ctx) => {
+        const anual = datos.impuesto === 'isr_anual'
+        const trimestral = datos.impuesto === 'isr_trimestral' || datos.impuesto === 'iso_trimestral'
+        const formato = anual ? /^\d{4}$/ : trimestral ? /^\d{4}-T[1-4]$/ : /^\d{4}-(0[1-9]|1[0-2])$/
+        if (!formato.test(datos.periodo)) {
+            ctx.addIssue({ code: 'custom', path: ['periodo'], message: anual ? 'Elige el año' : trimestral ? 'Elige el año y el trimestre' : 'Elige el mes (AAAA-MM)' })
+        }
+        else if (primerDiaPeriodo(datos.periodo) > hoy) {
+            ctx.addIssue({ code: 'custom', path: ['periodo'], message: 'El periodo no puede ser futuro' })
+        }
     }).transform((datos): CuerpoCalcular => ({ impuesto: datos.impuesto, periodo: datos.periodo, ...(datos.sustitutiva ? { sustitutiva: true } : {}) }))
 }
 
@@ -333,3 +357,57 @@ export function esquemaPagoDeclaracion(hoy: string) {
 }
 
 export type EntradaPagoDeclaracion = z.input<ReturnType<typeof esquemaPagoDeclaracion>>
+
+type CuerpoAnularPago = paths['/api/v1/declaraciones/{id}/anular-pago']['post']['requestBody']['content']['application/json']
+type CuerpoAjuste = paths['/api/v1/declaraciones/ajustes']['post']['requestBody']['content']['application/json']
+
+/** Anular el pago de una declaración: motivo 3–500 y fecha del reverso no futura ni anterior al pago (vacía: hoy). */
+export function esquemaAnularPago(hoy: string, fechaPago: string) {
+    return z.object({
+        motivo,
+        fecha: z.string().trim().refine(f => f === '' || FECHA.test(f), 'Fecha AAAA-MM-DD').refine(f => f === '' || f <= hoy, 'No puede ser futura').refine(f => f === '' || f >= fechaPago, `No puede ser anterior al pago (${fechaPago.split('-').reverse().join('/')})`),
+    }).transform((datos): CuerpoAnularPago => ({ motivo: datos.motivo, ...(datos.fecha ? { fecha: datos.fecha } : {}) }))
+}
+
+export type EntradaAnularPago = z.input<ReturnType<typeof esquemaAnularPago>>
+
+/** Ajuste fiscal (`POST /declaraciones/ajustes`): año, trimestre (vacío = anual), suma o resta, concepto 3–300 y monto > 0. */
+export const esquemaAjusteFiscal = z.object({
+    anio: z.number({ message: 'Elige el año' }).int().min(2000).max(2100),
+    trimestre: z.number().int().min(1).max(4).nullable(),
+    efecto: z.enum(['suma', 'resta']),
+    concepto: z.string().trim().min(3, 'Describe el ajuste (mínimo 3 caracteres)').max(300, 'Máximo 300 caracteres'),
+    monto: z.string().trim().regex(/^\d{1,12}(\.\d{1,2})?$/, 'Monto con hasta 2 decimales').refine(m => Number(m) > 0, 'Debe ser mayor que cero'),
+}).transform((datos): CuerpoAjuste => ({ anio: datos.anio, trimestre: datos.trimestre, efecto: datos.efecto, concepto: datos.concepto, monto: new Decimal(datos.monto).toFixed(2) }))
+
+export type EntradaAjusteFiscal = z.input<typeof esquemaAjusteFiscal>
+
+/** Anular un ajuste: otra fila con `anula_a` y su motivo como concepto. */
+export const esquemaAnularAjuste = z.object({
+    concepto: z.string().trim().min(3, 'Escribe por qué se anula (mínimo 3 caracteres)').max(300, 'Máximo 300 caracteres'),
+})
+
+type CuerpoCerrarEjercicio = paths['/api/v1/libro/ejercicios/cerrar']['post']['requestBody']['content']['application/json']
+
+/**
+ * Cerrar el ejercicio con el ISR escrito a mano (sin declaración ISR anual): monto obligatorio (0.00 si
+ * no hay), lo acreditado opcional y que no pase del ISR. Con declaración, el cuerpo va sin `isr`.
+ */
+export const esquemaIsrManual = z.object({
+    monto: z.string().trim().regex(/^\d{1,12}(\.\d{1,2})?$/, 'El ISR del ejercicio (0.00 si no hay)'),
+    acreditado_trimestral: z.string().trim().refine(m => m === '' || /^\d{1,12}(\.\d{1,2})?$/.test(m), 'Monto con hasta 2 decimales'),
+    acreditado_iso: z.string().trim().refine(m => m === '' || /^\d{1,12}(\.\d{1,2})?$/.test(m), 'Monto con hasta 2 decimales'),
+    nota: z.string().trim().max(500, 'Máximo 500 caracteres'),
+}).superRefine((datos, ctx) => {
+    const parte = (m: string) => new Decimal(m || '0')
+    if (/^\d/.test(datos.monto) && parte(datos.acreditado_trimestral).plus(parte(datos.acreditado_iso)).gt(parte(datos.monto))) {
+        ctx.addIssue({ code: 'custom', path: ['acreditado_trimestral'], message: 'Lo acreditado no puede pasar del ISR' })
+    }
+}).transform((datos): NonNullable<CuerpoCerrarEjercicio['isr']> => ({
+    monto: new Decimal(datos.monto).toFixed(2),
+    ...(datos.acreditado_trimestral ? { acreditado_trimestral: new Decimal(datos.acreditado_trimestral).toFixed(2) } : {}),
+    ...(datos.acreditado_iso ? { acreditado_iso: new Decimal(datos.acreditado_iso).toFixed(2) } : {}),
+    nota: datos.nota || null,
+}))
+
+export type EntradaIsrManual = z.input<typeof esquemaIsrManual>
