@@ -59458,6 +59458,7 @@
             "required": [
               "activo_neto",
               "ingresos_brutos",
+              "ingresos_anuales",
               "ingresos_anualizados",
               "base",
               "tasa",
@@ -59471,7 +59472,12 @@
               "ingresos_brutos": {
                 "type": "string",
                 "pattern": "^-?\\d+\\.\\d{2}$",
-                "description": "R de un año: anualizado × 12 / meses con menos de 12 (H37)"
+                "description": "R de los meses leídos"
+              },
+              "ingresos_anuales": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "R de un año (anualizado × 12 / meses con menos de 12; H37): el que entra en la base"
               },
               "ingresos_anualizados": {
                 "type": "boolean"

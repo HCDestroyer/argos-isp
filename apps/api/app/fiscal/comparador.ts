@@ -395,7 +395,8 @@ async function isoPiso(ctx: Contexto, base: DatosBase) {
         interno: { iso },
         datos: {
             activo_neto: aTexto(activo),
-            ingresos_brutos: aTexto(ingresos),
+            ingresos_brutos: aTexto(base.R),
+            ingresos_anuales: aTexto(ingresos),
             ingresos_anualizados: base.meses.length !== 12,
             base: aTexto(mayor.isNegative() ? CERO : mayor),
             tasa: pct(tasa),

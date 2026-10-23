@@ -95,7 +95,8 @@ test.group('Fase 8 · comparador de regímenes', (group) => {
         const iso = datos(c.bloques.iso_piso)
         // H37: los ingresos del piso se anualizan como el resto (50,000 × 12 / meses)
         const ingresosAnuales = (50000 * 12) / MESES
-        assert.equal(iso.ingresos_brutos, ingresosAnuales.toFixed(2))
+        assert.equal(iso.ingresos_brutos, '50000.00')
+        assert.equal(iso.ingresos_anuales, ingresosAnuales.toFixed(2))
         assert.equal(iso.ingresos_anualizados, MESES !== 12)
         const mayor = Math.max(Number(iso.activo_neto), ingresosAnuales)
         assert.equal(iso.iso_anual, (mayor / 100).toFixed(2))

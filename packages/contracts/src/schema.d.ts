@@ -8441,8 +8441,10 @@ export interface components {
             /** @description ISO anual como piso (solo con estado ok) */
             datos: {
                 activo_neto: string;
-                /** @description R de un año: anualizado × 12 / meses con menos de 12 (H37) */
+                /** @description R de los meses leídos */
                 ingresos_brutos: string;
+                /** @description R de un año (anualizado × 12 / meses con menos de 12; H37): el que entra en la base */
+                ingresos_anuales: string;
                 ingresos_anualizados: boolean;
                 base: string;
                 /** @description Por ciento con 2 decimales */

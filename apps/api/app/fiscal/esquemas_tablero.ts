@@ -335,7 +335,11 @@ const DatosUtilidades = objeto({
 
 const DatosIsoPiso = objeto({
     activo_neto: dinero,
-    ingresos_brutos: { ...dinero, description: 'R de un año: anualizado × 12 / meses con menos de 12 (H37)' },
+    ingresos_brutos: { ...dinero, description: 'R de los meses leídos' },
+    ingresos_anuales: {
+        ...dinero,
+        description: 'R de un año (anualizado × 12 / meses con menos de 12; H37): el que entra en la base',
+    },
     ingresos_anualizados: booleano,
     base: dinero,
     tasa: porciento,
