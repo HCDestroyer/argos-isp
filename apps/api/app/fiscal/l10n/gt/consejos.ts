@@ -12,7 +12,9 @@
  * su `periodo_iva`): queda `no_aplica` con su motivo y la pregunta §15 #84 abierta.
  */
 
+import type { ProblemaJson } from '#shared/errores'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
+import { ParametroSinConfirmar } from '#fiscal/errores'
 
 export type FuenteConsejo =
     | 'tablero.vencimientos'
@@ -28,6 +30,7 @@ export type FuenteConsejo =
 
 /** Datos de los bloques fuente (solo los que están en `ok`) y lectura de parámetros vigentes. */
 export interface EntradaConsejo {
+    hoy: string
     regimen: string | null
     bloques: Partial<Record<FuenteConsejo, Record<string, any>>>
     parametro: (clave: string) => unknown
@@ -41,6 +44,8 @@ export interface ResultadoConsejo {
     datos?: Record<string, string | number | boolean | null>
     /** por qué no aplica (régimen) */
     no_aplica?: string
+    /** el consejo no se puede evaluar (falta un parámetro): su problema RFC 9457, sin texto ni cifras */
+    sin_datos?: ProblemaJson
 }
 
 export interface DefinicionConsejo {
@@ -69,6 +74,13 @@ export const CONSEJOS_GT: readonly DefinicionConsejo[] = [
                 (o) => o.vencida && o.a_pagar !== null && num(o.a_pagar).gt(0),
             )
             if (vencidas.length === 0) return { aplica: false }
+            // sin mora_tributaria el tablero no estima la mora: no se dice «Q0.00» (observación del auditor)
+            if (v.mora_tributaria === null) {
+                return {
+                    aplica: false,
+                    sin_datos: new ParametroSinConfirmar('mora_tributaria', e.hoy).toJSON(),
+                }
+            }
             const mora = aTexto(suma(vencidas.map((o) => o.mora_estimada)))
             return {
                 aplica: true,
@@ -205,7 +217,10 @@ export const CONSEJOS_GT: readonly DefinicionConsejo[] = [
             return {
                 aplica: true,
                 texto: `Libros con meses sin emitir fuera del plazo de ${l.ventana_meses} meses: ${atrasados.map((x) => `${x.libro} (${x.meses_atrasados})`).join(', ')}. Emítalos con folio para evitar la multa`,
-                datos: { libros: atrasados.length },
+                datos: {
+                    libros: atrasados.length,
+                    detalle: atrasados.map((x) => `${x.libro}:${x.meses_atrasados}`).join(','),
+                },
             }
         },
     },

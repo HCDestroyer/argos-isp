@@ -3,6 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { DateTime } from 'luxon'
 import { Problema } from '#shared/errores'
 import { reservaIncobrables } from '#ledger/checks'
+import { CUOTA_VIGENTE } from '#ledger/activos'
 import { NoAplica, calcularBloque, type Bloque } from '#fiscal/bloques'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { idsEmpresasActivas } from '#core/empresas'
@@ -36,7 +37,8 @@ import {
  * Bloques: `facturado` (mes y año, por tipo de DTE), `iva` (mes en curso: IVA o pequeño contribuyente),
  * `isr` (opcional: el del mes; utilidades: trimestral en curso y anual a la fecha y proyectado), `iso`
  * (trimestre en curso), `pequeno_contribuyente` (facturado del año frente a `pc_limite_anual`),
- * `vencimientos` (obligaciones abiertas que vencen en 30 días o ya vencieron, con mora estimada),
+ * `vencimientos` (obligaciones abiertas, o presentadas con impuesto pendiente, que vencen en 30 días o
+ * ya vencieron; el pendiente descuenta lo pagado sin anular y la mora corre sobre él; H36),
  * `libros` (libros legales sin emitir fuera de `libros_ventana_meses`) y `fel` (alerta permanente si
  * la FEL es obligatoria y está desactivada). Fase 8 PR D: `compras_sin_nit` (compras del año desde
  * `consumidor_final_limite` sin proveedor identificado con NIT), `incobrables` (reserva permitida frente a
@@ -320,11 +322,12 @@ async function pequenoContribuyente(ctx: Contexto) {
 
 async function vencimientos(ctx: Contexto) {
     const limite = DateTime.fromISO(ctx.hoy, { zone: 'utc' }).plus({ days: DIAS_VENCIMIENTOS }).toISODate()!
+    // abiertas (pendiente, borrador) y, con impuesto pendiente de pagar, también las presentadas: corre mora
     const filas = (
         (await ctx.c
             .from('fiscal.obligaciones as o')
             .where('o.empresa_id', ctx.empresaId)
-            .whereIn('o.estado', ['pendiente', 'borrador'])
+            .whereIn('o.estado', ['pendiente', 'borrador', 'presentada'])
             .where('o.vence_en', '<=', limite)
             .orderBy('o.vence_en', 'asc')
             .orderBy('o.id', 'asc')
@@ -335,14 +338,21 @@ async function vencimientos(ctx: Contexto) {
     for (const o of filas) {
         const dias = diasEntre(ctx.hoy, o.vence_en)
         const vencida = dias < 0
-        let monto: string | null = null
-        let moraEstimada: string | null = null
+        let pendiente: Dec | null = null
+        let pagado: Dec | null = null
         if (o.declaracion_id !== null) {
             const d = await ultimaVersion(ctx.c, ctx.empresaId, o.impuesto, o.periodo_desde)
-            if (d) monto = aTexto(d.totales.a_pagar ?? '0')
+            if (d) {
+                // H36: lo pagado sin anular por cualquier versión del periodo (como registrar_pago)
+                pagado = await pagadoDelPeriodo(ctx, o.impuesto, o.periodo_desde)
+                const resto = dec(d.totales.a_pagar ?? '0').minus(pagado)
+                pendiente = resto.isNegative() ? CERO : resto
+            }
         }
-        if (vencida && monto !== null && mora && typeof mora.valor === 'string') {
-            moraEstimada = aTexto(redondear(dec(monto).times(dec(mora.valor)).dividedBy(100).times(-dias)))
+        if (o.estado === 'presentada' && (pendiente === null || !pendiente.gt(0))) continue
+        let moraEstimada: string | null = null
+        if (vencida && pendiente !== null && pendiente.gt(0) && mora && typeof mora.valor === 'string') {
+            moraEstimada = aTexto(redondear(pendiente.times(dec(mora.valor)).dividedBy(100).times(-dias)))
         }
         salida.push({
             obligacion_id: o.id,
@@ -356,7 +366,8 @@ async function vencimientos(ctx: Contexto) {
             vencida,
             estado: o.estado,
             declaracion_id: o.declaracion_id,
-            a_pagar: monto,
+            a_pagar: pendiente === null ? null : aTexto(pendiente),
+            pagado: pagado === null ? null : aTexto(pagado),
             mora_estimada: moraEstimada,
         })
     }
@@ -366,6 +377,20 @@ async function vencimientos(ctx: Contexto) {
         vencidas: salida.filter((v) => v.vencida).length,
         obligaciones: salida,
     }
+}
+
+/** Σ impuesto de los pagos vigentes (sin anulación) de las versiones del periodo. */
+async function pagadoDelPeriodo(ctx: Contexto, impuesto: string, desde: string): Promise<Dec> {
+    const fila = (await ctx.c
+        .from('fiscal.declaraciones_pagos as p')
+        .join('fiscal.declaraciones as d', 'd.id', 'p.declaracion_id')
+        .where({ 'd.empresa_id': ctx.empresaId, 'd.impuesto': impuesto, 'd.periodo_desde': desde })
+        .whereNotExists((q) =>
+            q.from('fiscal.declaraciones_pagos_anulaciones as x').whereRaw('x.pago_id = p.id'),
+        )
+        .select(ctx.c.raw('coalesce(sum(p.impuesto), 0)::text as pagado'))
+        .first()) as { pagado: string }
+    return dec(fila.pagado)
 }
 
 /** Meses YYYY-MM del rango (ambos incluidos). */
@@ -532,7 +557,12 @@ async function incobrables(ctx: Contexto) {
     }
 }
 
-/** Activos vigentes que se deprecian a una tasa menor que el máximo legal de su clase (vigente hoy). */
+/**
+ * Activos vigentes que se deprecian a una tasa menor que el máximo legal de su clase (vigente hoy) y aún
+ * tienen saldo por depreciar. H38: la deducción anual de cada tasa se acota a lo que queda por depreciar
+ * (depreciable − depreciación inicial − cuotas vigentes); la diferencia es la de la tasa máxima menos la
+ * de la actual, ambas acotadas, y un activo sin saldo no se lista.
+ */
 async function depreciacion(ctx: Contexto) {
     const topes = resolver(ctx.datos.filas, 'depreciacion', ctx.hoy)?.valor
     if (!topes || typeof topes !== 'object') throw new ParametroSinConfirmar('depreciacion', ctx.hoy)
@@ -547,6 +577,10 @@ async function depreciacion(ctx: Contexto) {
             'a.descripcion',
             ctx.c.raw('a.costo::text as costo'),
             ctx.c.raw('a.valor_residual::text as valor_residual'),
+            ctx.c.raw(
+                `(a.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q
+                   WHERE q.activo_id = a.id AND ${CUOTA_VIGENTE}), 0))::text as acumulada`,
+            ),
             'a.tasa_anual',
         )) as Array<{
         id: number
@@ -554,27 +588,34 @@ async function depreciacion(ctx: Contexto) {
         descripcion: string
         costo: string
         valor_residual: string
+        acumulada: string
         tasa_anual: string
     }>
     const tope = topes as Record<string, string>
+    const acotar = (v: Dec, limite: Dec) => (v.gt(limite) ? limite : v)
     const bajo = activos
         .filter((a) => tope[a.clase] !== undefined && dec(a.tasa_anual).lt(dec(tope[a.clase]!)))
         .map((a) => {
             const depreciable = dec(a.costo).minus(dec(a.valor_residual))
-            const actual = redondear(depreciable.times(dec(a.tasa_anual)).dividedBy(100))
-            const maxima = redondear(depreciable.times(dec(tope[a.clase]!)).dividedBy(100))
-            return {
-                activo_id: Number(a.id),
-                clase: a.clase,
-                descripcion: a.descripcion,
-                costo: aTexto(a.costo),
-                tasa_anual: aTexto(a.tasa_anual),
-                tasa_maxima: aTexto(tope[a.clase]!),
-                depreciacion_anual: aTexto(actual),
-                depreciacion_anual_maxima: aTexto(maxima),
-                diferencia_anual: aTexto(maxima.minus(actual)),
-            }
+            const restante = depreciable.minus(dec(a.acumulada))
+            const actual = acotar(redondear(depreciable.times(dec(a.tasa_anual)).dividedBy(100)), restante)
+            const maxima = acotar(redondear(depreciable.times(dec(tope[a.clase]!)).dividedBy(100)), restante)
+            return { a, restante, actual, maxima }
         })
+        .filter((x) => x.restante.gt(0) && x.maxima.gt(x.actual))
+        .map(({ a, restante, actual, maxima }) => ({
+            activo_id: Number(a.id),
+            clase: a.clase,
+            descripcion: a.descripcion,
+            costo: aTexto(a.costo),
+            acumulada: aTexto(a.acumulada),
+            por_depreciar: aTexto(restante),
+            tasa_anual: aTexto(a.tasa_anual),
+            tasa_maxima: aTexto(tope[a.clase]!),
+            depreciacion_anual: aTexto(actual),
+            depreciacion_anual_maxima: aTexto(maxima),
+            diferencia_anual: aTexto(maxima.minus(actual)),
+        }))
     return {
         activos: activos.length,
         bajo_maximo: bajo.length,
