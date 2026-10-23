@@ -9,7 +9,8 @@ import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
  * Consumidor de alertas internas (grupo `notify` del bus, junto a `ConsumidorNotify`): `aaa.caido`,
  * `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada` con diferencia y los avisos
  * fiscales (`libro.integridad_rota`, `dte.rechazado`, `fel.contingencia_cambiada`,
- * `nota_credito.anulada`) y del calendario fiscal (`fiscal.vencimiento_proximo`, `fiscal.limite_pc`).
+ * `nota_credito.anulada`), del calendario fiscal (`fiscal.vencimiento_proximo`, `fiscal.limite_pc`)
+ * y de declaraciones (`declaracion.revisada` en cascada, `declaracion.pagada`, `declaracion.pago_anulado`).
  * La lógica está en la acción
  * `RegistrarAlerta` (idempotente por `outbox:<id>`). Si falla, lanza y el evento se reintenta.
  */
@@ -27,6 +28,8 @@ export class ConsumidorAlertas implements ConsumidorEventos {
         const payload = evento.payload ?? {}
         // Un cierre de caja cuadrado no es un incidente: ni siquiera se audita.
         if (evento.evento === 'caja.cerrada' && esCero(payload.diferencia)) return
+        // Una revisión de declaración solo avisa cuando la hizo la cascada de remanentes (H34).
+        if (evento.evento === 'declaracion.revisada' && payload.motivo !== 'cascada') return
 
         const resultado = await new RegistrarAlerta().execute(
             { origen: `outbox:${evento.id}`, evento: evento.evento as EventoAlerta, payload },
