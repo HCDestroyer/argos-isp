@@ -211,7 +211,7 @@ describe('tablero fiscal', () => {
         const bloques = resultado.ok ? resultado.data.empresas[0]!.bloques : null
         expect(bloques?.compras_sin_nit.datos).toMatchObject({ anio: 2026, limite: '2500.00', cantidad: 1, total: '3150.00', compras: [{ compra_id: 90, fecha: '2026-09-21', proveedor: 'Ferretería El Tornillo', identificacion: 'nit: CF' }] })
         // H38: el switch casi depreciado (le quedan Q100) no se lista: a las dos tasas deduciría lo mismo.
-        expect(bloques?.depreciacion.datos).toMatchObject({ activos: 4, bajo_maximo: 1, diferencia_anual: '1439.64', detalle: [{ activo_id: 2, clase: 'computacion', acumulada: '1080.00', por_depreciar: '9720.00', tasa_maxima: '33.33', depreciacion_anual: '2160.00', depreciacion_anual_maxima: '3599.64' }] })
+        expect(bloques?.depreciacion.datos).toMatchObject({ activos: 3, bajo_maximo: 1, diferencia_anual: '1439.64', detalle: [{ activo_id: 2, clase: 'computacion', acumulada: '1080.00', por_depreciar: '9720.00', tasa_maxima: '33.33', depreciacion_anual: '2160.00', depreciacion_anual_maxima: '3599.64' }] })
         const inc = bloques?.incobrables.datos
         expect(inc?.porcentaje).toBe('3.00')
         expect(inc?.tope).toBe(new Decimal(inc?.base ?? '0').times('0.03').toDecimalPlaces(2).toFixed(2))
@@ -220,7 +220,8 @@ describe('tablero fiscal', () => {
         const pagina = await mountSuspended(PaginaTablero)
         const raiz = pagina.element as HTMLElement
         await esperar(() => expect(raiz.querySelector('[data-bloque="compras_sin_nit"] [data-compra="90"]')).not.toBeNull())
-        expect(bloqueDe(raiz, 'compras_sin_nit').querySelector('[data-prueba="compra-libro"]')?.getAttribute('href')).toBe('/libros?libro=compras&desde=2026-09-01&hasta=2026-09-30')
+        expect(bloqueDe(raiz, 'compras_sin_nit').querySelector('[data-prueba="compra-enlace"]')?.getAttribute('href')).toBe('/compras/90')
+        expect(bloqueDe(raiz, 'depreciacion').querySelector('[data-activo="2"] [data-prueba="activo-enlace"]')?.getAttribute('href')).toBe('/activos/2')
         expect(bloqueDe(raiz, 'depreciacion').querySelector('[data-activo="2"]')?.textContent).toContain('Equipo de cómputo')
         expect(bloqueDe(raiz, 'depreciacion').querySelector('[data-activo="2"] [data-prueba="por-depreciar"]')?.textContent).toContain('9,720.00')
         expect(bloqueDe(raiz, 'incobrables').textContent).toContain('Por provisionar')

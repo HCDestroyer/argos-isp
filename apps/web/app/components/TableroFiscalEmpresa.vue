@@ -542,13 +542,13 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                             <div class="flex flex-col gap-0.5 sm:items-end">
                                 <span class="text-sm tabular-nums">{{ formatearQuetzales(c.total) }}</span>
                                 <ULink
-                                    v-if="puede('libros.ver')"
+                                    v-if="puede('compras.ver')"
                                     raw
-                                    :to="rutaLibroCompras(c.fecha)"
+                                    :to="`/compras/${c.compra_id}`"
                                     class="text-xs underline underline-offset-2 hover:decoration-2"
-                                    data-prueba="compra-libro"
+                                    data-prueba="compra-enlace"
                                 >
-                                    Ver en el libro de compras
+                                    Ver la compra #{{ c.compra_id }}
                                 </ULink>
                             </div>
                         </li>
@@ -652,8 +652,20 @@ const ESTADOS_PENDIENTES: Record<string, string> = {
                             :data-activo="a.activo_id"
                         >
                             <div class="flex min-w-0 flex-col gap-0.5">
-                                <span class="text-sm font-medium text-highlighted">{{ a.descripcion }}</span>
-                                <span class="text-xs text-muted">{{ CLASES_ACTIVO[a.clase] ?? a.clase }} · activo #{{ a.activo_id }} · costo {{ formatearQuetzales(a.costo) }} · {{ a.tasa_anual }} % de un máximo de {{ a.tasa_maxima }} %</span>
+                                <ULink
+                                    v-if="puede('activos.ver')"
+                                    raw
+                                    :to="`/activos/${a.activo_id}`"
+                                    class="text-sm font-medium text-highlighted underline underline-offset-2 hover:decoration-2"
+                                    data-prueba="activo-enlace"
+                                >
+                                    {{ a.descripcion }}
+                                </ULink>
+                                <span
+                                    v-else
+                                    class="text-sm font-medium text-highlighted"
+                                >{{ a.descripcion }}</span>
+                                <span class="text-xs text-muted">{{ etiquetaClaseActivo(a.clase) }} · activo #{{ a.activo_id }} · costo {{ formatearQuetzales(a.costo) }} · {{ a.tasa_anual }} % de un máximo de {{ a.tasa_maxima }} %</span>
                                 <span
                                     class="text-xs text-muted"
                                     data-prueba="por-depreciar"

@@ -270,6 +270,17 @@ onMounted(() => {
                                 class="mt-1 self-start sm:hidden"
                                 @click="aAnular = row.original"
                             />
+                            <UButton
+                                v-if="puede('compras.registrar') && registrableComoCompra(row.original)"
+                                :to="`/compras/nueva?egreso=${row.original.id}`"
+                                label="Registrar su compra"
+                                icon="i-lucide-shopping-cart"
+                                color="neutral"
+                                variant="link"
+                                size="xs"
+                                class="mt-1 self-start px-0"
+                                :data-prueba="`compra-de-egreso-${row.original.id}`"
+                            />
                         </div>
                     </template>
                     <template #metodo-cell="{ row }">

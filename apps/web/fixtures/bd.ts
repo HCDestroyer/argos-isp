@@ -13,6 +13,7 @@ import { asientosFase4, conciliaciones, cuentasFase4, depositos, extractos, line
 import { lotesPuntos, movimientosPuntos, programasLealtad, referidosLealtad, reglasLealtad } from './lealtad/datos'
 import { premiosLealtad, sorteos, sorteosPrivados, type SorteoPrivado } from './sorteos/datos'
 import { compras } from './compras/datos'
+import { activosIniciales, constanciasIniciales, diferimientosIniciales, pagosProveedoresIniciales, proveedoresIniciales } from './compras/fase5'
 import type { ImagenAnuncioFixture } from './anuncios/datos'
 import { anuncios, imagenesAnuncios, metricasAnuncios } from './anuncios/datos'
 import type { PlanAdicionalFixture } from './adicionales/datos'
@@ -229,6 +230,12 @@ interface BaseFixtures {
     archivosSorteos: Record<number, Uint8Array>
     /* Fase 5 (A3): compras; el panel las lee para entregar el bien de un premio de sorteo. */
     compras: Schema<'Compra'>[]
+    /** Fase 5 (A3): proveedores, pagos a proveedores, constancias, activos fijos y diferimientos. */
+    proveedores: Schema<'Proveedor'>[]
+    pagosProveedores: Schema<'PagoProveedor'>[]
+    constancias: Schema<'ConstanciaRetencion'>[]
+    activos: Schema<'ActivoFijo'>[]
+    diferimientos: Schema<'Diferimiento'>[]
     /** Saldo de 2.1.10 por empresa cuando no es el de los lotes (para probar el aviso de `cuadra: false`). */
     pasivoLibroLealtad: Record<number, string>
     /** Localización fiscal por empresa (A3, fase 2). */
@@ -341,6 +348,11 @@ function inicial(): BaseFixtures {
         imagenesSorteos: {},
         archivosSorteos: {},
         compras,
+        proveedores: proveedoresIniciales(),
+        pagosProveedores: pagosProveedoresIniciales(),
+        constancias: constanciasIniciales(),
+        activos: activosIniciales(),
+        diferimientos: diferimientosIniciales(),
     })
     sembrarNotasCredito(datos)
     sembrarFel(datos)

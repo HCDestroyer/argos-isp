@@ -13,6 +13,7 @@ export const CLAVES_REPORTE = [
     'altas-bajas',
     'egresos',
     'bonificaciones',
+    'cuentas-por-pagar',
 ] as const
 
 export type ClaveReporte = typeof CLAVES_REPORTE[number]
@@ -159,6 +160,12 @@ export const REPORTES: Record<ClaveReporte, PresentacionReporte> = {
         filtros: ['rango', 'categoria', 'metodo_egreso'],
         rangoPorDefecto: DOCE_MESES,
     },
+    'cuentas-por-pagar': {
+        titulo: 'Cuentas por pagar',
+        descripcion: 'Lo que se debe a cada proveedor por antigüedad (por vencer, 0-30, 31-60, 61-90 y más de 90 días) al corte.',
+        icono: 'i-lucide-hourglass',
+        filtros: ['corte'],
+    },
 }
 
 export function esClaveReporte(valor: unknown): valor is ClaveReporte {
@@ -210,6 +217,7 @@ export const CONSULTAS_REPORTE: { [C in ClaveReporte]: (f: FiltrosReporte) => Qu
     'altas-bajas': f => ({ desde: f.desde, hasta: f.hasta, zona_id: f.zona_id, router_id: f.router_id, plan_id: f.plan_id }),
     'egresos': f => ({ desde: f.desde, hasta: f.hasta, categoria: f.categoria, metodo: f.metodo_egreso }),
     'bonificaciones': f => ({ desde: f.desde, hasta: f.hasta, origen: f.origen_bonificacion, motivo_id: f.motivo_id, cliente_id: f.cliente_id }),
+    'cuentas-por-pagar': f => ({ corte: f.corte }),
 }
 
 /** Fila del reporte como pares clave → valor, para pintar cualquier reporte con sus `columnas`. */

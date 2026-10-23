@@ -56,24 +56,6 @@ export const LIBROS_TABLERO: Record<Libro, string> = {
     mayor: 'Mayor',
 }
 
-/** Clase de activo (`depreciacion` del paquete) en palabras. */
-export const CLASES_ACTIVO: Record<string, string> = {
-    edificios: 'Edificios',
-    vehiculos: 'Vehículos',
-    equipo_red: 'Equipo de red',
-    mobiliario: 'Mobiliario',
-    computacion: 'Equipo de cómputo',
-    herramientas: 'Herramientas',
-    otros: 'Otros',
-}
-
-/** Libro de compras del mes de una compra (la vista previa de `/libros`). */
-export function rutaLibroCompras(fecha: string): string {
-    const [anio = 0, mes = 1] = fecha.split('-').map(Number)
-    const fin = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10)
-    return `/libros?libro=compras&desde=${fecha.slice(0, 7)}-01&hasta=${fin}`
-}
-
 /** `AAAA-MM` → «ene 2026». */
 export function mesAtrasado(mes: string): string {
     const [anio = 0, numero = 1] = mes.split('-').map(Number)

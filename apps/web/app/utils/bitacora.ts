@@ -412,6 +412,12 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     cierre_anual: { etiqueta: 'Cierre anual', ruta: () => '/libro?tab=ejercicios' },
     // Consejos fiscales (A3, fase 8 PR C): preferencia de ocultar, en el tablero fiscal.
     consejo_fiscal: { etiqueta: 'Consejo fiscal', ruta: () => '/fiscal/tablero' },
+    // Fase 5 (A3): proveedores, compras, pagos a proveedores, activos fijos y diferimientos.
+    proveedor: { etiqueta: 'Proveedor', ruta: id => `/proveedores/${id}` },
+    compra: { etiqueta: 'Compra', ruta: id => `/compras/${id}` },
+    pago_proveedor: { etiqueta: 'Pago a proveedor', ruta: () => '/pagos-proveedores' },
+    activo: { etiqueta: 'Activo fijo', ruta: id => `/activos/${id}` },
+    diferimiento: { etiqueta: 'Diferido', ruta: id => `/diferimientos/${id}` },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

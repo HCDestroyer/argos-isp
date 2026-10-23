@@ -1,9 +1,10 @@
 import type { Schema } from '@argosisp/contracts'
 
 /**
- * Compras de la fase 5 (A3): solo lo que el panel lee hoy, `GET /compras`, para entregar el bien de un
- * premio de sorteo con la contrapartida `compra` (decisión del PM, 19 oct). Dos compras de ArgosNet con
- * líneas de bien (una al crédito y una anulada, que no sirve) y una de Fibra del Sur.
+ * Compras de la fase 5 (A3). ArgosNet: la de las bicicletas al crédito (vencida el 19/09), la del
+ * televisor al contado, una anulada y la limpieza de octubre al crédito con retención de ISR del régimen
+ * opcional (con un abono). Fibra del Sur: el router para premio. Los bienes sirven también para entregar
+ * premios de sorteo (contrapartida `compra`). Proveedores en `fixtures/compras/fase5.ts`.
  */
 
 type Compra = Schema<'Compra'>
@@ -72,6 +73,7 @@ export const compras: Compra[] = [
     }),
     compra(2, {
         proveedor_nombre: 'Electrónica Central',
+        proveedor_nit: '3321456-1',
         numero: '5521',
         fecha_documento: '2026-09-10',
         base_bienes: '4107.14',
@@ -85,6 +87,7 @@ export const compras: Compra[] = [
         ],
     }),
     compra(3, {
+        proveedor_id: 1,
         proveedor_nombre: 'Ciclo Sport, S.A.',
         numero: '88001',
         fecha_documento: '2026-08-02',
@@ -100,12 +103,34 @@ export const compras: Compra[] = [
     }),
     compra(4, {
         empresa_id: 2,
+        proveedor_id: 3,
         proveedor_nombre: 'Distribuidora del Sur',
+        proveedor_nit: '4567891-2',
         numero: '301',
         fecha_documento: '2026-09-15',
         base_bienes: '892.86',
         iva: '107.14',
         total: '1000.00',
         lineas: [linea(41, 'Router Wi-Fi 6 para premio', '892.86', '107.14', INVENTARIO)],
+    }),
+    compra(5, {
+        proveedor_id: 4,
+        proveedor_nombre: 'Servicios de Limpieza Ramírez',
+        proveedor_nit: '7788990-1',
+        serie: 'B',
+        numero: '1201',
+        fecha_documento: '2026-10-05',
+        condicion: 'credito',
+        vence_en: '2026-11-04',
+        base_servicios: '3000.00',
+        iva: '360.00',
+        total: '3360.00',
+        retencion_isr: '150.00',
+        neto: '3210.00',
+        // Abono del pago a proveedor 1 (Q1,000.00).
+        saldo: '2210.00',
+        descripcion: 'Limpieza de oficinas de octubre',
+        lineas: [linea(51, 'Limpieza de oficinas (octubre)', '3000.00', '360.00', GASTOS_GENERALES, 'servicio')],
+        retenciones: [{ impuesto_codigo: 'RET_ISR_OPC_C', impuesto: 'isr', base: '3000.00', tasa: '5.00', monto: '150.00' }],
     }),
 ]

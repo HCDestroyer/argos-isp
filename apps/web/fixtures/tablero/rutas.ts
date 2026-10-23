@@ -42,19 +42,6 @@ const PAQUETE: Record<string, unknown> = {
     reserva_incobrables_max: '3.00',
 }
 
-/**
- * Activos fijos del fixture (`ledger.activos` sin bajas; el panel aún no tiene pantalla de activos): el
- * servidor de ArgosNet y el mostrador de Fibra del Sur se deprecian por debajo del máximo de su clase.
- */
-const ACTIVOS: { id: number, empresa_id: number, clase: string, descripcion: string, costo: string, valor_residual: string, tasa_anual: string, acumulada: string }[] = [
-    { id: 1, empresa_id: 1, clase: 'equipo_red', descripcion: 'Router de borde MikroTik CCR2116', costo: '18500.00', valor_residual: '0.00', tasa_anual: '10.00', acumulada: '1233.36' },
-    { id: 2, empresa_id: 1, clase: 'computacion', descripcion: 'Servidor del RADIUS', costo: '12000.00', valor_residual: '1200.00', tasa_anual: '20.00', acumulada: '1080.00' },
-    { id: 3, empresa_id: 1, clase: 'vehiculos', descripcion: 'Pickup de instalaciones', costo: '95000.00', valor_residual: '15000.00', tasa_anual: '20.00', acumulada: '24000.00' },
-    { id: 4, empresa_id: 2, clase: 'mobiliario', descripcion: 'Mostrador de atención', costo: '6000.00', valor_residual: '0.00', tasa_anual: '10.00', acumulada: '150.00' },
-    // Ya casi depreciada: a la tasa actual le queda menos de un año, así que la máxima no deduciría más (H38).
-    { id: 5, empresa_id: 1, clase: 'computacion', descripcion: 'Switch de acceso del nodo norte', costo: '3000.00', valor_residual: '0.00', tasa_anual: '20.00', acumulada: '2900.00' },
-]
-
 /** Proveedor no identificado con NIT: sin NIT o «CF» (consumidor final). */
 function sinNit(nit: string | null): boolean {
     return !nit || nit.replace(/[^A-Za-z0-9]/g, '').toUpperCase() === 'CF'
@@ -430,7 +417,8 @@ const CALCULOS: { [N in Nombre]: (ctx: Contexto) => NonNullable<Bloques[N]['dato
             throw sinConfirmar('depreciacion', ctx.hoy)
         }
         const tope = topes as Record<string, string>
-        const activos = ACTIVOS.filter(a => a.empresa_id === ctx.empresaId)
+        // Los activos de `bd.activos` (pantalla /activos): vigentes, con su depreciación acumulada (inicial + cuotas).
+        const activos = bd.activos.filter(a => a.empresa_id === ctx.empresaId && a.estado === 'vigente').map(a => ({ ...a, acumulada: a.depreciacion_acumulada }))
         const acotar = (v: Decimal, limite: Decimal) => (v.gt(limite) ? limite : v)
         // H38: cada deducción se acota a lo que queda por depreciar; sin saldo o sin diferencia, no se lista.
         const bajo = activos
