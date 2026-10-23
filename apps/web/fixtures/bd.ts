@@ -127,6 +127,8 @@ interface BaseFixtures {
     /** Declaraciones de IVA y pequeño contribuyente (A3, fase 7 PR B) y lo que la API leería hoy de los libros de cada mes. */
     declaraciones: Schema<'Declaracion'>[]
     datosDeclaraciones: DatosMes[]
+    /** Consejos fiscales ocultos (A3, fase 8 PR C; `fiscal.consejos_ocultos`, solo inserción). */
+    consejosOcultos: (Schema<'ConsejoOcultado'> & { motivo: string | null })[]
     /** Ajustes fiscales (solo inserción; anular = otra fila con `anula_a`) y cierres anuales (fase 7 PR C). */
     ajustesFiscales: Schema<'AjusteFiscal'>[]
     ejercicios: Schema<'CierreAnual'>[]
@@ -274,6 +276,7 @@ function inicial(): BaseFixtures {
         feriadosFiscales: [],
         declaraciones: declaracionesIniciales(datosIniciales()),
         datosDeclaraciones: datosIniciales(),
+        consejosOcultos: [],
         ajustesFiscales: ajustesIniciales(),
         ejercicios: ejerciciosIniciales(),
         bancos,

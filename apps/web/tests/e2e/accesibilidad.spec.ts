@@ -65,6 +65,10 @@ const PANTALLAS = [
     ['calendario fiscal', '/fiscal/calendario'],
     ['calendario fiscal en lista', '/fiscal/calendario?vista=lista'],
     ['obligación fiscal', '/fiscal/calendario?obligacion=8'],
+    // Tablero fiscal (fase 8 PR A): bloques en error y que no aplican, alertas y vencidas.
+    ['tablero fiscal', '/fiscal/tablero'],
+    // Comparador de regímenes (fase 8 PR B).
+    ['comparador de regímenes', '/fiscal/comparador'],
     ['feriados', '/configuracion/fiscal?pestana=feriados'],
     // Declaraciones de IVA y pequeño contribuyente (fase 7 PR B).
     ['declaraciones', '/declaraciones'],

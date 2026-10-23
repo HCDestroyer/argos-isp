@@ -12,7 +12,11 @@ test('cerrar julio pide sus checks: se verifican, la anomalía se supervisa con 
     await page.goto('/libro?tab=cierres&mes=2026-07')
 
     const lista = page.locator('[data-prueba="checklist-cierre"]')
-    await expect(lista.locator('[data-prueba="checklist-resumen"]')).toHaveText('2 por resolver')
+    // `page.goto` recarga la app: en el servidor de desarrollo la primera visita a /libro compila la
+    // página (pesada) y en la suite completa pasaba de los 5 s de `expect`. Se espera la pantalla con un
+    // plazo propio, como el recorrido de axe, antes de revisar su contenido.
+    await lista.waitFor({ timeout: 30_000 })
+    await expect(lista.locator('[data-prueba="checklist-resumen"]')).toHaveText('2 por resolver', { timeout: 15_000 })
     await expect(lista.locator('[data-prueba="checklist-sin-verificar"]')).toContainText('Cuotas de activos y diferidos')
     await lista.locator('[data-prueba="checklist-verificar"]').click()
     await expect(lista.locator('[data-prueba="checklist-resumen"]')).toHaveText('1 por resolver')
