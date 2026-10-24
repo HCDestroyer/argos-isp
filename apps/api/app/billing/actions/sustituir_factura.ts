@@ -212,7 +212,8 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
             t,
             empresaId,
             originales.map((l) => ({
-                producto_id: l.producto_id === null || l.producto_id === undefined ? null : Number(l.producto_id),
+                producto_id:
+                    l.producto_id === null || l.producto_id === undefined ? null : Number(l.producto_id),
                 bodega_id: l.bodega_id === null || l.bodega_id === undefined ? null : Number(l.bodega_id),
                 unidad_id: l.unidad_id === null || l.unidad_id === undefined ? null : Number(l.unidad_id),
                 cantidad: l.cantidad,

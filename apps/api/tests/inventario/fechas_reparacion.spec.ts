@@ -180,10 +180,14 @@ test.group('Inventario · fase C · fechas pasadas y reparación', (group) => {
             )
         }
         const [reparada, rota] = unidades as [number, number]
-        const movimientos = async () =>
-            Number(
-                (await db.from('inventario.movimientos').where('empresa_id', e.B).count('* as n').first()).n,
-            )
+        const movimientos = async () => {
+            const fila = await db
+                .from('inventario.movimientos')
+                .where('empresa_id', e.B)
+                .count('* as n')
+                .first()
+            return Number(fila.n)
+        }
         const antes = await movimientos()
         const valor = await saldoInventario(onu.id, bodega.id)
 

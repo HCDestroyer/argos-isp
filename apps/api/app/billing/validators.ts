@@ -652,7 +652,8 @@ export const cargoUnicoValidator = vine.compile(
                             examples: ['150.00'],
                         }),
                     producto_id: idEntidad().nullable().optional().meta({
-                        description: 'Inventario: vende este producto (sale del kardex con su costo de ventas)',
+                        description:
+                            'Inventario: vende este producto (sale del kardex con su costo de ventas)',
                     }),
                     bodega_id: idEntidad().nullable().optional().meta({
                         description: 'Inventario: bodega de la que sale (obligatoria con producto_id)',

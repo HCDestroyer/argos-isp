@@ -333,22 +333,27 @@ const DatosUtilidades = objeto({
     perdida: booleano,
 })
 
-const DatosIsoPiso = objeto({
-    costo_ventas: { ...dinero, description: 'Gastos del grupo 5.6 de los meses leídos (§15 #79)' },
-    margen_bruto: { ...porciento, description: '(ingresos − costo de ventas) / ingresos del mayor' },
-    umbral_margen: { ...porciento, description: 'iso_umbral_margen' },
-    aplica: { ...booleano, description: 'El margen bruto pasa del umbral: hay ISO' },
-    activo_neto: dinero,
-    ingresos_brutos: { ...dinero, description: 'R de los meses leídos' },
-    ingresos_anuales: {
-        ...dinero,
-        description: 'R de un año (anualizado × 12 / meses con menos de 12; H37): el que entra en la base',
+const DatosIsoPiso = objeto(
+    {
+        costo_ventas: { ...dinero, description: 'Gastos del grupo 5.6 de los meses leídos (§15 #79)' },
+        margen_bruto: { ...porciento, description: '(ingresos − costo de ventas) / ingresos del mayor' },
+        umbral_margen: { ...porciento, description: 'iso_umbral_margen' },
+        aplica: { ...booleano, description: 'El margen bruto pasa del umbral: hay ISO' },
+        activo_neto: dinero,
+        ingresos_brutos: { ...dinero, description: 'R de los meses leídos' },
+        ingresos_anuales: {
+            ...dinero,
+            description:
+                'R de un año (anualizado × 12 / meses con menos de 12; H37): el que entra en la base',
+        },
+        ingresos_anualizados: booleano,
+        base: dinero,
+        tasa: porciento,
+        iso_anual: dinero,
     },
-    ingresos_anualizados: booleano,
-    base: dinero,
-    tasa: porciento,
-    iso_anual: dinero,
-})
+    // fase C del inventario: opcionales (aditivos para los clientes que ya leen el bloque)
+    ['costo_ventas', 'margen_bruto', 'umbral_margen', 'aplica'],
+)
 
 const DatosComparacion = objeto({
     meses_base: entero,

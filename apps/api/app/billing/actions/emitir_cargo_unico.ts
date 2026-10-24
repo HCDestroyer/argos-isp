@@ -248,7 +248,11 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                 precio_unitario: precio.toFixed(2),
                 cuenta_codigo: concepto.cuenta_codigo,
                 ...(l.producto_id
-                    ? { producto_id: l.producto_id, bodega_id: l.bodega_id ?? null, unidad_id: l.unidad_id ?? null }
+                    ? {
+                          producto_id: l.producto_id,
+                          bodega_id: l.bodega_id ?? null,
+                          unidad_id: l.unidad_id ?? null,
+                      }
                     : {}),
             })
         })

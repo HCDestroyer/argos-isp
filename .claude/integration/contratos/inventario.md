@@ -97,6 +97,8 @@ Todo con `empresa_id`, `created_at`, y `version` en lo editable.
 | `ajuste` | `inventario.ajustar` (manual, con motivo obligatorio) | ± | Igual que el conteo |
 | `baja` | `inventario.dar_de_baja` (dañado, robado, obsoleto) | − | `5.6.02 / 1.1.14` |
 | `saldo_inicial` | `inventario.cargar_saldo_inicial` (al empezar, una vez por producto y bodega, o desde el importador) | + | `1.1.14 / 2.9.01 Saldos de apertura` |
+| `premio` | `sorteos.entregar` con `contrapartida: inventario` (decisión del líder, fase C): la única forma de que un premio en especie salga del inventario | − al costo promedio (o al costo de la unidad, que queda `entregada`) | `5.1.03 Premios y promociones / 1.1.14` por el costo |
+| `reverso_premio` | `sorteos.anular_entrega` | + lo que salió, al mismo costo y bodega | `1.1.14 / 5.1.03` |
 
 Reglas:
 
@@ -136,13 +138,14 @@ Acciones explícitas, una por permiso. Listas con cursor; errores RFC 9457; `Ide
     - `POST /inventario/ajustes` (`inventario.ajustar`).
     - `POST /inventario/bajas` (`inventario.dar_de_baja`).
     - `POST /inventario/saldos-iniciales` (`inventario.cargar_saldo_inicial`).
+    - `POST /inventario/unidades/:id/marcar-reparada` (`inventario.marcar_reparada`, fase C).
 - **Comodato:**
     - `POST /servicios/:id/equipos` (`inventario.asignar_comodato`).
     - `POST /servicios/:id/equipos/:unidad_id/devolver` (`inventario.devolver_comodato`).
     - `POST /servicios/:id/equipos/:unidad_id/perdida` (`inventario.declarar_perdida_comodato`).
     - `GET /servicios/:id/equipos` (también en la ficha del cliente).
 - **Conteos:**
-    - `GET /inventario/conteos`.
+    - `GET /inventario/conteos`, `GET /inventario/conteos/:id` (líneas con la diferencia valorizada).
     - `POST /inventario/conteos` (`inventario.abrir_conteo`), `POST /inventario/conteos/:id/lineas` (`inventario.contar`).
     - `POST /inventario/conteos/:id/cerrar` (`inventario.cerrar_conteo`), `POST /inventario/conteos/:id/cancelar` (`inventario.cancelar_conteo`).
 - **Reportes:**
@@ -276,3 +279,18 @@ Rama `a3/inventario-b` (sale de `a3/inventario-a` 0506d58). Incluye las decision
     - Un equipo que vuelve totalmente depreciado vale Q0 y se puede volver a prestar: su activo nace en Q0, sin depreciación ni asientos de alta ni de baja. `ledger.activos.costo` admite 0 solo con `unidad_id`, y la baja de un activo en Q0 va sin asiento.
     - Locks: todas las operaciones toman primero el lock del producto y después la fila de la unidad.
     - En una NCRE, `devolucion_excede_compra` sale antes que `ncre_excede_saldo`.
+
+## Desvíos de la fase C
+
+Rama `a3/inventario-c` (sale de `a3/inventario-b` c15a016). Incluye las decisiones del líder: NCRE de devolución al costo exacto, `marcar_reparada`, fechas pasadas en consumos y ajustes y la salida «premio».
+
+1. **Venta solo por cargo único.** Las facturas recurrentes no llevan productos: la «factura con línea de `producto_id`» de §5 es la del cargo único (`POST /cargos-unicos`, cada línea con `producto_id`, `bodega_id` y, si es de serie, `unidad_id`). Las columnas nuevas de `billing.facturas_lineas` (`producto_id`, `bodega_id`, `unidad_id`) guardan lo vendido. El costo se calcula con los locks de los productos **antes** de emitir la factura y el movimiento `venta` se registra en la misma transacción, con `factura_linea_id` y `origen` = la factura. La unidad vendida queda `vendida`. Un cargo sin costo (Q0, con motivo sin costo) que lleva producto: 422 `producto_sin_costo` (el regalo de un bien no es una venta; va por premio o baja).
+2. **Asiento de la venta.** Origen `inventario` (`origen_id` = el movimiento), diario `VEN`: respeta el bloqueo de ventas. Cuenta de costo: `cuenta_costo` del producto o `5.6.01`.
+3. **Reverso de la venta** (`reverso_venta`): anular la factura, o una nota de crédito que acredita **toda** la línea (lo acreditado ≥ total − descuento de la línea, o notas que cubren la factura entera), reingresa lo que sigue vendido de la línea al mismo costo, con su **asiento propio** `1.1.14 / cuenta de costo` (origen `inventario` = el reverso; no un `RevertirAsiento` del de la venta, para que cada asiento de inventario cite su movimiento). Una nota parcial no reingresa nada. Anular la nota (rechazo definitivo de la SAT) vuelve a sacar lo que ella reingresó, al mismo costo: 409 `existencia_insuficiente` o `unidad_no_disponible` si ya no está. Sustituir la factura revierte la venta de la sustituida y vende otra vez en la nueva.
+4. **Conteos.** Uno abierto por bodega (409 `conteo_abierto`); la bodega sigue operando mientras se cuenta y lo esperado se toma **al cerrar**. Una línea por producto (capturarla otra vez la reemplaza); por serie se capturan las series o MAC encontradas. Solo se ajustan los productos contados. Faltante al promedio (por serie, cada unidad no contada a su costo; queda `dada_de_baja`); sobrante con la regla del ajuste (H41: con existencia al promedio, sin ella al `costo_unitario` de la línea o al último costo; 422 `costo_requerido`). Una serie contada que no es de la bodega entra como unidad nueva `usado`; si es una unidad viva en otra parte, 422 `serie_duplicada` (se traslada antes). Los movimientos son `ajuste_conteo` con `origen` `conteo`; la fecha es la del cierre. `cancelar_conteo` con motivo, sin ajustes. Permisos: `abrir_conteo`, `cerrar_conteo` y `cancelar_conteo` para `contabilidad` (y `admin`); `contar` también para `tecnico`.
+5. **Reporte valorizado** (`GET /reportes/inventario-valorizado?fecha=&bodega_id=&producto_id=&con_ceros=`): cantidad, valor y costo promedio por producto × bodega reconstruidos del kardex (movimientos con fecha ≤ la pedida), y `cuadre` por empresa: kardex completo contra el saldo de `1.1.14` a la misma fecha (sin el filtro de bodega o producto). JSON; la exportación XLSX/CSV queda para los reportes generales.
+6. **Costo de ventas en el ISO y el comparador** (§15 #79): el costo de ventas es la suma de los gastos del grupo `5.6` (equipo vendido **y** mermas y faltantes, como el grupo del plan). ISO trimestral: margen bruto = (ingresos − costo de ventas) / ingresos del año anterior; la nota lo dice. Comparador: el ISO como piso solo se aplica si ese margen (con los ingresos del mayor de los meses leídos) pasa de `iso_umbral_margen`; si no, `iso_anual = 0`. El bloque trae `costo_ventas`, `margen_bruto`, `umbral_margen` y `aplica`. Un producto con `cuenta_costo` fuera de `5.6` no entra al costo de ventas.
+7. **`inventario.marcar_reparada`** (`admin`, `tecnico`, `contabilidad`): de `en_reparacion` a `disponible` en la misma bodega, con motivo. La unidad en reparación ya contaba en las existencias: sin movimiento ni asiento, solo `audit.cambios`. Desde `en_reparacion` también se da de baja.
+8. **Fechas pasadas** en `inventario.consumir` e `inventario.ajustar` (`fecha` opcional): no futura (422 `futuro`); una pasada solo en un periodo abierto (422 `periodo_cerrado`; los bloqueos los aplica el asiento); al costo promedio del momento de registrar; una salida no deja existencia negativa en ninguna fecha desde la suya (409 `existencia_insuficiente_en_fecha`); el faltante de una unidad no queda antes de su último movimiento (422 `fecha_anterior`). Traslado, baja, venta y premio siguen con la fecha de hoy.
+9. **Salida «premio»** (decisión del líder): `sorteos.entregar` con `contrapartida: inventario` y `producto_id`, `bodega_id` y `unidad_id` (serie) o `cantidad` (1 por defecto). El bien sale con el movimiento `premio` a su costo y su asiento propio `5.1.03 / 1.1.14` (origen `inventario`); el movimiento cita al ganador (`origen` `sorteo_ganador`) y el ganador guarda `movimiento_inventario_id`. El gasto es el **costo**, no el valor declarado del premio; el ISR (sobre el valor) lo asume la empresa en el asiento `sorteo` (`5.1.03 / 2.1.05`), como en los demás premios en especie. Sin ISR no hay asiento `sorteo`. `anular_entrega` lo reingresa (`reverso_premio`, `1.1.14 / 5.1.03`, la unidad vuelve `disponible`). Una línea de compra que entró al inventario sigue con 422 `linea_de_inventario` (su mensaje apunta a `contrapartida: inventario`). La unidad entregada queda en el estado nuevo `entregada`. **Canje en especie**: el canje de un premio `bien` sigue bloqueado por `premio_bien_iva` (contador); cuando se habilite usará la misma salida (`salidaPorPremio` de `#inventario/premios`).
+10. **Migración del rollback de la fase B**: el `down` de unidades ya no falla cuando hay varios saldos iniciales de serie del mismo producto y bodega (no recrea el índice único de antes si los datos lo impiden).

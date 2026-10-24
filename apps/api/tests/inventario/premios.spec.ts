@@ -45,17 +45,17 @@ async function afirmarCuadre(
 ) {
     const cuadre = await cuadreInventario(empresaId)
     assert.deepEqual(cuadre.libro, cuadre.kardex, '1.1.14 = Σ kardex')
-    const desdeInventario = (
-        await db
-            .from('lealtad.sorteos_ganadores')
-            .whereNotNull('movimiento_inventario_id')
-            .orWhereIn(
-                'id',
-                db.from('inventario.movimientos').where('origen_tipo', 'sorteo_ganador').select('origen_id'),
-            )
-            .select('id')
-    ).map((g) => Number(g.id))
-    const violaciones = (await verificarLibro(empresaId))
+    const ganadores = await db
+        .from('lealtad.sorteos_ganadores')
+        .whereNotNull('movimiento_inventario_id')
+        .orWhereIn(
+            'id',
+            db.from('inventario.movimientos').where('origen_tipo', 'sorteo_ganador').select('origen_id'),
+        )
+        .select('id')
+    const desdeInventario = ganadores.map((g) => Number(g.id))
+    const todas = await verificarLibro(empresaId)
+    const violaciones = todas
         .map((v) =>
             /^16\.premio_de_sorteo_mal_contabilizado/.test(v.invariante)
                 ? {

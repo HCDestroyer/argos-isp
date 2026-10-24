@@ -53,17 +53,17 @@ test.group('Inventario · fase C · reporte valorizado', (group) => {
             { producto_id: cable.id, bodega_id: bodega.id, cantidad: '6', motivo: 'sobrante' },
             e.ctx,
         )
-        const a = async (qs: Record<string, unknown>) =>
-            (
-                await estado(
-                    client
-                        .get('/api/v1/reportes/inventario-valorizado')
-                        .bearerToken(e.token)
-                        .headers(cabecera)
-                        .qs(qs),
-                    200,
-                )
-            ).body()
+        const a = async (qs: Record<string, unknown>) => {
+            const respuesta = await estado(
+                client
+                    .get('/api/v1/reportes/inventario-valorizado')
+                    .bearerToken(e.token)
+                    .headers(cabecera)
+                    .qs(qs),
+                200,
+            )
+            return respuesta.body()
+        }
         const filas = (r: { data: Array<{ bodega_id: number; cantidad: string; valor: string }> }) =>
             r.data.map((f) => [f.bodega_id, f.cantidad, f.valor])
 

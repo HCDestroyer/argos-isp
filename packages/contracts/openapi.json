@@ -19180,6 +19180,30 @@
                             "150.00"
                           ]
                         },
+                        "producto_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Inventario: vende este producto (sale del kardex con su costo de ventas)"
+                        },
+                        "bodega_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Inventario: bodega de la que sale (obligatoria con producto_id)"
+                        },
+                        "unidad_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Inventario: la unidad vendida de un producto de serie (cantidad 1)"
+                        },
                         "descuentos": {
                           "type": "array",
                           "items": {
@@ -25276,7 +25300,7 @@
       "post": {
         "operationId": "inventarioAjustar",
         "summary": "Ajuste manual con motivo (faltante 5.6.02 / 1.1.14; sobrante 1.1.14 / 4.2.04)",
-        "description": "cantidad con signo. El sobrante entra al último costo promedio o al costo_unitario dado (422 costo_requerido si no hay ninguno). Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo.",
+        "description": "cantidad con signo. El sobrante entra al último costo promedio o al costo_unitario dado (422 costo_requerido si no hay ninguno). Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
         "tags": [
           "inventario"
         ],
@@ -25376,6 +25400,15 @@
                     "examples": [
                       "5.25"
                     ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del ajuste (por defecto hoy): una pasada dentro de un periodo abierto, al costo de hoy y sin dejar existencia negativa después"
                   }
                 },
                 "required": [
@@ -25593,7 +25626,7 @@
       "post": {
         "operationId": "inventarioConsumir",
         "summary": "Consumo de materiales (cuenta_consumo, por defecto 5.2.07 / 1.1.14)",
-        "description": "servicio_id opcional (misma empresa). Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo.",
+        "description": "servicio_id opcional (misma empresa). Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo. fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).",
         "tags": [
           "inventario"
         ],
@@ -25655,6 +25688,15 @@
                       "null"
                     ],
                     "maxLength": 500
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del consumo (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después"
                   }
                 },
                 "required": [
@@ -25720,6 +25762,730 @@
           }
         },
         "x-permiso": "inventario.consumir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/conteos": {
+      "get": {
+        "operationId": "inventarioConteos",
+        "summary": "Conteos físicos",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "bodega_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abierto",
+                "cerrado",
+                "cancelado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de conteos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConteoInventario"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "inventarioAbrirConteo",
+        "summary": "Abrir el conteo físico de una bodega",
+        "description": "Uno abierto por bodega (409 conteo_abierto). La bodega sigue operando mientras se cuenta.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bodega_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "bodega_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoInventarioDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.abrir_conteo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.abrir_conteo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/conteos/{id}": {
+      "get": {
+        "operationId": "inventarioConteoVer",
+        "summary": "Un conteo con sus líneas y la diferencia valorizada",
+        "description": "Abierto: lo esperado es la existencia de hoy y el valor de la diferencia, un estimado al costo de hoy. Cerrado: lo que había al cerrar y lo ajustado.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoInventarioDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/conteos/{id}/cancelar": {
+      "post": {
+        "operationId": "inventarioCancelarConteo",
+        "summary": "Cancelar un conteo abierto sin ajustar",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conteo cancelado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoInventarioDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.cancelar_conteo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.cancelar_conteo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/conteos/{id}/cerrar": {
+      "post": {
+        "operationId": "inventarioCerrarConteo",
+        "summary": "Cerrar un conteo: faltante 5.6.02 / 1.1.14, sobrante 1.1.14 / 4.2.04",
+        "description": "Ajusta con movimientos ajuste_conteo (origen conteo) solo los productos contados: el faltante sale al promedio (por serie, cada unidad no contada a su costo y queda dada de baja) y el sobrante entra al promedio o, sin existencia, al costo_unitario de la línea o al último costo (422 costo_requerido). Series contadas vivas en otra parte: 422 serie_duplicada. Fecha de hoy; respeta los bloqueos del libro. 409 conteo_no_abierto; version distinta 409. Emite inventario.conteo_cerrado.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conteo cerrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoInventarioDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.cerrar_conteo; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.cerrar_conteo",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/conteos/{id}/lineas": {
+      "post": {
+        "operationId": "inventarioContar",
+        "summary": "Capturar lo contado de un producto (reemplaza la captura anterior)",
+        "description": "Por cantidad, contado; por serie, series (serie o MAC de cada unidad encontrada; 422 requiere_unidades o no_aplica). 409 conteo_no_abierto.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "producto_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "contado": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Producto por cantidad: lo contado (≥ 0, hasta 3 decimales)"
+                  },
+                  "series": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "maxItems": 5000,
+                    "description": "Producto de serie: serie o MAC de cada unidad encontrada"
+                  },
+                  "costo_unitario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,6})?$",
+                    "description": "Costo de un sobrante si la bodega no tiene existencia del producto (> 0)",
+                    "examples": [
+                      "5.25"
+                    ]
+                  }
+                },
+                "required": [
+                  "producto_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conteo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoInventarioDetalle"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.contar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.contar",
         "x-implementado": true
       }
     },
@@ -25971,7 +26737,9 @@
                 "ajuste_conteo",
                 "ajuste",
                 "baja",
-                "saldo_inicial"
+                "saldo_inicial",
+                "premio",
+                "reverso_premio"
               ]
             }
           }
@@ -26434,7 +27202,8 @@
                 "vendida",
                 "dada_de_baja",
                 "anulada",
-                "devuelta_proveedor"
+                "devuelta_proveedor",
+                "entregada"
               ]
             }
           },
@@ -26609,6 +27378,131 @@
           }
         },
         "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}/marcar-reparada": {
+      "post": {
+        "operationId": "inventarioMarcarReparada",
+        "summary": "Devolver a disponible una unidad en reparación (misma bodega, sin asiento)",
+        "description": "No cambia su valor ni la existencia (ya contaba en la bodega): sin movimiento ni asiento, queda en audit.cambios. Otro estado: 409 unidad_no_disponible. Desde en_reparacion también se puede dar de baja (POST /inventario/bajas).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.marcar_reparada; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.marcar_reparada",
         "x-implementado": true
       }
     },
@@ -31869,7 +32763,7 @@
       "post": {
         "operationId": "lealtadEntregarPremioSorteo",
         "summary": "Registrar la entrega del premio de un titular",
-        "description": "Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: 5.1.03 / 2.1.03 (proveedor) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
+        "description": "Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: contrapartida inventario (el bien sale del kardex a su costo, movimiento premio con 5.1.03 / 1.1.14; la bodega se revisa como cualquier salida), compra (compra_linea_id de una compra que no entró al inventario; 422 linea_de_inventario si entró) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado. 409 `estado_sorteo` si el paso no corresponde al estado; 403 si el sorteo es de otra empresa.",
         "tags": [
           "lealtad"
         ],
@@ -31961,6 +32855,7 @@
                       {
                         "type": "string",
                         "enum": [
+                          "inventario",
                           "compra",
                           "proveedor",
                           "cuenta"
@@ -31970,7 +32865,39 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra)"
+                    "description": "Solo bien: inventario (producto_id, bodega_id y unidad_id o cantidad: sale del kardex a su costo, 5.1.03 / 1.1.14), compra (compra_linea_id: el bien se compró con factura y no entró al inventario; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control); proveedor responde 422 (registra la compra)"
+                  },
+                  "producto_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con contrapartida inventario"
+                  },
+                  "bodega_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con contrapartida inventario"
+                  },
+                  "unidad_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Con contrapartida inventario, producto de serie: la unidad disponible que se entrega"
+                  },
+                  "cantidad": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Con contrapartida inventario, producto por cantidad (1 por defecto)"
                   },
                   "cuenta_codigo": {
                     "type": [
@@ -51943,6 +52870,120 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/inventario-valorizado": {
+      "get": {
+        "operationId": "reportesInventarioValorizado",
+        "summary": "Existencias y valor del inventario a una fecha, con el cuadre contra 1.1.14",
+        "description": "Por producto y bodega, reconstruido del kardex (movimientos con fecha ≤ la pedida; por defecto hoy). cuadre: por empresa, el kardex completo contra el saldo de 1.1.14 del libro a la misma fecha (no se filtra por bodega ni producto).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "description": "Fecha de corte (por defecto hoy)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bodega_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "con_ceros",
+            "in": "query",
+            "required": false,
+            "description": "Incluir filas sin existencia ni valor",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventario valorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventarioValorizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/iva": {
       "get": {
         "operationId": "reportesIva",
@@ -52498,13 +53539,18 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "inventario.abrir_conteo",
                         "inventario.ajustar",
                         "inventario.asignar_comodato",
+                        "inventario.cancelar_conteo",
                         "inventario.cargar_saldo_inicial",
+                        "inventario.cerrar_conteo",
                         "inventario.consumir",
+                        "inventario.contar",
                         "inventario.dar_de_baja",
                         "inventario.declarar_perdida_comodato",
                         "inventario.devolver_comodato",
+                        "inventario.marcar_reparada",
                         "inventario.trasladar",
                         "inventario.ver",
                         "ip.resolver",
@@ -52811,13 +53857,18 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "inventario.abrir_conteo",
                         "inventario.ajustar",
                         "inventario.asignar_comodato",
+                        "inventario.cancelar_conteo",
                         "inventario.cargar_saldo_inicial",
+                        "inventario.cerrar_conteo",
                         "inventario.consumir",
+                        "inventario.contar",
                         "inventario.dar_de_baja",
                         "inventario.declarar_perdida_comodato",
                         "inventario.devolver_comodato",
+                        "inventario.marcar_reparada",
                         "inventario.trasladar",
                         "inventario.ver",
                         "ip.resolver",
@@ -59418,13 +60469,18 @@
                             "horus.probar",
                             "horus.revocar_token",
                             "horus.ver",
+                            "inventario.abrir_conteo",
                             "inventario.ajustar",
                             "inventario.asignar_comodato",
+                            "inventario.cancelar_conteo",
                             "inventario.cargar_saldo_inicial",
+                            "inventario.cerrar_conteo",
                             "inventario.consumir",
+                            "inventario.contar",
                             "inventario.dar_de_baja",
                             "inventario.declarar_perdida_comodato",
                             "inventario.devolver_comodato",
+                            "inventario.marcar_reparada",
                             "inventario.trasladar",
                             "inventario.ver",
                             "ip.resolver",
@@ -63280,6 +64336,25 @@
               "iso_anual"
             ],
             "properties": {
+              "costo_ventas": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "Gastos del grupo 5.6 de los meses leídos (§15 #79)"
+              },
+              "margen_bruto": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "(ingresos − costo de ventas) / ingresos del mayor"
+              },
+              "umbral_margen": {
+                "type": "string",
+                "pattern": "^-?\\d+\\.\\d{2}$",
+                "description": "iso_umbral_margen"
+              },
+              "aplica": {
+                "type": "boolean",
+                "description": "El margen bruto pasa del umbral: hay ISO"
+              },
               "activo_neto": {
                 "type": "string",
                 "pattern": "^-?\\d+\\.\\d{2}$"
@@ -69216,6 +70291,271 @@
           }
         }
       },
+      "ConteoInventario": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "bodega_id",
+          "bodega_nombre",
+          "estado",
+          "fecha_corte",
+          "motivo",
+          "abierto_por",
+          "cerrado_por",
+          "cerrado_en",
+          "faltante",
+          "sobrante",
+          "version",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bodega_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "abierto",
+              "cerrado",
+              "cancelado"
+            ]
+          },
+          "fecha_corte": {
+            "type": "string",
+            "format": "date"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "faltante": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor del faltante ajustado al cerrar"
+          },
+          "sobrante": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor del sobrante ajustado al cerrar"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConteoInventarioDetalle": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "bodega_id",
+          "bodega_nombre",
+          "estado",
+          "fecha_corte",
+          "motivo",
+          "abierto_por",
+          "cerrado_por",
+          "cerrado_en",
+          "faltante",
+          "sobrante",
+          "version",
+          "created_at",
+          "lineas"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bodega_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "abierto",
+              "cerrado",
+              "cancelado"
+            ]
+          },
+          "fecha_corte": {
+            "type": "string",
+            "format": "date"
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "abierto_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cerrado_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cerrado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "faltante": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor del faltante ajustado al cerrar"
+          },
+          "sobrante": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor del sobrante ajustado al cerrar"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lineas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "producto_id",
+                "producto_sku",
+                "producto_nombre",
+                "seguimiento",
+                "contado",
+                "series",
+                "costo_unitario",
+                "esperado",
+                "diferencia",
+                "valor_diferencia"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "producto_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "producto_sku": {
+                  "type": "string"
+                },
+                "producto_nombre": {
+                  "type": "string"
+                },
+                "seguimiento": {
+                  "type": "string",
+                  "enum": [
+                    "cantidad",
+                    "serie"
+                  ]
+                },
+                "contado": {
+                  "type": "string",
+                  "pattern": "^-?\\d+\\.\\d{3}$",
+                  "description": "Cantidad con 3 decimales"
+                },
+                "series": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "costo_unitario": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Costo unitario con 6 decimales"
+                },
+                "esperado": {
+                  "type": "string",
+                  "pattern": "^-?\\d+\\.\\d{3}$",
+                  "description": "Cerrado: lo que había al cerrar; abierto: lo de hoy"
+                },
+                "diferencia": {
+                  "type": "string",
+                  "pattern": "^-?\\d+\\.\\d{3}$",
+                  "description": "contado − esperado"
+                },
+                "valor_diferencia": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero",
+                      "description": "Monto con signo (+ entra, − sale)"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Cerrado: lo ajustado; abierto: estimado al costo de hoy (null sin costo conocido)"
+                }
+              }
+            }
+          }
+        }
+      },
       "CorridasFacturacion": {
         "type": "object",
         "required": [
@@ -72660,7 +74000,8 @@
               "vendida",
               "dada_de_baja",
               "anulada",
-              "devuelta_proveedor"
+              "devuelta_proveedor",
+              "entregada"
             ]
           },
           "condicion": {
@@ -75487,6 +76828,122 @@
           }
         }
       },
+      "InventarioValorizado": {
+        "type": "object",
+        "required": [
+          "fecha",
+          "data",
+          "total",
+          "cuadre"
+        ],
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "producto_id",
+                "producto_sku",
+                "producto_nombre",
+                "unidad",
+                "seguimiento",
+                "bodega_id",
+                "bodega_nombre",
+                "cantidad",
+                "valor",
+                "costo_promedio"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "producto_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "producto_sku": {
+                  "type": "string"
+                },
+                "producto_nombre": {
+                  "type": "string"
+                },
+                "unidad": {
+                  "type": "string"
+                },
+                "seguimiento": {
+                  "type": "string",
+                  "enum": [
+                    "cantidad",
+                    "serie"
+                  ]
+                },
+                "bodega_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "bodega_nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "string",
+                  "pattern": "^-?\\d+\\.\\d{3}$",
+                  "description": "Cantidad con 3 decimales"
+                },
+                "valor": {
+                  "$ref": "#/components/schemas/Dinero"
+                },
+                "costo_promedio": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Costo unitario con 6 decimales"
+                }
+              }
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor de las filas"
+          },
+          "cuadre": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "valor_kardex",
+                "saldo_libro",
+                "diferencia"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "valor_kardex": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Kardex completo de la empresa a la fecha"
+                },
+                "saldo_libro": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Saldo de 1.1.14 a la fecha"
+                },
+                "diferencia": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "saldo_libro − valor_kardex (0 si cuadra)"
+                }
+              }
+            }
+          }
+        }
+      },
       "IpNoEncontradaHorus": {
         "type": "object",
         "required": [
@@ -76958,7 +78415,9 @@
               "ajuste_conteo",
               "ajuste",
               "baja",
-              "saldo_inicial"
+              "saldo_inicial",
+              "premio",
+              "reverso_premio"
             ]
           },
           "fecha": {
@@ -90671,6 +92130,14 @@
                   ],
                   "description": "Unidades de esa línea que consumió la entrega"
                 },
+                "movimiento_inventario_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "description": "Contrapartida inventario: el movimiento premio del kardex (5.1.03 / 1.1.14 al costo)"
+                },
                 "compra_base": {
                   "anyOf": [
                     {
@@ -91536,7 +93003,8 @@
               "vendida",
               "dada_de_baja",
               "anulada",
-              "devuelta_proveedor"
+              "devuelta_proveedor",
+              "entregada"
             ]
           },
           "condicion": {
@@ -91673,7 +93141,8 @@
               "vendida",
               "dada_de_baja",
               "anulada",
-              "devuelta_proveedor"
+              "devuelta_proveedor",
+              "entregada"
             ]
           },
           "condicion": {
@@ -91781,7 +93250,9 @@
                     "ajuste_conteo",
                     "ajuste",
                     "baja",
-                    "saldo_inicial"
+                    "saldo_inicial",
+                    "premio",
+                    "reverso_premio"
                   ]
                 },
                 "fecha": {
