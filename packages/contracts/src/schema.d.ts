@@ -9860,8 +9860,8 @@ export interface components {
                 password: "***" | null;
                 remitente: string | null;
                 nombre_visible: string | null;
-                /** @description Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada); direcciones separadas por coma. La API siempre lo devuelve */
-                contabilidad?: string | null;
+                /** @description Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada, libro y cierres); direcciones separadas por coma */
+                contabilidad: string | null;
             };
             telegram: {
                 clientes_activo: boolean;

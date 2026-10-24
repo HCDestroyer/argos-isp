@@ -365,7 +365,8 @@ BACKUP_RCLONE_DESTINO=
 
 # RADIUS: IP del servidor por la que llegan los MikroTik (LAN o túnel WireGuard). 0.0.0.0 = todas
 RADIUS_BIND_IP=0.0.0.0
-# IP de origen de los CoA (la que el router tiene en /radius)
+# Vacía: coa corre en red bridge y el NAT del servidor pone la IP de origen de los CoA (la que el
+# router tiene en /radius). Con la IP del servidor aquí el bind falla dentro del contenedor
 COA_ORIGEN_IP=
 
 # Correo y Telegram: se configuran en el panel (Configuración → Notificaciones)
