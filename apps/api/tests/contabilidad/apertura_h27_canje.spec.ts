@@ -24,6 +24,7 @@ import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
 import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
 import { CABECERAS_SVIX, firmarSvix } from '#billing/pasarelas/recurrente'
 import CerrarApertura from '#ledger/actions/cerrar_apertura'
+import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
 import CrearCaja from '#ledger/actions/crear_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
@@ -63,7 +64,8 @@ import type { ContextoAccion } from '#shared/contexto'
  *
  * Hallazgos de la primera revisión: H48 a H53 (arreglados por A3 en 28ee679; H49 desapareció con H50).
  * Verificación final de 28ee679: H60 a H64 (arreglados por A3 en 9f4a260).
- * Verificación de 9f4a260 (`a3/pedidos-panel`): H65 en adelante (`.fails`, fila en `a3.md`).
+ * Verificación de 9f4a260 (`a3/pedidos-panel`): H65 y H66 (arreglados por A3 en a693f85).
+ * Verificación de `a3/ajustes-reembolso` y `a3/reembolso-montos`: H70–H73 (arreglados por A3 en cb9201a y 5c6f26d).
  */
 
 async function importar(
@@ -1028,10 +1030,10 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
             const r3 = await reembolso(checkout, 're_c', resto)
             assert.isUndefined(r3.pago_reemplazo_id)
             assert.equal(await deudaDe(e.B, s.clienteId), aTexto(bruto))
-            assert.equal(
-                aTexto(dec(await bancoNeto(e.B)).minus(banco0)),
-                aTexto(CERO.minus(bruto).plus('10.50')),
-            )
+            // H73 (5c6f26d): sin el monto de la cuenta la comisión se conserva también en el total: el
+            // banco baja todo lo reembolsado y 5.1.02 queda con la comisión una sola vez
+            assert.equal(aTexto(dec(await bancoNeto(e.B)).minus(banco0)), aTexto(CERO.minus(bruto)))
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '10.50')
             const vigentes = await db
                 .from('billing.pagos')
                 .where('cliente_id', s.clienteId)
@@ -1044,7 +1046,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H65: un reembolso que deja menos que la comisión (casi total) no se aplica: el webhook responde error_de_negocio, el pago sigue vigente y la conciliación lo da por bueno', async ({
+    test('H65 (arreglado en a693f85): un reembolso que deja menos que la comisión se aplica: la deuda vuelve por lo reembolsado y el banco recibe el neto negativo', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -1055,10 +1057,27 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
             const r = await reembolso(checkout, 're_casi', centavos - 500)
             assert.isUndefined(r.ignorado, r.error)
             assert.equal(await deudaDe(e.B, s.clienteId), aTexto(dec(cobro.monto).minus('5.00')))
+            // el reemplazo: Banco al haber por 5.50 (5.00 − 10.50 de comisión), 5.1.02 y CxC por 5.00
+            const reemplazo = await lineas('pago', r.pago_reemplazo_id!)
+            assert.deepEqual(
+                reemplazo.map((l) => [l[0].startsWith('1.1.02') ? 'banco' : l[0], l[1], l[2]]),
+                [
+                    ['banco', '0.00', '5.50'],
+                    ['5.1.02', '10.50', '0.00'],
+                    ['1.1.03', '0.00', '5.00'],
+                ],
+            )
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepEqual(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id),
+                [],
+            )
         })
-    }).fails(
-        'H65: RegistrarPago del pago de reemplazo exige comisión < monto y el savepoint deshace el reembolso entero',
-    )
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 
     test('una disputa repetida emite pago.disputa_abierta una sola vez y no toca el libro', async ({
         assert,
@@ -1221,7 +1240,7 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H66: una importada tardía con fecha anterior al cierre (entró después de él, nunca trasladada) responde 409 al anularla', async ({
+    test('H66 (arreglado en a693f85): una importada tardía con fecha anterior al cierre (entró después de él, nunca trasladada) se anula contra 2.9.01', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -1233,5 +1252,332 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
             e.ctx,
         )
         assert.equal(await apertura(e.B), '0.00')
-    }).fails('H66: aperturaCerradaPara decide por la fecha del asiento, no por si entró en el cierre')
+    })
+})
+
+/** Reembolso con monto debitado al comercio distinto del devuelto al cliente. */
+function reembolsoConCuenta(checkout: string, id: string, cliente: number, cuenta: number) {
+    return new ProcesarWebhookPasarela().execute(
+        {
+            proveedor: 'recurrente',
+            ...webhook(
+                {
+                    event_type: 'refund.update',
+                    refund: {
+                        id,
+                        status: 'succeeded',
+                        customer_refunded_amount_in_cents: cliente,
+                        account_refunded_amount_in_cents: cuenta,
+                    },
+                    intentable: { checkout: { id: checkout } },
+                },
+                `msg_${unico('rc')}`,
+            ),
+        },
+        contextoSistema('webhook'),
+    )
+}
+
+test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
+    test('reembolso que no deja más que lo retenido: constancias en proporción, el libro cuadra y la conciliación está limpia', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('rr')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
+            // quedan Q4.00 (menos que lo retenido, Q4.82, y que la comisión, Q10.50)
+            const r = await reembolso(checkout, 're_ret', centavos - 400)
+            assert.isDefined(r.pago_reemplazo_id)
+            assert.equal(await deudaDe(e.B, s.clienteId), aTexto(dec(cobro.monto).minus('4.00')))
+            const pago = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+            assert.equal(pago.monto, '4.00')
+            assert.isTrue(dec(pago.retenido).lt('4.00'))
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepEqual(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id),
+                [],
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H70 (decisión del líder, cb9201a): las constancias del reemplazo se prorratean siempre: sin salto entre dejar Q4.83 y Q4.82, y 1.1.05 + banco bajan juntos lo reembolsado', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const resultado: Array<{ ret: string; dinero: string }> = []
+        for (const queda of [483, 482]) {
+            const checkout = `ch_${unico('h70')}`
+            await conRecurrente(checkout, 0, async () => {
+                const { centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
+                const ret0 = dec(await saldoCuenta(e.B, '1.1.05'))
+                const banco0 = dec(await bancoNeto(e.B))
+                await reembolso(checkout, `re_${queda}`, centavos - queda)
+                const dRet = dec(await saldoCuenta(e.B, '1.1.05')).minus(ret0)
+                const dBanco = dec(await bancoNeto(e.B)).minus(banco0)
+                resultado.push({ ret: aTexto(dRet), dinero: aTexto(dRet.plus(dBanco)) })
+                // 1.1.05 y el banco juntos bajan exactamente lo reembolsado (sin el monto de la cuenta)
+                assert.equal(
+                    aTexto(dRet.plus(dBanco)),
+                    aTexto(
+                        dec(String(centavos - queda))
+                            .div(100)
+                            .negated(),
+                    ),
+                )
+            })
+        }
+        // un centavo más de reembolso mueve 1.1.05 a lo sumo un centavo
+        assert.isTrue(
+            dec(resultado[0]!.ret).minus(resultado[1]!.ret).abs().lte('0.01'),
+            JSON.stringify(resultado),
+        )
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H71 (arreglado en cb9201a): parcial con comisión devuelta: la deuda vuelve por lo del cliente, el banco baja lo debitado a la cuenta y 5.1.02 baja la diferencia; la conciliación cuadra', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('h71')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro } = await cobroPagado(e, checkout)
+            const antes = dec(await bancoNeto(e.B))
+            // devuelve Q100.00 al cliente; a la cuenta del comercio le debitan Q95.00 (devuelve Q5.00 de comisión)
+            await reembolsoConCuenta(checkout, 're_cta', 10000, 9500)
+            assert.equal(aTexto(dec(await bancoNeto(e.B)).minus(antes)), '-95.00')
+            assert.equal(await deudaDe(e.B, s.clienteId), '100.00')
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '5.50')
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepEqual(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id),
+                [],
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('reembolso total con comisión devuelta en parte: la deuda vuelve entera, el banco baja lo debitado a la cuenta y 5.1.02 queda con la parte no devuelta (ajuste sin documento que el verificador acepta)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('tot')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, centavos } = await cobroPagado(e, checkout)
+            const antes = dec(await bancoNeto(e.B))
+            // devuelve todo al cliente; a la cuenta le debitan todo menos Q3.00 (comisión devuelta)
+            await reembolsoConCuenta(checkout, 're_tot', centavos, centavos - 300)
+            assert.equal(await deudaDe(e.B, s.clienteId), cobro.monto)
+            assert.equal(
+                aTexto(dec(await bancoNeto(e.B)).minus(antes)),
+                aTexto(
+                    dec(String(centavos - 300))
+                        .div(100)
+                        .negated(),
+                ),
+            )
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '7.50')
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepEqual(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id),
+                [],
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('proveedor de cobro con el monto de la cuenta: la comisión devuelta no toca el pago (sale en la liquidación); reemplazo y contracargo se liquidan y el puente vuelve a 0', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const banco = await cuentaBancariaPrueba('Banrural', e.B)
+        const proveedor = await new CrearProveedorCobro().execute(
+            {
+                empresa_id: e.B,
+                metodo: 'pasarela',
+                pasarela: 'recurrente',
+                nombre: 'Recurrente',
+                cuenta_bancaria_id: banco.id,
+            },
+            e.ctx,
+        )
+        const checkout = `ch_${unico('pmc')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, pago } = await cobroPagado(e, checkout)
+            const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+            await new LiquidarCobros().execute(
+                {
+                    proveedor_cobro_id: proveedor.id,
+                    referencia: unico('liq'),
+                    bruto: original.monto,
+                    comision: '10.50',
+                    pagos: [pago.pago_id!],
+                    cuenta_bancaria_id: banco.id,
+                },
+                e.ctx,
+            )
+            const r = await reembolsoConCuenta(checkout, 're_pmc', 10000, 9500)
+            assert.isUndefined(r.ignorado, r.error)
+            assert.equal(await deudaDe(e.B, s.clienteId), '100.00')
+            const reemplazo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+            assert.equal(reemplazo.comision, '0.00')
+            // en el puente: −pago (contracargo pendiente) + reemplazo
+            assert.equal(
+                aTexto(await saldoCuenta(e.B, proveedor.cuenta_codigo)),
+                aTexto(dec(reemplazo.monto).minus(original.monto)),
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H72 (arreglado en 5c6f26d): si la cuenta del comercio paga más que lo devuelto al cliente, el exceso es gasto 5.1.02: deuda por lo del cliente, banco por lo de la cuenta', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('h72')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s } = await cobroPagado(e, checkout)
+            const antes = dec(await bancoNeto(e.B))
+            // devuelve Q100.00 al cliente y le cobran Q102.00 a la cuenta (Q2.00 de cargo por reembolso)
+            const r = await reembolsoConCuenta(checkout, 're_cargo', 10000, 10200)
+            assert.isUndefined(r.ignorado, r.error)
+            assert.equal(await deudaDe(e.B, s.clienteId), '100.00')
+            assert.equal(aTexto(dec(await bancoNeto(e.B)).minus(antes)), '-102.00')
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '12.50')
+        })
+        // una comisión devuelta mayor que la del pago sigue siendo 422 (y el reembolso no se aplica)
+        const otro = `ch_${unico('h72b')}`
+        await conRecurrente(otro, 0, async () => {
+            const x = await cobroPagado(e, otro)
+            const malo = await reembolsoConCuenta(otro, 're_malo', 10000, 8000)
+            assert.equal(malo.ignorado, 'error_de_negocio')
+            assert.include(malo.error ?? '', 'reembolso_monto_cuenta')
+            assert.equal(await deudaDe(e.B, x.s.clienteId), '0.00')
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H73 (arreglado en 5c6f26d): sin el monto de la cuenta la comisión se conserva igual en el total y en el que deja Q0.01; el banco baja todo lo reembolsado', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const comisiones: string[] = []
+        for (const deja of [1, 0]) {
+            const checkout = `ch_${unico('h73')}`
+            await conRecurrente(checkout, 0, async () => {
+                const { centavos } = await cobroPagado(e, checkout)
+                const antes = dec(await saldoCuenta(e.B, '5.1.02'))
+                await reembolso(checkout, `re_${deja}`, centavos - deja)
+                comisiones.push(aTexto(dec(await saldoCuenta(e.B, '5.1.02')).minus(antes)))
+            })
+        }
+        // la misma regla en los dos: la comisión cobrada se queda (§15 #104)
+        assert.deepEqual(comisiones, ['0.00', '0.00'])
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('proveedor de cobro: reembolso que deja menos que la comisión y que lo retenido; el reemplazo se liquida y el puente vuelve a 0', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const banco = await cuentaBancariaPrueba('Banrural', e.B)
+        const proveedor = await new CrearProveedorCobro().execute(
+            {
+                empresa_id: e.B,
+                metodo: 'pasarela',
+                pasarela: 'recurrente',
+                nombre: 'Recurrente',
+                cuenta_bancaria_id: banco.id,
+            },
+            e.ctx,
+        )
+        const checkout = `ch_${unico('pq')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { pago, centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
+            const r = await reembolso(checkout, 're_pq', centavos - 400)
+            const reemplazo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+            const puenteReemplazo = dec(reemplazo.monto).minus(reemplazo.retenido)
+            assert.isTrue(puenteReemplazo.gt(0))
+            const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+            // sin liquidar todavía: el original anulado no deja contracargo; queda solo el reemplazo
+            assert.equal(original.estado, 'anulado')
+            assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), aTexto(puenteReemplazo))
+            await new LiquidarCobros().execute(
+                {
+                    proveedor_cobro_id: proveedor.id,
+                    referencia: unico('liq'),
+                    bruto: aTexto(puenteReemplazo),
+                    comision: '0.00',
+                    pagos: [r.pago_reemplazo_id!],
+                    cuenta_bancaria_id: banco.id,
+                },
+                e.ctx,
+            )
+            assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), '0.00')
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+})
+
+test.group('Auditor contable · notas viejas sobre importadas (8a6efcd)', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
+    test('una nota vieja (base a 2.9.01, IVA 0) y una nueva por el resto: la nueva lleva el IVA de lo que queda, el libro trae solo la nueva y el verificador acepta la vieja', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        const f = await importar(e.ctx, e.B, '112.00', '2026-08-10')
+        const hoy = hoyGuatemala()
+        const [vieja] = (await db
+            .table('billing.notas_credito')
+            .insert({
+                factura_id: f.id,
+                cliente_id: f.clienteId,
+                empresa_id: e.B,
+                fecha: hoy,
+                subtotal: '30.00',
+                iva: '0.00',
+                monto: '30.00',
+                motivo: 'auditoría: nota anterior a H50',
+                receptor: JSON.stringify({ id: 'CF', nombre: 'Consumidor final' }),
+            })
+            .returning('id')) as Array<{ id: number }>
+        await new RegistrarAsiento().execute(
+            {
+                empresa_id: e.B,
+                fecha: hoy,
+                descripcion: 'Nota anterior a H50',
+                origen_tipo: 'nota_credito',
+                origen_id: vieja!.id,
+                movimientos: [
+                    { cuenta: '2.9.01', debe: '30.00' },
+                    { cuenta: '1.1.03', haber: '30.00', cliente_id: f.clienteId },
+                ],
+            },
+            e.ctx,
+        )
+        // como la aplicaba el código anterior: la nota cubre 30.00 de la factura
+        await db.from('billing.facturas').where('id', f.id).increment('pagado', 30)
+        const nueva = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '82.00', motivo: 'auditoría: el resto' },
+            e.ctx,
+        )
+        assert.equal(nueva.iva, '8.79')
+        assert.equal(await deudaDe(e.B, f.clienteId), '0.00')
+        const ventas = await construirLibro('ventas', e.B, { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) })
+        assert.deepEqual([ventas.reporte.totales.total, ventas.reporte.totales.iva], ['-82.00', '-8.79'])
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 })

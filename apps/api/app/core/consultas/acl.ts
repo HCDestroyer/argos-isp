@@ -3,7 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { empresasAsignadas } from '#core/alcance_empresas'
-import { ROLES_BASE } from '#core/permisos'
+import { NOMBRES_PERMISOS, ROLES_BASE } from '#core/permisos'
 import type { AlcancesToken } from '#core/acl'
 
 /**
@@ -150,7 +150,13 @@ export async function verRol(id: number, cliente: QueryClientContract = db.conne
 }
 
 export async function listarPermisos() {
-    return (await db.from('core.permisos').orderBy('nombre').select('id', 'nombre', 'descripcion')) as Array<{
+    // solo los del catálogo de código: un permiso que se retiró de `permisos.ts` queda en la base
+    // (el seed no borra) pero ya no protege nada
+    return (await db
+        .from('core.permisos')
+        .whereIn('nombre', NOMBRES_PERMISOS)
+        .orderBy('nombre')
+        .select('id', 'nombre', 'descripcion')) as Array<{
         id: number
         nombre: string
         descripcion: string | null

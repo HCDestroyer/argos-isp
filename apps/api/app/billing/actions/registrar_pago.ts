@@ -107,6 +107,12 @@ export interface EntradaRegistrarPago {
     retenciones?: PedidoConstancia[] | null
     /** interno (ruta): alcance ACL del cajero para elegir y validar la caja de cada empresa */
     alcance?: Alcance
+    /**
+     * interno (webhook): pago de reemplazo tras un reembolso parcial de la pasarela (H65). La
+     * comisión original se conserva aunque supere lo que queda; el banco recibe entonces un neto
+     * negativo (la pasarela lo descuenta de la liquidación). No llega desde la API.
+     */
+    reemplazo_de_reembolso?: boolean
 }
 
 export type ServicioCobrado = Pick<
@@ -177,7 +183,7 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
         if (
             comision.isNegative() ||
             !tieneCentavosExactos(comision) ||
-            (comision.gt(0) && comision.gte(efectivo))
+            (comision.gt(0) && comision.gte(efectivo) && !input.reemplazo_de_reembolso)
         ) {
             throw new ValidacionFallida([
                 {
@@ -591,9 +597,11 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             caja?.cuentaId ??
             proveedor?.cuenta_id ??
             (input.metodo === 'caja' ? null : (bancario.cuentaLibro ?? CUENTAS.BANCO_PRINCIPAL))
-        const movimientos: LineaAsiento[] = [
-            { cuenta: cuentaDebe!, debe: aTexto(parte.monto.minus(comision).minus(retenido)) },
-        ]
+        // H65: en el reemplazo de un reembolso la comisión puede superar lo que queda: el neto va al haber
+        const neto = parte.monto.minus(comision).minus(retenido)
+        const movimientos: LineaAsiento[] = []
+        if (neto.gt(0)) movimientos.push({ cuenta: cuentaDebe!, debe: aTexto(neto) })
+        else if (neto.lt(0)) movimientos.push({ cuenta: cuentaDebe!, haber: aTexto(neto.abs()) })
         if (comision.gt(0)) {
             movimientos.push({ cuenta: CUENTAS.COMISIONES_PASARELAS, debe: aTexto(comision) })
         }

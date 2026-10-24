@@ -85,9 +85,11 @@ describe('A1: Rol.base, alcances de token y CA del router', () => {
     it('router: tiene_api_ca, el PEM nunca vuelve', async () => {
         const PEM = '-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----'
         const editado = await useRouters().editar(1, { version: 1, api_ca: PEM })
-        expect(editado.ok && [editado.data.tiene_api_ca, editado.data.api_ca]).toEqual([true, '***'])
+        expect(editado.ok && editado.data.tiene_api_ca).toBe(true)
+        expect(editado.ok && 'api_ca' in editado.data).toBe(false)
         const quitado = await useRouters().editar(1, { version: 2, api_ca: null })
-        expect(quitado.ok && [quitado.data.tiene_api_ca, quitado.data.api_ca]).toEqual([false, null])
+        expect(quitado.ok && quitado.data.tiene_api_ca).toBe(false)
+        expect(quitado.ok && 'api_ca' in quitado.data).toBe(false)
     })
 })
 

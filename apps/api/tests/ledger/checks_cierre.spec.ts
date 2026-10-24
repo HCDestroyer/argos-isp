@@ -16,6 +16,8 @@ import ImportarExtracto from '#ledger/actions/importar_extracto'
 import CrearCaja from '#ledger/actions/crear_caja'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import type { ContextoAccion } from '#shared/contexto'
+import rutasCierres from '#start/routes/cierres'
+import { NOMBRES_PERMISOS, ROLES_BASE } from '#core/permisos'
 
 /**
  * Fase 6 · PR B (contrato de localización fiscal §10.5): lista de verificación de cierre
@@ -77,6 +79,31 @@ async function extractoSinConciliar(
 
 test.group('Fase 6 · lista de verificación de cierre', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
+
+    test('acción = permiso: cierres.revisar_check existe, lo tienen admin y contabilidad y su ruta lo pide (no libro.cerrar_periodo)', async ({
+        assert,
+    }) => {
+        assert.include(NOMBRES_PERMISOS, 'cierres.revisar_check')
+        assert.equal(new RevisarCheck().nombre, 'cierres.revisar_check')
+        assert.include(ROLES_BASE.admin!.permisos, 'cierres.revisar_check')
+        assert.include(ROLES_BASE.contabilidad!.permisos, 'cierres.revisar_check')
+        for (const rol of ['cajero', 'soporte', 'tecnico', 'lectura']) {
+            assert.notInclude(ROLES_BASE[rol]!.permisos, 'cierres.revisar_check', rol)
+        }
+        const ruta = rutasCierres.find((r) => r.ruta === '/libro/cierres/checks/:id/revisar')
+        assert.equal(ruta?.permiso, 'cierres.revisar_check')
+        const permisos = await db
+            .from('core.roles_permisos as rp')
+            .join('core.roles as r', 'r.id', 'rp.role_id')
+            .join('core.permisos as p', 'p.id', 'rp.permiso_id')
+            .where('p.nombre', 'cierres.revisar_check')
+            .orderBy('r.nombre')
+            .select('r.nombre')
+        assert.deepEqual(
+            permisos.map((f) => f.nombre),
+            ['admin', 'contabilidad'],
+        )
+    })
 
     test('verificar: todos los checks del mes, en orden y sin anomalías en una empresa limpia; repetir no duplica', async ({
         client,

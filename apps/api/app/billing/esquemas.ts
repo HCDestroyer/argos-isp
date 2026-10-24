@@ -1094,6 +1094,8 @@ const DiferenciaConciliacion = objeto({
         'pago_anulado',
         'pago_sin_cobro',
         'error_consulta',
+        'disputa',
+        'reembolso_sin_aplicar',
     ]),
     cobro_id: nulable(id),
     pago_id: nulable(id),

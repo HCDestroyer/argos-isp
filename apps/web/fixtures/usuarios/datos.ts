@@ -34,7 +34,7 @@ const nombresContrato = new Set(PERMISOS_CONTRATO.map(permiso => permiso.nombre)
 export const roles: Schema<'Rol'>[] = [
     ...rolesBaseJson.map(rol => ({
         ...rol,
-        permisos: rol.nombre === 'admin' ? [...nombresContrato] : rol.permisos.filter(permiso => nombresContrato.has(permiso)),
+        permisos: rol.nombre === 'admin' ? [...nombresContrato] : rol.permisos.filter((permiso): permiso is Schema<'Permiso'>['nombre'] => (nombresContrato as Set<string>).has(permiso)),
         base: true,
         version: 1,
         created_at: creado,
