@@ -81,14 +81,21 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             pago_estado: string | null
         }>
 
-        const reembolsado = async (idProveedor: string) =>
-            Boolean(
-                await t.trx
-                    .from('billing.pasarela_eventos')
-                    .where({ proveedor, id_proveedor: idProveedor, estado: 'reembolsado' })
-                    .select('id')
-                    .first(),
-            )
+        // Σ reembolsado aplicado de un cobro (H60), de los avisos de reembolso que se aplicaron
+        const reembolsado = async (idProveedor: string) => {
+            const fila = (await t.trx
+                .from('billing.pasarela_eventos')
+                .where({ proveedor, id_proveedor: idProveedor, estado: 'reembolsado' })
+                .whereRaw(`coalesce(resultado->>'ignorado', '') = ''`)
+                .select(
+                    t.trx.raw(
+                        `coalesce(sum((payload->'refund'->>'customer_refunded_amount_in_cents')::numeric), 0)::text as centavos`,
+                    ),
+                    t.trx.raw('count(*)::int as n'),
+                )
+                .first()) as { centavos: string; n: number }
+            return { hay: Number(fila.n) > 0, monto: dec(fila.centavos).div(100) }
+        }
         const diferencias: Diferencia[] = []
         const conciliados: number[] = []
         for (const cobro of cobros) {
@@ -108,15 +115,18 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             }
             const pagadoRemoto = remoto.estado === 'pagado'
             const vigente = cobro.pago_id !== null && cobro.pago_estado !== 'anulado'
-            // reembolsado en el proveedor y pago anulado por el webhook: cuadra (el checkout sigue «paid»)
-            if (
-                pagadoRemoto &&
-                !vigente &&
-                cobro.pago_id !== null &&
-                (await reembolsado(cobro.id_proveedor))
-            ) {
-                conciliados.push(cobro.id)
-                continue
+            // reembolsado en el proveedor (el checkout sigue «paid»): cuadra si lo vigente es lo pagado
+            // menos lo reembolsado (total: pago anulado; parcial: el pago de reemplazo)
+            if (pagadoRemoto && cobro.pago_id !== null) {
+                const r = await reembolsado(cobro.id_proveedor)
+                if (r.hay) {
+                    const resto = dec(remoto.monto_pagado ?? '0').minus(r.monto)
+                    const nuestro = vigente ? dec(cobro.pago_monto ?? '0') : dec('0')
+                    if (nuestro.equals(resto.gt(0) ? resto : dec('0'))) {
+                        conciliados.push(cobro.id)
+                        continue
+                    }
+                }
             }
             if (pagadoRemoto && cobro.pago_id === null) {
                 diferencias.push({

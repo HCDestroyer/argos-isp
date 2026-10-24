@@ -2,8 +2,11 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { contextoSistema } from '#shared/contexto'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
 import { estadoServicio, eventosDe, lineasAsiento, servicioCortado } from '#tests/billing/ayudas_billing'
 import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
+import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
+import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { hoyGuatemala } from '#ledger/fechas'
 import {
     CABECERAS_SVIX,
@@ -16,6 +19,9 @@ import {
 import CrearCobroPasarela from '#billing/actions/crear_cobro_pasarela'
 import ProcesarWebhookPasarela from '#billing/actions/procesar_webhook_pasarela'
 import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
+import RegistrarPago from '#billing/actions/registrar_pago'
+import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
+import LiquidarCobros from '#ledger/actions/liquidar_cobros'
 
 /**
  * Adaptador de Recurrente (decisión del PM) con respuestas simuladas según la documentación oficial
@@ -129,7 +135,9 @@ const rutasDe = (checkout: string, extra: Record<string, { status?: number; cuer
     ...extra,
 })
 
-test.group('billing · pasarela Recurrente (simulada)', () => {
+test.group('billing · pasarela Recurrente (simulada)', (group) => {
+    // la prueba de H61 crea empresas propias: se desactivan al terminar
+    group.each.teardown(() => soloEmpresaPrincipal())
     test('crearCobro: POST /checkouts con X-SECRET-KEY, ítem en GTQ en centavos, retorno y referencia', async ({
         assert,
     }) => {
@@ -531,7 +539,7 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
                         intentable: { checkout: { id: checkout } },
                     }),
                 )
-                assert.equal(otra.ignorado, 'pago_ya_anulado')
+                assert.equal(otra.ignorado, 'reembolso_ya_aplicado')
 
                 const c = await new ConciliarPasarela().execute(
                     { fecha: hoyGuatemala() },
@@ -548,6 +556,139 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
                 await afirmarLibroCuadrado(assert)
             },
         )
+    })
+    test('H60: un reembolso parcial anula el pago y registra otro por lo que queda; repetido no se aplica dos veces', async ({
+        assert,
+    }) => {
+        const checkout = `ch_parcial_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                const pago = await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const reembolso = {
+                    event_type: 'refund.update',
+                    refund: {
+                        id: 're_parcial',
+                        status: 'succeeded',
+                        customer_refunded_amount_in_cents: 10000,
+                    },
+                    intentable: { checkout: { id: checkout } },
+                }
+                const r = await procesar(webhook(reembolso))
+                assert.equal(r.pago_id, pago.pago_id)
+                assert.isNumber(r.pago_reemplazo_id)
+                const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+                assert.equal(original.estado, 'anulado')
+                const nuevo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+                assert.include(nuevo, {
+                    estado: 'registrado',
+                    monto: '200.00',
+                    comision: '10.50',
+                    referencia: `${checkout}:reembolso:re_parcial`,
+                })
+                // la deuda vuelve solo por lo reembolsado
+                const pendiente = await db
+                    .from('billing.facturas')
+                    .where('cliente_id', datos.clienteId)
+                    .whereNot('estado', 'anulada')
+                    .select(db.raw('sum(total - pagado)::numeric(14,2)::text as s'))
+                    .firstOrFail()
+                assert.equal(pendiente.s, '100.00')
+                const fila = await db.from('billing.pasarela_cobros').where('id', cobro.id).firstOrFail()
+                assert.equal(Number(fila.pago_id), r.pago_reemplazo_id)
+
+                const otraVez = await procesar(webhook(reembolso))
+                assert.equal(otraVez.ignorado, 'reembolso_ya_aplicado')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H61: un error de negocio responde 2xx con la alerta y no deja nada a medias', async ({
+        assert,
+    }) => {
+        const checkout = `ch_error_${Date.now()}`
+        await conRecurrente(rutasDe(checkout), async () => {
+            const { datos, cobro } = await cobroRecurrente()
+            // otro pago por pasarela ya usa esa referencia: RegistrarPago responde 409
+            await new RegistrarPago().execute(
+                {
+                    cliente_id: datos.clienteId,
+                    metodo: 'pasarela',
+                    monto: '10.00',
+                    pasarela: 'recurrente',
+                    referencia: checkout,
+                },
+                contextoSistema('consola'),
+            )
+            const r = await procesar(webhook(pagado(checkout, 30000, 1050)))
+            assert.include(r, { ignorado: 'error_de_negocio', pago_id: null })
+            assert.match(r.error!, /referencia|duplicad/i)
+            const fila = await db.from('billing.pasarela_cobros').where('id', cobro.id).firstOrFail()
+            assert.equal(fila.estado, 'pendiente')
+            await afirmarLibroCuadrado(assert)
+        })
+    })
+
+    test('H61: con proveedor de cobro, la retención va a 1.1.05 y la liquidación suma el pago menos lo retenido', async ({
+        assert,
+    }) => {
+        // en una empresa propia: el proveedor de cobro queda activo (con pagos ya no se desactiva)
+        const e = await prepararEmpresasGt()
+        const ctx = e.ctx
+        const proveedor = await new CrearProveedorCobro().execute(
+            {
+                empresa_id: e.B,
+                metodo: 'pasarela',
+                pasarela: 'recurrente',
+                nombre: 'Recurrente',
+                cuenta_bancaria_id: e.cuentas.get(e.B)!,
+            },
+            ctx,
+        )
+        const checkout = `ch_pc_${Date.now()}`
+        await conRecurrente(rutasDe(checkout), async () => {
+            const s = await servicioFacturado(e.B, '2026-10-01', {
+                precio: '300.00',
+                instalacion: '2026-10-01',
+            })
+            await new CrearCobroPasarela().execute({ cliente_id: s.clienteId }, contextoSistema('portal'))
+            const r = await procesar(
+                webhook({
+                    event_type: 'intent.succeeded',
+                    checkout: { id: checkout },
+                    amount_in_cents: 30000,
+                    details: { fee: 1050, vat_withheld: 482 },
+                }),
+            )
+            assert.isNumber(r.pago_id, JSON.stringify(r))
+            const movimientos = await lineasAsiento('pago', r.pago_id!)
+            assert.deepInclude(movimientos, [proveedor.cuenta_codigo, '295.18', '0.00', null])
+            assert.deepInclude(movimientos, ['1.1.05', '4.82', '0.00', null])
+            const liquidacion = await new LiquidarCobros().execute(
+                {
+                    proveedor_cobro_id: proveedor.id,
+                    referencia: `LIQ-${checkout}`,
+                    bruto: '295.18',
+                    comision: '10.50',
+                    pagos: [r.pago_id!],
+                },
+                ctx,
+            )
+            assert.equal(liquidacion.neto, '284.68')
+        })
+        // inv. 5 y 13 del auditor todavía piden el puente por el bruto (fila en a3.md): aquí el cuadre
+        await afirmarLibroCuadrado(assert)
     })
 })
 

@@ -1,4 +1,5 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { aperturaCerradaPara } from '#ledger/apertura'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
@@ -12,6 +13,8 @@ import { claveImportacion } from '#billing/importacion'
  * un saldo inicial importado por error. Nunca borra ni edita el libro: revierte cada asiento con
  * `RevertirAsiento` (fecha de hoy, en el periodo abierto).
  *
+ * - H63: si el saldo ya entró en un cierre de apertura (cierre vigente con fecha ≥ la del saldo),
+ *   409 `saldo_con_apertura_cerrada` (no se reabre 2.9.01; se corrige con nota o ajuste del periodo).
  * - Saldo deudor (`monto > 0`): revierte `CxC / 2.9.01` y anula la factura de apertura. Si ya
  *   tiene pagos aplicados → 409 `saldo_con_pagos` (anular primero esos pagos).
  * - Saldo a favor (`monto < 0`): revierte `2.9.01 / Anticipos` y cada aplicación a facturas
@@ -102,6 +105,20 @@ export default class AnularSaldoInicial extends DomainAction<
                 `El saldo inicial ${saldo.clave_externa} ya está anulado`,
                 'saldo_inicial_anulado',
                 'Saldo inicial anulado',
+            )
+        }
+
+        // H63: si el saldo ya entró en un cierre de apertura, anularlo reabriría 2.9.01 (como la importada)
+        const fila = (await t.trx
+            .from('billing.saldos_iniciales')
+            .where('id', saldo.id)
+            .select(t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`))
+            .firstOrFail()) as { fecha: string }
+        if (await aperturaCerradaPara(t.trx, Number(previo.empresa_id), fila.fecha)) {
+            throw new Conflicto(
+                `El saldo inicial ${saldo.clave_externa} ya entró en el cierre de apertura: corrígelo con una nota de crédito o un ajuste del periodo`,
+                'saldo_con_apertura_cerrada',
+                'Saldo con la apertura cerrada',
             )
         }
 

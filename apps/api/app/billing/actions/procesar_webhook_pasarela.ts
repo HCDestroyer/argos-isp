@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { Problema } from '#shared/errores'
 import logger from '@adonisjs/core/services/logger'
 import { aTexto, dec } from '#ledger/dinero'
 import RegistrarPago from '#billing/actions/registrar_pago'
@@ -29,9 +30,13 @@ import {
  * 6. Retención de IVA de la emisora (H51, `retenido_iva`): el pago entra por el neto
  *    (monto − retención) con una constancia `RET_IVA_TAR` por la retención (1.1.05), así aplica el
  *    bruto a la deuda y el banco queda por lo que de verdad llega.
- * 7. `reembolsado`: anula el pago del cobro (`AnularPago` anidada: la deuda vuelve y el servicio se
- *    re-evalúa). `disputa` (contracargo): sin acción automática; queda registrada y avisada en el
+ * 7. `reembolsado`: total → anula el pago del cobro (`AnularPago` anidada: la deuda vuelve y el
+ *    servicio se re-evalúa); parcial (H60) → anula y registra en la misma transacción un pago nuevo por
+ *    lo que queda (ver `reembolsar`). `disputa` (contracargo): sin acción automática; queda registrada y avisada en el
  *    log, y la conciliación la lista para contabilidad.
+ * 8. Un error de negocio al aplicar un aviso auténtico (H61) se responde 2xx con `ignorado:
+ *    error_de_negocio` y `error`, queda en el evento y en el log: el proveedor no reintenta sin fin y la
+ *    conciliación lo reporta.
  */
 
 export interface EntradaWebhookPasarela {
@@ -49,6 +54,10 @@ export interface ResultadoWebhookPasarela {
     pago_id: number | null
     estado: string
     ignorado?: string
+    /** error de negocio que impidió aplicar el aviso (respondido 2xx para que el proveedor no reintente) */
+    error?: string
+    /** reembolso parcial (H60): el pago nuevo por lo que queda */
+    pago_reemplazo_id?: number
 }
 
 export default class ProcesarWebhookPasarela extends DomainAction<
@@ -97,7 +106,37 @@ export default class ProcesarWebhookPasarela extends DomainAction<
         const eventoId = nuevo.rows[0]!.id
         t.fijarEntidad('evento_pasarela', eventoId)
 
-        const resultado = await this.aplicar(t, input.proveedor, aviso)
+        let resultado: ResultadoWebhookPasarela
+        // todo lo que aplica el aviso va en un savepoint: si falla por negocio, se deshace entero
+        await t.trx.rawQuery('SAVEPOINT webhook_aplicar')
+        try {
+            resultado = await this.aplicar(t, input.proveedor, aviso)
+            await t.trx.rawQuery('RELEASE SAVEPOINT webhook_aplicar')
+        } catch (error) {
+            await t.trx.rawQuery('ROLLBACK TO SAVEPOINT webhook_aplicar')
+            // H61: un aviso auténtico con un error de negocio responde 2xx (si no, el proveedor reintenta
+            // sin fin) y deja la alerta en el log y en el evento; la conciliación lo reporta
+            if (!(error instanceof Problema) || error.status >= 500) throw error
+            logger.warn(
+                {
+                    proveedor: input.proveedor,
+                    id_evento: aviso.id_evento,
+                    id_proveedor: aviso.id_proveedor,
+                    error: error.tipo,
+                },
+                `Aviso de la pasarela sin aplicar: ${error.detalle ?? error.message}`,
+            )
+            resultado = {
+                recibido: true,
+                duplicado: false,
+                id_evento: aviso.id_evento,
+                estado: aviso.estado,
+                cobro_id: null,
+                pago_id: null,
+                ignorado: 'error_de_negocio',
+                error: `${error.tipo.split(':').at(-1)}: ${error.detalle ?? error.message}`,
+            }
+        }
         await t.trx
             .from('billing.pasarela_eventos')
             .where('id', eventoId)
@@ -153,30 +192,7 @@ export default class ProcesarWebhookPasarela extends DomainAction<
         t.fijarEntidad('cobro_pasarela', cobro.id)
         t.fijarEmpresa(Number(cobro.empresa_id))
 
-        if (aviso.estado === 'reembolsado') {
-            if (cobro.pago_id === null) {
-                return { ...base, cobro_id: cobro.id, pago_id: null, ignorado: 'reembolso_sin_pago' }
-            }
-            const pago = (await t.trx
-                .from('billing.pagos')
-                .where('id', cobro.pago_id)
-                .select('estado')
-                .first()) as {
-                estado: string
-            } | null
-            if (pago?.estado === 'anulado') {
-                return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'pago_ya_anulado' }
-            }
-            await new AnularPago().execute(
-                {
-                    pago_id: cobro.pago_id,
-                    motivo: `Reembolso en ${proveedor}${aviso.referencia_evento ? ` (${aviso.referencia_evento})` : ''}`,
-                },
-                t.ctx,
-                { trx: t.trx },
-            )
-            return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id }
-        }
+        if (aviso.estado === 'reembolsado') return this.reembolsar(t, proveedor, aviso, cobro, base)
 
         if (cobro.estado === 'pagado') {
             return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'cobro_ya_pagado' }
@@ -280,5 +296,122 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             proveedor,
             motivo: typeof razon === 'string' && razon ? razon : null,
         })
+    }
+
+    /**
+     * Reembolso hecho en el proveedor (H60). Total (lo reembolsado ≥ el pago vigente): anula el pago.
+     * Parcial: anula el pago vigente y, en la misma transacción, registra uno nuevo por lo que queda
+     * (pago − reembolsado) a las mismas facturas, con la misma comisión (§15 #104) y sus constancias,
+     * referencia `<referencia>:reembolso:<id>`; el cobro apunta al pago nuevo. Así la deuda vuelve solo
+     * por lo reembolsado. Idempotente por id del reembolso.
+     */
+    private async reembolsar(
+        t: Transaccion,
+        proveedor: string,
+        aviso: NotificacionPasarela,
+        cobro: { id: number; empresa_id: number; cliente_id: number; pago_id: number | null },
+        base: { recibido: true; duplicado: boolean; id_evento: string; estado: string },
+    ): Promise<ResultadoWebhookPasarela> {
+        if (cobro.pago_id === null) {
+            return { ...base, cobro_id: cobro.id, pago_id: null, ignorado: 'reembolso_sin_pago' }
+        }
+        const refundId = aviso.referencia_evento ?? aviso.id_evento
+        const aplicado = await t.trx
+            .from('billing.pasarela_eventos')
+            .where({ proveedor, id_proveedor: aviso.id_proveedor, estado: 'reembolsado' })
+            .whereNot('id_evento', aviso.id_evento)
+            .whereRaw(`payload->'refund'->>'id' = ?`, [refundId])
+            .whereRaw(`coalesce(resultado->>'ignorado', '') = ''`)
+            .select('id')
+            .first()
+        if (aplicado) {
+            return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'reembolso_ya_aplicado' }
+        }
+        const pago = (await t.trx
+            .from('billing.pagos')
+            .where('id', cobro.pago_id)
+            .select('id', 'estado', 'monto', 'retenido', 'comision', 'referencia', 'cliente_id')
+            .firstOrFail()) as {
+            id: number
+            estado: string
+            monto: string
+            retenido: string
+            comision: string
+            referencia: string | null
+            cliente_id: number
+        }
+        if (pago.estado === 'anulado') {
+            return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'pago_ya_anulado' }
+        }
+        const reembolsado = dec(aviso.monto)
+        const queda = dec(pago.monto).minus(reembolsado)
+        const facturas = (await t.trx
+            .from('billing.pagos_aplicaciones')
+            .where('pago_id', pago.id)
+            .orderBy('id', 'asc')
+            .select('factura_id')) as Array<{ factura_id: number }>
+        const constancias = (await t.trx
+            .from('ledger.constancias_retencion')
+            .where({ pago_id: pago.id, direccion: 'recibida' })
+            .select(
+                'impuesto_codigo',
+                'numero',
+                t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`),
+                'monto',
+            )) as Array<{
+            impuesto_codigo: string
+            numero: string
+            fecha: string
+            monto: string
+        }>
+        const motivo = `Reembolso en ${proveedor} (${refundId})`
+        await new AnularPago().execute(
+            {
+                pago_id: pago.id,
+                motivo:
+                    reembolsado.gt(0) && queda.gt(0)
+                        ? `${motivo}: parcial de Q${aTexto(reembolsado)}`
+                        : motivo,
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        // total (o sin monto en el aviso): solo se anula
+        if (reembolsado.lte(0) || queda.lte(0)) return { ...base, cobro_id: cobro.id, pago_id: pago.id }
+
+        const retenido = dec(pago.retenido)
+        const conRetencion = queda.gt(retenido) && retenido.gt(0)
+        const reemplazo = await new RegistrarPago().execute(
+            {
+                cliente_id: Number(pago.cliente_id),
+                metodo: 'pasarela',
+                monto: aTexto(conRetencion ? queda.minus(retenido) : queda),
+                comision: dec(pago.comision).gt(0) ? aTexto(pago.comision) : null,
+                pasarela: proveedor,
+                referencia: `${pago.referencia ?? aviso.id_proveedor}:reembolso:${refundId}`,
+                facturas: facturas.map((f) => Number(f.factura_id)),
+                retenciones: conRetencion
+                    ? constancias.map((c) => ({
+                          codigo: c.impuesto_codigo,
+                          numero: c.numero,
+                          fecha: c.fecha,
+                          monto: c.monto,
+                      }))
+                    : undefined,
+                nota: `Pago en línea (cobro ${cobro.id}) tras el reembolso parcial ${refundId} del pago ${pago.id}`,
+                empresa_id: Number(cobro.empresa_id),
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
+        await t.trx
+            .from('billing.pasarela_cobros')
+            .where('id', cobro.id)
+            .update({
+                pago_id: reemplazo.id,
+                version: t.trx.knexRawQuery('version + 1'),
+                updated_at: t.trx.knexRawQuery('now()'),
+            } as Record<string, unknown>)
+        return { ...base, cobro_id: cobro.id, pago_id: pago.id, pago_reemplazo_id: reemplazo.id }
     }
 }

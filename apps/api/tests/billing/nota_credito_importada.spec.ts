@@ -11,6 +11,12 @@ import AnularFactura from '#billing/actions/anular_factura'
 import CerrarApertura from '#ledger/actions/cerrar_apertura'
 import { cuentaIngresoDeLinea } from '#billing/facturas'
 import { errorDe } from '#tests/contabilidad/ayudas_contabilidad'
+import { empresasSinFel } from '#tests/contabilidad/ayudas_libros'
+import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
+import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
+import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
+import { construirLibro, finDeMes } from '#fiscal/libros_legales'
+import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
 import { verFactura } from '#billing/facturas'
 import type { ContextoAccion } from '#shared/contexto'
@@ -181,5 +187,78 @@ test.group('Facturación · nota de crédito sobre una factura importada (H27, H
         assert.equal(await saldoCuenta(e.B, '2.9.01'), '0.00')
         assert.equal(await saldoCuenta(e.B, '1.1.03'), '0.00')
         await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H64: una importada posterior al cierre de apertura se anula normal contra 2.9.01', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        await importada(e.ctx, e.B, '50.00', '2026-09-05')
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: '2026-09-30' }, e.ctx)
+        const tardia = await importada(e.ctx, e.B, '112.00', '2026-10-01')
+        await new AnularFactura().execute({ factura_id: tardia.id, motivo: 'importación errónea' }, e.ctx)
+        assert.equal(await saldoCuenta(e.B, '2.9.01'), '0.00')
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H63: un saldo inicial que ya entró en el cierre de apertura no se anula (409); uno posterior sí', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const cliente = await crearClienteFila()
+        const saldo = (fecha: string, monto: string) =>
+            new RegistrarSaldoInicial().execute(
+                {
+                    origen: 'prueba_h63',
+                    id_externo: unico('s'),
+                    cliente_id: cliente,
+                    empresa_id: e.B,
+                    monto,
+                    fecha,
+                },
+                e.ctx,
+            )
+        const antes = await saldo('2026-09-07', '80.00')
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: '2026-09-30' }, e.ctx)
+        const r = await errorDe(
+            new AnularSaldoInicial().execute(
+                { saldo_inicial_id: antes.saldo_inicial_id, motivo: 'tras el cierre' },
+                e.ctx,
+            ),
+        )
+        assert.deepInclude(r, { status: 409, codigo: 'saldo_con_apertura_cerrada' })
+        const despues = await saldo('2026-10-02', '-15.00')
+        await new AnularSaldoInicial().execute(
+            { saldo_inicial_id: despues.saldo_inicial_id, motivo: 'error de carga' },
+            e.ctx,
+        )
+        assert.equal(await saldoCuenta(e.B, '2.9.01'), '0.00')
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H62: en pequeño contribuyente la importada no desglosa IVA y su nota sale en el libro de ventas', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        await new CambiarRegimen().execute(
+            {
+                empresa_id: e.B,
+                regimen: 'pequeno_contribuyente',
+                vigente_desde: '2014-01-01',
+                motivo: 'Inscripción',
+            },
+            e.ctx,
+        )
+        const f = await importada(e.ctx, e.B, '200.00', '2026-08-10')
+        assert.equal(f.iva, '0.00')
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '50.00', motivo: 'rebaja PC' },
+            e.ctx,
+        )
+        assert.equal(nota.iva, '0.00')
+        assert.isTrue(dec(await saldoCuenta(e.B, '2.1.02')).isZero())
+        const hoy = hoyGuatemala()
+        const ventas = await construirLibro('ventas', e.B, { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) })
+        assert.equal(ventas.reporte.totales.total, '-50.00')
     })
 })
