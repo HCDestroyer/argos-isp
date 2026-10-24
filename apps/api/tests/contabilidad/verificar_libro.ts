@@ -11,6 +11,7 @@ import { verificarCadena } from '#ledger/sellos'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { construirLibro, esLibroEmitible } from '#fiscal/libros_legales'
 import { sinIvaPorRegimen } from '#billing/regimen'
+import { existenciasDelKardex, valorKardex } from '#inventario/kardex'
 
 /**
  * Auditor contable · `verificarLibro(empresaId?)`.
@@ -131,6 +132,8 @@ const PASIVO_LEALTAD = '2.1.10'
 const DIFERIDOS_LEALTAD = '4.1.05'
 const INGRESOS_PUNTOS = '4.1.06'
 const ESTADOS_PENDIENTES = `('emitida', 'parcial', 'vencida')`
+/** inventario (`contratos/inventario.md` §3): la única cuenta del kardex */
+const INVENTARIOS = CUENTAS_GT.INVENTARIOS
 
 /** Empresas sobre las que se verifica: la pedida (o las pedidas) o todas. */
 async function empresasDelAlcance(empresaId?: number | number[] | null): Promise<number[]> {
@@ -573,7 +576,7 @@ async function verificarLibroCon(
     await revisar(
         '6.documento_y_asiento_de_empresas_distintas',
         `SELECT a.id AS asiento_id, a.origen_tipo, a.origen_id, a.empresa_id,
-                coalesce(p.empresa_id, f.empresa_id, n.empresa_id, e.empresa_id, cj.empresa_id, s.empresa_id) AS empresa_documento
+                coalesce(p.empresa_id, f.empresa_id, n.empresa_id, e.empresa_id, cj.empresa_id, s.empresa_id, im.empresa_id) AS empresa_documento
            FROM ledger.asientos a
            LEFT JOIN billing.pagos p ON a.origen_tipo = 'pago' AND p.id = a.origen_id
            LEFT JOIN billing.facturas f ON a.origen_tipo IN ('factura', 'mora') AND f.id = a.origen_id
@@ -582,11 +585,13 @@ async function verificarLibroCon(
            LEFT JOIN ledger.cajas_turnos t ON a.origen_tipo = 'cierre_caja' AND t.id = a.origen_id
            LEFT JOIN ledger.cajas cj ON cj.id = t.caja_id
            LEFT JOIN billing.saldos_iniciales s ON a.origen_tipo = 'ajuste' AND s.id = a.origen_id
+           -- inventario fase A: el asiento propio del kardex es de la empresa de su movimiento
+           LEFT JOIN inventario.movimientos im ON a.origen_tipo = 'inventario' AND im.id = a.origen_id
           WHERE ${E('a.empresa_id')}
             AND (a.empresa_id <> coalesce(p.empresa_id, f.empresa_id, n.empresa_id, e.empresa_id, cj.empresa_id,
-                                          s.empresa_id, a.empresa_id)
-                 OR (a.origen_tipo IN ('pago', 'factura', 'mora', 'nota_credito', 'egreso', 'cierre_caja')
-                     AND coalesce(p.id, f.id, n.id, e.id, t.id) IS NULL))`,
+                                          s.empresa_id, im.empresa_id, a.empresa_id)
+                 OR (a.origen_tipo IN ('pago', 'factura', 'mora', 'nota_credito', 'egreso', 'cierre_caja', 'inventario')
+                     AND coalesce(p.id, f.id, n.id, e.id, t.id, im.id) IS NULL))`,
     )
     await revisar(
         '6.pago_con_caja_turno_o_cuenta_de_otra_empresa',
@@ -1048,7 +1053,9 @@ async function verificarLibroCon(
                                       'baja_activo', 'diferido', 'alta_activo', 'lealtad', 'diferencia_cobro',
                                       'sorteo', 'bonificacion', 'cierre_anual',
                                       -- fase 7 PR B (§10.6): liquidación de una declaración y su pago
-                                      'liquidacion_impuesto', 'pago_impuesto')`,
+                                      'liquidacion_impuesto', 'pago_impuesto',
+                                      -- inventario fase A (§5): consumo, ajuste, baja y saldo inicial (inv. 24)
+                                      'inventario')`,
     )
 
     /*
@@ -3824,6 +3831,212 @@ async function verificarLibroCon(
     }
 
     /*
+    | 24 · Inventario, fase A (`contratos/inventario.md` §5 y §8; rama a3/inventario-a). El kardex
+    | (`inventario.movimientos`, solo inserción) es la verdad: 1.1.14 = Σ `costo_total` a cualquier
+    | fecha y por empresa (§8.1), la proyección `inventario.saldos` = Σ kardex por producto y bodega
+    | (§8.2), ninguna existencia negativa ni valor sin existencia en ninguna fecha (§8.4) y cada
+    | asiento mueve 1.1.14 exactamente por los movimientos que lo citan (§8.5). Más los del auditor:
+    | la contrapartida de cada asiento propio, la entrada de cada compra = sus líneas de inventario
+    | (al costo con o sin IVA según su crédito fiscal), el reverso de las anuladas, los traslados en
+    | pareja y sin asiento. SQL propio: no usa `valorKardex` ni `existenciasDelKardex` (esas se cruzan
+    | con estos en `verificarConFuncionesProducto`).
+    */
+    await revisar(
+        '24.libro_distinto_del_kardex_a_una_fecha (§8.1: saldo de 1.1.14 al día = Σ costo_total del kardex hasta ese día, por empresa)',
+        `WITH libro AS (
+             SELECT a.empresa_id, a.fecha, sum(m.debe - m.haber) AS neto
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${INVENTARIOS}' AND ${E('a.empresa_id')}
+              GROUP BY 1, 2
+         ), kardex AS (
+             SELECT empresa_id, fecha, sum(costo_total) AS neto FROM inventario.movimientos
+              WHERE ${E('empresa_id')} GROUP BY 1, 2
+         ), dias AS (
+             SELECT empresa_id, fecha FROM libro UNION SELECT empresa_id, fecha FROM kardex
+         ), acumulado AS (
+             SELECT d.empresa_id, d.fecha,
+                    (SELECT coalesce(sum(l.neto), 0) FROM libro l WHERE l.empresa_id = d.empresa_id AND l.fecha <= d.fecha) AS libro,
+                    (SELECT coalesce(sum(k.neto), 0) FROM kardex k WHERE k.empresa_id = d.empresa_id AND k.fecha <= d.fecha) AS kardex
+               FROM dias d
+         )
+         SELECT empresa_id, to_char(fecha, 'YYYY-MM-DD') AS fecha, libro::text, kardex::text
+           FROM acumulado WHERE libro <> kardex ORDER BY empresa_id, fecha`,
+    )
+    await revisar(
+        '24.saldos_distintos_del_kardex (§8.2: inventario.saldos = Σ kardex por producto y bodega, cantidad y valor, de la misma empresa)',
+        `WITH k AS (
+             SELECT empresa_id, producto_id, bodega_id, sum(cantidad) AS cantidad, sum(costo_total) AS valor
+               FROM inventario.movimientos WHERE ${E('empresa_id')} GROUP BY 1, 2, 3
+         ), s AS (
+             SELECT * FROM inventario.saldos WHERE ${E('empresa_id')}
+         )
+         SELECT coalesce(k.producto_id, s.producto_id) AS producto_id, coalesce(k.bodega_id, s.bodega_id) AS bodega_id,
+                k.empresa_id AS empresa_kardex, s.empresa_id AS empresa_saldo,
+                k.cantidad::text AS cantidad_kardex, s.cantidad::text AS cantidad_saldo,
+                k.valor::text AS valor_kardex, s.valor::text AS valor_saldo
+           FROM k FULL JOIN s ON s.producto_id = k.producto_id AND s.bodega_id = k.bodega_id
+          WHERE (k.producto_id IS NULL AND (s.cantidad <> 0 OR s.valor <> 0))
+             OR (s.producto_id IS NULL)
+             OR k.cantidad <> s.cantidad OR k.valor <> s.valor OR k.empresa_id <> s.empresa_id`,
+    )
+    await revisar(
+        '24.existencia_negativa_en_una_fecha (§8.4: por producto y bodega, al cierre de cada día del kardex, cantidad ≥ 0, valor ≥ 0 y sin valor cuando no hay existencia)',
+        `WITH d AS (
+             SELECT empresa_id, producto_id, bodega_id, fecha, sum(cantidad) AS cantidad, sum(costo_total) AS valor
+               FROM inventario.movimientos WHERE ${E('empresa_id')} GROUP BY 1, 2, 3, 4
+         ), acumulado AS (
+             SELECT d.*, sum(cantidad) OVER w AS existencia, sum(valor) OVER w AS saldo
+               FROM d WINDOW w AS (PARTITION BY producto_id, bodega_id ORDER BY fecha)
+         )
+         SELECT empresa_id, producto_id, bodega_id, to_char(fecha, 'YYYY-MM-DD') AS fecha,
+                existencia::text, saldo::text
+           FROM acumulado WHERE existencia < 0 OR saldo < 0 OR (existencia = 0 AND saldo <> 0)`,
+    )
+    await revisar(
+        '24.existencia_negativa_en_orden_de_registro (lo mismo después de cada movimiento, en el orden del costo promedio)',
+        `WITH acumulado AS (
+             SELECT m.id, m.empresa_id, m.producto_id, m.bodega_id,
+                    sum(m.cantidad) OVER w AS existencia, sum(m.costo_total) OVER w AS saldo
+               FROM inventario.movimientos m WHERE ${E('m.empresa_id')}
+             WINDOW w AS (PARTITION BY m.producto_id, m.bodega_id ORDER BY m.id)
+         )
+         SELECT id AS movimiento_id, empresa_id, producto_id, bodega_id, existencia::text, saldo::text
+           FROM acumulado WHERE existencia < 0 OR saldo < 0 OR (existencia = 0 AND saldo <> 0)`,
+    )
+    await revisar(
+        '24.movimiento_mal_formado (con costo y sin asiento salvo el traslado; traslado con asiento; costo_unitario = |costo| / |cantidad|; producto y bodega de su empresa)',
+        `SELECT m.id, m.empresa_id, m.tipo, m.cantidad::text, m.costo_unitario::text, m.costo_total::text, m.asiento_id,
+                p.empresa_id AS empresa_producto, b.empresa_id AS empresa_bodega
+           FROM inventario.movimientos m
+           JOIN inventario.productos p ON p.id = m.producto_id
+           JOIN inventario.bodegas b ON b.id = m.bodega_id
+          WHERE ${E('m.empresa_id')}
+            AND ((m.tipo <> 'traslado' AND m.costo_total <> 0 AND m.asiento_id IS NULL)
+                 OR (m.tipo = 'traslado' AND m.asiento_id IS NOT NULL)
+                 OR m.costo_unitario <> round(abs(m.costo_total) / abs(m.cantidad), 6)
+                 OR p.empresa_id <> m.empresa_id OR b.empresa_id <> m.empresa_id)`,
+    )
+    await revisar(
+        '24.asiento_mueve_1114_distinto_del_kardex (§8.5: en cada asiento, 1.1.14 neto = Σ costo_total de los movimientos del kardex que lo citan; ningún asiento mueve 1.1.14 sin kardex)',
+        `WITH l AS (
+             SELECT a.id, a.empresa_id, a.origen_tipo, a.origen_id, sum(m.debe - m.haber) AS neto
+               FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE c.codigo = '${INVENTARIOS}' AND ${E('a.empresa_id')}
+              GROUP BY a.id
+         ), k AS (
+             SELECT asiento_id AS id, sum(costo_total) AS neto FROM inventario.movimientos
+              WHERE asiento_id IS NOT NULL AND ${E('empresa_id')} GROUP BY 1
+         )
+         SELECT coalesce(l.id, k.id) AS asiento_id, l.empresa_id, l.origen_tipo, l.origen_id,
+                coalesce(l.neto, 0)::text AS libro, coalesce(k.neto, 0)::text AS kardex
+           FROM l FULL JOIN k ON k.id = l.id
+          WHERE coalesce(l.neto, 0) <> coalesce(k.neto, 0)`,
+    )
+    await revisar(
+        '24.asiento_propio_mal_ligado (consumo, ajuste, baja y saldo inicial: su asiento es origen inventario con origen_id = el movimiento, sin reverso; todo asiento inventario es de un movimiento de su empresa que lo cita; compras: el original de su compra, y el reverso el espejo del de su entrada)',
+        `SELECT m.id AS movimiento_id, m.tipo, m.asiento_id, a.origen_tipo, a.origen_id, a.reversa_de
+           FROM inventario.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+          WHERE ${E('m.empresa_id')}
+            AND CASE
+                    WHEN m.tipo IN ('consumo', 'ajuste', 'baja', 'saldo_inicial', 'ajuste_conteo') THEN
+                        a.origen_tipo <> 'inventario' OR a.origen_id <> m.id OR a.reversa_de IS NOT NULL
+                        OR EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)
+                    WHEN m.tipo = 'entrada_compra' THEN
+                        a.origen_tipo <> 'compra' OR m.origen_tipo IS DISTINCT FROM 'compra' OR a.origen_id <> m.origen_id
+                        OR a.reversa_de IS NOT NULL
+                    WHEN m.tipo = 'reverso_compra' THEN
+                        a.origen_tipo <> 'compra' OR a.origen_id <> m.origen_id
+                        OR a.reversa_de IS DISTINCT FROM (SELECT e.asiento_id FROM inventario.movimientos e WHERE e.id = m.reverso_de)
+                    ELSE false
+                END
+         UNION ALL
+         SELECT NULL, 'sin_movimiento', a.id, a.origen_tipo, a.origen_id, a.reversa_de
+           FROM ledger.asientos a
+          WHERE a.origen_tipo = 'inventario' AND ${E('a.empresa_id')}
+            AND NOT EXISTS (SELECT 1 FROM inventario.movimientos m
+                             WHERE m.id = a.origen_id AND m.asiento_id = a.id AND m.empresa_id = a.empresa_id)`,
+    )
+    await revisar(
+        '24.asiento_propio_con_otra_contrapartida (consumo → una sola cuenta de gasto, la cuenta_consumo del producto o 5.2.07, que puede haber cambiado después; baja y faltante → 5.6.02; sobrante → 4.2.04; saldo inicial → 2.9.01; solo esa cuenta contra 1.1.14, por −costo_total)',
+        `WITH esperado AS (
+             SELECT m.id, m.tipo, m.asiento_id, m.costo_total,
+                    CASE
+                        -- la del asiento si es de gasto (la del producto pudo cambiar después del consumo)
+                        WHEN m.tipo = 'consumo' THEN coalesce(
+                            (SELECT min(c.codigo) FROM ledger.movimientos mm JOIN ledger.cuentas c ON c.id = mm.cuenta_id
+                              WHERE mm.asiento_id = m.asiento_id AND c.tipo = 'gasto' AND c.imputable),
+                            coalesce(p.cuenta_consumo, '${CUENTAS_GT.MATERIALES_INSTALACION}'))
+                        WHEN m.tipo = 'baja' THEN '${CUENTAS_GT.MERMAS_INVENTARIO}'
+                        WHEN m.tipo IN ('ajuste', 'ajuste_conteo') AND m.cantidad < 0 THEN '${CUENTAS_GT.MERMAS_INVENTARIO}'
+                        WHEN m.tipo IN ('ajuste', 'ajuste_conteo') THEN '${CUENTAS_GT.SOBRANTES_INVENTARIO}'
+                        WHEN m.tipo = 'saldo_inicial' THEN '${APERTURA}'
+                    END AS cuenta
+               FROM inventario.movimientos m JOIN inventario.productos p ON p.id = m.producto_id
+              WHERE m.asiento_id IS NOT NULL AND ${E('m.empresa_id')}
+                AND m.tipo IN ('consumo', 'ajuste', 'baja', 'saldo_inicial', 'ajuste_conteo')
+         )
+         SELECT x.id AS movimiento_id, x.tipo, x.asiento_id, x.cuenta AS esperada, x.costo_total::text,
+                (SELECT string_agg(c.codigo || ' ' || (mm.debe - mm.haber)::text, ', ' ORDER BY mm.id)
+                   FROM ledger.movimientos mm JOIN ledger.cuentas c ON c.id = mm.cuenta_id
+                  WHERE mm.asiento_id = x.asiento_id AND c.codigo <> '${INVENTARIOS}') AS contrapartidas
+           FROM esperado x
+          WHERE EXISTS (SELECT 1 FROM ledger.movimientos mm JOIN ledger.cuentas c ON c.id = mm.cuenta_id
+                         WHERE mm.asiento_id = x.asiento_id AND c.codigo NOT IN ('${INVENTARIOS}', x.cuenta))
+             OR (SELECT coalesce(sum(mm.debe - mm.haber), 0) FROM ledger.movimientos mm JOIN ledger.cuentas c ON c.id = mm.cuenta_id
+                  WHERE mm.asiento_id = x.asiento_id AND c.codigo = x.cuenta) <> -x.costo_total`,
+    )
+    await revisar(
+        '24.compra_distinta_de_su_entrada (por compra, producto y bodega: Σ entradas = Σ cantidad de sus líneas de inventario, al costo base con crédito fiscal o base + IVA sin él; una NCRE no entra en la fase A)',
+        `WITH lineas AS (
+             SELECT c.id AS compra_id, l.producto_id, l.bodega_id, sum(l.cantidad) AS cantidad,
+                    sum(CASE WHEN c.credito_fiscal THEN l.base ELSE l.base + l.iva END) AS costo
+               FROM ledger.compras c JOIN ledger.compras_lineas l ON l.compra_id = c.id
+              WHERE l.producto_id IS NOT NULL AND ${E('c.empresa_id')}
+              GROUP BY 1, 2, 3
+         ), entradas AS (
+             SELECT origen_id AS compra_id, producto_id, bodega_id, sum(cantidad) AS cantidad, sum(costo_total) AS costo
+               FROM inventario.movimientos
+              WHERE tipo = 'entrada_compra' AND ${E('empresa_id')}
+              GROUP BY 1, 2, 3
+         )
+         SELECT coalesce(l.compra_id, e.compra_id) AS compra_id, coalesce(l.producto_id, e.producto_id) AS producto_id,
+                coalesce(l.bodega_id, e.bodega_id) AS bodega_id, l.cantidad::text AS cantidad_lineas,
+                e.cantidad::text AS cantidad_kardex, l.costo::text AS costo_lineas, e.costo::text AS costo_kardex
+           FROM lineas l FULL JOIN entradas e
+             ON e.compra_id = l.compra_id AND e.producto_id = l.producto_id AND e.bodega_id = l.bodega_id
+          WHERE l.compra_id IS NULL OR e.compra_id IS NULL OR l.cantidad <> e.cantidad OR l.costo <> e.costo`,
+    )
+    await revisar(
+        '24.compra_anulada_sin_reverso_de_su_entrada (anulada ⇔ cada entrada tiene su reverso_compra espejo: mismo producto, bodega, −cantidad y −costo; un reverso siempre de una entrada)',
+        `SELECT m.id AS entrada_id, m.origen_id AS compra_id, m.cantidad::text, m.costo_total::text,
+                r.id AS reverso_id, r.cantidad::text AS cantidad_reverso, r.costo_total::text AS costo_reverso
+           FROM inventario.movimientos m
+           LEFT JOIN inventario.movimientos r ON r.reverso_de = m.id
+          WHERE m.tipo = 'entrada_compra' AND ${E('m.empresa_id')}
+            AND (EXISTS (SELECT 1 FROM ledger.compras_anulaciones x WHERE x.compra_id = m.origen_id) <> (r.id IS NOT NULL)
+                 OR (r.id IS NOT NULL AND (r.tipo <> 'reverso_compra' OR r.producto_id <> m.producto_id
+                     OR r.bodega_id <> m.bodega_id OR r.cantidad <> -m.cantidad OR r.costo_total <> -m.costo_total
+                     OR r.origen_id IS DISTINCT FROM m.origen_id)))
+         UNION ALL
+         SELECT r.reverso_de, r.origen_id, NULL, NULL, r.id, r.cantidad::text, r.costo_total::text
+           FROM inventario.movimientos r LEFT JOIN inventario.movimientos m ON m.id = r.reverso_de
+          WHERE r.tipo = 'reverso_compra' AND ${E('r.empresa_id')} AND (m.id IS NULL OR m.tipo <> 'entrada_compra')`,
+    )
+    await revisar(
+        '24.traslado_mal_formado (dos movimientos por traslado_id, del mismo producto, empresa y fecha, en bodegas distintas, que suman cero en cantidad y costo)',
+        `SELECT traslado_id, count(*)::int AS movimientos, sum(cantidad)::text AS cantidad, sum(costo_total)::text AS costo,
+                count(DISTINCT producto_id)::int AS productos, count(DISTINCT bodega_id)::int AS bodegas,
+                count(DISTINCT fecha)::int AS fechas, count(DISTINCT empresa_id)::int AS empresas
+           FROM inventario.movimientos
+          WHERE tipo = 'traslado' AND ${E('empresa_id')}
+          GROUP BY traslado_id
+         HAVING count(*) <> 2 OR sum(cantidad) <> 0 OR sum(costo_total) <> 0 OR count(DISTINCT producto_id) <> 1
+             OR count(DISTINCT bodega_id) <> 2 OR count(DISTINCT fecha) <> 1 OR count(DISTINCT empresa_id) <> 1`,
+    )
+
+    /*
     | 11 · Integridad (§10.10): la parte sellada de la cadena de hash de cada empresa verifica
     */
     for (const empresa of empresas) {
@@ -3875,6 +4088,39 @@ async function verificarConFuncionesProducto(
 ): Promise<Violacion[]> {
     const violaciones: Violacion[] = []
     const E = (col: string) => en(col, empresas)
+
+    // 24 · lecturas del inventario para el auditor (`#inventario/kardex`): `valorKardex` = 1.1.14 del
+    // libro (§8.1) y `existenciasDelKardex` = `inventario.saldos` (§8.2), hoy
+    for (const empresaId of empresas) {
+        const [libro] = await filas(
+            `SELECT coalesce(sum(m.debe - m.haber), 0)::text AS saldo
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.empresa_id = ${empresaId} AND c.codigo = '${INVENTARIOS}'`,
+        )
+        const kardex = await valorKardex(empresaId, null, clienteLectura ?? db.connection())
+        if (!kardex.equals(dec(String(libro!.saldo)))) {
+            violaciones.push({
+                invariante: '24.valorKardex_distinto_de_1.1.14',
+                detalle: { empresa_id: empresaId, valorKardex: kardex.toFixed(2), libro: libro!.saldo },
+            })
+        }
+        const existencias = await existenciasDelKardex(empresaId, null, clienteLectura ?? db.connection())
+        const saldos = await filas(
+            `SELECT producto_id, bodega_id, cantidad::text, valor::text FROM inventario.saldos
+              WHERE empresa_id = ${empresaId} ORDER BY producto_id, bodega_id`,
+        )
+        const clave = (f: { producto_id: unknown; bodega_id: unknown; cantidad: unknown; valor: unknown }) =>
+            `${Number(f.producto_id)}/${Number(f.bodega_id)}:${dec(String(f.cantidad)).toFixed(3)}/${dec(String(f.valor)).toFixed(2)}`
+        const a = existencias.map(clave).join(' ')
+        const b = saldos.map((f) => clave(f as never)).join(' ')
+        if (a !== b) {
+            violaciones.push({
+                invariante: '24.existenciasDelKardex_distintas_de_saldos',
+                detalle: { empresa_id: empresaId, existenciasDelKardex: a, saldos: b },
+            })
+        }
+    }
 
     // 3 · saldo del cliente (función del producto) = suma de su auxiliar, y Σ auxiliares = control
     const conMovimientos = clientes
