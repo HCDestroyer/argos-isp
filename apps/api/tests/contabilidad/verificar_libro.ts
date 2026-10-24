@@ -2507,7 +2507,7 @@ async function verificarLibroCon(
             AND NOT EXISTS (SELECT 1 FROM ledger.activos_cuotas q WHERE q.asiento_id = a.id)`,
     )
     await revisar(
-        '15.alta_de_activo_mal_contabilizada (desde la compra: su línea activo_fijo, costo = base con crédito o base + IVA sin él, sin asiento propio; a mano: alta_activo 1.2.01 = costo / 1.2.02 = inicial + contrapartida; en comodato: el asiento de su asignación, 1.2.01 = costo / 1.1.14)',
+        '15.alta_de_activo_mal_contabilizada (desde la compra: su línea activo_fijo, costo = base con crédito o base + IVA sin él, sin asiento propio; a mano: alta_activo 1.2.01 = costo / 1.2.02 = inicial + contrapartida; en comodato: el asiento de su asignación, 1.2.01 = costo / 1.1.14, o en Q0 sin asiento ni cuotas)',
         `WITH alta AS (
              SELECT a.origen_id AS activo_id, count(DISTINCT a.id) AS asientos,
                     sum(CASE WHEN m.cuenta_id = ac.cuenta_activo_id THEN m.debe - m.haber ELSE 0 END) AS costo,
@@ -2530,6 +2530,15 @@ async function verificarLibroCon(
           WHERE ${E('ac.empresa_id')}
             AND CASE -- inventario fase B: el alta de un equipo en comodato es el asiento de su asignación
                      -- (origen inventario): 1.2.01.NN = costo / 1.1.14 = costo, nada más (inv. 24.comodato_*)
+                     WHEN ac.unidad_id IS NOT NULL AND ac.costo = 0
+                     -- un equipo totalmente depreciado que se presta otra vez: activo en Q0, sin asiento
+                     THEN ac.compra_id IS NOT NULL OR ac.compra_linea_id IS NOT NULL OR alta.activo_id IS NOT NULL
+                          OR ac.depreciacion_inicial <> 0 OR ac.valor_residual <> 0
+                          OR EXISTS (SELECT 1 FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id)
+                          OR NOT EXISTS (
+                              SELECT 1 FROM inventario.movimientos im
+                               WHERE im.tipo = 'asignacion_comodato' AND im.unidad_id = ac.unidad_id
+                                 AND im.fecha = ac.fecha_alta AND im.costo_total = 0 AND im.asiento_id IS NULL)
                      WHEN ac.unidad_id IS NOT NULL
                      THEN ac.compra_id IS NOT NULL OR ac.compra_linea_id IS NOT NULL OR alta.activo_id IS NOT NULL
                           OR ac.depreciacion_inicial <> 0
@@ -2553,7 +2562,7 @@ async function verificarLibroCon(
                           OR alta.ajenos <> 0 END`,
     )
     await revisar(
-        '15.baja_de_activo_mal_contabilizada (venta o retiro: 1.2.02 = inicial + Σ cuotas, cobro = precio, 1.2.01 = costo y la diferencia a 4.2.02 o 5.3.06, nada más; anulación: sin asiento, su compra anulada y sin cuotas; devolución de comodato: su asiento (origen inventario) 1.1.14 = valor en libros + 1.2.02 = acumulada / 1.2.01 = costo, sin resultado)',
+        '15.baja_de_activo_mal_contabilizada (venta o retiro: 1.2.02 = inicial + Σ cuotas, cobro = precio, 1.2.01 = costo y la diferencia a 4.2.02 o 5.3.06, nada más; anulación: sin asiento, su compra anulada y sin cuotas; devolución de comodato: su asiento (origen inventario) 1.1.14 = valor en libros + 1.2.02 = acumulada / 1.2.01 = costo, sin resultado; un activo de comodato en Q0 se da de baja sin asiento)',
         `WITH mov AS (
              SELECT b.id AS baja_id, count(DISTINCT a.id) AS asientos, min(a.fecha) AS fecha,
                     sum(CASE WHEN m.cuenta_id = ac.cuenta_depreciacion_id THEN m.debe - m.haber ELSE 0 END) AS acumulada,
@@ -2587,7 +2596,11 @@ async function verificarLibroCon(
                 precio_venta::text, acumulada_libro::text, costo_libro::text, cobro::text, ganancia::text, perdida::text, ajenos::int
            FROM x
           WHERE costo <> costo_activo OR depreciacion_acumulada <> acumulada_real OR valor_libros <> costo - depreciacion_acumulada
-             OR CASE WHEN tipo = 'devolucion_comodato'
+             OR CASE WHEN costo = 0 AND tipo <> 'anulacion'
+                     -- el activo en Q0 de un comodato: su devolución o pérdida no mueve el libro
+                     THEN unidad_id IS NULL OR asiento_id IS NOT NULL OR asientos IS NOT NULL OR acumulada_real <> 0
+                          OR valor_libros <> 0 OR precio_venta <> 0 OR tipo NOT IN ('devolucion_comodato', 'retiro')
+                     WHEN tipo = 'devolucion_comodato'
                      THEN unidad_id IS NULL OR asientos IS DISTINCT FROM 1 OR fecha_asiento <> fecha
                           OR acumulada_libro <> acumulada_real OR costo_libro <> costo OR inventario <> valor_libros
                           OR precio_venta <> 0 OR cobro <> 0 OR ganancia <> 0 OR perdida <> 0 OR ajenos <> 0
@@ -3871,7 +3884,7 @@ async function verificarLibroCon(
              SELECT a.empresa_id, a.fecha, sum(m.debe - m.haber) AS neto
                FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE c.codigo = '${INVENTARIOS}' AND ${E('a.empresa_id')}
+              WHERE (c.codigo = '${INVENTARIOS}' OR c.codigo LIKE '${INVENTARIOS}.%') AND ${E('a.empresa_id')}
               GROUP BY 1, 2
          ), kardex AS (
              SELECT empresa_id, fecha, sum(costo_total) AS neto FROM inventario.movimientos
@@ -3947,7 +3960,7 @@ async function verificarLibroCon(
              SELECT a.id, a.empresa_id, a.origen_tipo, a.origen_id, sum(m.debe - m.haber) AS neto
                FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE c.codigo = '${INVENTARIOS}' AND ${E('a.empresa_id')}
+              WHERE (c.codigo = '${INVENTARIOS}' OR c.codigo LIKE '${INVENTARIOS}.%') AND ${E('a.empresa_id')}
               GROUP BY a.id
          ), k AS (
              SELECT asiento_id AS id, sum(costo_total) AS neto FROM inventario.movimientos
@@ -4235,7 +4248,7 @@ async function verificarConFuncionesProducto(
             `SELECT coalesce(sum(m.debe - m.haber), 0)::text AS saldo
                FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
                JOIN ledger.cuentas c ON c.id = m.cuenta_id
-              WHERE a.empresa_id = ${empresaId} AND c.codigo = '${INVENTARIOS}'`,
+              WHERE a.empresa_id = ${empresaId} AND (c.codigo = '${INVENTARIOS}' OR c.codigo LIKE '${INVENTARIOS}.%')`,
         )
         const kardex = await valorKardex(empresaId, null, clienteLectura ?? db.connection())
         if (!kardex.equals(dec(String(libro!.saldo)))) {

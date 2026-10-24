@@ -44,18 +44,19 @@ import { REQUISITOS_PARA_EJECUTAR } from '#lealtad/sorteos'
  * Los invariantes de §8 (1, 2, 4 y 5) y los del auditor están en el inv. 24 de `verificar_libro.ts`;
  * aquí cada escenario se arma con las acciones y termina en `afirmarLibro`.
  *
- * Hallazgos de la fase A (`.fails` mientras estén abiertos, detalle en `.claude/integration/a3.md`):
+ * Hallazgos de la fase A (arreglados por A3 en a5df8c0; quedan como pruebas normales, detalle en
+ * `.claude/integration/a3.md`):
  *
- * - **H39** (alta): `1.1.14 Inventarios` se mueve sin kardex desde otros módulos. El premio de un
+ * - **H39** (alta, arreglado: `esCuentaDelKardex` en premios, extractos, reglas y compras): `1.1.14 Inventarios` se mueve sin kardex desde otros módulos. El premio de un
  *   sorteo en bienes acepta `contrapartida: cuenta` con `cuenta_codigo = 1.1.14` (no está en
  *   `CONTROL_NO_PERMITIDAS`) y `contrapartida: compra` con una línea de inventario (acredita la cuenta
  *   de la línea, 1.1.14, por su base); una línea del extracto bancario acepta 1.1.14 de contrapartida
  *   (`contrapartidaProhibida`). En los tres el libro y el kardex dejan de cuadrar (inv. 24.1 y 24.5).
- * - **H40** (media): una empresa del régimen de pequeño contribuyente toma crédito fiscal por
+ * - **H40** (media, arreglado: sin crédito fiscal con el régimen de la fecha del documento): una empresa del régimen de pequeño contribuyente toma crédito fiscal por
  *   defecto en una FACT con IVA (`prepararCompra` solo mira el documento): el IVA va a 1.1.04 y el
  *   inventario entra a la base, cuando su IVA no es acreditable y es costo.
  * - Fase B (rama `a3/inventario-b`): los de comodato y unidades están en `inventario_comodato.spec.ts`.
- * - **H41** (menor): un ajuste positivo (sobrante) acepta `costo_unitario` a voluntad aunque el
+ * - **H41** (menor, arreglado: con existencia, el promedio; sin costo, > 0): un ajuste positivo (sobrante) acepta `costo_unitario` a voluntad aunque el
  *   producto tenga existencia y promedio en la bodega (§5: «al último costo promedio»), y acepta
  *   `costo_unitario = 0` sin costo conocido (entra a Q0, sin asiento), en vez de 422 `costo_requerido`.
  */
@@ -783,7 +784,7 @@ test.group('Auditor contable · inventario fase A', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H39: el premio de un sorteo con contrapartida cuenta 1.1.14 acredita inventarios sin kardex', async ({
+    test('H39 (arreglado): el premio de un sorteo con contrapartida cuenta 1.1.14 acredita inventarios sin kardex', async ({
         assert,
     }) => {
         const { e, producto, bodega } = await escenario()
@@ -812,9 +813,9 @@ test.group('Auditor contable · inventario fase A', (group) => {
             { rechazado: true, violaciones: [] },
             'el premio no debe acreditar 1.1.14',
         )
-    }).fails('H39: 1.1.14 se mueve sin kardex (premio con cuenta 1.1.14)')
+    })
 
-    test('H39: el premio de un sorteo con contrapartida compra de una línea de inventario acredita 1.1.14 por la base sin kardex', async ({
+    test('H39 (arreglado): el premio de un sorteo con contrapartida compra de una línea de inventario acredita 1.1.14 por la base sin kardex', async ({
         assert,
     }) => {
         const { e, producto, bodega } = await escenario()
@@ -845,9 +846,9 @@ test.group('Auditor contable · inventario fase A', (group) => {
             { rechazado: true, violaciones: [] },
             'la entrega no debe acreditar 1.1.14 sin su salida del kardex',
         )
-    }).fails('H39: 1.1.14 se mueve sin kardex (premio con línea de inventario)')
+    })
 
-    test('H39: una línea del extracto bancario con contrapartida 1.1.14 mueve inventarios sin kardex', async ({
+    test('H39 (arreglado): una línea del extracto bancario con contrapartida 1.1.14 mueve inventarios sin kardex', async ({
         assert,
     }) => {
         const { e } = await escenario()
@@ -877,9 +878,9 @@ test.group('Auditor contable · inventario fase A', (group) => {
             { rechazado: true, violaciones: [] },
             'la contrapartida 1.1.14 debe responder 422 (contrapartida)',
         )
-    }).fails('H39: 1.1.14 se mueve sin kardex (extracto bancario)')
+    })
 
-    test('H40: una empresa de pequeño contribuyente no tiene crédito fiscal: su FACT entra al inventario con el IVA', async ({
+    test('H40 (arreglado): una empresa de pequeño contribuyente no tiene crédito fiscal: su FACT entra al inventario con el IVA', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -906,13 +907,13 @@ test.group('Auditor contable · inventario fase A', (group) => {
             {
                 credito_fiscal: comprada.credito_fiscal,
                 kardex: entrada?.costo_total,
-                iva_credito: await saldoCuenta(e.C, CUENTAS_GT.IVA_CREDITO),
+                iva_credito: dec(await saldoCuenta(e.C, CUENTAS_GT.IVA_CREDITO)).toFixed(2),
             },
             { credito_fiscal: false, kardex: '112.00', iva_credito: '0.00' },
         )
-    }).fails('H40: el pequeño contribuyente toma crédito fiscal por defecto y su inventario entra sin el IVA')
+    })
 
-    test('H41: un sobrante con existencia entra al promedio de la bodega, no al costo_unitario que se teclee; sin costo conocido, costo 0 es 422', async ({
+    test('H41 (arreglado): un sobrante con existencia entra al promedio de la bodega, no al costo_unitario que se teclee; sin costo conocido, costo 0 es 422', async ({
         assert,
     }) => {
         const { e, producto, bodega } = await escenario()
@@ -950,5 +951,5 @@ test.group('Auditor contable · inventario fase A', (group) => {
             { sobrante: sobrante.costo_total, sin_costo: gratis?.reglas ?? 'entró a Q0' },
             { sobrante: '6.00', sin_costo: ['costo_requerido'] },
         )
-    }).fails('H41: el sobrante se valoriza con el costo tecleado (o a Q0) en vez del promedio')
+    })
 })

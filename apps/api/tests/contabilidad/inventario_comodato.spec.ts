@@ -30,14 +30,14 @@ import CargarSaldoInicial from '#inventario/actions/cargar_saldo_inicial'
  * 24 (unidades = kardex = saldos, §8.3 comodato = activo) y en 15.alta/15.baja_de_activo (los
  * asientos del comodato, origen `inventario`).
  *
- * Hallazgos de la fase B (`.fails` mientras estén abiertos; detalle en `.claude/integration/a3.md`):
+ * Hallazgos de la fase B (H42 y H43 arreglados por A3 en c15a016; detalle en `.claude/integration/a3.md`):
  *
- * - **H42** (alta): anular la compra de una unidad que estuvo en comodato y volvió a la misma bodega
+ * - **H42** (alta, arreglado: 409 `unidades_en_uso` si la unidad no está tal como entró): anular la compra de una unidad que estuvo en comodato y volvió a la misma bodega
  *   pasa (`revertirEntradasDeLaCompra` solo mira que esté `disponible` en su bodega): el reverso saca
  *   el costo de compra, pero la unidad vale su valor en libros. Con otras unidades en la bodega, la
  *   diferencia se le descuenta a ellas (inv. 24.saldo_de_serie_distinto_de_sus_unidades); si era la
  *   única, responde `valor_insuficiente` por casualidad.
- * - **H43** (alta): `activos.dar_de_baja` acepta el activo de una unidad en comodato (retiro a 5.3.06
+ * - **H43** (alta, arreglado: 409 `activo_en_comodato`): `activos.dar_de_baja` acepta el activo de una unidad en comodato (retiro a 5.3.06
  *   o venta). El activo queda dado de baja con la unidad `en_comodato` (inv. 24.comodato_sin_su_activo)
  *   y la devolución del equipo ya no se puede registrar: la unidad queda varada fuera del inventario.
  */
@@ -433,7 +433,7 @@ test.group('Auditor contable · inventario fase B (comodato)', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H42: anular la compra de una unidad que volvió del comodato saca el costo de compra, no su valor en libros', async ({
+    test('H42 (arreglado): anular la compra de una unidad que volvió del comodato saca el costo de compra, no su valor en libros', async ({
         assert,
     }) => {
         const { e, bodega, onu, compra, servicioId, unidades } = await escenario(1, haceMeses(3, 2))
@@ -458,9 +458,9 @@ test.group('Auditor contable · inventario fase B (comodato)', (group) => {
             { rechazada: anulada !== null, violaciones: await nombresDeViolaciones([e.B, e.C]) },
             { rechazada: true, violaciones: [] },
         )
-    }).fails('H42: anular una compra cuya unidad pasó por comodato y volvió')
+    })
 
-    test('H43: activos.dar_de_baja acepta el activo de una unidad en comodato; la devolución lo da de baja otra vez', async ({
+    test('H43 (arreglado): activos.dar_de_baja acepta el activo de una unidad en comodato; la devolución lo da de baja otra vez', async ({
         assert,
     }) => {
         const { e, bodega, servicioId, unidades } = await escenario(1)
@@ -488,5 +488,5 @@ test.group('Auditor contable · inventario fase B (comodato)', (group) => {
             },
             { baja_directa_rechazada: true, devolucion_ok: true, violaciones: [] },
         )
-    }).fails('H43: el activo de un comodato se da de baja por activos.dar_de_baja')
+    })
 })
