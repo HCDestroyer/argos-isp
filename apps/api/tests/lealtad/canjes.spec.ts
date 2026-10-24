@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { verificarLibro } from '#tests/contabilidad/verificar_libro'
-import { afirmarLibro } from '#tests/lealtad/ayudas_reverso_canje'
+import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
+import { reporteLealtad } from '#lealtad/reporte'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { generar } from '#tests/billing/ayudas_billing'
 import { crearPlanFila } from '#tests/core/fabricas'
@@ -250,6 +250,10 @@ test.group('Lealtad · canjes', (group) => {
             assert.include(['4.1.06', '2.1.10'], r.codigo!)
             assert.equal(r.codigo === '4.1.06' ? r.debe : '0.00', r.codigo === '4.1.06' ? r.valor : r.debe)
         }
+        // el reverso positivo no es emisión: lo canjeado vuelve a 0 y lo emitido no cambia (40 + 30)
+        const reporte = await reporteLealtad([e.B], null, null)
+        const deB = reporte.empresas.find((x) => x.empresa_id === e.B)!
+        assert.deepEqual([deB.emitidos, deB.canjeados], [70, 0])
         const otraVez = await errorDe(
             new RevertirCanje().execute({ id: canje.id, motivo: 'otra vez' }, e.ctx),
         )

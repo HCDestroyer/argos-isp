@@ -81,6 +81,14 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             pago_estado: string | null
         }>
 
+        const reembolsado = async (idProveedor: string) =>
+            Boolean(
+                await t.trx
+                    .from('billing.pasarela_eventos')
+                    .where({ proveedor, id_proveedor: idProveedor, estado: 'reembolsado' })
+                    .select('id')
+                    .first(),
+            )
         const diferencias: Diferencia[] = []
         const conciliados: number[] = []
         for (const cobro of cobros) {
@@ -100,6 +108,16 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             }
             const pagadoRemoto = remoto.estado === 'pagado'
             const vigente = cobro.pago_id !== null && cobro.pago_estado !== 'anulado'
+            // reembolsado en el proveedor y pago anulado por el webhook: cuadra (el checkout sigue «paid»)
+            if (
+                pagadoRemoto &&
+                !vigente &&
+                cobro.pago_id !== null &&
+                (await reembolsado(cobro.id_proveedor))
+            ) {
+                conciliados.push(cobro.id)
+                continue
+            }
             if (pagadoRemoto && cobro.pago_id === null) {
                 diferencias.push({
                     ...comun,
@@ -161,6 +179,33 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
                 nuestro: pago.monto,
                 proveedor: null,
                 detalle: 'Pago por pasarela sin cobro en línea',
+            })
+        }
+
+        // contracargos abiertos del día (sin acción automática): aviso para contabilidad
+        const disputas = (await t.trx
+            .from('billing.pasarela_eventos as e')
+            .leftJoin('billing.pasarela_cobros as pc', (j) =>
+                j.on('pc.id_proveedor', 'e.id_proveedor').andOn('pc.proveedor', 'e.proveedor'),
+            )
+            .where('e.proveedor', proveedor)
+            .where('e.estado', 'disputa')
+            .whereRaw(dia('e.created_at'), [fecha])
+            .select('e.id_proveedor', 'pc.id as cobro_id', 'pc.pago_id')) as Array<{
+            id_proveedor: string
+            cobro_id: number | null
+            pago_id: number | null
+        }>
+        for (const d of disputas) {
+            diferencias.push({
+                tipo: 'disputa',
+                cobro_id: d.cobro_id,
+                pago_id: d.pago_id,
+                id_proveedor: d.id_proveedor,
+                nuestro: null,
+                proveedor: null,
+                detalle:
+                    'Contracargo abierto en el proveedor: revisarlo con contabilidad (sin acción automática)',
             })
         }
 

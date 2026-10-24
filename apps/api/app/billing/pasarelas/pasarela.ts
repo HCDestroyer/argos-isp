@@ -14,6 +14,12 @@ import { Problema, ValidacionFallida } from '#shared/errores'
 
 export type EstadoCobroProveedor = 'pendiente' | 'pagado' | 'fallido' | 'expirado'
 
+/**
+ * Estado de una notificación: el del cobro o, en un pago ya registrado, `reembolsado` (el proveedor
+ * devolvió el dinero: se anula el pago) y `disputa` (contracargo abierto: solo se registra y se avisa).
+ */
+export type EstadoNotificacion = EstadoCobroProveedor | 'reembolsado' | 'disputa'
+
 export interface EntradaCrearCobro {
     /** nuestro id del cobro (`billing.pasarela_cobros.id`), como referencia en el proveedor */
     referencia: string
@@ -38,11 +44,15 @@ export interface NotificacionPasarela {
     /** id único del evento en el proveedor (idempotencia del webhook) */
     id_evento: string
     id_proveedor: string
-    estado: EstadoCobroProveedor
+    estado: EstadoNotificacion
     /** lo que el cliente pagó (string decimal) */
     monto: string
     /** comisión que retiene el proveedor (string decimal) */
     comision: string
+    /** IVA que retuvo la emisora de la tarjeta (H51; string decimal, 0.00 si no hay) */
+    retenido_iva?: string
+    /** id del reembolso o del contracargo en el proveedor (reembolsado, disputa) */
+    referencia_evento?: string | null
     ocurrido_en: Date
     payload: Record<string, unknown>
 }

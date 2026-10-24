@@ -79,6 +79,56 @@ const pagado = (checkout: string, centavos: number, fee: number) => ({
     details: { fee },
 })
 
+/** Corre `fn` con Recurrente como proveedor configurado y `fetch` simulado; restaura todo al final. */
+async function conRecurrente<T>(
+    rutas: Record<string, { status?: number; cuerpo: unknown }>,
+    fn: () => Promise<T>,
+) {
+    const anterior = {
+        proveedor: env.get('PASARELA_PROVEEDOR'),
+        llave: env.get('RECURRENTE_SECRET_KEY'),
+        secreto: env.get('RECURRENTE_WEBHOOK_SECRETO'),
+        url: env.get('RECURRENTE_API_URL'),
+    }
+    const fetchOriginal = globalThis.fetch
+    const { http } = simulado(rutas)
+    try {
+        env.set('PASARELA_PROVEEDOR', 'recurrente')
+        env.set('RECURRENTE_SECRET_KEY', CONFIG.secretKey)
+        env.set('RECURRENTE_WEBHOOK_SECRETO', SECRETO)
+        env.set('RECURRENTE_API_URL', CONFIG.urlBase)
+        globalThis.fetch = ((url: string, init: RequestInit) => http(String(url), init)) as typeof fetch
+        return await fn()
+    } finally {
+        globalThis.fetch = fetchOriginal
+        env.set('PASARELA_PROVEEDOR', anterior.proveedor ?? '')
+        env.set('RECURRENTE_SECRET_KEY', anterior.llave ?? '')
+        env.set('RECURRENTE_WEBHOOK_SECRETO', anterior.secreto ?? '')
+        env.set('RECURRENTE_API_URL', anterior.url ?? '')
+    }
+}
+
+/** Cobro de Recurrente (el checkout lo simula `rutasDe`) por la deuda de un servicio cortado. */
+async function cobroRecurrente() {
+    const datos = await servicioCortado()
+    const cobro = await new CrearCobroPasarela().execute(
+        { cliente_id: datos.clienteId },
+        contextoSistema('portal'),
+    )
+    return { datos, cobro }
+}
+
+const procesar = (w: { cuerpo: string; cabeceras: Record<string, string> }) =>
+    new ProcesarWebhookPasarela().execute({ proveedor: 'recurrente', ...w }, contextoSistema('webhook'))
+
+const rutasDe = (checkout: string, extra: Record<string, { status?: number; cuerpo: unknown }> = {}) => ({
+    '/checkouts': {
+        status: 201,
+        cuerpo: { id: checkout, checkout_url: `https://app.recurrente.com/checkout-session/${checkout}` },
+    },
+    ...extra,
+})
+
 test.group('billing · pasarela Recurrente (simulada)', () => {
     test('crearCobro: POST /checkouts con X-SECRET-KEY, ítem en GTQ en centavos, retorno y referencia', async ({
         assert,
@@ -293,12 +343,12 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
             assert.include(cobro, { proveedor: 'recurrente', id_proveedor: 'ch_flujo', monto: '300.00' })
 
             const w = webhook(pagado('ch_flujo', 30000, 1050), { id: 'msg_flujo' })
-            const procesar = () =>
+            const enviar = () =>
                 new ProcesarWebhookPasarela().execute(
                     { proveedor: 'recurrente', ...w },
                     contextoSistema('webhook'),
                 )
-            const primero = await procesar()
+            const primero = await enviar()
             assert.isFalse(primero.duplicado)
             assert.equal(await estadoServicio(datos.servicioId), 'activo')
             assert.deepEqual(await lineasAsiento('pago', primero.pago_id!), [
@@ -314,7 +364,7 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
                 referencia: 'ch_flujo',
             })
 
-            const repetido = await procesar()
+            const repetido = await enviar()
             assert.isTrue(repetido.duplicado)
             assert.equal(repetido.pago_id, primero.pago_id)
             const pagos = await db
@@ -341,6 +391,143 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
             env.set('RECURRENTE_WEBHOOK_SECRETO', anterior.secreto ?? '')
             env.set('RECURRENTE_API_URL', anterior.url ?? '')
         }
+    })
+    test('H51: la retención de IVA de la emisora va a 1.1.05 y el banco queda por el neto', async ({
+        assert,
+    }) => {
+        const checkout = `ch_ret_${Date.now()}`
+        await conRecurrente(rutasDe(checkout), async () => {
+            const { cobro } = await cobroRecurrente()
+            const r = await procesar(
+                webhook({
+                    event_type: 'payment_intent.succeeded',
+                    checkout: { id: checkout },
+                    amount_in_cents: 30000,
+                    fee: 1050,
+                    vat_withheld: 482,
+                    vat_withheld_currency: 'GTQ',
+                }),
+            )
+            assert.isNumber(r.pago_id)
+            const pago = await db.from('billing.pagos').where('id', r.pago_id!).firstOrFail()
+            assert.deepEqual(await lineasAsiento('pago', r.pago_id!), [
+                ['1.1.02.01', '284.68', '0.00', null],
+                ['5.1.02', '10.50', '0.00', null],
+                ['1.1.05', '4.82', '0.00', null],
+                ['1.1.03', '0.00', '300.00', pago.cliente_id],
+            ])
+            assert.include(pago, { monto: '300.00', retenido: '4.82' })
+            assert.equal(cobro.monto, '300.00')
+            await afirmarLibroCuadrado(assert)
+        })
+    })
+
+    test('monto distinto del cobro: no registra el pago y la conciliación lo reporta', async ({ assert }) => {
+        const checkout = `ch_monto_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 29000 },
+                },
+            }),
+            async () => {
+                const { cobro } = await cobroRecurrente()
+                const r = await procesar(webhook(pagado(checkout, 29000, 0)))
+                assert.include(r, { pago_id: null, ignorado: 'monto_distinto' })
+                const fila = await db.from('billing.pasarela_cobros').where('id', cobro.id).firstOrFail()
+                assert.equal(fila.estado, 'pendiente')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.deepEqual(
+                    c.diferencias.filter((d) => d.cobro_id === cobro.id).map((d) => d.tipo),
+                    ['pago_sin_registrar'],
+                )
+            },
+        )
+    })
+
+    test('refund.* anula el pago (la deuda vuelve); dispute.* solo se registra y se lista para contabilidad', async ({
+        assert,
+    }) => {
+        const checkout = `ch_reemb_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                const pago = await procesar(webhook(pagado(checkout, 30000, 1050)))
+                assert.equal(await estadoServicio(datos.servicioId), 'activo')
+
+                const disputa = await procesar(
+                    webhook({
+                        event_type: 'dispute.create',
+                        id: 'dp_1',
+                        status: 'needs_response',
+                        reason: 'fraudulent',
+                    }),
+                )
+                assert.equal(disputa.ignorado, 'disputa')
+                const conCheckout = await procesar(
+                    webhook({
+                        event_type: 'dispute.update',
+                        id: 'dp_1',
+                        checkout: { id: checkout },
+                        status: 'under_review',
+                    }),
+                )
+                assert.include(conCheckout, { ignorado: 'disputa', cobro_id: cobro.id })
+                const vigente = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+                assert.equal(vigente.estado, 'registrado')
+
+                const pendiente = await procesar(
+                    webhook({
+                        event_type: 'refund.create',
+                        refund: { id: 're_1', status: 'pending' },
+                        intentable: { checkout: { id: checkout } },
+                    }),
+                )
+                assert.equal(pendiente.estado, 'pendiente')
+                const reembolso = await procesar(
+                    webhook({
+                        event_type: 'refund.update',
+                        refund: { id: 're_1', status: 'succeeded', customer_refunded_amount_in_cents: 30000 },
+                        intentable: { checkout: { id: checkout } },
+                    }),
+                )
+                assert.include(reembolso, { estado: 'reembolsado', pago_id: pago.pago_id })
+                const anulado = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+                assert.equal(anulado.estado, 'anulado')
+                assert.include(anulado.motivo_anulacion, 're_1')
+                assert.notEqual(await estadoServicio(datos.servicioId), 'activo')
+                const otra = await procesar(
+                    webhook({
+                        event_type: 'refund.update',
+                        refund: { id: 're_1', status: 'succeeded' },
+                        intentable: { checkout: { id: checkout } },
+                    }),
+                )
+                assert.equal(otra.ignorado, 'pago_ya_anulado')
+
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                const deEste = c.diferencias.filter(
+                    (d) => d.cobro_id === cobro.id || d.id_proveedor === 'disputa:dp_1',
+                )
+                assert.sameMembers(
+                    deEste.map((d) => d.tipo),
+                    ['disputa', 'disputa'],
+                )
+                await afirmarLibroCuadrado(assert)
+            },
+        )
     })
 })
 

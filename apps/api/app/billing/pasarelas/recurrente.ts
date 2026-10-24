@@ -11,6 +11,7 @@ import {
     type EntradaWebhook,
     type EstadoCobroProveedor,
     type EstadoEnProveedor,
+    type EstadoNotificacion,
     type NotificacionPasarela,
     type Pasarela,
 } from '#billing/pasarelas/pasarela'
@@ -29,9 +30,11 @@ import {
  *   `svix-signature` (`v1,<base64>` separadas por espacio); firma = base64(HMAC-SHA256(secreto,
  *   `<id>.<timestamp>.<cuerpo crudo>`)) con el secreto `whsec_<base64>` decodificado. Ventana ± 5 min.
  *   Eventos: `intent.succeeded` / `payment_intent.succeeded` → pagado; `intent.failed`,
- *   `intent.canceled`, `payment_intent.failed` → fallido; el resto → pendiente. El cobro es
- *   `checkout.id`; el monto `amount_in_cents`; la comisión `details.fee` (unificado) o `fee` (legacy),
- *   en centavos. El id del evento (idempotencia) es `svix-id`.
+ *   `intent.canceled`, `payment_intent.failed` → fallido; `refund.*` con `refund.status = succeeded`
+ *   → reembolsado (se anula el pago); `dispute.*` → disputa (solo se registra); el resto → pendiente.
+ *   El cobro es `checkout.id` (en reembolsos, el del `intentable`); el monto `amount_in_cents`; la
+ *   comisión `details.fee` (unificado) o `fee` (legacy) y la retención de IVA de la emisora
+ *   `details.vat_withheld` o `vat_withheld` (H51), en centavos. El id del evento es `svix-id`.
  * - `consultar`: `GET /checkouts/{id}` (`status`: `unpaid`, `payment_in_progress`, `paid`,
  *   `expired`; `total_in_cents`) y, si está pagado, `GET /intents/{payment.id}` para la comisión
  *   (si no responde, la comisión queda 0.00: la conciliación compara monto y estado).
@@ -85,10 +88,24 @@ export function firmarSvix(secreto: string, id: string, marca: number, cuerpo: s
     return `v1,${firma}`
 }
 
-function estadoDeEvento(tipo: string): EstadoCobroProveedor {
+function estadoDeEvento(tipo: string, datos: Record<string, any>): EstadoNotificacion {
     if (EVENTOS_PAGADO.has(tipo)) return 'pagado'
     if (EVENTOS_FALLIDO.has(tipo)) return 'fallido'
+    // reembolso hecho (refund.status = succeeded): el pago se anula
+    if (tipo.startsWith('refund.')) return datos.refund?.status === 'succeeded' ? 'reembolsado' : 'pendiente'
+    if (tipo.startsWith('dispute.')) return 'disputa'
     return 'pendiente'
+}
+
+/** Checkout del pago original de un reembolso o contracargo (el intent viene en `intentable`). */
+function checkoutDe(datos: Record<string, any>): string {
+    const id =
+        datos.checkout?.id ??
+        datos.intentable?.checkout?.id ??
+        datos.intentable?.checkout_id ??
+        datos.refund?.intentable?.checkout?.id ??
+        datos.payment_intent?.checkout?.id
+    return id ? String(id) : ''
 }
 
 function estadoDeCheckout(status: string): EstadoCobroProveedor {
@@ -232,13 +249,25 @@ export class PasarelaRecurrente implements Pasarela {
             throw new FirmaInvalida('Cuerpo inválido')
         }
         const tipo = String(datos.event_type ?? '')
+        const estado = estadoDeEvento(tipo, datos)
         const fee = datos.details?.fee ?? datos.fee ?? 0
+        const retenido = datos.details?.vat_withheld ?? datos.vat_withheld ?? 0
+        const referencia =
+            estado === 'reembolsado' ? datos.refund?.id : estado === 'disputa' ? datos.id : null
+        const checkout = checkoutDe(datos)
         return {
             id_evento: id,
-            id_proveedor: String(datos.checkout?.id ?? ''),
-            estado: estadoDeEvento(tipo),
-            monto: deCentavos(datos.amount_in_cents),
+            // un contracargo puede no traer el checkout: se registra con su propio id (cobro desconocido)
+            id_proveedor: checkout || (estado === 'disputa' ? `disputa:${String(datos.id ?? id)}` : ''),
+            estado,
+            monto: deCentavos(
+                estado === 'reembolsado'
+                    ? datos.refund?.customer_refunded_amount_in_cents
+                    : datos.amount_in_cents,
+            ),
             comision: deCentavos(fee),
+            retenido_iva: deCentavos(retenido),
+            referencia_evento: referencia ? String(referencia) : null,
             ocurrido_en: datos.created_at ? new Date(datos.created_at) : new Date(marca * 1000),
             payload: datos,
         }

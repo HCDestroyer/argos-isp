@@ -1,6 +1,8 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { dec } from '#ledger/dinero'
+import logger from '@adonisjs/core/services/logger'
+import { aTexto, dec } from '#ledger/dinero'
 import RegistrarPago from '#billing/actions/registrar_pago'
+import AnularPago from '#billing/actions/anular_pago'
 import {
     FirmaInvalida,
     pasarela,
@@ -22,6 +24,14 @@ import {
  *    solo cambia el estado del cobro.
  * 4. Un cobro desconocido se registra y se responde 200 (`ignorado`) para que el proveedor no
  *    reintente sin fin; la conciliación lo reporta.
+ * 5. Monto distinto del cobro: no registra el pago (`ignorado: monto_distinto`, aviso en el log); la
+ *    conciliación lo reporta como `pago_sin_registrar` para que contabilidad lo resuelva.
+ * 6. Retención de IVA de la emisora (H51, `retenido_iva`): el pago entra por el neto
+ *    (monto − retención) con una constancia `RET_IVA_TAR` por la retención (1.1.05), así aplica el
+ *    bruto a la deuda y el banco queda por lo que de verdad llega.
+ * 7. `reembolsado`: anula el pago del cobro (`AnularPago` anidada: la deuda vuelve y el servicio se
+ *    re-evalúa). `disputa` (contracargo): sin acción automática; queda registrada y avisada en el
+ *    log, y la conciliación la lista para contabilidad.
  */
 
 export interface EntradaWebhookPasarela {
@@ -111,8 +121,9 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             .where('proveedor', proveedor)
             .where('id_proveedor', aviso.id_proveedor)
             .forUpdate()
-            .select('id', 'empresa_id', 'cliente_id', 'estado', 'pago_id', 'facturas')
+            .select('id', 'empresa_id', 'cliente_id', 'estado', 'pago_id', 'facturas', 'monto')
             .first()) as {
+            monto: string
             id: number
             empresa_id: number
             cliente_id: number
@@ -120,9 +131,51 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             pago_id: number | null
             facturas: Array<number | string>
         } | null
+        if (aviso.estado === 'disputa') {
+            logger.warn(
+                {
+                    proveedor,
+                    id_proveedor: aviso.id_proveedor,
+                    disputa: aviso.referencia_evento,
+                    cobro_id: cobro?.id,
+                },
+                'Contracargo abierto en la pasarela: revisar con contabilidad (sin acción automática)',
+            )
+            return {
+                ...base,
+                cobro_id: cobro?.id ?? null,
+                pago_id: cobro?.pago_id ?? null,
+                ignorado: 'disputa',
+            }
+        }
         if (!cobro) return { ...base, cobro_id: null, pago_id: null, ignorado: 'cobro_desconocido' }
         t.fijarEntidad('cobro_pasarela', cobro.id)
         t.fijarEmpresa(Number(cobro.empresa_id))
+
+        if (aviso.estado === 'reembolsado') {
+            if (cobro.pago_id === null) {
+                return { ...base, cobro_id: cobro.id, pago_id: null, ignorado: 'reembolso_sin_pago' }
+            }
+            const pago = (await t.trx
+                .from('billing.pagos')
+                .where('id', cobro.pago_id)
+                .select('estado')
+                .first()) as {
+                estado: string
+            } | null
+            if (pago?.estado === 'anulado') {
+                return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'pago_ya_anulado' }
+            }
+            await new AnularPago().execute(
+                {
+                    pago_id: cobro.pago_id,
+                    motivo: `Reembolso en ${proveedor}${aviso.referencia_evento ? ` (${aviso.referencia_evento})` : ''}`,
+                },
+                t.ctx,
+                { trx: t.trx },
+            )
+            return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id }
+        }
 
         if (cobro.estado === 'pagado') {
             return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'cobro_ya_pagado' }
@@ -141,11 +194,30 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             return { ...base, cobro_id: cobro.id, pago_id: null }
         }
 
+        if (!dec(aviso.monto).equals(dec(cobro.monto))) {
+            logger.warn(
+                { proveedor, cobro_id: cobro.id, cobro: aTexto(cobro.monto), pagado: aviso.monto },
+                'Pago en línea por un monto distinto del cobro: no se registra (la conciliación lo reporta)',
+            )
+            return { ...base, cobro_id: cobro.id, pago_id: null, ignorado: 'monto_distinto' }
+        }
+        // H51: la retención de IVA de la emisora entra como constancia (1.1.05); al banco llega el neto
+        const retenido = dec(aviso.retenido_iva ?? '0')
         const pago = await new RegistrarPago().execute(
             {
                 cliente_id: cobro.cliente_id,
                 metodo: 'pasarela',
-                monto: aviso.monto,
+                monto: aTexto(dec(aviso.monto).minus(retenido)),
+                retenciones: retenido.gt(0)
+                    ? [
+                          {
+                              codigo: 'RET_IVA_TAR',
+                              numero: `${proveedor}:${aviso.id_proveedor}`,
+                              fecha: null,
+                              monto: aTexto(retenido),
+                          },
+                      ]
+                    : undefined,
                 comision: dec(aviso.comision).gt(0) ? aviso.comision : null,
                 pasarela: proveedor,
                 referencia: aviso.id_proveedor,
