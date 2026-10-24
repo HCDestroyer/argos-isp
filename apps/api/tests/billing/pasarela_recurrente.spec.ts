@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { contextoSistema } from '#shared/contexto'
-import { estadoServicio, lineasAsiento, servicioCortado } from '#tests/billing/ayudas_billing'
+import { estadoServicio, eventosDe, lineasAsiento, servicioCortado } from '#tests/billing/ayudas_billing'
 import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
 import { hoyGuatemala } from '#ledger/fechas'
 import {
@@ -481,6 +481,26 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
                     }),
                 )
                 assert.include(conCheckout, { ignorado: 'disputa', cobro_id: cobro.id })
+                // pago.disputa_abierta una vez por pago, en la transacción del aviso
+                await procesar(
+                    webhook({
+                        event_type: 'dispute.update',
+                        id: 'dp_1',
+                        checkout: { id: checkout },
+                        status: 'needs_response',
+                        reason: 'fraudulent',
+                    }),
+                )
+                const disputas = await eventosDe('pago.disputa_abierta', 'pago_id', pago.pago_id!)
+                assert.lengthOf(disputas, 1)
+                assert.deepInclude(disputas[0]!.payload, {
+                    pago_id: pago.pago_id,
+                    cobro_id: cobro.id,
+                    cliente_id: datos.clienteId,
+                    monto: '300.00',
+                    proveedor: 'recurrente',
+                    motivo: null,
+                })
                 const vigente = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
                 assert.equal(vigente.estado, 'registrado')
 
@@ -523,7 +543,7 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
                 )
                 assert.sameMembers(
                     deEste.map((d) => d.tipo),
-                    ['disputa', 'disputa'],
+                    ['disputa', 'disputa', 'disputa'],
                 )
                 await afirmarLibroCuadrado(assert)
             },

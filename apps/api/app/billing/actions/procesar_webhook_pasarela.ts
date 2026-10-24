@@ -141,6 +141,7 @@ export default class ProcesarWebhookPasarela extends DomainAction<
                 },
                 'Contracargo abierto en la pasarela: revisar con contabilidad (sin acción automática)',
             )
+            if (cobro?.pago_id) await this.avisarDisputa(t, proveedor, aviso, cobro)
             return {
                 ...base,
                 cobro_id: cobro?.id ?? null,
@@ -242,5 +243,42 @@ export default class ProcesarWebhookPasarela extends DomainAction<
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
         return { ...base, cobro_id: cobro.id, pago_id: pago.id }
+    }
+
+    /**
+     * `pago.disputa_abierta` en la misma transacción que registra el aviso: una vez por pago (el
+     * primer aviso de contracargo del cobro; los `dispute.update` siguientes no lo repiten).
+     */
+    private async avisarDisputa(
+        t: Transaccion,
+        proveedor: string,
+        aviso: NotificacionPasarela,
+        cobro: { id: number; empresa_id: number; cliente_id: number; pago_id: number | null },
+    ) {
+        const previos = (await t.trx
+            .from('billing.pasarela_eventos')
+            .where({ proveedor, id_proveedor: aviso.id_proveedor, estado: 'disputa' })
+            .whereNot('id_evento', aviso.id_evento)
+            .count('* as n')
+            .first()) as { n: number | string }
+        if (Number(previos.n) > 0) return
+        const pago = (await t.trx
+            .from('billing.pagos')
+            .where('id', cobro.pago_id!)
+            .select('monto')
+            .firstOrFail()) as {
+            monto: string
+        }
+        const razon = (aviso.payload as Record<string, unknown>).reason
+        t.fijarEmpresa(Number(cobro.empresa_id))
+        await t.emit('pago.disputa_abierta', {
+            pago_id: Number(cobro.pago_id),
+            empresa_id: Number(cobro.empresa_id),
+            cobro_id: Number(cobro.id),
+            cliente_id: Number(cobro.cliente_id),
+            monto: aTexto(pago.monto),
+            proveedor,
+            motivo: typeof razon === 'string' && razon ? razon : null,
+        })
     }
 }
