@@ -484,8 +484,17 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
                 .where('referencia', checkout)
                 .select('monto', 'comision')
             assert.deepEqual(pagos, [{ monto: cobro.monto, comision: '10.50' }])
-            // el libro de la empresa del cobro (las demás empresas de la base son de otras pruebas)
-            await afirmarLibro(assert, [Number(cobro.empresa_id)])
+            // un solo asiento: Banco por el neto, 5.1.02 por la comisión y CxC por el bruto (en la empresa
+            // principal no se corre afirmarLibro: otras pruebas dejan cierres de fixture sin resumen)
+            const asiento = await lineas('pago', uno.pago_id!)
+            assert.deepEqual(
+                asiento.map((l) => [l[0].startsWith('1.1.02') ? 'banco' : l[0], l[1], l[2]]),
+                [
+                    ['banco', aTexto(dec(cobro.monto).minus('10.50')), '0.00'],
+                    ['5.1.02', '10.50', '0.00'],
+                    ['1.1.03', '0.00', cobro.monto],
+                ],
+            )
         })
     })
 
