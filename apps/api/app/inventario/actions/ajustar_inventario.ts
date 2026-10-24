@@ -1,7 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
 import { dec, redondear, type Dec } from '#ledger/dinero'
-import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import {
     bloquearProducto,
@@ -9,7 +8,9 @@ import {
     cantidadValida,
     costoDeSobrante,
     costoSalida,
+    exigirExistenciaDesde,
     exigirSeguimiento,
+    fechaDeOperacion,
     productoMovible,
     registrarMovimientoConAsiento,
     saldoDe,
@@ -19,6 +20,7 @@ import {
 import {
     actualizarUnidad,
     crearUnidades,
+    ultimaFechaDeUnidad,
     unidadesDeBodega,
     validarUnidadesNuevas,
     type UnidadNueva,
@@ -36,7 +38,10 @@ import {
  *   existencia, al `costo_unitario` pedido (> 0) o al del último movimiento del producto. `1.1.14 /
  *   4.2.04 Sobrantes`. Sin costo, o con costo ≤ 0: 422 `costo_requerido`.
  *
- * Fecha de hoy; respeta los bloqueos de siempre.
+ * `fecha` (fase C, decisión del líder; por defecto hoy): una pasada solo dentro de un periodo abierto
+ * (422 `periodo_cerrado`), al costo del momento de registrar; un faltante no deja existencia negativa en
+ * ninguna fecha desde la suya (409 `existencia_insuficiente_en_fecha`) y el de una unidad no queda antes
+ * de su último movimiento (422 `fecha_anterior`). Respeta los bloqueos de siempre.
  */
 
 export interface EntradaAjuste {
@@ -47,6 +52,7 @@ export interface EntradaAjuste {
     unidad?: UnidadNueva | null
     motivo: string
     costo_unitario?: string | null
+    fecha?: string | null
 }
 
 export default class AjustarInventario extends DomainAction<EntradaAjuste, MovimientoVista> {
@@ -78,6 +84,7 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
         t.fijarEmpresa(empresaId)
         exigirSeguimiento(producto, porUnidad, input.unidad ? 'unidad' : 'unidad_id')
         const bodega = await bodegaMovible(t, input.bodega_id, empresaId, { entrada: entra })
+        const fecha = await fechaDeOperacion(t, empresaId, input.fecha)
         await bloquearProducto(t, producto.id)
 
         let costo: Dec
@@ -106,6 +113,16 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
             })
             costo = dec(unidad!.costo).neg()
             unidadId = unidad!.id
+            const ultima = await ultimaFechaDeUnidad(t, unidadId)
+            if (ultima && fecha < ultima) {
+                throw new ValidacionFallida([
+                    {
+                        field: 'fecha',
+                        message: `La unidad tiene un movimiento del ${ultima}: la fecha no puede ser anterior`,
+                        rule: 'fecha_anterior',
+                    },
+                ])
+            }
             await actualizarUnidad(t, unidad!.id, { estado: 'dada_de_baja', bodega_id: null })
         } else {
             costo = costoSalida(
@@ -115,12 +132,13 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
                 bodega.id,
             ).neg()
         }
+        if (!entra) await exigirExistenciaDesde(t, producto, bodega.id, fecha, cantidad.abs())
         const id = await registrarMovimientoConAsiento(
             t,
             {
                 empresaId,
                 tipo: 'ajuste',
-                fecha: hoyGuatemala(),
+                fecha,
                 producto,
                 bodegaId: bodega.id,
                 cantidad,

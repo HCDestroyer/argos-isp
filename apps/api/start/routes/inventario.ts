@@ -51,12 +51,16 @@ import AbrirConteo from '#inventario/actions/abrir_conteo'
 import ContarInventario from '#inventario/actions/contar_inventario'
 import CerrarConteo from '#inventario/actions/cerrar_conteo'
 import CancelarConteo from '#inventario/actions/cancelar_conteo'
+import MarcarReparada from '#inventario/actions/marcar_reparada'
 import { empresaDeConteo, listarConteos, verConteo } from '#inventario/conteos'
 
 const acceso = accesoBodegas
 
 const DESCRIPCION_COSTO =
     'Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo.'
+
+const DESCRIPCION_FECHA =
+    ' fecha opcional (fase C): una pasada solo dentro de un periodo abierto (422 periodo_cerrado), al costo del momento de registrar, sin dejar existencia negativa en ninguna fecha desde la suya (409 existencia_insuficiente_en_fecha).'
 
 const productos: Ruta[] = [
     definirRuta({
@@ -258,7 +262,7 @@ const operaciones: Ruta[] = [
         permiso: 'inventario.consumir',
         cuerpo: v.consumoValidator,
         idempotente: true,
-        descripcion: `servicio_id opcional (misma empresa). ${DESCRIPCION_COSTO}`,
+        descripcion: `servicio_id opcional (misma empresa). ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
         respuesta: { status: 201, descripcion: 'Movimiento', esquema: MovimientoInventario },
         handler: async (ctx, { cuerpo }) => {
             await exigirBodega(ctx, cuerpo.bodega_id)
@@ -292,7 +296,7 @@ const operaciones: Ruta[] = [
         permiso: 'inventario.ajustar',
         cuerpo: v.ajusteValidator,
         idempotente: true,
-        descripcion: `cantidad con signo. El sobrante entra al último costo promedio o al costo_unitario dado (422 costo_requerido si no hay ninguno). ${DESCRIPCION_COSTO}`,
+        descripcion: `cantidad con signo. El sobrante entra al último costo promedio o al costo_unitario dado (422 costo_requerido si no hay ninguno). ${DESCRIPCION_COSTO}${DESCRIPCION_FECHA}`,
         respuesta: { status: 201, descripcion: 'Movimiento', esquema: MovimientoInventario },
         handler: async (ctx, { cuerpo }) => {
             await exigirBodega(ctx, cuerpo.bodega_id)
@@ -366,6 +370,24 @@ const unidades: Ruta[] = [
             const id = Number(params.id)
             await exigirUnidad(ctx, id)
             return historialUnidad(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/inventario/unidades/:id/marcar-reparada',
+        operacion: 'inventarioMarcarReparada',
+        resumen: 'Devolver a disponible una unidad en reparación (misma bodega, sin asiento)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.marcar_reparada',
+        cuerpo: v.marcarReparadaValidator,
+        idempotente: true,
+        descripcion:
+            'No cambia su valor ni la existencia (ya contaba en la bodega): sin movimiento ni asiento, queda en audit.cambios. Otro estado: 409 unidad_no_disponible. Desde en_reparacion también se puede dar de baja (POST /inventario/bajas).',
+        respuesta: { status: 200, descripcion: 'Unidad', esquema: Unidad },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirUnidad(ctx, id)
+            return new MarcarReparada().execute({ ...cuerpo, unidad_id: id }, ctx.contextoAccion())
         },
     }),
     definirRuta({

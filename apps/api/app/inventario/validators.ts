@@ -203,6 +203,10 @@ export const consumoValidator = vine.compile(
             description: 'Instalación o reparación en la que se usó (misma empresa)',
         }),
         motivo: texto(500).nullable().optional(),
+        fecha: fechaIso().nullable().optional().meta({
+            description:
+                'Fecha del consumo (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después',
+        }),
     }),
 )
 
@@ -233,6 +237,10 @@ export const ajusteValidator = vine.compile(
         costo_unitario: costoUnitario().nullable().optional().meta({
             description:
                 'Sobrante sin existencia en la bodega: el costo unitario con que entra (> 0); con existencia se ignora y entra al promedio',
+        }),
+        fecha: fechaIso().nullable().optional().meta({
+            description:
+                'Fecha del ajuste (por defecto hoy): una pasada dentro de un periodo abierto, al costo de hoy y sin dejar existencia negativa después',
         }),
     }),
 )
@@ -364,3 +372,5 @@ export const listarConteosValidator = vine.compile(
         estado: vine.enum(ESTADOS_CONTEO).optional(),
     }),
 )
+
+export const marcarReparadaValidator = vine.compile(vine.object({ motivo: motivo() }))

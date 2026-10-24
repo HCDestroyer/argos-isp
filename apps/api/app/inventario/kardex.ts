@@ -1,11 +1,13 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Transaccion } from '#shared/domain_action'
-import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
+import { Conflicto, NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa, filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { D, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
+import { periodoCerrado } from '#ledger/cierres'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { filtrarBodegasVisibles, type AccesoBodegas } from '#inventario/bodegas'
 
@@ -274,6 +276,72 @@ export async function costoDeSobrante(
         .first()) as { costo_unitario: string } | null
     if (!ultimo) throw requerido(`El producto ${producto.sku} no tiene costo conocido: indica costo_unitario`)
     return dec(ultimo.costo_unitario)
+}
+
+/**
+ * Fecha de un consumo o un ajuste (decisión del líder, fase C): por defecto hoy; una pasada solo dentro
+ * de un periodo abierto (422 `periodo_cerrado`; los bloqueos del libro los aplica el asiento) y nunca
+ * futura (422 `futuro`). El costo es siempre el promedio del momento de registrar.
+ */
+export async function fechaDeOperacion(
+    t: Transaccion,
+    empresaId: number,
+    pedida?: string | null,
+): Promise<string> {
+    const hoy = hoyGuatemala()
+    if (!pedida) return hoy
+    const fecha = fechaValida(pedida)
+    if (fecha > hoy) {
+        throw new ValidacionFallida([
+            { field: 'fecha', message: 'La fecha no puede ser futura', rule: 'futuro' },
+        ])
+    }
+    if (fecha < hoy && (await periodoCerrado(t.trx, fecha, empresaId))) {
+        throw new ReglaNegocio(
+            `Periodo ${inicioDeMes(fecha).slice(0, 7)} cerrado: no se registran movimientos con fecha ${fecha}`,
+            'periodo_cerrado',
+        )
+    }
+    return fecha
+}
+
+/**
+ * Una salida con fecha pasada no deja la bodega en negativo en ninguna fecha desde la suya (con el lock
+ * del producto): la existencia acumulada por fecha menos lo que sale, en su fecha y en cada fecha
+ * posterior con movimientos. Si no alcanza: 409 `existencia_insuficiente_en_fecha`.
+ */
+export async function exigirExistenciaDesde(
+    t: Transaccion,
+    producto: { id: number; sku: string },
+    bodegaId: number,
+    fecha: string,
+    sale: Dec,
+): Promise<void> {
+    if (fecha >= hoyGuatemala()) return
+    const { rows } = (await t.trx.rawQuery(
+        `WITH por_dia AS (
+             SELECT fecha, sum(sum(cantidad)) OVER (ORDER BY fecha) AS acumulado
+               FROM inventario.movimientos
+              WHERE producto_id = ? AND bodega_id = ?
+              GROUP BY fecha
+         )
+         SELECT least(
+                    (SELECT coalesce(sum(cantidad), 0) FROM inventario.movimientos
+                      WHERE producto_id = ? AND bodega_id = ? AND fecha <= ?::date),
+                    (SELECT min(acumulado) FROM por_dia WHERE fecha >= ?::date)
+                )::text AS minimo,
+                (SELECT to_char(fecha, 'YYYY-MM-DD') FROM por_dia WHERE fecha >= ?::date
+                  ORDER BY acumulado, fecha LIMIT 1) AS en`,
+        [producto.id, bodegaId, producto.id, bodegaId, fecha, fecha, fecha],
+    )) as { rows: Array<{ minimo: string; en: string | null }> }
+    const minimo = dec(rows[0]!.minimo)
+    if (sale.gt(minimo)) {
+        throw new Conflicto(
+            `Con fecha ${fecha} el producto ${producto.sku} quedaría en negativo en la bodega ${bodegaId} (mínimo ${aCantidad(minimo)}${rows[0]!.en ? ` el ${rows[0]!.en}` : ''}); se piden ${aCantidad(sale)}`,
+            'existencia_insuficiente_en_fecha',
+            'Existencia insuficiente en la fecha',
+        )
+    }
 }
 
 /** Cantidad válida de una operación: > 0 con hasta 3 decimales. */

@@ -1,13 +1,14 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
-import { hoyGuatemala } from '#ledger/fechas'
 import { CUENTA_CONSUMO_POR_DEFECTO } from '#inventario/productos'
 import {
     bloquearProducto,
     bodegaMovible,
     cantidadValida,
     costoSalida,
+    exigirExistenciaDesde,
     exigirSeguimiento,
+    fechaDeOperacion,
     productoMovible,
     registrarMovimientoConAsiento,
     saldoDe,
@@ -18,8 +19,12 @@ import {
 /**
  * `inventario.consumir` (`POST /inventario/consumos`): materiales usados en una instalación o una
  * reparación (`servicio_id` opcional, de la misma empresa). Sale de la bodega al costo promedio;
- * asiento `cuenta_consumo` del producto (por defecto `5.2.07`) / `1.1.14`. Fecha de hoy. Más que la
- * existencia: 409 `existencia_insuficiente` sin escribir nada.
+ * asiento `cuenta_consumo` del producto (por defecto `5.2.07`) / `1.1.14`. Más que la existencia: 409
+ * `existencia_insuficiente` sin escribir nada.
+ *
+ * `fecha` (fase C, decisión del líder; por defecto hoy): una pasada solo dentro de un periodo abierto
+ * (422 `periodo_cerrado`), al costo promedio del momento de registrar, y sin dejar existencia negativa en
+ * ninguna fecha desde la suya (409 `existencia_insuficiente_en_fecha`).
  */
 
 export interface EntradaConsumo {
@@ -28,6 +33,7 @@ export interface EntradaConsumo {
     cantidad: string
     servicio_id?: number | null
     motivo?: string | null
+    fecha?: string | null
 }
 
 export default class ConsumirInventario extends DomainAction<EntradaConsumo, MovimientoVista> {
@@ -51,14 +57,16 @@ export default class ConsumirInventario extends DomainAction<EntradaConsumo, Mov
                 throw new NoEncontrado(`El servicio ${input.servicio_id} no existe en esta empresa`)
             }
         }
+        const fecha = await fechaDeOperacion(t, empresaId, input.fecha)
         await bloquearProducto(t, producto.id)
         const costo = costoSalida(await saldoDe(t, producto.id, bodega.id), cantidad, producto, bodega.id)
+        await exigirExistenciaDesde(t, producto, bodega.id, fecha, cantidad)
         const id = await registrarMovimientoConAsiento(
             t,
             {
                 empresaId,
                 tipo: 'consumo',
-                fecha: hoyGuatemala(),
+                fecha,
                 producto,
                 bodegaId: bodega.id,
                 cantidad: cantidad.neg(),
