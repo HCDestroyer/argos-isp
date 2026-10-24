@@ -30834,6 +30834,232 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/apertura": {
+      "get": {
+        "operationId": "libroApertura",
+        "summary": "Saldo de 2.9.01 Saldos de apertura y sus cierres",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa cuyo 2.9.01 se cierra o se consulta; por defecto la activa (X-Empresa-Id)",
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            }
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "description": "Saldo de 2.9.01 al día (por defecto hoy, Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saldo de apertura",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoApertura"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/apertura/cerrar": {
+      "post": {
+        "operationId": "libroCerrarApertura",
+        "summary": "Cerrar los saldos de apertura (2.9.01 → patrimonio)",
+        "description": "Terminada la importación, traslada el saldo neto de 2.9.01 con fecha hasta fecha a la cuenta de patrimonio elegida (3.3.01 por defecto, o 3.1.01): asiento ajuste del diario VAR. Con el saldo en 0.00 no escribe nada (asiento: null). Respeta cierres y bloqueos: 422 periodo_cerrado, 409 bloqueo_duro, 422 periodo_bloqueado. Se corrige revirtiendo su asiento (POST /libro/asientos/:id/revertir).",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo 2.9.01 se cierra o se consulta; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del asiento y corte del saldo de 2.9.01 (por defecto hoy, Guatemala; no futura)"
+                  },
+                  "cuenta_destino": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "3.3.01",
+                          "3.1.01"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Cuenta de patrimonio que recibe el saldo: 3.3.01 Utilidades acumuladas (por defecto) o 3.1.01 Capital social"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Se agrega a la descripción del asiento (p. ej. «importación desde Mikrowisp terminada»)"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saldos de apertura cerrados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreApertura"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.cerrar_apertura; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.cerrar_apertura",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/asientos/{id}": {
       "get": {
         "operationId": "libroVerAsiento",
@@ -49264,6 +49490,7 @@
                         "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
+                        "libro.cerrar_apertura",
                         "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
                         "libro.desbloquear",
@@ -49560,6 +49787,7 @@
                         "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
+                        "libro.cerrar_apertura",
                         "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
                         "libro.desbloquear",
@@ -55629,6 +55857,7 @@
                             "lealtad.ver",
                             "libro.bloquear",
                             "libro.bloquear_duro",
+                            "libro.cerrar_apertura",
                             "libro.cerrar_ejercicio",
                             "libro.cerrar_periodo",
                             "libro.desbloquear",
@@ -62454,6 +62683,104 @@
           }
         }
       },
+      "CierreApertura": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "fecha",
+          "cuenta",
+          "saldo",
+          "cierres",
+          "cuenta_destino",
+          "trasladado",
+          "asiento"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Corte del saldo"
+          },
+          "cuenta": {
+            "type": "string",
+            "description": "Siempre 2.9.01"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 al corte (debe − haber; negativo = acreedor). 0.00 = el check apertura_cero pasa"
+          },
+          "cierres": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CierreAperturaAsiento"
+            },
+            "description": "Cierres de apertura vigentes (sin reverso), el más reciente primero"
+          },
+          "cuenta_destino": {
+            "type": "string",
+            "enum": [
+              "3.3.01",
+              "3.1.01"
+            ],
+            "description": "Cuenta de patrimonio que recibió el saldo"
+          },
+          "trasladado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 que se trasladó (debe − haber antes del cierre); 0.00 si ya estaba en cero"
+          },
+          "asiento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Asiento"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Asiento del cierre; null si no había saldo (idempotente)"
+          }
+        }
+      },
+      "CierreAperturaAsiento": {
+        "type": "object",
+        "required": [
+          "asiento_id",
+          "fecha",
+          "cuenta_destino",
+          "monto",
+          "created_at"
+        ],
+        "properties": {
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "cuenta_destino": {
+            "type": "string",
+            "enum": [
+              "3.3.01",
+              "3.1.01"
+            ],
+            "description": "Cuenta de patrimonio que recibió el saldo"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 que canceló (debe − haber antes del cierre; negativo = acreedor)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CierrePeriodo": {
         "type": "object",
         "required": [
@@ -68667,6 +68994,42 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "EstadoApertura": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "fecha",
+          "cuenta",
+          "saldo",
+          "cierres"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Corte del saldo"
+          },
+          "cuenta": {
+            "type": "string",
+            "description": "Siempre 2.9.01"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 al corte (debe − haber; negativo = acreedor). 0.00 = el check apertura_cero pasa"
+          },
+          "cierres": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CierreAperturaAsiento"
+            },
+            "description": "Cierres de apertura vigentes (sin reverso), el más reciente primero"
           }
         }
       },

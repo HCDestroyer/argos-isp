@@ -174,6 +174,7 @@ export const PERMISOS = {
     'libros.emitir': 'Emitir libros legales con folio sobre un periodo bloqueado',
     'libros.habilitar': 'Registrar habilitaciones de folios de libros',
     'libro.cerrar_ejercicio': 'Cerrar el ejercicio anual (resultados a cero y reserva legal)',
+    'libro.cerrar_apertura': 'Cerrar los saldos de apertura de la importación (2.9.01 a patrimonio)',
     'libro.reabrir_ejercicio': 'Reabrir un ejercicio cerrado (con motivo); solo admin',
     'libro.bloquear': 'Bloquear el libro hasta una fecha (global, ventas, compras o impuestos); solo avanza',
     'libro.bloquear_duro': 'Bloqueo duro del libro (no retrocede); solo admin',
@@ -250,7 +251,7 @@ const PERMISOS_FISCALES = NOMBRES_PERMISOS.filter(
     (p) =>
         p === 'empresas.cambiar_pais' ||
         /^(fiscal|fel|proveedores|compras|libros|declaraciones|activos)\./.test(p) ||
-        /^libro\.(cerrar_ejercicio|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear|excepcion_bloqueo)$/.test(
+        /^libro\.(cerrar_ejercicio|cerrar_apertura|reabrir_ejercicio|bloquear|bloquear_duro|desbloquear|excepcion_bloqueo)$/.test(
             p,
         ),
 )
