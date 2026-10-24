@@ -369,7 +369,7 @@ export const CANALES_ACCION = ['panel', 'portal', 'api', 'ia', 'cron', 'worker',
 
 /** Tipos de entidad que registran las acciones (`t.fijarEntidad`) y dónde se ven en el panel. */
 export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: number) => string }> = {
-    campo_personalizado: { etiqueta: 'Campo personalizado' },
+    campo_personalizado: { etiqueta: 'Campo personalizado', ruta: id => `/campos-personalizados?campo=${id}` },
     cliente: { etiqueta: 'Cliente', ruta: id => `/clientes/${id}` },
     servicio: { etiqueta: 'Servicio', ruta: id => `/servicios/${id}` },
     factura: { etiqueta: 'Factura', ruta: id => `/facturas/${id}` },

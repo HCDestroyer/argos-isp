@@ -24,12 +24,14 @@ export const ESTADOS_SESION: Record<EstadoSesion, PresentacionEstadoUi> = {
 }
 
 /**
- * Router (equipo). La API todavía no expone si el router responde (pedido a A1/A2 en
- * `.claude/integration/a4.md`); el mapeo queda listo para cuando llegue.
+ * Router (equipo), de `Router.en_linea` (A1, `network/contacto_router.ts`; `estadoContactoRouter`
+ * en `utils/contactoRouter.ts`). `desconocido` = `en_linea` null: ninguna fuente periódica lo mide
+ * todavía; nunca se muestra como fuera de línea.
  */
-export type EstadoRouter = 'en_linea' | 'caido'
+export type EstadoRouter = 'en_linea' | 'caido' | 'desconocido'
 
 export const ESTADOS_ROUTER: Record<EstadoRouter, PresentacionEstadoUi> = {
     en_linea: { etiqueta: 'En línea', color: 'success', icono: 'i-lucide-circle-check' },
     caido: { etiqueta: 'Fuera de línea', color: 'error', icono: 'i-lucide-circle-x' },
+    desconocido: { etiqueta: 'Desconocido', color: 'neutral', icono: 'i-lucide-circle-help' },
 }

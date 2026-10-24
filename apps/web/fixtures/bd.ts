@@ -44,6 +44,7 @@ import { promesas } from './promesas/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { implementacionesPlan } from './planes/implementaciones'
 import { nodosPortal } from './nodosPortal/datos'
+import { camposPersonalizados } from './camposPersonalizados/datos'
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, ipv6Pools, redesIpv4, routers } from './routers/datos'
@@ -148,6 +149,8 @@ interface BaseFixtures {
     conciliacionesPasarela: Schema<'ConciliacionPasarela'>[]
     /** Nodos portal remotos (A5). */
     nodosPortal: Schema<'NodoPortal'>[]
+    /** Catálogo de campos personalizados del cliente (A1). */
+    camposPersonalizados: Schema<'CampoPersonalizado'>[]
     /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
     planesTemporales: Schema<'PlanTemporal'>[]
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
@@ -317,6 +320,7 @@ function inicial(): BaseFixtures {
         usuarios,
         planesTemporales: [],
         nodosPortal,
+        camposPersonalizados,
         conciliacionesPasarela,
         roles,
         tokensApi,

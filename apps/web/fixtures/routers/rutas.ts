@@ -3,6 +3,7 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
 import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
+import { SIN_CONTACTO } from './datos'
 import { vistaPreviaControl } from './vistaPrevia'
 
 function existeRouter(id: number | null): boolean {
@@ -243,6 +244,7 @@ export const rutasRouters: RutasFixture = {
             dhcp_servidor: null,
             interfaz_clientes: null,
             empresa_sugerida_id: null,
+            ...SIN_CONTACTO,
             version: 1,
             created_at: creado,
             updated_at: creado,

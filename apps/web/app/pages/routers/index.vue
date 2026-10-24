@@ -2,7 +2,8 @@
 import type { TableColumn } from '@nuxt/ui'
 
 /**
- * Routers (A1): lista con su control de velocidad y la capacidad del enlace. "Velocidad" abre el
+ * Routers (A1): lista con su estado en línea y último contacto (`contacto_router.ts`), su control
+ * de velocidad y la capacidad del enlace. "Velocidad" abre el
  * panel para cambiar la capacidad y el modo de colas (`contratos/velocidad.md`); "Conexión", los
  * cinco datos de la API REST de RouterOS (`contratos/routeros.md`). "Nuevo router" (`routers.crear`);
  * redes IPv4 y bloques y pools IPv6 en la ficha de cada router.
@@ -24,6 +25,7 @@ function alCrear(router: RouterNas) {
 const columnas: TableColumn<RouterNas>[] = [
     { accessorKey: 'nombre', header: 'Router', meta: { class: { td: 'whitespace-normal' } } },
     { accessorKey: 'nas_ip', header: 'NAS', meta: SOLO_ESCRITORIO },
+    { id: 'contacto', header: 'Contacto', meta: SOLO_ANCHO },
     { id: 'control', header: 'Colas', meta: SOLO_ANCHO },
     { id: 'capacidad', header: 'Capacidad (bajada / subida)', meta: SOLO_ESCRITORIO },
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
@@ -119,11 +121,23 @@ onMounted(() => void lista.recargar())
                                 />
                             </span>
                             <span class="font-mono text-xs text-muted">{{ row.original.host }}</span>
+                            <RouterContacto
+                                :router="row.original"
+                                compacto
+                                class="sm:hidden"
+                            />
                             <span class="text-xs text-muted sm:hidden">{{ CONTROLES_VELOCIDAD[controlDe(row.original)].etiqueta }} · {{ capacidad(row.original) }}</span>
                         </div>
                     </template>
                     <template #nas_ip-cell="{ row }">
                         <span class="font-mono text-sm">{{ row.original.nas_ip }}</span>
+                    </template>
+                    <template #contacto-cell="{ row }">
+                        <RouterContacto
+                            :router="row.original"
+                            compacto
+                            class="flex-col items-start"
+                        />
                     </template>
                     <template #control-cell="{ row }">
                         <UBadge
