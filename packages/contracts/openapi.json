@@ -45385,14 +45385,9 @@
       "get": {
         "operationId": "portalImagenPremioSorteo",
         "summary": "Imagen de un premio de un sorteo anunciado en el portal",
-        "description": "Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.",
+        "description": "Sin sesión (página pública del sorteo): solo de sorteos con las bases publicadas, aviso_portal y no cancelados (404 si no). Con sesión del portal, además de una empresa del cliente (404 si no). Solo la imagen. Mismo origen, ETag y Cache-Control: private, max-age=300.",
         "tags": [
           "portal"
-        ],
-        "security": [
-          {
-            "portal": []
-          }
         ],
         "parameters": [
           {
@@ -45427,16 +45422,6 @@
           },
           "304": {
             "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
-          },
-          "401": {
-            "description": "Sin sesión del portal (cookie vencida o ausente)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           },
           "404": {
             "description": "No encontrado",
@@ -49444,6 +49429,7 @@
                         "documentos.ver",
                         "egresos.anular",
                         "egresos.registrar",
+                        "egresos.registrar_sin_limite",
                         "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
@@ -49741,6 +49727,7 @@
                         "documentos.ver",
                         "egresos.anular",
                         "egresos.registrar",
+                        "egresos.registrar_sin_limite",
                         "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
@@ -55811,6 +55798,7 @@
                             "documentos.ver",
                             "egresos.anular",
                             "egresos.registrar",
+                            "egresos.registrar_sin_limite",
                             "egresos.ver",
                             "empresa.editar",
                             "empresa.ver",
