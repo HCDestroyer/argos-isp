@@ -20,6 +20,7 @@ import { emitirDocumento } from '#billing/emision'
 import { registrarBonificacion, type BonificacionVista } from '#billing/bonificaciones'
 import { configuracionFel, modoEmision, type CertificarAl } from '#fiscal/fel/configuracion'
 import type { TipoConceptoCargo } from '#billing/cargos_unicos'
+import { prepararVentas, registrarVentas } from '#inventario/ventas'
 
 /**
  * `facturas.emitir_cargo_unico` (`POST /facturas/cargo-unico`): factura manual de un cargo que no es
@@ -44,6 +45,10 @@ import type { TipoConceptoCargo } from '#billing/cargos_unicos'
  *   motivo con total > 0 → 422.
  * - Devuelve la factura o la bonificación con `documento` (`factura` | `bonificacion`); la ruta responde
  *   `{ documento, factura, bonificacion }`.
+ * - **Inventario** (fase C, `contratos/inventario.md` §5): una línea con `producto_id` y `bodega_id`
+ *   (y `unidad_id` si es de serie) vende del kardex: sale al costo promedio (o al de la unidad) con su
+ *   asiento de costo de ventas `5.6.01 / 1.1.14` en esta transacción (`#inventario/ventas`). 409
+ *   `existencia_insuficiente`, `unidad_en_comodato`; un cargo en Q0 con producto: 422 `producto_sin_costo`.
  * - FEL activa con un concepto exento (`gravable: false`) → 422 `concepto_exento_con_fel`: el DTE aún no
  *   lleva la frase de exención (pendiente del contador).
  */
@@ -57,6 +62,10 @@ export interface LineaCargoUnico {
     /** precio unitario bruto con IVA incluido (> 0) */
     precio_unitario: string
     descuentos?: Array<{ concepto: string; monto: string }>
+    /** inventario (fase C): vende del kardex de esta bodega (y esta unidad si es de serie) */
+    producto_id?: number | null
+    bodega_id?: number | null
+    unidad_id?: number | null
 }
 
 export interface EntradaEmitirCargoUnico {
@@ -238,9 +247,23 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                 }),
                 precio_unitario: precio.toFixed(2),
                 cuenta_codigo: concepto.cuenta_codigo,
+                ...(l.producto_id
+                    ? { producto_id: l.producto_id, bodega_id: l.bodega_id ?? null, unidad_id: l.unidad_id ?? null }
+                    : {}),
             })
         })
         if (errores.length > 0) throw new ValidacionFallida(errores)
+        // inventario (fase C): valida y costea lo que se vende, con el lock de cada producto
+        const ventas = await prepararVentas(
+            t,
+            empresaId,
+            input.lineas.map((l) => ({
+                producto_id: l.producto_id,
+                bodega_id: l.bodega_id,
+                unidad_id: l.unidad_id,
+                cantidad: l.cantidad ?? '1',
+            })),
+        )
         const conDescuentos = descuentos.length > 0 ? aplicarDescuentos(lineas, descuentos) : lineas
         const totales = totalesDe(conDescuentos)
 
@@ -278,6 +301,16 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                                 ? `El motivo ${input.motivo_sin_costo_id} no es del catálogo de la empresa ${empresaId}`
                                 : `El motivo «${motivo.nombre}» está inactivo`,
                         rule: 'motivo',
+                    },
+                ])
+            }
+            if (ventas.length > 0) {
+                throw new ValidacionFallida([
+                    {
+                        field: `lineas.${ventas[0]!.indice}.producto_id`,
+                        message:
+                            'Un equipo o material entregado sin costo no es una venta: dalo de baja, consúmelo o préstalo en comodato',
+                        rule: 'producto_sin_costo',
                     },
                 ])
             }
@@ -350,6 +383,12 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
             descripcion: `cargo único ${servicio ? `servicio ${servicio.id}` : `cliente ${clienteId}`}`,
         })
         const facturaId = emision.factura_id!
+        await registrarVentas(t, ventas, {
+            id: facturaId,
+            empresa_id: empresaId,
+            fecha: hoy,
+            servicio_id: servicio?.id ?? null,
+        })
         t.fijarEntidad('factura', facturaId)
         return { ...(await verFactura(facturaId, t.trx)), documento: 'factura' as const }
     }

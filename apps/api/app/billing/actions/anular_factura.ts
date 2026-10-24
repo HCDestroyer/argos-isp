@@ -4,6 +4,7 @@ import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
+import { revertirVentasDeFactura } from '#inventario/ventas'
 import { aplicarAnticipos, bloquearCliente, revertirAplicacionesDeNotas } from '#billing/cobros'
 import { columnasFactura, type FacturaFila } from '#billing/facturas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
@@ -33,6 +34,8 @@ async function bloquearDte(t: Transaccion, dteId: number): Promise<void> {
  * - Pasa a `anulada` con quién/cuándo/motivo; nunca se borra. Sus recargos de mora pendientes
  *   se anulan con ella (cada uno con su reverso y su evento).
  * - Revierte su asiento (`factura` o `mora`) con `RevertirAsiento`: el saldo del cliente baja.
+ * - Lo que la factura vendió del inventario vuelve a su bodega al mismo costo (`reverso_venta`, con
+ *   el reverso del asiento de costo; `#inventario/ventas`).
  * - Evento `factura.anulada` y re-evaluación del servicio: si ya no le quedan vencidas, se
  *   reactiva en la misma transacción.
  * - La `clave_unica` del periodo sigue ocupada: `generarFacturas` no vuelve a emitir ese periodo.
@@ -291,6 +294,8 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                     { trx: t.trx },
                 )
             }
+            // inventario (fase C): lo vendido en la factura vuelve a su bodega al mismo costo
+            await revertirVentasDeFactura(t, f.id, motivo)
             await t.trx
                 .from('billing.facturas')
                 .where('id', f.id)

@@ -7,6 +7,8 @@ import { bloquearCliente } from '#billing/cobros'
 import { emitirDocumento } from '#billing/emision'
 import { verFactura, type LineaCalculada } from '#billing/facturas'
 import AnularFactura from '#billing/actions/anular_factura'
+import { hoyGuatemala } from '#ledger/fechas'
+import { prepararVentas, registrarVentas } from '#inventario/ventas'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import { dteVigente, type ReceptorFiscal } from '#fiscal/fel/dte'
@@ -200,7 +202,22 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
                 'cuenta_codigo',
                 'servicio_adicional_id',
                 t.trx.raw(`to_char(adicional_periodo, 'YYYY-MM-DD') as adicional_periodo`),
+                'producto_id',
+                'bodega_id',
+                'unidad_id',
             )) as Array<LineaCalculada & { id: number; linea_id: number | null }>
+        // inventario (fase C): lo vendido volvió a su bodega con la anulación o la nota; la factura
+        // nueva lo vuelve a vender (al costo de hoy; una unidad de serie, al suyo)
+        const ventas = await prepararVentas(
+            t,
+            empresaId,
+            originales.map((l) => ({
+                producto_id: l.producto_id === null || l.producto_id === undefined ? null : Number(l.producto_id),
+                bodega_id: l.bodega_id === null || l.bodega_id === undefined ? null : Number(l.bodega_id),
+                unidad_id: l.unidad_id === null || l.unidad_id === undefined ? null : Number(l.unidad_id),
+                cantidad: l.cantidad,
+            })),
+        )
         // los descuentos siguen ligados a su línea en la factura nueva (por posición)
         const posicion = new Map(originales.map((l, i) => [Number(l.id), i]))
         const lineas: LineaCalculada[] = originales.map(({ id: _id, linea_id: lineaId, ...l }) =>
@@ -228,6 +245,12 @@ export default class SustituirFactura extends DomainAction<EntradaSustituirFactu
             receptor: input.cliente_fiscal ?? null,
         })
         const nuevaId = emision.factura_id!
+        await registrarVentas(t, ventas, {
+            id: nuevaId,
+            empresa_id: empresaId,
+            fecha: hoyGuatemala(),
+            servicio_id: f.servicio_id,
+        })
         await t.trx
             .insertQuery()
             .table('billing.sustituciones')

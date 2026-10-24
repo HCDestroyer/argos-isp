@@ -33,6 +33,7 @@ async function idCuenta(t: Transaccion, codigo: string): Promise<number> {
 }
 import type { ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { diferimientoDeFactura } from '#ledger/diferidos'
+import { revertirVentasPorNota } from '#inventario/ventas'
 
 /**
  * `facturas.nota_credito` (`POST /facturas/:id/notas-credito { monto, motivo }`): nota de crédito
@@ -326,6 +327,8 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         }
         // el saldo a favor paga ya otras facturas pendientes del cliente en la empresa (como un anticipo)
         if (aFavor.gt(0)) await aplicarAnticipos(t, factura.cliente_id, empresaId)
+        // inventario (fase C): una línea de venta acreditada por completo (o la factura entera) reingresa
+        await revertirVentasPorNota(t, { id: Number(notaId), factura_id: factura.id, motivo })
         await t.emit('nota_credito.emitida', {
             nota_credito_id: notaId,
             empresa_id: empresaId,

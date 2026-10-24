@@ -3,6 +3,7 @@
 | Rutas de facturación (A3): plantillas, facturas, pagos, promesas, estado de cuenta
 |--------------------------------------------------------------------------
 */
+import { exigirBodega } from '#inventario/acceso_http'
 import { definirRuta, redirigir, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#billing/validators'
@@ -250,6 +251,10 @@ const facturas: Ruta[] = [
             esquema: CargoUnicoEmitido,
         },
         handler: async (ctx, { cuerpo }) => {
+            // inventario: la bodega de la que sale cada venta (alcance y tope por técnico)
+            for (const linea of cuerpo.lineas) {
+                if (linea.bodega_id) await exigirBodega(ctx, linea.bodega_id)
+            }
             if (cuerpo.servicio_id) await exigirServicio(ctx, cuerpo.servicio_id)
             else if (cuerpo.cliente_id) {
                 const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {

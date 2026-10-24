@@ -279,6 +279,8 @@ export interface MovimientoNuevo {
     servicioId?: number | null
     /** movimiento de una unidad de serie (cantidad ±1 a su costo) */
     unidadId?: number | null
+    /** venta y sus reversos: la línea de la factura */
+    facturaLineaId?: number | null
     asientoId?: number | null
     origen?: { tipo: string; id: number } | null
     trasladoId?: number | null
@@ -321,6 +323,7 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
             costo_total: aTexto(m.costoTotal),
             servicio_id: m.servicioId ?? null,
             unidad_id: m.unidadId ?? null,
+            factura_linea_id: m.facturaLineaId ?? null,
             asiento_id: m.asientoId ?? null,
             origen_tipo: m.origen?.tipo ?? null,
             origen_id: m.origen?.id ?? null,
@@ -377,6 +380,8 @@ export async function registrarMovimientoConAsiento(
         descripcion: string
         /** partidas propias (la devolución de comodato); por defecto 1.1.14 contra `contrapartida` */
         movimientos?: LineaAsiento[]
+        /** diario del asiento (la venta va al de ventas, `VEN`, y respeta su bloqueo) */
+        diario?: string | null
     },
     id: number | null = null,
 ): Promise<number> {
@@ -393,6 +398,7 @@ export async function registrarMovimientoConAsiento(
                 descripcion: asiento.descripcion,
                 origen_tipo: 'inventario',
                 origen_id: id,
+                diario: asiento.diario ?? null,
                 movimientos: asiento.movimientos ?? [
                     { cuenta: sale ? contrapartida : CUENTAS_GT.INVENTARIOS, debe: monto },
                     { cuenta: sale ? CUENTAS_GT.INVENTARIOS : contrapartida, haber: monto },
