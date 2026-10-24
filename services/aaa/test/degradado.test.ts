@@ -73,7 +73,10 @@ describe('UltimoConocido', () => {
         const u = new UltimoConocido()
         u.guardar(servicio({ user_ppp: 'solo-en-memoria' }))
         for (let i = 0; i < 1200; i++) {
-            await redis.set(`${prefijo}e-${i}`, JSON.stringify(servicio({ user_ppp: `e-${i}`, servicio_id: i })))
+            await redis.set(
+                `${prefijo}e-${i}`,
+                JSON.stringify(servicio({ user_ppp: `e-${i}`, servicio_id: i })),
+            )
         }
         await redis.set(`${prefijo}e-lapida`, JSON.stringify({ eliminado: true, user_ppp: 'e-lapida' }))
         await redis.set(`${prefijo}e-roto`, '{no es json')
@@ -163,7 +166,16 @@ describe('POST /aaa/authorize en modo degradado', () => {
     function fuenteApi(): FuenteApi {
         const holgada = new FuenteApi({ url: api.url, token: 't', timeoutMs: 5000 })
         const corta = new FuenteApi({ url: api.url, token: 't', timeoutMs: 150 })
-        return new Proxy(holgada, { get: (_destino, clave) => Reflect.get(api.colgada ? corta : holgada, clave) })
+        // Los métodos van ligados a su fuente: cada una lleva su propia cola de lotes.
+        return new Proxy(holgada, {
+            get: (_destino, clave) => {
+                const fuente = api.colgada ? corta : holgada
+                const valor: unknown = Reflect.get(fuente, clave)
+                return typeof valor === 'function'
+                    ? (valor as (...a: unknown[]) => unknown).bind(fuente)
+                    : valor
+            },
+        })
     }
 
     function crear(modoDegradado: ModoDegradado = 'aceptar', redis: Redis = redisActual) {
@@ -238,7 +250,10 @@ describe('POST /aaa/authorize en modo degradado', () => {
         assert.equal(despues.status, 200)
         const fin = lineas.find((l) => l.msg === 'modo degradado: fin')
         assert.equal(fin?.atendidas, 2)
-        assert.match((await normal.inject({ method: 'GET', url: '/metrics' })).body, /^argosisp_aaa_degradado 0$/m)
+        assert.match(
+            (await normal.inject({ method: 'GET', url: '/metrics' })).body,
+            /^argosisp_aaa_degradado 0$/m,
+        )
         await normal.close()
     })
 
@@ -264,7 +279,10 @@ describe('POST /aaa/authorize en modo degradado', () => {
         const app = crear('aceptar', caido)
         const r = await autorizar(app, 'd-nuevo')
         assert.equal(r.status, 503)
-        assert.match((await app.inject({ method: 'GET', url: '/metrics' })).body, /resultado="sin_perfil"\} 1$/m)
+        assert.match(
+            (await app.inject({ method: 'GET', url: '/metrics' })).body,
+            /resultado="sin_perfil"\} 1$/m,
+        )
         assert.ok(lineas.some((l) => l.resultado === 'sin_perfil' && l.modo === 'degradado'))
         await app.close()
     })
@@ -274,7 +292,10 @@ describe('POST /aaa/authorize en modo degradado', () => {
         api.respuestas.set('d-rech', { status: 500 })
         const app = crear('rechazar', caido)
         assert.equal((await autorizar(app, 'd-rech')).status, 503)
-        assert.match((await app.inject({ method: 'GET', url: '/metrics' })).body, /resultado="desactivado"\} 1$/m)
+        assert.match(
+            (await app.inject({ method: 'GET', url: '/metrics' })).body,
+            /resultado="desactivado"\} 1$/m,
+        )
         await app.close()
     })
 
@@ -288,7 +309,10 @@ describe('POST /aaa/authorize en modo degradado', () => {
     })
 
     it('Redis responde pero perdió la clave (reinicio sin datos) y la API no responde: sirve el espejo', async () => {
-        await redisVivo.set(`${prefijo}d-espejo`, JSON.stringify(servicio({ user_ppp: 'd-espejo' }, 'k-espejo')))
+        await redisVivo.set(
+            `${prefijo}d-espejo`,
+            JSON.stringify(servicio({ user_ppp: 'd-espejo' }, 'k-espejo')),
+        )
         await ultimoConocido.espejar(redisVivo, prefijo)
         await redisVivo.del(`${prefijo}d-espejo`)
         api.respuestas.set('d-espejo', { status: 502 })

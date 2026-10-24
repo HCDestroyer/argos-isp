@@ -17,7 +17,7 @@ Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accountin
 ## `/aaa/authorize`
 
 1. Lee `User-Name` del cuerpo de `rlm_rest`.
-2. Busca `aaa:user:<user_ppp>` en Redis. Si no está, o Redis no responde (timeout 150 ms), consulta el respaldo: `GET $API_INTERNAL_URL/internal/aaa/servicio?user_ppp=` con `Authorization: Bearer $AAA_INTERNAL_TOKEN` o, mientras A1 no lo publique, `fixtures/servicios.json` (`AAA_RESPALDO=fixtures`).
+2. Busca `aaa:user:<user_ppp>` en Redis. Si no está, o Redis no responde (timeout 150 ms), consulta el respaldo: `GET $API_INTERNAL_URL/internal/aaa/servicio?user_ppp=` con `Authorization: Bearer $AAA_INTERNAL_TOKEN` (las consultas que llegan a la vez van juntas en `POST internal/aaa/servicios`, ver "Prueba de carga"). `fixtures/servicios.json` (`AAA_RESPALDO=fixtures`) queda solo para pruebas y desarrollo sin la API.
 3. Cachea lo obtenido con `SET NX` y **sin TTL**: si A1 escribió mientras se consultaba, gana A1. Los inexistentes no se cachean.
 4. Descifra `pass_ppp` (`v1.<iv>.<tag>.<datos>`, AES-256-GCM, `AAA_PPP_KEY`) y responde a FreeRADIUS, que autentica PAP o CHAP contra `control:Cleartext-Password`.
 
