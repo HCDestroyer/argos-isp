@@ -13,6 +13,9 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
  * si cambió el régimen, una bandera o un plazo, `ConsumidorCalendario`; `pago.registrado` → pedir la
  * certificación de los avisos de cobro cubiertos, `ConsumidorFel`); `--sin-eventos` lo apaga.
  *
+ * Consume además el grupo `inventario` (`ConsumidorInventario`: `servicio.estado_cambiado` → equipos
+ * en comodato por recuperar).
+ *
  * También consume el grupo `lealtad` (`ConsumidorLealtad`: pagos, facturas, notas de crédito y
  * servicios retirados → `lealtad.evaluar_evento`) y agenda los crons `lealtad:antiguedad` y
  * `lealtad:vencer`.
@@ -84,6 +87,16 @@ export default class BillingWorker extends BaseCommand {
             lealtad.iniciar()
             ejecutores.push(lealtad)
             this.logger.info(`billing:worker consumiendo el grupo lealtad de ${lealtad.stream}`)
+
+            // inventario: equipos en comodato de servicios retirados (grupo propio)
+            const { ConsumidorInventario } = await import('#inventario/consumidor')
+            const inventario = new EjecutorGrupo({
+                grupo: 'inventario',
+                consumidores: [new ConsumidorInventario()],
+            })
+            inventario.iniciar()
+            ejecutores.push(inventario)
+            this.logger.info(`billing:worker consumiendo el grupo inventario de ${inventario.stream}`)
         }
 
         const terminar = async () => {

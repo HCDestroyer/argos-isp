@@ -49,6 +49,7 @@ import EditarProveedor from '#ledger/actions/editar_proveedor'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import RegistrarCompraDesdeEgreso from '#ledger/actions/registrar_compra_desde_egreso'
 import AnularCompra from '#ledger/actions/anular_compra'
+import { exigirBodega } from '#inventario/acceso_http'
 
 /** JSON, o descarga CSV/XLSX con nombre `<reporte>-<fecha>.<ext>` (como `/reportes/*`). */
 export function responderReporte(ctx: HttpContext, reporte: Reporte, formato?: 'json' | 'csv' | 'xlsx') {
@@ -170,10 +171,17 @@ const compras: Ruta[] = [
         cuerpo: v.registrarCompraValidator,
         idempotente: true,
         descripcion:
-            'Solo inserción. Al contado crea el egreso que la paga (un solo asiento, el de la compra). Al crédito queda en 2.1.03 con el auxiliar del proveedor. FPEQ, FCAP y RECIBO sin crédito fiscal; crédito fuera de la ventana: 422 credito_fiscal_extemporaneo. 409 compra_duplicada. Retenciones sugeridas si no se indican. Emite compra.registrada.',
+            'Solo inserción. Una línea bien con producto_id y bodega_id entra al inventario (1.1.14; producto de serie con unidades[]); una NCRE con producto devuelve al proveedor (unidad_ids en serie). Al contado crea el egreso que la paga (un solo asiento, el de la compra). Al crédito queda en 2.1.03 con el auxiliar del proveedor. FPEQ, FCAP y RECIBO sin crédito fiscal; crédito fuera de la ventana: 422 credito_fiscal_extemporaneo. 409 compra_duplicada. Retenciones sugeridas si no se indican. Emite compra.registrada.',
         respuesta: { status: 201, descripcion: 'Compra registrada', esquema: Compra },
         handler: async (ctx, { cuerpo }) => {
             exigirAcceso(ctx, await empresaDeProveedor(cuerpo.proveedor_id))
+            // inventario: la bodega que recibe (alcance, como el destino de un traslado) o, en una NCRE
+            // de devolución al proveedor, de la que sale (alcance y tope por técnico)
+            for (const linea of cuerpo.lineas) {
+                if (linea.bodega_id) {
+                    await exigirBodega(ctx, linea.bodega_id, cuerpo.tipo_documento !== 'NCRE')
+                }
+            }
             return new RegistrarCompra().execute(cuerpo, ctx.contextoAccion())
         },
     }),

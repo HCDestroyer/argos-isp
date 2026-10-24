@@ -4,6 +4,7 @@ import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import type { DatosFiscales } from '#fiscal/parametros'
 import { resolverImpuesto } from '#fiscal/impuestos'
 import { ParametroSinConfirmar } from '#fiscal/errores'
+import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import {
     max0,
     min,
@@ -225,7 +226,18 @@ export interface ResultadosRango {
     ingresos: Dec
     gastos: Dec
     no_deducibles: Dec
+    /** costo de lo vendido, `5.6.01` (inventario, fase C; las mermas 5.6.02 son gasto, decisión del líder) */
+    costo_ventas: Dec
     renglones: RenglonDeclaracion[]
+}
+
+/**
+ * ¿La cuenta es costo de lo vendido para el margen bruto del ISO (§15 #79)? Solo `5.6.01` y sus hijas:
+ * las mermas y faltantes (`5.6.02`) son gasto, no costo de ventas (decisión del líder; §15 #103).
+ */
+export function esCostoDeVentas(codigo: string): boolean {
+    const c = CUENTAS_GT.COSTO_EQUIPO_VENDIDO
+    return codigo === c || codigo.startsWith(`${c}.`)
 }
 
 /** Ingresos y gastos del rango sin el cierre anual; los no deducibles por `categoria_fiscal`. */
@@ -257,12 +269,14 @@ export async function resultadosDelRango(
     let ingresos = CERO
     let gastos = CERO
     let noDeducibles = CERO
+    let costoVentas = CERO
     const renglones: RenglonDeclaracion[] = []
     for (const f of rows) {
         const neto = dec(f.neto)
         const monto = f.tipo === 'ingreso' ? neto.negated() : neto
         if (f.tipo === 'ingreso') ingresos = ingresos.plus(monto)
         else gastos = gastos.plus(monto)
+        if (f.tipo === 'gasto' && esCostoDeVentas(f.codigo)) costoVentas = costoVentas.plus(monto)
         if (f.tipo === 'gasto' && f.categoria_fiscal === 'no_deducible') {
             noDeducibles = noDeducibles.plus(monto)
         }
@@ -279,7 +293,7 @@ export async function resultadosDelRango(
             estado: null,
         })
     }
-    return { ingresos, gastos, no_deducibles: noDeducibles, renglones }
+    return { ingresos, gastos, no_deducibles: noDeducibles, costo_ventas: costoVentas, renglones }
 }
 
 export interface AjusteFiscal {
@@ -637,7 +651,8 @@ async function isoTrimestral(c: QueryClientContract, empresaId: number, desde: s
     const activo = await saldoActivo(c, empresaId, corte)
     const resultados = await resultadosDelRango(c, empresaId, `${anio}-01-01`, corte)
     const ingresos = resultados.ingresos
-    const costo = CERO
+    // fase C del inventario (§15 #79): el costo de ventas es 5.6.01 (las mermas 5.6.02 son gasto)
+    const costo = resultados.costo_ventas
     const margen = ingresos.gt(0) ? redondear(ingresos.minus(costo).times(100).dividedBy(ingresos)) : CERO
     const baseActivo = redondear(max0(activo).dividedBy(4))
     const baseIngresos = redondear(max0(ingresos).dividedBy(4))
@@ -647,7 +662,7 @@ async function isoTrimestral(c: QueryClientContract, empresaId: number, desde: s
     const impuesto = aplica ? pct(base, tasa) : CERO
     const notas = [
         `Base: activo neto al ${corte} y ingresos brutos de ${anio} (iso_base_periodo = anio_anterior)`,
-        'Costo de ventas 0.00: el plan de cuentas no tiene costo de ventas separado; margen bruto = ingresos (§15)',
+        `Costo de ventas ${aTexto(costo)}: 5.6.01 de ${anio} (costo del equipo vendido; las mermas 5.6.02 son gasto; §15 #79)`,
         regla4x === null
             ? 'iso_regla_4x sin valor: no se aplica la regla de activo neto mayor que 4 veces los ingresos (§15 #4)'
             : `iso_regla_4x = ${String(regla4x)}${por4x ? ': se usa la base de ingresos' : ''}`,

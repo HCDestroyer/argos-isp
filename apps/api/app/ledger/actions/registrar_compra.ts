@@ -15,6 +15,7 @@ import {
 } from '#ledger/preparar_compra'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { altasDeLaCompra } from '#ledger/altas_compra'
+import { entradasDeLaCompra } from '#inventario/compras'
 
 /**
  * `compras.registrar` (`POST /compras`): la factura (u otro documento) de un proveedor, de solo
@@ -30,6 +31,8 @@ import { altasDeLaCompra } from '#ledger/altas_compra'
  * - **NCRE** del proveedor: siempre contra la CxP de la compra que corrige (al revés).
  * - Líneas `activo_fijo` dan de alta su activo y las que traen `diferir_meses` su diferimiento, en
  *   la misma transacción (`#ledger/altas_compra`).
+ * - Líneas `bien` con `producto_id` y `bodega_id` van a `1.1.14 Inventarios` y entran al kardex
+ *   (`#inventario/compras`, `contratos/inventario.md` §5).
  * - Emite `compra.registrada`.
  */
 
@@ -159,7 +162,8 @@ export default class RegistrarCompra extends DomainAction<EntradaRegistrarCompra
         }
 
         const altas = await altasDeLaCompra(t, compraId, compra, input.lineas)
-        await new RegistrarAsiento().execute(
+        const inventario = await entradasDeLaCompra(t, compra)
+        const asiento = await new RegistrarAsiento().execute(
             {
                 empresa_id: compra.empresaId,
                 fecha: compra.fecha,
@@ -183,6 +187,7 @@ export default class RegistrarCompra extends DomainAction<EntradaRegistrarCompra
             { trx: t.trx },
         )
         await altas.despuesDelAsiento()
+        await inventario.despuesDelAsiento(asiento, compraId)
         await t.emit('compra.registrada', {
             compra_id: compraId,
             empresa_id: compra.empresaId,

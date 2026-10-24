@@ -27,7 +27,8 @@ import { escalaOpcional, resultadosDelRango, saldoActivo, type Tramo } from '#fi
  * - `utilidades`: `isr_utilidades_tasa × m × R` (sin pérdidas: 0 con margen negativo).
  * - `iso_piso`: ISO de un año con la base del periodo (`iso_tasa` × la mayor entre el activo neto al
  *   cierre del último mes y los ingresos `R` anualizados como el resto con menos de 12 meses; H37), como
- *   piso del régimen sobre utilidades cuando es mayor.
+ *   piso del régimen sobre utilidades cuando es mayor. Solo si el margen bruto (ingresos − costo de
+ *   ventas `5.6.01`, sobre los ingresos del mayor) pasa de `iso_umbral_margen` (§15 #79); si no, 0.
  * - `comparacion`: ISR anual de cada régimen (utilidades con el piso), la diferencia y el margen de
  *   equilibrio `m*` = opcional / (tasa × `R`) (= `0.28 − 2,400 / R` mensual sobre Q30,000).
  * - `proyeccion`: los próximos 12 meses con `crecimiento` (por ciento mensual; por defecto la tendencia
@@ -115,6 +116,7 @@ const PARAMETROS_USADOS = [
     'isr_utilidades_tasa',
     'iso_tasa',
     'iso_base',
+    'iso_umbral_margen',
 ] as const
 
 class Dependiente extends Problema {
@@ -148,6 +150,7 @@ interface DatosBase {
     ingresos: Dec
     gastos: Dec
     no_deducibles: Dec
+    costo_ventas: Dec
 }
 
 const pct = (v: Dec) => aTexto(redondear(v.times(100)))
@@ -332,6 +335,7 @@ async function datosBase(ctx: Contexto) {
         ingresos: r.ingresos,
         gastos: r.gastos,
         no_deducibles: r.no_deducibles,
+        costo_ventas: r.costo_ventas,
     }
     return {
         interno,
@@ -390,10 +394,21 @@ async function isoPiso(ctx: Contexto, base: DatosBase) {
     const ingresos = anualizar(base.meses.length, base.R)
     // ISO de un año: 4 trimestres de tasa × ¼ de la mayor base = tasa × la mayor base
     const mayor = activo.gt(ingresos) ? activo : ingresos
-    const iso = redondear((mayor.isNegative() ? CERO : mayor).times(tasa))
+    // §15 #79 (fase C del inventario): margen bruto = (ingresos − costo de ventas 5.6.01) / ingresos del
+    // mayor; sin pasar de iso_umbral_margen no hay ISO (sin ingresos, margen 0)
+    const umbral = dec(leer<string>(ctx, 'iso_umbral_margen'))
+    const margen = base.ingresos.gt(0)
+        ? redondear(base.ingresos.minus(base.costo_ventas).times(100).dividedBy(base.ingresos))
+        : CERO
+    const aplica = margen.gt(umbral)
+    const iso = aplica ? redondear((mayor.isNegative() ? CERO : mayor).times(tasa)) : CERO
     return {
         interno: { iso },
         datos: {
+            costo_ventas: aTexto(base.costo_ventas),
+            margen_bruto: aTexto(margen),
+            umbral_margen: aTexto(umbral),
+            aplica,
             activo_neto: aTexto(activo),
             ingresos_brutos: aTexto(base.R),
             ingresos_anuales: aTexto(ingresos),

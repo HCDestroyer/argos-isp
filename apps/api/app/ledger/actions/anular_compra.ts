@@ -6,6 +6,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { verCompra, type CompraVista } from '#ledger/compras'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { anularAltasDeLaCompra } from '#ledger/altas_compra'
+import { revertirEntradasDeLaCompra } from '#inventario/compras'
 
 /**
  * `compras.anular` (`POST /compras/:id/anular`, con motivo): revierte el asiento de la compra (con
@@ -18,6 +19,8 @@ import { anularAltasDeLaCompra } from '#ledger/altas_compra'
  * - 409 `compra_anulada` (dos veces), `compra_con_notas` (NCRE vigentes que la corrigen),
  *   `compra_con_pagos` (pagos a proveedor vigentes aplicados), `compra_con_constancia` (constancia
  *   de retención emitida) y las de sus activos o diferidos con cuotas (`#ledger/altas_compra`).
+ * - Lo que la compra entró al inventario sale al mismo costo con el reverso (`#inventario/compras`):
+ *   409 `existencia_insuficiente` o `valor_insuficiente` si ya no está.
  * - Emite `compra.anulada`.
  */
 
@@ -138,6 +141,7 @@ export default class AnularCompra extends DomainAction<EntradaAnularCompra, Comp
                   { trx: t.trx },
               )
             : null
+        if (reverso) await revertirEntradasDeLaCompra(t, compra.id, reverso)
         const anuladoPor = usuarioDelActor(t.ctx.actor)
         await t.trx
             .insertQuery()

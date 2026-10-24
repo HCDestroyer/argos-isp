@@ -283,6 +283,27 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routers.marcar_migrado': 'Fecha de migración al nuevo RADIUS marcada',
     'sesiones.completar_prefijo': 'Prefijo IPv6 de la sesión completado',
     'sesiones.desconectar': 'Desconexión de sesión solicitada',
+    // Inventario (A3)
+    'bodegas.crear': 'Bodega creada',
+    'bodegas.editar': 'Bodega editada',
+    'bodegas.desactivar': 'Bodega desactivada',
+    'productos.crear': 'Producto creado',
+    'productos.editar': 'Producto editado',
+    'productos.desactivar': 'Producto desactivado',
+    'inventario.cargar_saldo_inicial': 'Saldo inicial de inventario cargado',
+    'inventario.ajustar': 'Inventario ajustado',
+    'inventario.trasladar': 'Traslado entre bodegas',
+    'inventario.consumir': 'Material consumido',
+    'inventario.dar_de_baja': 'Equipo dado de baja',
+    'inventario.marcar_reparada': 'Equipo marcado como reparado',
+    'inventario.asignar_comodato': 'Equipo en comodato asignado',
+    'inventario.devolver_comodato': 'Equipo en comodato devuelto',
+    'inventario.declarar_perdida_comodato': 'Equipo en comodato declarado perdido',
+    'inventario.revisar_comodatos': 'Comodatos revisados',
+    'inventario.abrir_conteo': 'Conteo de inventario abierto',
+    'inventario.contar': 'Conteo registrado',
+    'inventario.cerrar_conteo': 'Conteo de inventario cerrado',
+    'inventario.cancelar_conteo': 'Conteo de inventario cancelado',
 }
 
 /** Todas las acciones con texto propio (para comprobar que ninguna de la API queda sin traducir). */
@@ -426,6 +447,14 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     pago_proveedor: { etiqueta: 'Pago a proveedor', ruta: () => '/pagos-proveedores' },
     activo: { etiqueta: 'Activo fijo', ruta: id => `/activos/${id}` },
     diferimiento: { etiqueta: 'Diferido', ruta: id => `/diferimientos/${id}` },
+    // Inventario (A3): sin `ruta` hasta que existan sus pantallas
+    bodega: { etiqueta: 'Bodega' },
+    producto: { etiqueta: 'Producto' },
+    movimiento_inventario: { etiqueta: 'Movimiento de inventario' },
+    traslado_inventario: { etiqueta: 'Traslado de inventario' },
+    conteo_inventario: { etiqueta: 'Conteo de inventario' },
+    unidad: { etiqueta: 'Equipo (unidad)' },
+    unidad_inventario: { etiqueta: 'Equipo (unidad)' },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

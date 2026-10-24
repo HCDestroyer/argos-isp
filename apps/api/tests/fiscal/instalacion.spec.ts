@@ -5,10 +5,10 @@ import { CUENTAS_AGREGADAS_GT, CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { PARAMETROS_GT_2026_3 } from '#fiscal/l10n/gt/parametros'
 import { IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
 import { instalarPaquete, paqueteDePais } from '#fiscal/instalador'
-import { PAQUETE_GT_2026_3 } from '#fiscal/l10n/gt/index'
+import { PAQUETE_GT_2026_4 } from '#fiscal/l10n/gt/index'
 
-/** versión vigente del paquete (gt-2026.3: 2026.2 más el parámetro egreso_cajero_maximo) */
-const ULTIMA = PAQUETE_GT_2026_3.codigo
+/** versión vigente del paquete (gt-2026.4: 2026.3 más las cuentas del inventario 1.1.14, 5.2.07, 4.2.04 y 5.6) */
+const ULTIMA = PAQUETE_GT_2026_4.codigo
 import { parametro } from '#fiscal/parametros'
 import { hoyFiscal } from '#fiscal/comun'
 import { crearEmpresaFila } from '#tests/core/fabricas'
@@ -113,7 +113,7 @@ test.group('Localización fiscal · instalación', (group) => {
 
         // el paquete aplicado directo (como la migración) tampoco agrega nada
         await db.transaction((trx) =>
-            instalarPaquete(trx, PAQUETE_GT_2026_3, 1, { instaladaPor: null, hoy: hoyFiscal() }),
+            instalarPaquete(trx, PAQUETE_GT_2026_4, 1, { instaladaPor: null, hoy: hoyFiscal() }),
         )
         assert.deepEqual(await conteos(), antes)
 

@@ -1,3 +1,4 @@
+import { esCuentaDelKardex } from '#fiscal/l10n/gt/cuentas'
 import { createHash } from 'node:crypto'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
@@ -566,6 +567,8 @@ export function contrapartidaProhibida(codigo: string): boolean {
         codigo.startsWith('1.1.10') ||
         codigo === '1.1.11' ||
         codigo === CUENTAS.CXC_CLIENTES ||
-        codigo === CUENTAS.ANTICIPOS_CLIENTES
+        codigo === CUENTAS.ANTICIPOS_CLIENTES ||
+        // H39: 1.1.14 solo la mueve el kardex
+        esCuentaDelKardex(codigo)
     )
 }

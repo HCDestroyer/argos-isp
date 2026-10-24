@@ -102,6 +102,19 @@ export default class RegistrarCompraDesdeEgreso extends DomainAction<EntradaComp
             ])
         }
 
+        // inventario §5: el gasto del egreso ya está en su cuenta; una entrada al kardex es otra compra
+        const conProducto = input.lineas.findIndex((l) => l.producto_id || l.bodega_id)
+        if (conProducto >= 0) {
+            throw new ValidacionFallida([
+                {
+                    field: `lineas.${conProducto}.producto_id`,
+                    message:
+                        'Una compra desde un egreso no entra al inventario: registra la compra con POST /compras',
+                    rule: 'no_aplica',
+                },
+            ])
+        }
+
         const compra = await prepararCompra(t, input, {
             periodoMinimo: inicioDeMes(egreso.fecha),
             sinCreditoFueraDeVentana: true,

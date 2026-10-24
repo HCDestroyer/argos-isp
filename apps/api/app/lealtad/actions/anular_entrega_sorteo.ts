@@ -6,6 +6,7 @@ import AnularEgreso from '#ledger/actions/anular_egreso'
 import { bloquearCliente } from '#billing/cobros'
 import RevertirCanje from '#lealtad/actions/revertir_canje'
 import { detalleSorteo, exigirEstado, ganadoresDe, verSorteo } from '#lealtad/sorteos'
+import { revertirPremio } from '#inventario/premios'
 
 /**
  * `sorteos.anular_entrega` (`POST /lealtad/sorteos/:id/ganadores/:ganadorId/anular-entrega`, permiso
@@ -14,6 +15,8 @@ import { detalleSorteo, exigirEstado, ganadoresDe, verSorteo } from '#lealtad/so
  *
  * - `efectivo`: anula su egreso (categoría `premios`) con `AnularEgreso`;
  * - `bien`: revierte su asiento `sorteo` (`5.1.03 / 2.1.03` o la cuenta de activo);
+ * - `bien` desde el inventario: reingresa el movimiento `premio` al mismo costo y bodega
+ *   (`reverso_premio`, `1.1.14 / 5.1.03`); la unidad de serie vuelve `disponible`;
  * - `servicio`: revierte el canje sin puntos del ganador (sin devolver existencias: no las tomó); si
  *   el descuento ya se aplicó a una factura, 409 `canje_no_revertible`;
  * - el asiento del ISR (`5.1.03 / 2.1.05`) se revierte en todos los casos.
@@ -83,6 +86,14 @@ export default class AnularEntregaSorteo extends DomainAction<
                 { trx: t.trx },
             )
         }
+        if (ganador.movimiento_inventario_id !== null) {
+            await revertirPremio(
+                t,
+                ganador.movimiento_inventario_id,
+                { tipo: 'sorteo_ganador', id: ganador.id },
+                razon,
+            )
+        }
         if (ganador.asiento_id !== null) {
             await new RevertirAsiento().execute(
                 { asiento_id: ganador.asiento_id, motivo: razon, por_anulacion: true },
@@ -100,6 +111,7 @@ export default class AnularEntregaSorteo extends DomainAction<
             canje_id: ganador.canje_id,
             retencion_isr: ganador.retencion_isr,
             contrapartida: ganador.contrapartida,
+            movimiento_inventario_id: ganador.movimiento_inventario_id,
         }
         await t.trx
             .from('lealtad.sorteos_ganadores')
@@ -113,6 +125,7 @@ export default class AnularEntregaSorteo extends DomainAction<
                 constancia_archivo_id: null,
                 compra_unidades: null,
                 compra_base: null,
+                movimiento_inventario_id: null,
                 retencion_isr: null,
                 contrapartida: null,
                 entregado_en: null,
@@ -128,6 +141,7 @@ export default class AnularEntregaSorteo extends DomainAction<
             canje_id: null,
             retencion_isr: null,
             contrapartida: null,
+            movimiento_inventario_id: null,
         })
         if (sorteo.estado === 'premios_entregados') {
             // reabre al estado del que venía: con el acta cerrada, acta_cerrada
