@@ -44,6 +44,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
             { id: 'facturas', etiqueta: 'Facturas', descripcion: 'Avisos de cobro emitidos, vencidos y anulados.', icono: 'i-lucide-receipt-text', ruta: '/facturas', permiso: 'facturas.ver' },
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-banknote', ruta: '/pagos', permiso: 'pagos.ver' },
             { id: 'comprobantes', etiqueta: 'Comprobantes', descripcion: 'Depósitos y transferencias por verificar: aprobar registra el pago y reactiva.', icono: 'i-lucide-file-check-2', ruta: '/comprobantes', permiso: 'comprobantes.ver' },
+            { id: 'pasarela', etiqueta: 'Conciliación de la pasarela', descripcion: 'Cobros en línea de cada día contra el reporte del proveedor, con sus diferencias.', icono: 'i-lucide-scale', ruta: '/cobros/pasarela', permiso: 'pagos.ver' },
             { id: 'promesas', etiqueta: 'Promesas', descripcion: 'Promesas de pago y su evaluación.', icono: 'i-lucide-calendar-clock', ruta: '/promesas', permiso: 'promesas.ver' },
             { id: 'dte', etiqueta: 'Cola de DTE', descripcion: 'Certificación FEL: pendientes, rechazados, en contingencia y anulaciones.', icono: 'i-lucide-badge-check', ruta: '/dte', permiso: 'fel.ver' },
             { id: 'notas-credito', etiqueta: 'Notas de crédito', descripcion: 'Rebajas sobre el saldo de una factura, con su asiento.', icono: 'i-lucide-file-minus', ruta: '/notas-credito', permiso: 'facturas.ver' },
@@ -91,7 +92,6 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         icono: 'i-lucide-landmark',
         secciones: [
             { id: 'cobros-por-liquidar', etiqueta: 'Cobros por liquidar', descripcion: 'Pagos por pasarela, agente o débito que esperan la liquidación del proveedor.', icono: 'i-lucide-hand-coins', ruta: '/cobros/por-liquidar', permiso: 'bancos.ver' },
-            { id: 'pasarela', etiqueta: 'Conciliación de la pasarela', descripcion: 'Cobros en línea de cada día contra el reporte del proveedor, con sus diferencias.', icono: 'i-lucide-scale', ruta: '/cobros/pasarela', permiso: 'pagos.ver' },
             { id: 'fondos-transito', etiqueta: 'Fondos en tránsito', descripcion: 'Depósitos de caja y traslados entre bancos por acreditar.', icono: 'i-lucide-truck', ruta: '/bancos/transito', permiso: 'bancos.ver' },
             { id: 'conciliacion', etiqueta: 'Conciliación bancaria', descripcion: 'Extractos del banco, conciliación con el libro y reglas.', icono: 'i-lucide-file-spreadsheet', ruta: '/bancos/extractos', permiso: 'bancos.ver' },
         ],
