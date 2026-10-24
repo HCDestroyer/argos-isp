@@ -2507,7 +2507,7 @@ async function verificarLibroCon(
             AND NOT EXISTS (SELECT 1 FROM ledger.activos_cuotas q WHERE q.asiento_id = a.id)`,
     )
     await revisar(
-        '15.alta_de_activo_mal_contabilizada (desde la compra: su línea activo_fijo, costo = base con crédito o base + IVA sin él, sin asiento propio; a mano: alta_activo 1.2.01 = costo / 1.2.02 = inicial + contrapartida)',
+        '15.alta_de_activo_mal_contabilizada (desde la compra: su línea activo_fijo, costo = base con crédito o base + IVA sin él, sin asiento propio; a mano: alta_activo 1.2.01 = costo / 1.2.02 = inicial + contrapartida; en comodato: el asiento de su asignación, 1.2.01 = costo / 1.1.14)',
         `WITH alta AS (
              SELECT a.origen_id AS activo_id, count(DISTINCT a.id) AS asientos,
                     sum(CASE WHEN m.cuenta_id = ac.cuenta_activo_id THEN m.debe - m.haber ELSE 0 END) AS costo,
@@ -2528,7 +2528,22 @@ async function verificarLibroCon(
            LEFT JOIN ledger.compras co ON co.id = l.compra_id
            LEFT JOIN alta ON alta.activo_id = ac.id
           WHERE ${E('ac.empresa_id')}
-            AND CASE WHEN ac.compra_linea_id IS NOT NULL OR ac.compra_id IS NOT NULL
+            AND CASE -- inventario fase B: el alta de un equipo en comodato es el asiento de su asignación
+                     -- (origen inventario): 1.2.01.NN = costo / 1.1.14 = costo, nada más (inv. 24.comodato_*)
+                     WHEN ac.unidad_id IS NOT NULL
+                     THEN ac.compra_id IS NOT NULL OR ac.compra_linea_id IS NOT NULL OR alta.activo_id IS NOT NULL
+                          OR ac.depreciacion_inicial <> 0
+                          OR NOT EXISTS (
+                              SELECT 1 FROM inventario.movimientos im JOIN ledger.asientos ia ON ia.id = im.asiento_id
+                               WHERE im.tipo = 'asignacion_comodato' AND im.unidad_id = ac.unidad_id
+                                 AND im.fecha = ac.fecha_alta AND im.costo_total = -ac.costo
+                                 AND ia.origen_tipo = 'inventario' AND ia.origen_id = im.id
+                                 AND (SELECT coalesce(sum(mm.debe - mm.haber), 0) FROM ledger.movimientos mm
+                                       WHERE mm.asiento_id = ia.id AND mm.cuenta_id = ac.cuenta_activo_id) = ac.costo
+                                 AND (SELECT count(*) FROM ledger.movimientos mm JOIN ledger.cuentas mc ON mc.id = mm.cuenta_id
+                                       WHERE mm.asiento_id = ia.id AND mm.cuenta_id <> ac.cuenta_activo_id
+                                         AND mc.codigo <> '${CUENTAS_GT.INVENTARIOS}') = 0)
+                     WHEN ac.compra_linea_id IS NOT NULL OR ac.compra_id IS NOT NULL
                      THEN l.id IS NULL OR co.id IS DISTINCT FROM ac.compra_id OR l.tipo <> 'activo_fijo'
                           OR co.empresa_id <> ac.empresa_id OR l.cuenta_id <> ac.cuenta_activo_id
                           OR ac.costo <> CASE WHEN co.credito_fiscal THEN l.base ELSE l.base + l.iva END
@@ -2538,7 +2553,7 @@ async function verificarLibroCon(
                           OR alta.ajenos <> 0 END`,
     )
     await revisar(
-        '15.baja_de_activo_mal_contabilizada (venta o retiro: 1.2.02 = inicial + Σ cuotas, cobro = precio, 1.2.01 = costo y la diferencia a 4.2.02 o 5.3.06, nada más; anulación: sin asiento, su compra anulada y sin cuotas)',
+        '15.baja_de_activo_mal_contabilizada (venta o retiro: 1.2.02 = inicial + Σ cuotas, cobro = precio, 1.2.01 = costo y la diferencia a 4.2.02 o 5.3.06, nada más; anulación: sin asiento, su compra anulada y sin cuotas; devolución de comodato: su asiento (origen inventario) 1.1.14 = valor en libros + 1.2.02 = acumulada / 1.2.01 = costo, sin resultado)',
         `WITH mov AS (
              SELECT b.id AS baja_id, count(DISTINCT a.id) AS asientos, min(a.fecha) AS fecha,
                     sum(CASE WHEN m.cuenta_id = ac.cuenta_depreciacion_id THEN m.debe - m.haber ELSE 0 END) AS acumulada,
@@ -2546,11 +2561,16 @@ async function verificarLibroCon(
                     sum(CASE WHEN m.cuenta_id = b.cuenta_cobro_id THEN m.debe - m.haber ELSE 0 END) AS cobro,
                     sum(CASE WHEN c.codigo = '${CUENTAS_GT.GANANCIA_VENTA_ACTIVOS}' THEN m.haber - m.debe ELSE 0 END) AS ganancia,
                     sum(CASE WHEN c.codigo = '${CUENTAS_GT.PERDIDA_BAJA_ACTIVOS}' THEN m.debe - m.haber ELSE 0 END) AS perdida,
+                    sum(CASE WHEN c.codigo = '${CUENTAS_GT.INVENTARIOS}' THEN m.debe - m.haber ELSE 0 END) AS inventario,
                     count(*) FILTER (WHERE m.cuenta_id NOT IN (ac.cuenta_depreciacion_id, ac.cuenta_activo_id)
                                        AND m.cuenta_id IS DISTINCT FROM b.cuenta_cobro_id
-                                       AND c.codigo NOT IN ('${CUENTAS_GT.GANANCIA_VENTA_ACTIVOS}', '${CUENTAS_GT.PERDIDA_BAJA_ACTIVOS}')) AS ajenos
+                                       AND c.codigo NOT IN ('${CUENTAS_GT.GANANCIA_VENTA_ACTIVOS}', '${CUENTAS_GT.PERDIDA_BAJA_ACTIVOS}')
+                                       AND (b.tipo <> 'devolucion_comodato' OR c.codigo <> '${CUENTAS_GT.INVENTARIOS}')) AS ajenos
                FROM ledger.activos_bajas b JOIN ledger.activos ac ON ac.id = b.activo_id
-               JOIN ledger.asientos a ON a.origen_tipo = 'baja_activo' AND a.origen_id = ac.id AND a.reversa_de IS NULL
+               -- la devolución de comodato (inventario fase B) lleva el asiento de su movimiento: b.asiento_id
+               JOIN ledger.asientos a ON a.reversa_de IS NULL
+                    AND CASE WHEN b.tipo = 'devolucion_comodato' THEN a.id = b.asiento_id AND a.origen_tipo = 'inventario'
+                             ELSE a.origen_tipo = 'baja_activo' AND a.origen_id = ac.id END
                JOIN ledger.movimientos m ON m.asiento_id = a.id JOIN ledger.cuentas c ON c.id = m.cuenta_id
               GROUP BY b.id
          ), x AS (
@@ -2558,7 +2578,7 @@ async function verificarLibroCon(
                     ac.depreciacion_inicial + coalesce((SELECT sum(q.monto) FROM ledger.activos_cuotas q WHERE q.activo_id = ac.id
                                                           AND NOT EXISTS (SELECT 1 FROM ledger.asientos qr WHERE qr.reversa_de = q.asiento_id)), 0) AS acumulada_real,
                     mov.asientos, mov.fecha AS fecha_asiento, mov.acumulada AS acumulada_libro, mov.costo AS costo_libro,
-                    mov.cobro, mov.ganancia, mov.perdida, mov.ajenos
+                    mov.cobro, mov.ganancia, mov.perdida, mov.ajenos, mov.inventario, ac.unidad_id
                FROM ledger.activos_bajas b JOIN ledger.activos ac ON ac.id = b.activo_id
                LEFT JOIN mov ON mov.baja_id = b.id
               WHERE ${E('ac.empresa_id')}
@@ -2567,7 +2587,11 @@ async function verificarLibroCon(
                 precio_venta::text, acumulada_libro::text, costo_libro::text, cobro::text, ganancia::text, perdida::text, ajenos::int
            FROM x
           WHERE costo <> costo_activo OR depreciacion_acumulada <> acumulada_real OR valor_libros <> costo - depreciacion_acumulada
-             OR CASE WHEN tipo = 'anulacion'
+             OR CASE WHEN tipo = 'devolucion_comodato'
+                     THEN unidad_id IS NULL OR asientos IS DISTINCT FROM 1 OR fecha_asiento <> fecha
+                          OR acumulada_libro <> acumulada_real OR costo_libro <> costo OR inventario <> valor_libros
+                          OR precio_venta <> 0 OR cobro <> 0 OR ganancia <> 0 OR perdida <> 0 OR ajenos <> 0
+                     WHEN tipo = 'anulacion'
                      THEN asiento_id IS NOT NULL OR asientos IS NOT NULL OR acumulada_real <> 0 OR precio_venta <> 0
                           OR NOT EXISTS (SELECT 1 FROM ledger.compras_anulaciones xa WHERE xa.compra_id = x.compra_id)
                      ELSE asientos IS DISTINCT FROM 1 OR fecha_asiento <> fecha OR acumulada_libro <> acumulada_real
@@ -3935,15 +3959,16 @@ async function verificarLibroCon(
           WHERE coalesce(l.neto, 0) <> coalesce(k.neto, 0)`,
     )
     await revisar(
-        '24.asiento_propio_mal_ligado (consumo, ajuste, baja y saldo inicial: su asiento es origen inventario con origen_id = el movimiento, sin reverso; todo asiento inventario es de un movimiento de su empresa que lo cita; compras: el original de su compra, y el reverso el espejo del de su entrada)',
+        '24.asiento_propio_mal_ligado (consumo, ajuste, baja, saldo inicial y comodato: su asiento es origen inventario con origen_id = el movimiento, sin reverso; todo asiento inventario es de un movimiento de su empresa que lo cita; compras y devoluciones al proveedor: el original de su compra o NCRE, y el reverso el espejo del de su entrada)',
         `SELECT m.id AS movimiento_id, m.tipo, m.asiento_id, a.origen_tipo, a.origen_id, a.reversa_de
            FROM inventario.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
           WHERE ${E('m.empresa_id')}
             AND CASE
-                    WHEN m.tipo IN ('consumo', 'ajuste', 'baja', 'saldo_inicial', 'ajuste_conteo') THEN
+                    WHEN m.tipo IN ('consumo', 'ajuste', 'baja', 'saldo_inicial', 'ajuste_conteo',
+                                    'asignacion_comodato', 'devolucion_comodato') THEN
                         a.origen_tipo <> 'inventario' OR a.origen_id <> m.id OR a.reversa_de IS NOT NULL
                         OR EXISTS (SELECT 1 FROM ledger.asientos r WHERE r.reversa_de = a.id)
-                    WHEN m.tipo = 'entrada_compra' THEN
+                    WHEN m.tipo IN ('entrada_compra', 'devolucion_proveedor') THEN
                         a.origen_tipo <> 'compra' OR m.origen_tipo IS DISTINCT FROM 'compra' OR a.origen_id <> m.origen_id
                         OR a.reversa_de IS NOT NULL
                     WHEN m.tipo = 'reverso_compra' THEN
@@ -3959,7 +3984,7 @@ async function verificarLibroCon(
                              WHERE m.id = a.origen_id AND m.asiento_id = a.id AND m.empresa_id = a.empresa_id)`,
     )
     await revisar(
-        '24.asiento_propio_con_otra_contrapartida (consumo → una sola cuenta de gasto, la cuenta_consumo del producto o 5.2.07, que puede haber cambiado después; baja y faltante → 5.6.02; sobrante → 4.2.04; saldo inicial → 2.9.01; solo esa cuenta contra 1.1.14, por −costo_total)',
+        '24.asiento_propio_con_otra_contrapartida (consumo → una sola cuenta de gasto, la cuenta_consumo del producto o 5.2.07, que puede haber cambiado después; baja y faltante → 5.6.02; sobrante → 4.2.04; saldo inicial → 2.9.01; asignación en comodato → la 1.2.01.NN de su activo; solo esa cuenta contra 1.1.14, por −costo_total. La devolución de comodato la revisa 15.baja_de_activo)',
         `WITH esperado AS (
              SELECT m.id, m.tipo, m.asiento_id, m.costo_total,
                     CASE
@@ -3972,10 +3997,14 @@ async function verificarLibroCon(
                         WHEN m.tipo IN ('ajuste', 'ajuste_conteo') AND m.cantidad < 0 THEN '${CUENTAS_GT.MERMAS_INVENTARIO}'
                         WHEN m.tipo IN ('ajuste', 'ajuste_conteo') THEN '${CUENTAS_GT.SOBRANTES_INVENTARIO}'
                         WHEN m.tipo = 'saldo_inicial' THEN '${APERTURA}'
+                        WHEN m.tipo = 'asignacion_comodato' THEN coalesce(
+                            (SELECT min(c.codigo) FROM ledger.movimientos mm JOIN ledger.cuentas c ON c.id = mm.cuenta_id
+                              WHERE mm.asiento_id = m.asiento_id AND c.codigo LIKE '${CUENTAS_GT.PROPIEDAD_PLANTA_EQUIPO}.%'),
+                            '${CUENTAS_GT.PROPIEDAD_PLANTA_EQUIPO}')
                     END AS cuenta
                FROM inventario.movimientos m JOIN inventario.productos p ON p.id = m.producto_id
               WHERE m.asiento_id IS NOT NULL AND ${E('m.empresa_id')}
-                AND m.tipo IN ('consumo', 'ajuste', 'baja', 'saldo_inicial', 'ajuste_conteo')
+                AND m.tipo IN ('consumo', 'ajuste', 'baja', 'saldo_inicial', 'ajuste_conteo', 'asignacion_comodato')
          )
          SELECT x.id AS movimiento_id, x.tipo, x.asiento_id, x.cuenta AS esperada, x.costo_total::text,
                 (SELECT string_agg(c.codigo || ' ' || (mm.debe - mm.haber)::text, ', ' ORDER BY mm.id)
@@ -3988,17 +4017,19 @@ async function verificarLibroCon(
                   WHERE mm.asiento_id = x.asiento_id AND c.codigo = x.cuenta) <> -x.costo_total`,
     )
     await revisar(
-        '24.compra_distinta_de_su_entrada (por compra, producto y bodega: Σ entradas = Σ cantidad de sus líneas de inventario, al costo base con crédito fiscal o base + IVA sin él; una NCRE no entra en la fase A)',
+        '24.compra_distinta_de_su_entrada (por compra, producto y bodega: Σ entradas = Σ cantidad de sus líneas de inventario, al costo base con crédito fiscal o base + IVA sin él; una NCRE, en negativo con devolucion_proveedor, fase B §6)',
         `WITH lineas AS (
-             SELECT c.id AS compra_id, l.producto_id, l.bodega_id, sum(l.cantidad) AS cantidad,
-                    sum(CASE WHEN c.credito_fiscal THEN l.base ELSE l.base + l.iva END) AS costo
+             SELECT c.id AS compra_id, l.producto_id, l.bodega_id,
+                    sum(CASE WHEN c.tipo_documento = 'NCRE' THEN -l.cantidad ELSE l.cantidad END) AS cantidad,
+                    sum((CASE WHEN c.credito_fiscal THEN l.base ELSE l.base + l.iva END)
+                        * CASE WHEN c.tipo_documento = 'NCRE' THEN -1 ELSE 1 END) AS costo
                FROM ledger.compras c JOIN ledger.compras_lineas l ON l.compra_id = c.id
               WHERE l.producto_id IS NOT NULL AND ${E('c.empresa_id')}
               GROUP BY 1, 2, 3
          ), entradas AS (
              SELECT origen_id AS compra_id, producto_id, bodega_id, sum(cantidad) AS cantidad, sum(costo_total) AS costo
                FROM inventario.movimientos
-              WHERE tipo = 'entrada_compra' AND ${E('empresa_id')}
+              WHERE tipo IN ('entrada_compra', 'devolucion_proveedor') AND ${E('empresa_id')}
               GROUP BY 1, 2, 3
          )
          SELECT coalesce(l.compra_id, e.compra_id) AS compra_id, coalesce(l.producto_id, e.producto_id) AS producto_id,
@@ -4009,31 +4040,139 @@ async function verificarLibroCon(
           WHERE l.compra_id IS NULL OR e.compra_id IS NULL OR l.cantidad <> e.cantidad OR l.costo <> e.costo`,
     )
     await revisar(
-        '24.compra_anulada_sin_reverso_de_su_entrada (anulada ⇔ cada entrada tiene su reverso_compra espejo: mismo producto, bodega, −cantidad y −costo; un reverso siempre de una entrada)',
+        '24.compra_anulada_sin_reverso_de_su_entrada (anulada ⇔ cada entrada o devolución al proveedor tiene su reverso_compra espejo: mismo producto, bodega, unidad, −cantidad y −costo; un reverso siempre de una entrada o devolución)',
         `SELECT m.id AS entrada_id, m.origen_id AS compra_id, m.cantidad::text, m.costo_total::text,
                 r.id AS reverso_id, r.cantidad::text AS cantidad_reverso, r.costo_total::text AS costo_reverso
            FROM inventario.movimientos m
            LEFT JOIN inventario.movimientos r ON r.reverso_de = m.id
-          WHERE m.tipo = 'entrada_compra' AND ${E('m.empresa_id')}
+          WHERE m.tipo IN ('entrada_compra', 'devolucion_proveedor') AND ${E('m.empresa_id')}
             AND (EXISTS (SELECT 1 FROM ledger.compras_anulaciones x WHERE x.compra_id = m.origen_id) <> (r.id IS NOT NULL)
                  OR (r.id IS NOT NULL AND (r.tipo <> 'reverso_compra' OR r.producto_id <> m.producto_id
                      OR r.bodega_id <> m.bodega_id OR r.cantidad <> -m.cantidad OR r.costo_total <> -m.costo_total
+                     OR r.unidad_id IS DISTINCT FROM m.unidad_id
                      OR r.origen_id IS DISTINCT FROM m.origen_id)))
          UNION ALL
          SELECT r.reverso_de, r.origen_id, NULL, NULL, r.id, r.cantidad::text, r.costo_total::text
            FROM inventario.movimientos r LEFT JOIN inventario.movimientos m ON m.id = r.reverso_de
-          WHERE r.tipo = 'reverso_compra' AND ${E('r.empresa_id')} AND (m.id IS NULL OR m.tipo <> 'entrada_compra')`,
+          WHERE r.tipo = 'reverso_compra' AND ${E('r.empresa_id')}
+            AND (m.id IS NULL OR m.tipo NOT IN ('entrada_compra', 'devolucion_proveedor'))`,
     )
     await revisar(
-        '24.traslado_mal_formado (dos movimientos por traslado_id, del mismo producto, empresa y fecha, en bodegas distintas, que suman cero en cantidad y costo)',
-        `SELECT traslado_id, count(*)::int AS movimientos, sum(cantidad)::text AS cantidad, sum(costo_total)::text AS costo,
-                count(DISTINCT producto_id)::int AS productos, count(DISTINCT bodega_id)::int AS bodegas,
-                count(DISTINCT fecha)::int AS fechas, count(DISTINCT empresa_id)::int AS empresas
-           FROM inventario.movimientos
-          WHERE tipo = 'traslado' AND ${E('empresa_id')}
-          GROUP BY traslado_id
-         HAVING count(*) <> 2 OR sum(cantidad) <> 0 OR sum(costo_total) <> 0 OR count(DISTINCT producto_id) <> 1
-             OR count(DISTINCT bodega_id) <> 2 OR count(DISTINCT fecha) <> 1 OR count(DISTINCT empresa_id) <> 1`,
+        '24.traslado_mal_formado (por traslado_id, un par por unidad, o un solo par por cantidad: del mismo producto, empresa y fecha, de una bodega a otra, que suma cero en cantidad y costo)',
+        `WITH t AS (
+             SELECT traslado_id, coalesce(unidad_id, 0) AS unidad, count(*) AS movimientos, sum(cantidad) AS cantidad,
+                    sum(costo_total) AS costo, count(DISTINCT bodega_id) AS bodegas,
+                    count(DISTINCT producto_id) AS productos, count(DISTINCT fecha) AS fechas,
+                    count(DISTINCT empresa_id) AS empresas,
+                    min(bodega_id) FILTER (WHERE cantidad < 0) AS origen, min(bodega_id) FILTER (WHERE cantidad > 0) AS destino,
+                    min(producto_id) AS producto_id, min(fecha) AS fecha
+               FROM inventario.movimientos
+              WHERE tipo = 'traslado' AND ${E('empresa_id')}
+              GROUP BY 1, 2
+         )
+         SELECT traslado_id, unidad, movimientos::int, cantidad::text, costo::text, bodegas::int, productos::int, fechas::int
+           FROM t
+          WHERE movimientos <> 2 OR cantidad <> 0 OR costo <> 0 OR bodegas <> 2 OR productos <> 1 OR fechas <> 1 OR empresas <> 1
+         UNION ALL
+         SELECT traslado_id, NULL, count(*)::int, NULL, NULL, count(DISTINCT (origen, destino))::int,
+                count(DISTINCT producto_id)::int, count(DISTINCT fecha)::int
+           FROM t GROUP BY traslado_id
+         HAVING count(DISTINCT (origen, destino)) <> 1 OR count(DISTINCT producto_id) <> 1 OR count(DISTINCT fecha) <> 1
+             OR (count(*) > 1 AND bool_or(unidad = 0))`,
+    )
+
+    await revisar(
+        '24.movimiento_de_serie_sin_unidad (un producto de serie se mueve de una unidad en una: ±1 con unidad_id; uno por cantidad, sin unidad)',
+        `SELECT m.id, m.tipo, p.seguimiento, m.unidad_id, m.cantidad::text, u.producto_id AS producto_unidad
+           FROM inventario.movimientos m JOIN inventario.productos p ON p.id = m.producto_id
+           LEFT JOIN inventario.unidades u ON u.id = m.unidad_id
+          WHERE ${E('m.empresa_id')}
+            AND ((p.seguimiento = 'serie') <> (m.unidad_id IS NOT NULL)
+                 OR (m.unidad_id IS NOT NULL AND (abs(m.cantidad) <> 1 OR u.producto_id <> m.producto_id OR u.empresa_id <> m.empresa_id)))`,
+    )
+    await revisar(
+        '24.unidad_distinta_de_su_kardex (en bodega, disponible o en reparación: Σ cantidad de sus movimientos = 1 en su bodega y Σ costo = su costo; fuera de bodega: Σ cantidad = 0 y Σ costo = 0)',
+        `WITH k AS (
+             SELECT m.unidad_id, sum(m.cantidad) AS cantidad, sum(m.costo_total) AS costo,
+                    sum(m.cantidad) FILTER (WHERE m.bodega_id = u.bodega_id) AS en_su_bodega
+               FROM inventario.movimientos m JOIN inventario.unidades u ON u.id = m.unidad_id
+              WHERE m.unidad_id IS NOT NULL AND ${E('m.empresa_id')}
+              GROUP BY m.unidad_id
+         )
+         SELECT u.id AS unidad_id, u.estado, u.bodega_id, u.costo::text, k.cantidad::text, k.costo::text AS costo_kardex,
+                k.en_su_bodega::text
+           FROM inventario.unidades u LEFT JOIN k ON k.unidad_id = u.id
+          WHERE ${E('u.empresa_id')}
+            AND CASE WHEN u.estado IN ('disponible', 'en_reparacion')
+                     THEN coalesce(k.cantidad, 0) <> 1 OR coalesce(k.en_su_bodega, 0) <> 1 OR coalesce(k.costo, 0) <> u.costo
+                     ELSE coalesce(k.cantidad, 0) <> 0 OR coalesce(k.costo, 0) <> 0 END`,
+    )
+    await revisar(
+        '24.saldo_de_serie_distinto_de_sus_unidades (producto de serie: saldos = número y Σ costo de sus unidades disponibles o en reparación en la bodega)',
+        `WITH u AS (
+             SELECT producto_id, bodega_id, count(*) AS cantidad, sum(costo) AS valor
+               FROM inventario.unidades
+              WHERE estado IN ('disponible', 'en_reparacion') AND ${E('empresa_id')}
+              GROUP BY 1, 2
+         ), s AS (
+             SELECT s.* FROM inventario.saldos s JOIN inventario.productos p ON p.id = s.producto_id
+              WHERE p.seguimiento = 'serie' AND ${E('s.empresa_id')}
+         )
+         SELECT coalesce(u.producto_id, s.producto_id) AS producto_id, coalesce(u.bodega_id, s.bodega_id) AS bodega_id,
+                u.cantidad::text AS unidades, s.cantidad::text AS saldo, u.valor::text AS costo_unidades, s.valor::text AS valor_saldo
+           FROM u FULL JOIN s ON s.producto_id = u.producto_id AND s.bodega_id = u.bodega_id
+          WHERE coalesce(u.cantidad, 0) <> coalesce(s.cantidad, 0) OR coalesce(u.valor, 0) <> coalesce(s.valor, 0)`,
+    )
+    await revisar(
+        '24.comodato_sin_su_activo (§8.3: cada unidad en comodato o por recuperar tiene su activo vigente, de su empresa, con unidad_id = ella y costo = el de la unidad; cada activo de una unidad sin baja la tiene en uno de esos dos estados con activo_id = él; una unidad dada de baja después de un comodato, con la baja de su activo)',
+        `SELECT u.id AS unidad_id, u.estado, u.activo_id, ac.id AS activo, ac.unidad_id AS unidad_del_activo,
+                u.costo::text, ac.costo::text AS costo_activo, (b.id IS NOT NULL) AS activo_con_baja
+           FROM inventario.unidades u
+           LEFT JOIN ledger.activos ac ON ac.id = u.activo_id
+           LEFT JOIN ledger.activos_bajas b ON b.activo_id = ac.id
+          WHERE ${E('u.empresa_id')} AND u.estado IN ('en_comodato', 'por_recuperar')
+            AND (ac.id IS NULL OR ac.unidad_id IS DISTINCT FROM u.id OR ac.costo <> u.costo OR b.id IS NOT NULL
+                 OR ac.empresa_id <> u.empresa_id)
+         UNION ALL
+         SELECT u.id, u.estado, u.activo_id, ac.id, ac.unidad_id, u.costo::text, ac.costo::text, false
+           FROM ledger.activos ac JOIN inventario.unidades u ON u.id = ac.unidad_id
+          WHERE ${E('ac.empresa_id')}
+            AND NOT EXISTS (SELECT 1 FROM ledger.activos_bajas b WHERE b.activo_id = ac.id)
+            AND (u.estado NOT IN ('en_comodato', 'por_recuperar') OR u.activo_id IS DISTINCT FROM ac.id)
+         UNION ALL
+         SELECT u.id, u.estado, NULL, NULL, NULL, u.costo::text, NULL, NULL
+           FROM inventario.unidades u
+          WHERE ${E('u.empresa_id')} AND u.estado = 'dada_de_baja'
+            AND EXISTS (SELECT 1 FROM ledger.activos ac WHERE ac.unidad_id = u.id
+                         AND NOT EXISTS (SELECT 1 FROM ledger.activos_bajas b WHERE b.activo_id = ac.id))`,
+    )
+    await revisar(
+        '24.comodato_mal_ligado (cada activo de una unidad nace con la asignación de esa unidad, k-ésima con k-ésima: su fecha de alta, costo = −costo_total y el servicio; cada devolución de comodato es la baja devolucion_comodato de su activo, con el mismo asiento, fecha y valor en libros)',
+        `WITH act AS (
+             SELECT ac.*, row_number() OVER (PARTITION BY ac.unidad_id ORDER BY ac.id) AS k
+               FROM ledger.activos ac WHERE ac.unidad_id IS NOT NULL AND ${E('ac.empresa_id')}
+         ), asig AS (
+             SELECT m.*, row_number() OVER (PARTITION BY m.unidad_id ORDER BY m.id) AS k
+               FROM inventario.movimientos m WHERE m.tipo = 'asignacion_comodato' AND ${E('m.empresa_id')}
+         ), dev AS (
+             SELECT m.*, row_number() OVER (PARTITION BY m.unidad_id ORDER BY m.id) AS k
+               FROM inventario.movimientos m WHERE m.tipo = 'devolucion_comodato' AND ${E('m.empresa_id')}
+         ), bajas AS (
+             SELECT b.*, act.unidad_id, act.k FROM ledger.activos_bajas b JOIN act ON act.id = b.activo_id
+              WHERE b.tipo = 'devolucion_comodato'
+         )
+         SELECT 'alta' AS que, act.unidad_id, act.k, act.id AS activo_id, asig.id AS movimiento_id,
+                to_char(act.fecha_alta, 'YYYY-MM-DD') AS fecha_activo, to_char(asig.fecha, 'YYYY-MM-DD') AS fecha_movimiento,
+                act.costo::text, asig.costo_total::text
+           FROM act FULL JOIN asig ON asig.unidad_id = act.unidad_id AND asig.k = act.k
+          WHERE act.id IS NULL OR asig.id IS NULL OR act.fecha_alta <> asig.fecha OR act.costo <> -asig.costo_total
+             OR act.depreciacion_inicial <> 0
+         UNION ALL
+         SELECT 'devolucion', coalesce(b.unidad_id, dev.unidad_id), coalesce(b.k, dev.k), b.activo_id, dev.id,
+                to_char(b.fecha, 'YYYY-MM-DD'), to_char(dev.fecha, 'YYYY-MM-DD'), b.valor_libros::text, dev.costo_total::text
+           FROM bajas b FULL JOIN dev ON dev.unidad_id = b.unidad_id AND dev.k = b.k
+          WHERE b.id IS NULL OR dev.id IS NULL OR b.asiento_id IS DISTINCT FROM dev.asiento_id OR b.fecha <> dev.fecha
+             OR b.valor_libros <> dev.costo_total OR b.precio_venta <> 0`,
     )
 
     /*
