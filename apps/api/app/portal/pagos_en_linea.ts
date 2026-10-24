@@ -2,12 +2,12 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import { NoEncontrado, Problema, ReglaNegocio, ValidacionFallida } from '#shared/errores'
-import { dec } from '#ledger/dinero'
+import { ESTADOS_PENDIENTES } from '#billing/facturas'
 import { proveedorConfigurado } from '#billing/pasarelas/pasarela'
 import { verCobroPasarela, type CobroPasarelaVista } from '#billing/pasarelas/cobros'
 import type { EstadoCobroProveedor } from '#billing/pasarelas/pasarela'
 import { exigirSesionPortal, SesionPortalRequerida, tokenDeLaPeticion } from '#portal/acceso/sesion'
-import { resolverServicio } from '#portal/consultas'
+import { resolverServicio, saldoCobrable } from '#portal/consultas'
 import { titularDeLaPeticion } from '#portal/comprobantes'
 
 /**
@@ -95,9 +95,11 @@ export async function pagadorDeLaPeticion(
     return titularDeLaPeticion(ctx, ip, entrada.servicio_id)
 }
 
-const ESTADOS_PENDIENTES = ['emitida', 'parcial', 'vencida']
-
-/** ids de las facturas a cobrar, la más antigua primero. 422 `sin_deuda` si no hay ninguna. */
+/**
+ * ids de las facturas a cobrar, la más antigua primero: solo las pendientes de A3
+ * (`ESTADOS_PENDIENTES`); una castigada o acreditada nunca se cobra en línea (`saldoCobrable`).
+ * 422 `sin_deuda` si no hay ninguna.
+ */
 export async function facturasAPagar(
     ctx: HttpContext,
     pagador: { clienteId: number; servicioId: number | null },
@@ -125,10 +127,7 @@ export async function facturasAPagar(
         if (ajenas.length > 0) throw new NoEncontrado('Esa factura no es de tu cuenta')
         const sinSaldo = unicas
             .map((id, i) => ({ id, i, fila: filas.find((f) => Number(f.id) === id)! }))
-            .filter(
-                ({ fila }) =>
-                    !ESTADOS_PENDIENTES.includes(fila.estado) || dec(fila.total).lte(dec(fila.pagado)),
-            )
+            .filter(({ fila }) => saldoCobrable(fila).lte(0))
         if (sinSaldo.length > 0) {
             throw new ValidacionFallida(
                 sinSaldo.map(({ i }) => ({
@@ -147,7 +146,7 @@ export async function facturasAPagar(
     const filas = (await db
         .from('billing.facturas')
         .where('servicio_id', pagador.servicioId)
-        .whereIn('estado', ESTADOS_PENDIENTES)
+        .whereIn('estado', [...ESTADOS_PENDIENTES])
         .whereRaw('total > pagado')
         .orderBy('vence_en', 'asc')
         .orderBy('id', 'asc')

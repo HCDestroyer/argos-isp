@@ -1,10 +1,8 @@
 import type { BadgeProps } from '@nuxt/ui'
+import type { Schema } from '@argosisp/contracts'
 
-/**
- * Estados del servicio (`.claude/CLAUDE.md`). TODO(A5): cuando el OpenAPI publique el
- * esquema `Servicio`, cambiar por `Schema<'Servicio'>['estado']`.
- */
-export type EstadoServicio = 'activo' | 'limitado' | 'suspendido' | 'retirado'
+/** Estados del servicio (`.claude/CLAUDE.md`), del esquema `EstadoServicio` del OpenAPI. */
+export type EstadoServicio = Schema<'EstadoServicio'>
 
 interface PresentacionEstado {
     etiqueta: string

@@ -10,7 +10,11 @@ import type { ConsumidorEventos, EventoEntrante } from '#shared/eventos_bus'
  * `aaa.recuperado`, `coa.fallido`, `routeros.fallido`, `caja.cerrada` con diferencia y los avisos
  * fiscales (`libro.integridad_rota`, `dte.rechazado`, `fel.contingencia_cambiada`,
  * `nota_credito.anulada`), del calendario fiscal (`fiscal.vencimiento_proximo`, `fiscal.limite_pc`)
- * y de declaraciones (`declaracion.revisada` en cascada, `declaracion.pagada`, `declaracion.pago_anulado`).
+ * de declaraciones (`declaracion.revisada` en cascada, `declaracion.pagada`, `declaracion.pago_anulado`,
+ * `declaracion.calculada`, `declaracion.presentada`), del libro y los cierres
+ * (`libro.proceso_bloqueado`, `libro.checks_verificados` con anomalías, `libro.bloqueo_cambiado`,
+ * `libro.emitido`, `ejercicio.cerrado`, `ejercicio.reabierto`) y de sorteos (`sorteo.*` salvo los que
+ * van al ganador).
  * La lógica está en la acción
  * `RegistrarAlerta` (idempotente por `outbox:<id>`). Si falla, lanza y el evento se reintenta.
  */
@@ -30,6 +34,13 @@ export class ConsumidorAlertas implements ConsumidorEventos {
         if (evento.evento === 'caja.cerrada' && esCero(payload.diferencia)) return
         // Una revisión de declaración solo avisa cuando la hizo la cascada de remanentes (H34).
         if (evento.evento === 'declaracion.revisada' && payload.motivo !== 'cascada') return
+        // Una verificación de cierre sin anomalías no es un incidente.
+        if (
+            evento.evento === 'libro.checks_verificados' &&
+            !(Array.isArray(payload.anomalias) && payload.anomalias.length > 0)
+        ) {
+            return
+        }
 
         const resultado = await new RegistrarAlerta().execute(
             { origen: `outbox:${evento.id}`, evento: evento.evento as EventoAlerta, payload },

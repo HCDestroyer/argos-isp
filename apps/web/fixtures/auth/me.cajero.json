@@ -41,5 +41,7 @@
       "logo_url": null
     }
   ],
-  "empresa_activa_id": 1
+  "empresa_activa_id": 1,
+  "expira_en": null,
+  "expira_max_en": null
 }

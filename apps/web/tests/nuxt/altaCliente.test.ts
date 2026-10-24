@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { Schema } from '@argosisp/contracts'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 
@@ -52,7 +53,9 @@ describe('esquemaCliente (espejo de crearClienteValidator)', () => {
     it('consumidor final manda nit_cui null y un cliente viejo sin tipo lo deduce del número', () => {
         const cf = esquemaCliente.parse({ ...entradaDesdeCliente(), nombre: 'Ana' })
         expect(cf).toMatchObject({ tipo_documento_fiscal: 'cf', nit_cui: null })
-        expect(entradaDesdeCliente({ ...bd.clientes[3]!, tipo_documento_fiscal: undefined })).toMatchObject({ tipo_documento_fiscal: 'cui', nit_cui: '2984561320101' })
+        // La API ya siempre manda el tipo (obligatorio en el OpenAPI); el panel igual se defiende de uno viejo.
+        const viejo = { ...bd.clientes[3]!, tipo_documento_fiscal: undefined } as unknown as Schema<'Cliente'>
+        expect(entradaDesdeCliente(viejo)).toMatchObject({ tipo_documento_fiscal: 'cui', nit_cui: '2984561320101' })
     })
 
     it('la API rechaza un NIT con dígito verificador malo con el mismo mensaje (422 en nit_cui)', async () => {

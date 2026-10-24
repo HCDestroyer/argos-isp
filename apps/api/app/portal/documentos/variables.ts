@@ -2,7 +2,8 @@ import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
-import { D, dec } from '#ledger/dinero'
+import { dec } from '#ledger/dinero'
+import { saldoCobrable } from '#portal/consultas'
 import { ZONA, fechaCalendario, fechaCorta, fechaHora, mesAnio, quetzales } from '#notify/formato'
 import { COLUMNAS_DTE, dteDeFila, joinDteFactura, numeroDocumento, type ColumnasDte } from '#portal/fel'
 import { leerEmpresa, type DatosEmpresa } from '#portal/empresa'
@@ -105,7 +106,11 @@ export const VARIABLES_AVISO_COBRO: ReadonlyArray<{ nombre: string; descripcion:
     { nombre: 'factura.periodo', descripcion: 'Mes facturado: "octubre 2026"' },
     { nombre: 'factura.emitida', descripcion: 'Fecha de emisión: 01/10/2026' },
     { nombre: 'factura.vence', descripcion: 'Fecha de vencimiento: 10/10/2026' },
-    { nombre: 'factura.estado', descripcion: 'Pendiente, Abono parcial, Vencida, Pagada o Anulada' },
+    {
+        nombre: 'factura.estado',
+        descripcion:
+            'Pendiente, Abono parcial, Vencida, Pagada, Anulada, Cubierta por notas de crédito o Dada de baja',
+    },
     { nombre: 'factura.subtotal', descripcion: 'Subtotal sin IVA: "Q 156.25"' },
     { nombre: 'factura.iva', descripcion: 'IVA: "Q 18.75"' },
     { nombre: 'factura.total', descripcion: 'Total: "Q 175.00"' },
@@ -146,6 +151,8 @@ const ESTADOS: Record<string, string> = {
     vencida: 'Vencida',
     pagada: 'Pagada',
     anulada: 'Anulada',
+    acreditada: 'Cubierta por notas de crédito',
+    castigada: 'Dada de baja',
 }
 
 /**
@@ -206,7 +213,8 @@ export async function variablesAvisoCobro(
 
     const total = dec(fila.total)
     const pagado = dec(fila.pagado)
-    const saldo = fila.estado === 'anulada' ? new D(0) : D.max(total.minus(pagado), 0)
+    // la regla del portal (`saldoCobrable`): una castigada o acreditada no tiene saldo a pagar
+    const saldo = saldoCobrable({ estado: fila.estado, total: fila.total, pagado: fila.pagado })
     const id = Number(fila.id)
     const dte = dteDeFila(fila as ColumnasDte)
     const documento = dte ? (TIPOS_DTE[dte.tipo_dte] ?? 'Factura') : 'Aviso de cobro'

@@ -77,26 +77,61 @@ export function cuerpoRest(
     return Object.fromEntries(Object.entries(atributos).map(([k, v]) => [k, { type: 'string', value: [v] }]))
 }
 
-/** API interna simulada de A1 (`GET /internal/aaa/servicio`). */
+/**
+ * API interna simulada de A1: `GET /internal/aaa/servicio?user_ppp=` y `POST /internal/aaa/servicios
+ * { user_ppp: [...] }` (lotes, mismo JSON en `data`; los que no responden 200 se omiten, como en la API).
+ */
 export class ApiFalsa {
-    readonly llamadas: { url: string; auth: string | undefined; requestId?: string }[] = []
+    readonly llamadas: {
+        metodo: string
+        url: string
+        auth: string | undefined
+        requestId?: string
+        usuarios?: string[]
+    }[] = []
     respuestas = new Map<string, { status: number; cuerpo?: unknown }>()
+    /** Respuesta fija para `POST /internal/aaa/servicios` (p. ej. 404 = API sin la ruta de lotes). */
+    respuestaLote: { status: number; cuerpo?: unknown } | null = null
     /** true: acepta la conexión y nunca responde (API colgada → timeout de `FuenteApi`). */
     colgada = false
     private servidor: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
         if (this.colgada) return
+        const partes: Buffer[] = []
+        req.on('data', (c: Buffer) => partes.push(c))
+        req.on('end', () => this.responder(req, res, Buffer.concat(partes).toString('utf8')))
+    })
+    url = ''
+
+    private responder(req: IncomingMessage, res: ServerResponse, cuerpo: string): void {
         const url = new URL(req.url ?? '/', 'http://x')
         const requestId = req.headers['x-request-id']
-        this.llamadas.push({
+        const comun = {
+            metodo: req.method ?? 'GET',
             url: url.pathname + url.search,
             auth: req.headers.authorization,
             ...(typeof requestId === 'string' ? { requestId } : {}),
-        })
-        const r = this.respuestas.get(url.searchParams.get('user_ppp') ?? '') ?? { status: 404 }
+        }
+        let r: { status: number; cuerpo?: unknown }
+        if (req.method === 'POST' && url.pathname.endsWith('/internal/aaa/servicios')) {
+            const usuarios = (JSON.parse(cuerpo || '{}') as { user_ppp?: string[] }).user_ppp ?? []
+            this.llamadas.push({ ...comun, usuarios })
+            r = this.respuestaLote ?? {
+                status: 200,
+                cuerpo: {
+                    data: usuarios.flatMap((u) => {
+                        const e = this.respuestas.get(u)
+                        return e?.status === 200 ? [e.cuerpo] : []
+                    }),
+                    nextCursor: null,
+                },
+            }
+        } else {
+            this.llamadas.push(comun)
+            r = this.respuestas.get(url.searchParams.get('user_ppp') ?? '') ?? { status: 404 }
+        }
         res.writeHead(r.status, { 'content-type': 'application/json' })
         res.end(r.cuerpo === undefined ? '' : JSON.stringify(r.cuerpo))
-    })
-    url = ''
+    }
 
     async iniciar(): Promise<void> {
         await new Promise<void>((resolve) => this.servidor.listen(0, '127.0.0.1', resolve))

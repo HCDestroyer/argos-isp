@@ -65,6 +65,19 @@ export const Router = definirEsquema(
             description: 'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
         },
         activo: booleano,
+        en_linea: {
+            ...nulable(booleano),
+            description:
+                'Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) ' +
+                'dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el ' +
+                'umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)',
+        },
+        ultimo_contacto: {
+            ...nulable(instante),
+            description:
+                'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
+                'comando de RouterOS (`audit.red` con ok); null si nunca',
+        },
         ...auditable,
     }),
 )
@@ -153,9 +166,8 @@ export const Plan = definirEsquema(
                 description: 'Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)',
             },
         },
-        // `tipo`: opcional hasta que los fixtures del panel lo tengan (la API siempre lo envía);
-        // `warnings`: solo en las respuestas de crear y editar
-        ['tipo', 'warnings'],
+        // `warnings` es opcional de verdad: solo en las respuestas de crear y editar
+        ['warnings'],
     ),
 )
 
@@ -187,47 +199,43 @@ export const PlanRouter = definirEsquema(
 /** Plan con su configuración efectiva en un router (plantilla + `planes_routers`). */
 export const PlanEfectivo = definirEsquema(
     'PlanEfectivo',
-    objeto(
-        {
-            id,
-            nombre: texto,
-            precio: Dinero,
-            bajada_kbps: entero,
-            subida_kbps: entero,
-            bajada_limitada_kbps: entero,
-            subida_limitada_kbps: entero,
-            reuso: { ...entero, description: 'Reuso efectivo en el router' },
-            ...velocidadPlan,
-            dual_stack: enumerado(['ambos', 'v4', 'v6']),
-            tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
-            global: booleano,
-            activo: booleano,
-            ...auditable,
-            router_id: id,
-            implementacion: nulable(PlanRouter),
-            rate_limit: {
-                type: 'string',
-                description:
-                    'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
-            },
-            rate_limit_limitado: {
-                type: 'string',
-                description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
-            },
-            profile_ppp: nulable(texto),
-            pool_ipv4: nulable(texto),
-            pool_ipv6_enlace: nulable(texto),
-            pool_ipv6_delegacion: nulable(texto),
-            local_address: nulable(texto),
-            no_crear_reglas: booleano,
-            tipo: {
-                ...enumerado(TIPOS_PLAN),
-                description: 'Tipo del plan (residencial, empresarial, dedicado)',
-            },
+    objeto({
+        id,
+        nombre: texto,
+        precio: Dinero,
+        bajada_kbps: entero,
+        subida_kbps: entero,
+        bajada_limitada_kbps: entero,
+        subida_limitada_kbps: entero,
+        reuso: { ...entero, description: 'Reuso efectivo en el router' },
+        ...velocidadPlan,
+        dual_stack: enumerado(['ambos', 'v4', 'v6']),
+        tamano_prefijo_delegado: { type: 'integer', enum: [64, 56, 48] },
+        global: booleano,
+        activo: booleano,
+        ...auditable,
+        router_id: id,
+        implementacion: nulable(PlanRouter),
+        rate_limit: {
+            type: 'string',
+            description:
+                'Mikrotik-Rate-Limit completo en estado activo: "5M/20M 0/0 0/0 0/0 8 5M/20M" (rx/tx ráfaga umbral tiempo prioridad limit-at) o rate_limit_override',
         },
-        // `tipo`: opcional hasta que los fixtures del panel lo tengan (la API siempre lo envía)
-        ['tipo'],
-    ),
+        rate_limit_limitado: {
+            type: 'string',
+            description: 'Mikrotik-Rate-Limit completo en estado limitado (sin ráfaga)',
+        },
+        profile_ppp: nulable(texto),
+        pool_ipv4: nulable(texto),
+        pool_ipv6_enlace: nulable(texto),
+        pool_ipv6_delegacion: nulable(texto),
+        local_address: nulable(texto),
+        no_crear_reglas: booleano,
+        tipo: {
+            ...enumerado(TIPOS_PLAN),
+            description: 'Tipo del plan (residencial, empresarial, dedicado)',
+        },
+    }),
 )
 
 export const Sesion = definirEsquema(

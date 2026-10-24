@@ -3,7 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { D, aTexto, dec } from '#ledger/dinero'
-import { saldoDelServicio, type EstadoServicio } from '#portal/consultas'
+import { saldoCobrable, saldoDelServicio, type EstadoServicio } from '#portal/consultas'
 import type { MetodoPago } from '#shared/eventos'
 import { EMPRESA_PRINCIPAL } from '#core/empresas'
 import { estadoCuenta } from '#billing/estado_cuenta'
@@ -121,7 +121,8 @@ export interface FacturaPortal {
     periodo: string
     emitida_en: Date
     vence_en: string
-    estado: 'emitida' | 'parcial' | 'pagada' | 'vencida' | 'anulada'
+    /** todos los de `billing.facturas` menos `por_certificar` (no sale en el portal) */
+    estado: 'emitida' | 'parcial' | 'pagada' | 'vencida' | 'anulada' | 'castigada' | 'acreditada'
     subtotal: string
     iva: string
     total: string
@@ -302,7 +303,7 @@ export async function cuentaPorEmpresa(clienteId: number, principal: number): Pr
                     estado: f.estado as FacturaPendientePortal['estado'],
                     vencida: f.estado === 'vencida' || f.vence_en < hoy,
                     total: aTexto(f.total),
-                    saldo: aTexto(D.max(dec(f.total).minus(dec(f.pagado)), 0)),
+                    saldo: aTexto(saldoCobrable(f)),
                 }
             }),
             bonificaciones: bonificaciones.get(seccion.empresa_id) ?? [],
@@ -398,7 +399,7 @@ function aFacturaPortal(
         ...resto
     } = sinColumnasDte(fila)
     const id = Number(resto.id)
-    const saldo = resto.estado === 'anulada' ? new D(0) : dec(resto.total).minus(dec(resto.pagado))
+    const saldo = saldoCobrable(resto)
     const referencia = (otra: number | null): ReferenciaFactura | null => {
         if (otra === null) return null
         const numero = referencias.get(Number(otra))
@@ -412,7 +413,7 @@ function aFacturaPortal(
         numero: numeroDocumento(id, dte),
         documento: dte ? (resto.tipo === 'mora' ? 'nota_debito' : 'factura') : 'aviso_cobro',
         acreditado: aTexto(resto.acreditado),
-        saldo: aTexto(saldo.isNegative() ? new D(0) : saldo),
+        saldo: aTexto(saldo),
         fel_uuid: dte?.autorizacion ?? null,
         fel_serie: dte?.serie ?? null,
         fel_numero: dte?.numero ?? null,

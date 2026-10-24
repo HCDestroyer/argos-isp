@@ -6,10 +6,13 @@ import {
     abrirIncidente,
     cerrarIncidente,
     crearAlerta,
+    crearAlertas,
+    duracion,
     incidentesAbiertos,
     instanteLocal,
     type Incidente,
 } from '#notify/alertas'
+import { TIPO_PROCESO_BLOQUEADO, descripcionProceso } from '#notify/avisos_internos'
 import { ZONA } from '#notify/formato'
 import { horasDeCorte } from '#billing/cortes'
 
@@ -87,6 +90,11 @@ export interface ResultadoVigilar {
  *   que ya pasó hace más de la tolerancia y no aparece en `resultado.horas` de una corrida de hoy.
  *   Incidente `cron:servicios.corte:<fecha> <hora>`: una alerta por hora de corte perdida.
  *
+ * - **Procesos bloqueados por el libro** (`libro.proceso_bloqueado`, incidente
+ *   `libro-proceso:<empresa>:<proceso>`): se resuelve cuando la última corrida correcta del proceso
+ *   que cubre a la empresa (todas o la incluye en `parametros.empresas`) no tiene `bloqueos` de esa
+ *   empresa. Avisa "resuelto" al equipo y a contabilidad con la configuración de la empresa.
+ *
  * Solo lee; las corridas las registra A3. Una revisión sin cambios no crea envíos.
  */
 export default class VigilarCrons extends DomainAction<EntradaVigilar, ResultadoVigilar> {
@@ -156,7 +164,39 @@ export default class VigilarCrons extends DomainAction<EntradaVigilar, Resultado
         }
 
         await this.vigilarCorte(t.trx, ahora, tolerancia, resultado, avisar)
+        await this.vigilarProcesosBloqueados(t, ahora, resultado)
         return resultado
+    }
+
+    /** Cierra los `libro-proceso:*` cuya empresa ya tuvo una corrida sin bloqueos. */
+    private async vigilarProcesosBloqueados(t: Transaccion, ahora: DateTime, resultado: ResultadoVigilar) {
+        for (const abierto of await incidentesAbiertos(t.trx, TIPO_PROCESO_BLOQUEADO)) {
+            const empresaId = Number(abierto.detalle.empresa_id)
+            const proceso = String(abierto.detalle.proceso ?? '')
+            if (!Number.isInteger(empresaId) || empresaId <= 0 || !proceso) continue
+            const corrida = await ultimaCorridaDeEmpresa(t.trx, proceso, empresaId, ahora)
+            if (!corrida || corrida.bloqueados > 0) continue
+            const cerrado = await cerrarIncidente(t.trx, abierto.clave, ahora)
+            if (!cerrado) continue
+            resultado.recuperados.push(abierto.clave)
+            const envios = await crearAlertas(t.trx, {
+                incidente: cerrado,
+                fase: 'cerrado',
+                evento: 'alerta.libro.proceso_desbloqueado',
+                alerta: {
+                    proceso,
+                    descripcion: descripcionProceso(proceso),
+                    desde: instanteLocal(cerrado.abierto_en),
+                    duracion: duracion(cerrado.abierto_en, ahora.toJSDate()),
+                    ultima: instanteLocal(corrida.en),
+                    eventos: cerrado.eventos,
+                },
+                requestId: t.ctx.requestId,
+                empresaId,
+                canales: ['telegram', 'correo'],
+            })
+            resultado.encolar.push(...envios.filter((e) => e.estado === 'encolado').map((e) => e.id))
+        }
     }
 
     private async vigilarCorte(
@@ -246,6 +286,41 @@ export async function ultimaCorrida(
         .max('created_at as ultima')
         .first()) as { ultima: Date | null } | null
     return fila?.ultima ? DateTime.fromJSDate(fila.ultima) : null
+}
+
+/**
+ * Última corrida correcta de `proceso` que cubre a la empresa (recorrió todas: `parametros.empresas`
+ * nulo o ausente; o la incluye) y cuántos documentos de esa empresa dejó bloqueados. Misma regla que
+ * `ultimasCorridas` de `#billing/corridas` (A3), dentro de la transacción y en los últimos 35 días.
+ */
+export async function ultimaCorridaDeEmpresa(
+    trx: TransactionClientContract,
+    proceso: string,
+    empresaId: number,
+    ahora: DateTime,
+): Promise<{ en: Date; bloqueados: number } | null> {
+    const fila = (await trx
+        .from('audit.acciones')
+        .where('accion', proceso)
+        .where('resultado', 'ok')
+        .where('created_at', '>', ahora.minus({ days: 35 }).toJSDate())
+        .where('created_at', '<', ahora.plus({ milliseconds: 1 }).toJSDate())
+        .whereRaw(
+            `(entrada->'parametros'->'empresas' IS NULL
+              OR jsonb_typeof(entrada->'parametros'->'empresas') = 'null'
+              OR entrada->'parametros'->'empresas' @> to_jsonb(?::bigint))`,
+            [empresaId],
+        )
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .select('created_at', trx.raw(`entrada->'bloqueos' as bloqueos`))
+        .first()) as { created_at: Date; bloqueos: unknown } | null
+    if (!fila) return null
+    const bloqueos = Array.isArray(fila.bloqueos) ? (fila.bloqueos as Array<Record<string, unknown>>) : []
+    const bloqueados = bloqueos
+        .filter((b) => Number(b.empresa_id) === empresaId)
+        .reduce((suma, b) => suma + (Number(b.documentos) || 0), 0)
+    return { en: fila.created_at, bloqueados }
 }
 
 /** Instante de la última migración aplicada (`adonis_schema.migration_time`). */

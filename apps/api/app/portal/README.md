@@ -221,7 +221,7 @@ La pasarela es una sola: `pago_en_linea` es igual para todas las empresas. Prueb
 | Endpoint                           | Identifica                               | Qué hace                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/v1/portal/bancos`        | público (límite por IP)                  | `PortalBanco[]`: bancos de origen activos (`listarBancos()` de A3), solo id y nombre                                                                                                                                                                                                                                                                                                                                                              |
-| `POST /api/v1/portal/comprobantes` | IP o sesión (`servicio_id` en el cuerpo) | **multipart**: `metodo` (`deposito`, `transferencia`, `ach`, `remesa`), `cuenta_bancaria_id` (de `cuentas_deposito`), `banco_origen_id` (solo transferencia y ACH), `referencia`, `monto`, `fecha_deposito` (YYYY-MM-DD, no futura), `nota?` y el archivo `archivo` (JPG, PNG, WebP o PDF, 5 MB). Llama `RegistrarComprobante` de A3 (`comprobantes.registrar`) con canal `portal` y actor sistema. 201 `PortalComprobante` (`estado: pendiente`) |
+| `POST /api/v1/portal/comprobantes` | IP o sesión (`servicio_id` en el cuerpo) | **multipart**: `metodo` (`deposito`, `transferencia`, `ach`, `remesa`), `cuenta_bancaria_id` (de `cuentas_deposito`), `banco_origen_id` (solo transferencia y ACH), `referencia`, `monto`, `fecha_deposito` (YYYY-MM-DD, no futura), `nota?` y el archivo `archivo` (JPG, PNG, WebP o PDF, 5 MB). Llama `RegistrarComprobante` de A3 (`comprobantes.registrar`) con canal `portal`, actor `cliente` con la sesión o `sistema` por la IP. 201 `PortalComprobante` (`estado: pendiente`) |
 | `GET /api/v1/portal/comprobantes`  | sesión                                   | Comprobantes del cliente de la sesión (`listarComprobantes({ cliente_id })` de A3), con estado y `motivo_rechazo`                                                                                                                                                                                                                                                                                                                                 |
 
 - **Sin lógica de comprobantes en el portal.** Validación del archivo por contenido, unicidad de la
@@ -245,6 +245,17 @@ declara la cookie `argos_portal` y su 401; el handler la exige igual (`exigirSes
 "IP o sesión" (promesas, comprobante, pago en línea) y las de IP siguen `publico`. Los PDF se declaran
 `application/pdf` (`respuesta.contenido`). Prueba: `tests/portal/openapi_portal.spec.ts`.
 
+**Saldo de una factura** (`saldoCobrable` en `consultas.ts`, la regla de A3): `total − pagado` solo
+si está `emitida`, `parcial` o `vencida` (`ESTADOS_PENDIENTES` de `#billing/facturas`); en cualquier
+otro estado, 0.00. Así una `castigada` (incobrable; lo castigado está en `ledger.castigos_facturas` y lo
+que el cliente pague después va a recuperación `4.2.03`, nunca a la factura) o una `acreditada`
+(cubierta por notas internas) salen con su estado y sin deuda en la lista, el detalle, el PDF del
+aviso, `/corte`, la cuenta y el pago en línea. Las `por_certificar` no salen. Pruebas:
+`tests/portal/estados_factura.spec.ts`.
+
+Límite de peticiones: las rutas con cuerpo o query lo cuentan en el gancho `antes` (antes de VineJS:
+un 422 también consume el cupo) y el handler no lo cuenta otra vez (`limitarAntesDeValidar`).
+
 Las de IP son lecturas puras (`consultas.ts`: resolución de la IP, saldo y nombre parcial): no cambian
 estado ni emiten eventos. Se auditan en `audit.acciones` (canal `portal`, entidad `servicio`, entrada
 `{ ip }`) porque son públicas y revelan información de un cliente.
@@ -267,7 +278,7 @@ reactivación son de A3; el portal solo identifica al pagador, elige las factura
 
 | Ruta                                                                                | Acción                                                                           | Qué hace                                                                                                                                                                                                                                                                                          |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/portal/pagos/iniciar` (IP o sesión, límite por IP, `Idempotency-Key`) | `CrearCobroPasarela` de A3 (`pasarela.crear_cobro`, canal portal, actor sistema) | Sin `facturas`: las vencidas con saldo del servicio (o todo lo pendiente del servicio). Con `facturas` (sesión): deben ser del cliente (404). 201 `PortalPagoEnLinea` con `url_pago`; 422 `sin_deuda` / `no_identificado` / `facturas.<i>`; 503 `pasarela_no_configurada` en palabras del cliente |
+| `POST /api/v1/portal/pagos/iniciar` (IP o sesión, límite por IP, `Idempotency-Key`) | `CrearCobroPasarela` de A3 (`pasarela.crear_cobro`, canal portal, actor `cliente` con la sesión o `sistema` por la IP) | Sin `facturas`: las vencidas con saldo del servicio (o todo lo pendiente del servicio). Con `facturas` (sesión): deben ser del cliente (404). 201 `PortalPagoEnLinea` con `url_pago`; 422 `sin_deuda` / `no_identificado` / `facturas.<i>`; 503 `pasarela_no_configurada` en palabras del cliente |
 | `GET /api/v1/portal/pagos/en-linea/:id` (límite por IP)                             | `pagos_en_linea.ts` (`cobroDeLaPeticion`, lectura con `verCobroPasarela` de A3)  | Estado del cobro para la página de retorno `/corte?pago=<id>`; solo si es del cliente de la sesión o del servicio de la IP (si no, 404). `url_pago` solo mientras está pendiente                                                                                                                  |
 
 `GET /portal/empresa` agrega `pago_en_linea` (hay pasarela configurada, `proveedorConfigurado()` de A3).
@@ -380,7 +391,9 @@ sobre `lealtad.*` de A3, sin motivos internos ni valores contables:
   `motivo_no_canjeable` para pintar la tarjeta (`PortalPremio`).
 - `GET /portal/canjes` y `POST /portal/canjes` (`Idempotency-Key`): el canje lo hace
   `lealtad.canjear` (A3) con actor `cliente` y canal `portal`, que exige además `canje_portal`. Un
-  premio sin `en_portal` o de un programa no visible responde 404 antes de llamar la acción.
+  premio sin `en_portal`, de un tipo que no se canjea en el portal (`bien`, `boletos`) o de un
+  programa no visible responde 404 antes de llamar la acción: el portal no depende de que la acción
+  lo bloquee.
 
 Pruebas: `tests/portal/puntos.spec.ts`.
 
