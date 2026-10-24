@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { Conflicto, ValidacionFallida } from '#shared/errores'
+import { Conflicto } from '#shared/errores'
 import { aTexto, dec } from '#ledger/dinero'
 import { cuentasDeClase, inicioDepreciacion, tasaDeClase } from '#ledger/activos'
 import type { ClaseActivo } from '#ledger/compras'
@@ -10,7 +10,7 @@ import {
     registrarMovimientoConAsiento,
     reservarMovimiento,
 } from '#inventario/kardex'
-import { actualizarUnidad, unidadesDeBodega, type UnidadVista } from '#inventario/unidades'
+import { actualizarUnidad, productoDeUnidad, unidadesDeBodega, type UnidadVista } from '#inventario/unidades'
 import {
     emitirComodato,
     empresaDeLaUnidad,
@@ -56,12 +56,9 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
                 'Servicio retirado',
             )
         }
-        const [previa] = await unidadesDeBodega(t, [input.unidad_id], {
-            empresaId,
-            estados: ['disponible'],
-            campo: 'unidad_id',
-        })
-        const producto = await productoMovible(t, previa!.producto_id)
+        // locks en el orden de todo el inventario: producto primero, después la fila de la unidad
+        const previa = await productoDeUnidad(t, input.unidad_id)
+        const producto = await productoMovible(t, previa)
         await bloquearProducto(t, producto.id)
         // con el lock del producto la unidad ya no cambia: se vuelve a leer
         const [unidad] = await unidadesDeBodega(t, [input.unidad_id], {
@@ -69,16 +66,9 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
             estados: ['disponible'],
             campo: 'unidad_id',
         })
+        // un equipo que volvió totalmente depreciado vale Q0: su activo nace en Q0, sin depreciación ni
+        // asiento (decisión del líder, fase B)
         const costo = dec(unidad!.costo)
-        if (costo.lte(0)) {
-            throw new ValidacionFallida([
-                {
-                    field: 'unidad_id',
-                    message: 'La unidad no tiene costo: no se puede dar de alta como activo',
-                    rule: 'unidad_sin_costo',
-                },
-            ])
-        }
         const fecha = await fechaDeComodato(t, unidad!.id, input.fecha)
         const clase = (producto.clase_activo ?? 'equipo_red') as ClaseActivo
         const cuentas = await cuentasDeClase(t.trx, clase)
@@ -122,10 +112,12 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
             },
             {
                 descripcion: `Comodato de ${producto.sku} ${nombre} al servicio ${servicio.id} · activo ${activoId}`,
-                movimientos: [
-                    { cuenta: cuentas.activo, debe: aTexto(costo) },
-                    { cuenta: CUENTAS_GT.INVENTARIOS, haber: aTexto(costo) },
-                ],
+                movimientos: costo.gt(0)
+                    ? [
+                          { cuenta: cuentas.activo, debe: aTexto(costo) },
+                          { cuenta: CUENTAS_GT.INVENTARIOS, haber: aTexto(costo) },
+                      ]
+                    : undefined,
             },
             id,
         )

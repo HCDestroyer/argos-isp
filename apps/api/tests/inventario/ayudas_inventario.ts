@@ -8,7 +8,7 @@ import CrearProducto, { type EntradaCrearProducto } from '#inventario/actions/cr
 import CrearBodega, { type EntradaCrearBodega } from '#inventario/actions/crear_bodega'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import { existenciasDelKardex, valorKardex } from '#inventario/kardex'
-import { verificarLibro } from '#tests/contabilidad/verificar_libro'
+import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { dec } from '#ledger/dinero'
 
 /**
@@ -134,48 +134,5 @@ export async function afirmarCuadre(
         await existenciasDelKardex(empresaId),
         'inventario.saldos = Σ kardex por producto y bodega',
     )
-    // el auditor agrega el origen `inventario` a 9.origen_de_asiento_desconocido con los checks de §8
-    // (`.claude/integration/a3.md`); mientras, solo ese caso se descarta aquí
-    // fase B: el alta y la baja de un activo en comodato (`ledger.activos.unidad_id`) llevan el asiento
-    // del movimiento (origen `inventario`) y la devolución es una baja `devolucion_comodato`; el
-    // auditor los suma a 15.alta_… y 15.baja_…; mientras, solo esas filas se descartan
-    const comodato = new Set(
-        (
-            (await db
-                .from('ledger.activos')
-                .where('empresa_id', empresaId)
-                .whereNotNull('unidad_id')
-                .select('id')) as Array<{
-                id: number
-            }>
-        ).map((a) => Number(a.id)),
-    )
-    const todas = await verificarLibro(empresaId)
-    const violaciones = todas
-        .map((v) => {
-            if (v.invariante.startsWith('15.alta_de_activo_mal_contabilizada')) {
-                return {
-                    ...v,
-                    detalle: (v.detalle as Array<{ id: number }>).filter((d) => !comodato.has(Number(d.id))),
-                }
-            }
-            if (v.invariante.startsWith('15.baja_de_activo_mal_contabilizada')) {
-                return {
-                    ...v,
-                    detalle: (v.detalle as Array<{ activo_id: number; tipo: string }>).filter(
-                        (d) => !(comodato.has(Number(d.activo_id)) && d.tipo === 'devolucion_comodato'),
-                    ),
-                }
-            }
-            return v
-        })
-        .filter((v) => !Array.isArray(v.detalle) || v.detalle.length > 0)
-        .filter(
-            (v) =>
-                !(
-                    v.invariante.startsWith('9.origen_de_asiento_desconocido') &&
-                    (v.detalle as Array<{ origen_tipo: string }>).every((d) => d.origen_tipo === 'inventario')
-                ),
-        )
-    assert.deepEqual(violaciones, [], `Invariantes contables rotos (empresa ${empresaId})`)
+    await afirmarLibro(assert, empresaId)
 }

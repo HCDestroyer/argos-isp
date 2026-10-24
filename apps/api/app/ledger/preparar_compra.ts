@@ -7,6 +7,8 @@ import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { bloqueoDe } from '#ledger/bloqueos'
 import { impuesto as impuestoVigente } from '#fiscal/impuestos'
 import { valorParametro } from '#fiscal/parametros'
+import { sinIvaPorRegimen } from '#billing/regimen'
+import { exigirDevolucionDentroDeLaCompra } from '#inventario/compras'
 import { verProveedor, type ProveedorVista } from '#ledger/proveedores'
 import {
     DOCUMENTOS_PEQUENO,
@@ -37,7 +39,8 @@ import {
  *   FACT, FCAM, NDEB ni FESP); FESP solo a un proveedor `sin_documento`; un no residente, RECIBO.
  *   Otro caso: 422 `documento_no_permitido`.
  * - Duplicado (mismo proveedor, tipo, serie y número): 409 `compra_duplicada`.
- * - Crédito fiscal: por defecto, si el documento desglosa IVA. `periodo_iva` (primer día del mes en
+ * - Crédito fiscal: por defecto, si el documento desglosa IVA y la empresa no es pequeño
+ *   contribuyente en la fecha del documento (H40: entonces nunca, 422 `credito_no_permitido` si se pide). `periodo_iva` (primer día del mes en
  *   que se toma el crédito; por defecto el mes del documento, o el actual si ese mes está cerrado)
  *   va del mes del documento hasta `credito_fiscal_ventana_meses` después (inv. A.1, art. 20);
  *   fuera: 422 `credito_fiscal_extemporaneo` (o, desde un egreso, la compra entra sin crédito).
@@ -239,16 +242,21 @@ export async function prepararCompra(
     const lineas = calcularLineas(input.lineas, cuentas, tipo, tasa)
     const totales = totalesCompra(lineas)
 
-    const admite = !DOCUMENTOS_SIN_IVA.has(tipo) && totales.iva.gt(0)
+    // H40 (auditor): una empresa de pequeño contribuyente en la fecha del documento no tiene crédito
+    // fiscal: el IVA de su compra es costo o gasto (la línea va por su total, C_SIN_CREDITO)
+    const pequeno = await sinIvaPorRegimen(t.trx, empresaId, fechaDocumento)
+    const admite = !DOCUMENTOS_SIN_IVA.has(tipo) && totales.iva.gt(0) && !pequeno
     let credito = input.credito_fiscal ?? admite
     if (tipo === 'NCRE') credito = Boolean(referencia?.credito_fiscal) && admite
     if (credito && !admite) {
         throw new ValidacionFallida([
             {
                 field: 'credito_fiscal',
-                message: DOCUMENTOS_SIN_IVA.has(tipo)
-                    ? `Un documento ${tipo} no da derecho a crédito fiscal`
-                    : 'Sin IVA no hay crédito fiscal',
+                message: pequeno
+                    ? 'La empresa es pequeño contribuyente en la fecha del documento: sus compras no dan crédito fiscal'
+                    : DOCUMENTOS_SIN_IVA.has(tipo)
+                      ? `Un documento ${tipo} no da derecho a crédito fiscal`
+                      : 'Sin IVA no hay crédito fiscal',
                 rule: 'credito_no_permitido',
             },
         ])
@@ -343,6 +351,8 @@ export async function prepararCompra(
     }
 
     if (tipo === 'NCRE') {
+        // inventario: lo que pasa de lo que entró con la compra, antes que el saldo (observación del auditor)
+        await exigirDevolucionDentroDeLaCompra(t, referencia!.id, lineas)
         const saldo = await saldoCompra(t.trx, referencia!.id)
         if (referencia!.condicion !== 'credito' || totales.total.gt(saldo)) {
             throw new Problema(

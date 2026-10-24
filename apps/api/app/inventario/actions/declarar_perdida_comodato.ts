@@ -2,7 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { ValidacionFallida } from '#shared/errores'
 import DarDeBajaActivo from '#ledger/actions/dar_de_baja_activo'
 import { bloquearProducto } from '#inventario/kardex'
-import { actualizarUnidad, unidadesDeBodega, type UnidadVista } from '#inventario/unidades'
+import { actualizarUnidad, productoDeUnidad, unidadesDeBodega, type UnidadVista } from '#inventario/unidades'
 import {
     empresaDeLaUnidad,
     exigirEnComodatoDe,
@@ -40,12 +40,9 @@ export default class DeclararPerdidaComodato extends DomainAction<EntradaPerdida
         const empresaId = await empresaDeLaUnidad(t, input.unidad_id)
         t.fijarEmpresa(empresaId)
         const servicio = await servicioDe(t, input.servicio_id, empresaId)
-        const [previa] = await unidadesDeBodega(t, [input.unidad_id], {
-            empresaId,
-            estados: ['en_comodato', 'por_recuperar'],
-            campo: 'unidad_id',
-        })
-        await bloquearProducto(t, previa!.producto_id)
+        // locks en el orden de todo el inventario: producto primero, después la fila de la unidad
+        const previa = await productoDeUnidad(t, input.unidad_id)
+        await bloquearProducto(t, previa)
         const [unidad] = await unidadesDeBodega(t, [input.unidad_id], {
             empresaId,
             estados: ['en_comodato', 'por_recuperar'],
@@ -59,6 +56,7 @@ export default class DeclararPerdidaComodato extends DomainAction<EntradaPerdida
                 tipo: 'retiro',
                 fecha,
                 motivo: `equipo en comodato no devuelto (servicio ${servicio.id}): ${motivo}`,
+                desde_comodato: true,
             },
             t.ctx,
             { trx: t.trx },

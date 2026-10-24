@@ -14,7 +14,13 @@ import {
     registrarMovimientoConAsiento,
     reservarMovimiento,
 } from '#inventario/kardex'
-import { actualizarUnidad, unidadesDeBodega, type Condicion, type UnidadVista } from '#inventario/unidades'
+import {
+    actualizarUnidad,
+    productoDeUnidad,
+    unidadesDeBodega,
+    type Condicion,
+    type UnidadVista,
+} from '#inventario/unidades'
 import {
     emitirComodato,
     empresaDeLaUnidad,
@@ -58,12 +64,9 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
         t.fijarEmpresa(empresaId)
         const servicio = await servicioDe(t, input.servicio_id, empresaId)
         const bodega = await bodegaMovible(t, input.bodega_id, empresaId, { entrada: true })
-        const [previa] = await unidadesDeBodega(t, [input.unidad_id], {
-            empresaId,
-            estados: ['en_comodato', 'por_recuperar'],
-            campo: 'unidad_id',
-        })
-        const producto = await productoMovible(t, previa!.producto_id)
+        // locks en el orden de todo el inventario: producto primero, después la fila de la unidad
+        const previa = await productoDeUnidad(t, input.unidad_id)
+        const producto = await productoMovible(t, previa)
         await bloquearProducto(t, producto.id)
         const [unidad] = await unidadesDeBodega(t, [input.unidad_id], {
             empresaId,
@@ -128,7 +131,8 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
             },
             {
                 descripcion: `Devolución de ${producto.sku} ${nombre} del servicio ${servicio.id} · baja del activo ${activoId} sin resultado`,
-                movimientos,
+                // un activo de costo Q0 no mueve el libro
+                movimientos: costo.gt(0) ? movimientos : undefined,
             },
             id,
         )
@@ -137,7 +141,7 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
             .where('id', id)
             .select('asiento_id')
             .first()) as {
-            asiento_id: number
+            asiento_id: number | null
         }
         await t.trx
             .insertQuery()
@@ -151,7 +155,7 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
                 costo: aTexto(costo),
                 depreciacion_acumulada: aTexto(acumulada),
                 valor_libros: aTexto(libros),
-                asiento_id: Number(asiento.asiento_id),
+                asiento_id: asiento.asiento_id === null ? null : Number(asiento.asiento_id),
                 registrado_por: usuarioDelActor(t.ctx.actor),
             })
         await t.emit('activo.dado_de_baja', {

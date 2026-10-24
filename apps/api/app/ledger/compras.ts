@@ -5,7 +5,7 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { CUENTAS, PAIS_PLAN } from '#ledger/plan_cuentas'
-import { CLASES_ACTIVO, CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { CLASES_ACTIVO, CUENTAS_GT, esCuentaDelKardex } from '#fiscal/l10n/gt/cuentas'
 import type { LineaAsiento } from '#ledger/actions/registrar_asiento'
 
 /**
@@ -419,7 +419,7 @@ export async function resolverCuentasLineas(
             continue
         }
         // inventario §3: 1.1.14 solo la mueve el kardex (una línea con producto_id)
-        if (String(fila!.codigo) === CUENTAS_GT.INVENTARIOS) {
+        if (esCuentaDelKardex(String(fila!.codigo))) {
             errores.push({
                 field: `${campo}.cuenta`,
                 message: `La cuenta ${CUENTAS_GT.INVENTARIOS} es del kardex: usa producto_id y bodega_id en una línea bien`,

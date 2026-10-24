@@ -230,7 +230,8 @@ export const ajusteValidator = vine.compile(
             .meta({ description: 'Serie: sobrante de esta unidad nueva' }),
         motivo: motivo(),
         costo_unitario: costoUnitario().nullable().optional().meta({
-            description: 'Sobrante sin costo conocido: el costo unitario con que entra',
+            description:
+                'Sobrante sin existencia en la bodega: el costo unitario con que entra (> 0); con existencia se ignora y entra al promedio',
         }),
     }),
 )

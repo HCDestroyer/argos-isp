@@ -38,8 +38,8 @@ import {
  *   bodega, a su costo (quedan `devuelta_proveedor`). La línea de la NCRE debe valer ese costo (422
  *   `devolucion_distinta_del_costo`) y no pasar de lo que entró (422 `devolucion_excede_compra`).
  * - **Reverso.** Anular la compra (o la NCRE) revierte sus movimientos al mismo costo con el asiento
- *   de reverso (`reverso_compra`). 409 `unidades_en_uso` si una unidad que entró ya no está
- *   disponible en su bodega; 409 `existencia_insuficiente` y `valor_insuficiente` como en la fase A.
+ *   de reverso (`reverso_compra`). 409 `unidades_en_uso` si una unidad que entró ya no está tal como
+ *   entró: disponible en su bodega, a su costo de compra y sin más movimientos que traslados (H42); 409 `existencia_insuficiente` y `valor_insuficiente` como en la fase A.
  *
  * Sin líneas de inventario, nada de esto corre: la compra es la de siempre.
  */
@@ -373,22 +373,47 @@ export async function revertirEntradasDeLaCompra(
             )
             .orderBy('id')
             .forUpdate()
-            .select('id', 'serie', 'mac', 'estado', 'bodega_id')) as Array<{
+            .select(
+                'id',
+                'serie',
+                'mac',
+                'estado',
+                'bodega_id',
+                'costo',
+                // H42: lo que la unidad hizo después de entrar (fuera de traslados): comodato, ajuste…
+                t.trx.raw(
+                    `(SELECT count(*)::int FROM inventario.movimientos x
+                       WHERE x.unidad_id = inventario.unidades.id AND x.tipo <> 'traslado'
+                         AND NOT (x.origen_tipo = 'compra' AND x.origen_id = ?)) as otros`,
+                    [compraId],
+                ),
+            )) as Array<{
             id: number
             serie: string | null
             mac: string | null
             estado: string
             bodega_id: number | null
+            costo: string
+            otros: number
         }>
         const enUso = unidades.filter((u) => {
             const entrada = entradas.find((m) => Number(m.unidad_id) === Number(u.id))!
-            return u.estado !== 'disponible' || Number(u.bodega_id) !== Number(entrada.bodega_id)
+            // H42: solo si está tal como entró: disponible en su bodega, a su costo de compra y sin otro
+            // movimiento que traslados (si volvió de un comodato vale su valor en libros: NCRE a su costo)
+            return (
+                u.estado !== 'disponible' ||
+                Number(u.bodega_id) !== Number(entrada.bodega_id) ||
+                !dec(u.costo).eq(dec(entrada.costo_total)) ||
+                Number(u.otros) > 0
+            )
         })
         if (enUso.length > 0) {
             throw new Conflicto(
                 `La compra ${compraId} tiene unidades que ya no están disponibles en su bodega: ${enUso
                     .map((u) => `${u.serie ?? u.mac} (${u.estado.replaceAll('_', ' ')})`)
-                    .join(', ')}. Devuélvelas o trasládalas de vuelta antes de anular`,
+                    .join(
+                        ', ',
+                    )}. Una unidad que pasó por un comodato o un ajuste se devuelve al proveedor con una NCRE por serie; una trasladada, vuelve a su bodega antes de anular`,
                 'unidades_en_uso',
                 'Unidades en uso',
             )
@@ -458,5 +483,58 @@ export async function revertirEntradasDeLaCompra(
             reversoDe: Number(m.id),
             motivo: `anulación de la compra ${compraId}`,
         })
+    }
+}
+
+/**
+ * Observación del auditor (fase B): en una NCRE, lo que pasa de lo que entró con la compra responde
+ * 422 `devolucion_excede_compra` antes que `ncre_excede_saldo` (la causa es la cantidad, no el
+ * monto). Solo mira las cantidades por producto y bodega; el resto lo valida `entradasDeLaCompra`.
+ */
+export async function exigirDevolucionDentroDeLaCompra(
+    t: Transaccion,
+    referenciaId: number,
+    lineas: Array<Pick<LineaCompraCalculada, 'producto_id' | 'bodega_id' | 'cantidad' | 'unidad_ids'>>,
+): Promise<void> {
+    const pedido = new Map<string, { i: number; cantidad: Dec }>()
+    lineas.forEach((l, i) => {
+        if (!l.producto_id || !l.bodega_id) return
+        const clave = `${l.producto_id}:${l.bodega_id}`
+        const previo = pedido.get(clave)
+        const cantidad = dec(String(l.unidad_ids.length > 0 ? l.unidad_ids.length : l.cantidad))
+        pedido.set(clave, { i: previo?.i ?? i, cantidad: (previo?.cantidad ?? dec('0')).plus(cantidad) })
+    })
+    for (const [clave, { i, cantidad }] of pedido) {
+        const [productoId, bodegaId] = clave.split(':').map(Number) as [number, number]
+        const fila = (await t.trx
+            .from('inventario.movimientos as m')
+            .where({ 'm.producto_id': productoId, 'm.bodega_id': bodegaId, 'm.origen_tipo': 'compra' })
+            .where((q) =>
+                q
+                    .where((e) => e.where('m.tipo', 'entrada_compra').where('m.origen_id', referenciaId))
+                    .orWhere((d) =>
+                        d
+                            .where('m.tipo', 'devolucion_proveedor')
+                            .whereIn(
+                                'm.origen_id',
+                                t.trx
+                                    .from('ledger.compras')
+                                    .where('compra_referencia_id', referenciaId)
+                                    .select('id'),
+                            ),
+                    ),
+            )
+            .whereNotExists((q) => q.from('inventario.movimientos as r').whereRaw('r.reverso_de = m.id'))
+            .select(t.trx.raw('coalesce(sum(m.cantidad), 0)::text as queda'))
+            .first()) as { queda: string }
+        const queda = dec(fila.queda)
+        if (cantidad.gt(queda)) {
+            throw problemaLinea(
+                i,
+                'cantidad',
+                `De la compra ${referenciaId} quedan por devolver ${queda.toFixed(3)} de ese producto en esa bodega`,
+                'devolucion_excede_compra',
+            )
+        }
     }
 }
