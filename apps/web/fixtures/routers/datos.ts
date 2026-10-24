@@ -76,3 +76,9 @@ export const ipv6Bloques: Schema<'Ipv6Bloque'>[] = [
     { id: 1, router_id: 1, prefijo: '2803:d100:1000::/40', ...meta },
     { id: 2, router_id: 2, prefijo: '2803:d100:2000::/40', ...meta },
 ]
+
+/** Pools del bloque del RB-Centro: enlace /64 por servicio y delegación /56, como en el laboratorio. */
+export const ipv6Pools: Schema<'Ipv6Pool'>[] = [
+    { id: 1, bloque_id: 1, prefijo: '2803:d100:1000::/44', tipo: 'enlace', tamano_entrega: 64, nombre_en_router: 'v6-enlace', ...meta },
+    { id: 2, bloque_id: 1, prefijo: '2803:d100:1080::/41', tipo: 'delegacion', tamano_entrega: 56, nombre_en_router: 'v6-pd', ...meta },
+]

@@ -2,8 +2,9 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Ficha corta del router: destino del autologin desde Horus (`/routers/:id`, `rutaDestino` de A1)
- * y acceso a "Ver en Horus". La velocidad y la conexión se cambian desde la lista de routers.
+ * Ficha del router: destino del autologin desde Horus (`/routers/:id`, `rutaDestino` de A1), "Ver
+ * en Horus" y su direccionamiento (redes IPv4, bloques y pools IPv6). La velocidad y la conexión
+ * se cambian desde la lista de routers.
  */
 definePageMeta({ permiso: 'routers.ver' })
 
@@ -109,5 +110,10 @@ const control = computed(() => {
                 />
             </dl>
         </section>
+        <RouterDireccionamiento
+            v-if="nas"
+            :router-id="nas.id"
+            class="mx-auto mt-6 w-full max-w-4xl"
+        />
     </PanelPagina>
 </template>

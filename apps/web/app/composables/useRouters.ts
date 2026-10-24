@@ -12,6 +12,9 @@ export type CambioControlVelocidad = paths['/api/v1/routers/{id}/cambiar-control
 export type MigracionAaa = Schema<'MigracionAaaRouter'>
 export type DatosMarcarMigrado = paths['/api/v1/routers/{id}/marcar-migrado']['post']['requestBody']['content']['application/json']
 export type ResumenSesionesRouter = Schema<'ResumenSesionesRouter'>
+export type DatosRouter = paths['/api/v1/routers']['post']['requestBody']['content']['application/json']
+export type DatosRedIpv4 = paths['/api/v1/routers/{id}/redes-ipv4']['post']['requestBody']['content']['application/json']
+export type DatosIpv6Bloque = paths['/api/v1/routers/{id}/ipv6-bloques']['post']['requestBody']['content']['application/json']
 export type ServicioSinSesion = Schema<'ServicioSinSesion'>
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
@@ -57,6 +60,21 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/planes', { params: { path: { id } } }))
     }
 
+    /** `POST /routers` (`routers.crear`): nombre, host, NAS, secretos (se guardan cifrados) y colas. */
+    function crear(datos: DatosRouter): Promise<Resultado<RouterNas>> {
+        return resolver(api.POST('/api/v1/routers', { body: datos }))
+    }
+
+    /** `POST /routers/:id/redes-ipv4` (`redes.crear`): red en CIDR, estática o pool; 422 si se solapa. */
+    function agregarRed(id: number, datos: DatosRedIpv4): Promise<Resultado<RedIpv4>> {
+        return resolver(api.POST('/api/v1/routers/{id}/redes-ipv4', { params: { path: { id } }, body: datos }))
+    }
+
+    /** `POST /routers/:id/ipv6-bloques` (`ipv6.crear`): bloque IPv6 del router, que luego se reparte en pools. */
+    function agregarBloque(id: number, datos: DatosIpv6Bloque): Promise<Resultado<Ipv6Bloque>> {
+        return resolver(api.POST('/api/v1/routers/{id}/ipv6-bloques', { params: { path: { id } }, body: datos }))
+    }
+
     function redesIpv4(id: number): Promise<Resultado<RedIpv4[]>> {
         return resolver(api.GET('/api/v1/routers/{id}/redes-ipv4', { params: { path: { id } } }))
     }
@@ -89,5 +107,5 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/resumen-sesiones', { params: { path: { id }, query: desde ? { desde } : {} } }))
     }
 
-    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones }
+    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

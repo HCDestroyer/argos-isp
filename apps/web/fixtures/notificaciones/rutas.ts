@@ -1,7 +1,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
-import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, problemaTipado, registrarAccion } from '../comun'
+import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { configuracionSinFila } from './datos'
 
 type Configuracion = Schema<'ConfiguracionNotificaciones'>
@@ -133,7 +133,114 @@ function probar(solicitud: SolicitudFixture, empresaId: number | null): Respuest
     return { status: 200, cuerpo: { estado: error ? 'fallido' : 'enviado', error, destino: chat, origen, envio_id: envio } }
 }
 
+/**
+ * Sintaxis Mustache mínima, como `errorDeSintaxis` de A6: llaves cerradas y secciones
+ * `{{#x}}`/`{{^x}}` cerradas con su `{{/x}}` en orden.
+ */
+function errorMustache(texto: string): string | null {
+    const abiertas: string[] = []
+    const etiquetas = texto.match(/\{\{[^}]*\}\}/g) ?? []
+    const sinCerrar = texto.replace(/\{\{[^}]*\}\}/g, '')
+    if (sinCerrar.includes('{{')) {
+        return 'Unclosed tag'
+    }
+    for (const etiqueta of etiquetas) {
+        const contenido = etiqueta.slice(2, -2).trim()
+        if (contenido.startsWith('#') || contenido.startsWith('^')) {
+            abiertas.push(contenido.slice(1).trim())
+        }
+        else if (contenido.startsWith('/')) {
+            const nombre = contenido.slice(1).trim()
+            if (abiertas.pop() !== nombre) {
+                return `Unopened section "${nombre}"`
+            }
+        }
+    }
+    return abiertas.length ? `Unclosed section "${abiertas.at(-1)}"` : null
+}
+
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
+
 export const rutasNotificaciones: RutasFixture = {
+    'GET /api/v1/notificaciones/plantillas': conPermiso('notificaciones.ver', () => ({ status: 200, cuerpo: bd.plantillasNotificacion })),
+
+    /** Como `EditarPlantillaNotificacion` (A6): Mustache válido (422 por campo), `version` (409). */
+    'PUT /api/v1/notificaciones/plantillas/:id': conPermiso('notificaciones.editar', (solicitud) => {
+        const plantilla = bd.plantillasNotificacion.find(p => p.id === idDe(solicitud))
+        if (!plantilla) {
+            return noEncontrado('la plantilla')
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        const errores = (['asunto', 'cuerpo'] as const).flatMap((campo) => {
+            const valor = cuerpo[campo]
+            const error = typeof valor === 'string' ? errorMustache(valor) : null
+            return error ? [{ field: campo, message: `Plantilla Mustache inválida: ${error}`, rule: 'mustache' }] : []
+        })
+        if (cuerpo.cuerpo !== undefined && (typeof cuerpo.cuerpo !== 'string' || !cuerpo.cuerpo.length)) {
+            errores.push({ field: 'cuerpo', message: 'El cuerpo es obligatorio', rule: 'minLength' })
+        }
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        if (cuerpo.version !== plantilla.version) {
+            return versionCambiada()
+        }
+        Object.assign(plantilla, {
+            asunto: cuerpo.asunto === undefined ? plantilla.asunto : (typeof cuerpo.asunto === 'string' ? cuerpo.asunto : null),
+            cuerpo: typeof cuerpo.cuerpo === 'string' ? cuerpo.cuerpo : plantilla.cuerpo,
+            activa: typeof cuerpo.activa === 'boolean' ? cuerpo.activa : plantilla.activa,
+            version: plantilla.version + 1,
+            updated_at: ahora(),
+        })
+        registrarAccion(solicitud, 'notificaciones.editar', { tipo: 'plantilla_notificacion', id: plantilla.id }, cuerpo)
+        return { status: 200, cuerpo: plantilla }
+    }),
+
+    'GET /api/v1/notificaciones/recordatorios': conPermiso('notificaciones.ver', () => ({ status: 200, cuerpo: bd.recordatoriosPago })),
+
+    /** Como `EditarRecordatorio` (A6): días −60…60, hora HH:MM (se guarda HH:MM:SS), `version` (409). */
+    'PUT /api/v1/notificaciones/recordatorios/:id': conPermiso('notificaciones.editar', (solicitud) => {
+        const recordatorio = bd.recordatoriosPago.find(r => r.id === idDe(solicitud))
+        if (!recordatorio) {
+            return noEncontrado('el recordatorio')
+        }
+        const cuerpo = cuerpoObjeto(solicitud)
+        const errores = []
+        if (cuerpo.dias !== undefined && (typeof cuerpo.dias !== 'number' || !Number.isInteger(cuerpo.dias) || cuerpo.dias < -60 || cuerpo.dias > 60)) {
+            errores.push({ field: 'dias', message: 'Los días deben estar entre -60 y 60', rule: 'range' })
+        }
+        if (cuerpo.hora !== undefined && (typeof cuerpo.hora !== 'string' || !HORA.test(cuerpo.hora))) {
+            errores.push({ field: 'hora', message: 'El formato de hora no es válido', rule: 'regex' })
+        }
+        if (errores.length) {
+            return datosInvalidos(errores)
+        }
+        if (cuerpo.version !== recordatorio.version) {
+            return versionCambiada()
+        }
+        Object.assign(recordatorio, {
+            dias: typeof cuerpo.dias === 'number' ? cuerpo.dias : recordatorio.dias,
+            hora: typeof cuerpo.hora === 'string' ? `${cuerpo.hora}:00` : recordatorio.hora,
+            activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : recordatorio.activo,
+            version: recordatorio.version + 1,
+            updated_at: ahora(),
+        })
+        registrarAccion(solicitud, 'notificaciones.editar', { tipo: 'recordatorio', id: recordatorio.id }, cuerpo)
+        return { status: 200, cuerpo: recordatorio }
+    }),
+
+    'GET /api/v1/notificaciones/envios': conPermiso('notificaciones.ver', (solicitud) => {
+        const { query } = solicitud
+        const cliente = numeroQuery(solicitud, 'cliente_id')
+        const filas = bd.enviosNotificacion
+            .filter(e => cliente === undefined || e.cliente_id === cliente)
+            .filter(e => !query.get('evento') || e.evento === query.get('evento'))
+            .filter(e => !query.get('canal') || e.canal === query.get('canal'))
+            .filter(e => !query.get('estado') || e.estado === query.get('estado'))
+            .sort((a, b) => b.id - a.id)
+        return { status: 200, cuerpo: paginar(filas, solicitud) }
+    }),
+
     'GET /api/v1/notificaciones/configuracion': conPermiso('notificaciones.ver', () => ({ status: 200, cuerpo: leer(null) })),
     'PUT /api/v1/notificaciones/configuracion': conPermiso('notificaciones.configurar', solicitud => guardar(solicitud, null)),
     'GET /api/v1/notificaciones/configuracion/empresas': conPermiso('notificaciones.ver', () => ({ status: 200, cuerpo: Object.values(bd.notificaciones.empresas) })),

@@ -227,6 +227,19 @@ function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
     void historialAsignaciones.value?.recargar()
 }
 
+const configuracionEfectiva = useTemplateRef<{ recargar: () => Promise<void> }>('configuracionEfectiva')
+
+/** Un plan temporal que empieza o se cancela cambia el plan del servicio: se relee la ficha. */
+async function alCambiarPlanTemporal() {
+    const resultado = await useServicios().ver(servicioId.value)
+    if (resultado.ok) {
+        servicio.value = resultado.data
+        void cargarRelacionados(resultado.data)
+    }
+    void configuracionEfectiva.value?.recargar()
+    void lineaTiempo.value?.recargar()
+}
+
 const precio = computed(() => servicio.value?.costo_override ?? plan.value?.precio ?? null)
 
 watch(servicioId, cargar)
@@ -610,6 +623,16 @@ onMounted(cargar)
                     </dl>
                 </UPageCard>
             </div>
+
+            <ServicioConfiguracionEfectiva
+                ref="configuracionEfectiva"
+                :servicio-id="servicio.id"
+            />
+
+            <ServicioPlanesTemporales
+                :servicio="servicio"
+                @cambiado="alCambiarPlanTemporal"
+            />
 
             <ServicioHorus
                 v-if="puede('horus.ver')"

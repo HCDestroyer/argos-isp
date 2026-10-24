@@ -4,14 +4,22 @@ import type { TableColumn } from '@nuxt/ui'
 /**
  * Routers (A1): lista con su control de velocidad y la capacidad del enlace. "Velocidad" abre el
  * panel para cambiar la capacidad y el modo de colas (`contratos/velocidad.md`); "Conexión", los
- * cinco datos de la API REST de RouterOS (`contratos/routeros.md`). El CRUD completo, las redes
- * IPv4 y los bloques IPv6 quedan para la tarea 6 completa.
+ * cinco datos de la API REST de RouterOS (`contratos/routeros.md`). "Nuevo router" (`routers.crear`);
+ * redes IPv4 y bloques y pools IPv6 en la ficha de cada router.
  */
 definePageMeta({ permiso: 'routers.ver' })
 
 useHead({ title: 'Routers · ArgosIsp' })
 
 const lista = usePaginacionCursor(cursor => useRouters().listar({}, cursor))
+const { puede } = usePermisos()
+const toast = useToast()
+const altaAbierta = ref(false)
+
+function alCrear(router: RouterNas) {
+    toast.add({ title: `${router.nombre} creado`, description: 'Agrega sus redes IPv4 y bloques IPv6 en su ficha.', icon: 'i-lucide-circle-check', color: 'success' })
+    void navigateTo(`/routers/${router.id}`)
+}
 
 const columnas: TableColumn<RouterNas>[] = [
     { accessorKey: 'nombre', header: 'Router', meta: { class: { td: 'whitespace-normal' } } },
@@ -71,6 +79,13 @@ onMounted(() => void lista.recargar())
                 variant="outline"
                 data-prueba="ir-migracion"
             />
+            <UButton
+                v-if="puede('routers.crear')"
+                label="Nuevo router"
+                icon="i-lucide-plus"
+                data-prueba="nuevo-router"
+                @click="altaAbierta = true"
+            />
         </template>
 
         <div class="flex flex-col gap-4">
@@ -91,7 +106,10 @@ onMounted(() => void lista.recargar())
                     <template #nombre-cell="{ row }">
                         <div class="flex min-w-0 flex-col gap-0.5">
                             <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                {{ row.original.nombre }}
+                                <ULink
+                                    :to="`/routers/${row.original.id}`"
+                                    class="hover:text-primary"
+                                >{{ row.original.nombre }}</ULink>
                                 <UBadge
                                     v-if="!row.original.activo"
                                     label="Inactivo"
@@ -167,6 +185,10 @@ onMounted(() => void lista.recargar())
             </template>
         </div>
 
+        <RouterAltaModal
+            v-model:open="altaAbierta"
+            @creado="alCrear"
+        />
         <RouterVelocidad
             v-if="seleccionado"
             v-model:open="velocidadAbierta"

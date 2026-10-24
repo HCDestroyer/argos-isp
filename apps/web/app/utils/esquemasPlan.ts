@@ -186,3 +186,102 @@ export const PRIORIDADES: { label: string, value: number }[] = Array.from({ leng
     label: i === 0 ? '1 · alta (corporativos)' : i === 7 ? '8 · baja (residencial)' : String(i + 1),
     value: i + 1,
 }))
+
+/*
+ * Implementación del plan en un router (`PUT /planes/:id/routers/:routerId`, A1).
+ */
+
+type PlanRouter = Schema<'PlanRouter'>
+type DatosPlanRouter = paths['/api/v1/planes/{id}/routers/{routerId}']['put']['requestBody']['content']['application/json']
+
+const IPV4 = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
+const textoCorto = (max: number) => z.string().trim().max(max, `Máximo ${max} caracteres`)
+
+/**
+ * Espejo de `implementarPlanValidator` (A1): textos de RouterOS (vacío = sin valor), `local_address`
+ * IPv4 y las excepciones de velocidad del plan en ese router (`null` = hereda del plan). Las reglas
+ * cruzadas (garantía ≤ 100 / reuso, ráfaga > MIR) las responde la API como 422 por campo.
+ */
+export const esquemaPlanRouter = z.object({
+    profile_ppp: textoCorto(100),
+    pool_ipv4: textoCorto(100),
+    pool_ipv6_enlace: textoCorto(100),
+    pool_ipv6_delegacion: textoCorto(100),
+    local_address: z.string().trim().refine(v => v === '' || IPV4.test(v), 'Escribe una IPv4 (ej. 10.0.0.1)'),
+    no_crear_reglas: z.boolean(),
+    rate_limit_override: textoCorto(200),
+    reuso: opcional(1, 64, 'Entre 1 y 64'),
+    garantizado_pct: opcional(0.01, 100, 'Entre 0.01 y 100 %'),
+    rafaga_bajada_kbps: opcional(1, KBPS_MAX, 'kbps inválidos'),
+    rafaga_subida_kbps: opcional(1, KBPS_MAX, 'kbps inválidos'),
+    rafaga_umbral_pct: opcional(1, 99, 'Entre 1 y 99 %'),
+    rafaga_segundos: opcional(1, 3600, 'Entre 1 y 3600 s'),
+    prioridad: opcional(1, 8, 'Entre 1 y 8'),
+})
+
+export type EntradaPlanRouter = z.input<typeof esquemaPlanRouter>
+export type SalidaPlanRouter = z.output<typeof esquemaPlanRouter>
+
+export function entradaPlanRouter(implementacion: PlanRouter | null): EntradaPlanRouter {
+    const texto = (v: string | null | undefined) => v ?? ''
+    return {
+        profile_ppp: texto(implementacion?.profile_ppp),
+        pool_ipv4: texto(implementacion?.pool_ipv4),
+        pool_ipv6_enlace: texto(implementacion?.pool_ipv6_enlace),
+        pool_ipv6_delegacion: texto(implementacion?.pool_ipv6_delegacion),
+        local_address: texto(implementacion?.local_address),
+        no_crear_reglas: implementacion?.no_crear_reglas ?? false,
+        rate_limit_override: texto(implementacion?.rate_limit_override),
+        reuso: implementacion?.reuso ?? null,
+        garantizado_pct: implementacion?.garantizado_pct ?? null,
+        rafaga_bajada_kbps: implementacion?.rafaga_bajada_kbps ?? null,
+        rafaga_subida_kbps: implementacion?.rafaga_subida_kbps ?? null,
+        rafaga_umbral_pct: implementacion?.rafaga_umbral_pct ?? null,
+        rafaga_segundos: implementacion?.rafaga_segundos ?? null,
+        prioridad: implementacion?.prioridad ?? null,
+    }
+}
+
+/** Cuerpo del `PUT`: textos vacíos como `null`; con `version` solo si ya existía. */
+export function cuerpoPlanRouter(datos: SalidaPlanRouter, version: number | null): DatosPlanRouter {
+    const nulo = (v: string) => (v === '' ? null : v)
+    return {
+        ...(version === null ? {} : { version }),
+        profile_ppp: nulo(datos.profile_ppp),
+        pool_ipv4: nulo(datos.pool_ipv4),
+        pool_ipv6_enlace: nulo(datos.pool_ipv6_enlace),
+        pool_ipv6_delegacion: nulo(datos.pool_ipv6_delegacion),
+        local_address: nulo(datos.local_address),
+        no_crear_reglas: datos.no_crear_reglas,
+        rate_limit_override: nulo(datos.rate_limit_override),
+        reuso: datos.reuso,
+        garantizado_pct: datos.garantizado_pct,
+        rafaga_bajada_kbps: datos.rafaga_bajada_kbps,
+        rafaga_subida_kbps: datos.rafaga_subida_kbps,
+        rafaga_umbral_pct: datos.rafaga_umbral_pct,
+        rafaga_segundos: datos.rafaga_segundos,
+        prioridad: datos.prioridad,
+    }
+}
+
+/** Qué cambia la implementación respecto al plan, en palabras. */
+export function resumenImplementacion(implementacion: PlanRouter): string {
+    const partes: string[] = []
+    if (implementacion.profile_ppp) {
+        partes.push(`profile ${implementacion.profile_ppp}`)
+    }
+    if (implementacion.pool_ipv4) {
+        partes.push(`pool ${implementacion.pool_ipv4}`)
+    }
+    if (implementacion.rate_limit_override) {
+        partes.push('rate-limit propio')
+    }
+    const velocidad = (['reuso', 'garantizado_pct', 'rafaga_bajada_kbps', 'rafaga_subida_kbps', 'rafaga_umbral_pct', 'rafaga_segundos', 'prioridad'] as const).filter(c => implementacion[c] !== null)
+    if (velocidad.length) {
+        partes.push(`${velocidad.length} ${velocidad.length === 1 ? 'excepción' : 'excepciones'} de velocidad`)
+    }
+    if (implementacion.no_crear_reglas) {
+        partes.push('sin reglas automáticas')
+    }
+    return partes.join(' · ') || 'Igual que el plan'
+}

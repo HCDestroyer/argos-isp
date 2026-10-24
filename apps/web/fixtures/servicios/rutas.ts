@@ -24,6 +24,7 @@ import {
 import { nuevaSesion } from '../sesiones/datos'
 import { asignarIncluidos, aplicarBloqueoPorEstado, bajaPorRetiro, bloqueoCambioEmpresa, reconciliarIncluidos } from '../adicionales/rutas'
 import { advertenciasServicio, TIPOS_PLAN } from '../planes/tipos'
+import { planTemporalDe } from './planesTemporales'
 
 type Servicio = Schema<'Servicio'>
 type Errores = NonNullable<Problem['errors']>
@@ -68,7 +69,7 @@ export function nombresDe(clienteId: number, planId: number, routerId: number): 
 
 /** El servicio como lo devuelve la API: con los nombres al día (un cliente renombrado, por ejemplo). */
 function vista(servicio: Servicio): Servicio {
-    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id) }
+    return { ...servicio, ...nombresDe(servicio.cliente_id, servicio.plan_id, servicio.router_id), plan_temporal: planTemporalDe(servicio.id) }
 }
 
 function texto(valor: unknown): string | null {
