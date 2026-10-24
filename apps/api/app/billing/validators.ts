@@ -592,6 +592,13 @@ export const simularPagoFalsaValidator = vine.compile(
     }),
 )
 
+export const retirarPlantillaValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1),
+        motivo: motivo(),
+    }),
+)
+
 export const simularPromesaValidator = vine.compile(
     vine.object({
         servicio_id: idEntidad(),
