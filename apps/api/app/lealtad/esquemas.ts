@@ -470,6 +470,11 @@ const GanadorSorteo = objeto(
         no_reclamado_en: nulable(instante),
         constancia_archivo_id: nulable(id),
         compra_unidades: { ...nulable(entero), description: 'Unidades de esa línea que consumió la entrega' },
+        movimiento_inventario_id: {
+            ...nulable(id),
+            description:
+                'Contrapartida inventario: el movimiento premio del kardex (5.1.03 / 1.1.14 al costo)',
+        },
         compra_base: {
             ...nulable(Dinero),
             description:
@@ -488,6 +493,7 @@ const GanadorSorteo = objeto(
         'constancia_archivo_id',
         'compra_unidades',
         'compra_base',
+        'movimiento_inventario_id',
     ],
 )
 

@@ -29,6 +29,7 @@ export const ESTADOS_UNIDAD = [
     'dada_de_baja',
     'anulada',
     'devuelta_proveedor',
+    'entregada',
 ] as const
 export type EstadoUnidad = (typeof ESTADOS_UNIDAD)[number]
 export const CONDICIONES = ['nuevo', 'usado'] as const

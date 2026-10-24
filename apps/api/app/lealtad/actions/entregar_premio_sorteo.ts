@@ -15,6 +15,7 @@ import { camposAuditables, verCanje } from '#lealtad/canjes'
 import { detalleSorteo, exigirEstado, ganadoresDe, verSorteo } from '#lealtad/sorteos'
 import { verArchivo } from '#lealtad/sorteos_archivos'
 import { cerrarSiTodoResuelto } from '#lealtad/sorteos_entrega'
+import { salidaPorPremio } from '#inventario/premios'
 
 /**
  * `sorteos.entregar` (`POST /lealtad/sorteos/:id/ganadores/:g/entregar`, permiso `sorteos.entregar`):
@@ -23,7 +24,10 @@ import { cerrarSiTodoResuelto } from '#lealtad/sorteos_entrega'
  *
  * - `efectivo`: sale de Caja o Bancos como un **egreso** (categoría `premios` → 5.1.03; método `caja`,
  *   `banco` o `cuenta_bancaria`, como `POST /egresos`) por lo que se paga.
- * - `bien`: asiento `sorteo` `5.1.03 / contrapartida`: `compra` (decisión del PM, 19 oct: el bien se
+ * - `bien`: `inventario` (decisión del líder, fase C del inventario: la única forma de que un bien del
+ *   inventario salga como premio): movimiento `premio` del kardex a su costo (promedio, o el de la
+ *   unidad de serie) con su asiento `5.1.03 / 1.1.14`; el sorteo solo lleva el ISR. Si no, asiento
+ *   `sorteo` `5.1.03 / contrapartida`: `compra` (decisión del PM, 19 oct: el bien se
  *   compró con factura, una compra registrada; su IVA ya es crédito fiscal y el premio es gasto deducible
  *   `5.1.03` por la base sin IVA de la línea, contra la cuenta de esa línea; si la línea ya fue a
  *   `5.1.03`, solo se liga); `proveedor` ya no (422 `contrapartida_proveedor`: 2.1.03 solo con una compra)
@@ -46,7 +50,12 @@ export interface EntradaEntregarPremio {
     caja_id?: number | null
     banco_id?: number | null
     cuenta_bancaria_id?: number | null
-    contrapartida?: 'proveedor' | 'cuenta' | 'compra' | null
+    contrapartida?: 'inventario' | 'proveedor' | 'cuenta' | 'compra' | null
+    /** con `inventario`: el bien sale del kardex (fase C del inventario) */
+    producto_id?: number | null
+    bodega_id?: number | null
+    unidad_id?: number | null
+    cantidad?: string | null
     cuenta_codigo?: string | null
     /** con `compra`: la línea de la compra registrada con la que se compró el bien (decisión del PM) */
     compra_linea_id?: number | null
@@ -229,7 +238,10 @@ export default class EntregarPremioSorteo extends DomainAction<
         } else if (premio.tipo === 'bien') {
             Object.assign(
                 cambios,
-                await contabilizarBien(t, input, sorteo.empresa_id, valor, isr, movimientos),
+                await contabilizarBien(t, input, sorteo.empresa_id, valor, isr, movimientos, {
+                    ganadorId: ganador.id,
+                    descripcion,
+                }),
             )
         } else {
             // servicio: canje sin puntos del premio del catálogo, reservado para la próxima factura
@@ -346,18 +358,41 @@ async function contabilizarBien(
     valor: Dec,
     isr: Dec,
     movimientos: LineaAsiento[],
+    entrega: { ganadorId: number; descripcion: string },
 ): Promise<Record<string, unknown>> {
     const errores: ErrorCampo[] = []
     if (!input.contrapartida) {
         errores.push({
             field: 'contrapartida',
-            message: 'compra (compra_linea_id) o cuenta (cuenta_codigo)',
+            message: 'inventario (producto_id, bodega_id), compra (compra_linea_id) o cuenta (cuenta_codigo)',
             rule: 'required',
         })
         throw new ValidacionFallida(errores)
     }
     const isrMovimiento = () => {
         if (isr.gt(0)) movimientos.push({ cuenta: CUENTAS_GT.RETENCIONES_ISR_POR_PAGAR, haber: aTexto(isr) })
+    }
+    if (input.contrapartida === 'inventario') {
+        if (!input.producto_id || !input.bodega_id) {
+            throw new ValidacionFallida(
+                (['producto_id', 'bodega_id'] as const)
+                    .filter((c) => !input[c])
+                    .map((c) => ({ field: c, message: 'Con contrapartida inventario', rule: 'required' })),
+            )
+        }
+        // el bien sale del kardex a su costo con su propio asiento (5.1.03 / 1.1.14); aquí solo el ISR
+        const salida = await salidaPorPremio(t, {
+            empresaId,
+            productoId: input.producto_id,
+            bodegaId: input.bodega_id,
+            unidadId: input.unidad_id ?? null,
+            cantidad: input.cantidad ?? null,
+            origen: { tipo: 'sorteo_ganador', id: entrega.ganadorId },
+            descripcion: entrega.descripcion,
+        })
+        if (isr.gt(0)) movimientos.push({ cuenta: CUENTAS_GT.PREMIOS_PROMOCIONES, debe: aTexto(isr) })
+        isrMovimiento()
+        return { contrapartida: 'inventario', movimiento_inventario_id: salida.movimientoId }
     }
     if (input.contrapartida === 'compra') {
         const linea = input.compra_linea_id
@@ -406,10 +441,10 @@ async function contabilizarBien(
             ])
         }
         // H39: una línea que entró al inventario (1.1.14) no se acredita aquí: el bien está en el kardex
-        // y su salida necesita su movimiento; mientras el inventario no tenga la salida por premio, 422
+        // y sale con su movimiento `premio` (contrapartida inventario)
         if (esCuentaDelKardex(linea.codigo)) {
             throw new ReglaNegocio(
-                `La línea ${linea.id} de la compra ${linea.compra_id} entró al inventario (${linea.codigo}): el premio no se entrega desde la compra, porque el bien ya está en el kardex`,
+                `La línea ${linea.id} de la compra ${linea.compra_id} entró al inventario (${linea.codigo}): el bien está en el kardex; entrégalo con contrapartida inventario (producto_id, bodega_id)`,
                 'linea_de_inventario',
             )
         }

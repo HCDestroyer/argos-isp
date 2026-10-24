@@ -102,6 +102,7 @@ import Canjear from '#lealtad/actions/canjear'
 import RevertirCanje from '#lealtad/actions/revertir_canje'
 import { listarPremios, verPremio } from '#lealtad/premios'
 import { listarCanjes, verCanje } from '#lealtad/canjes'
+import { exigirBodega } from '#inventario/acceso_http'
 
 const ERRORES_CANJE =
     ' 422 `programa_inactivo` sin programa activo; 422 `servicio_no_valido` si el cliente no tiene servicio en la empresa.'
@@ -683,18 +684,22 @@ const sorteos: Ruta[] = [
         operacion: 'lealtadEntregarPremioSorteo',
         resumen: 'Registrar la entrega del premio de un titular',
         descripcion:
-            'Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: 5.1.03 / 2.1.03 (proveedor) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado.' +
+            'Gasto promocional 5.1.03. efectivo: egreso de Caja o Bancos (metodo, como POST /egresos) por el valor menos el ISR; bien: contrapartida inventario (el bien sale del kardex a su costo, movimiento premio con 5.1.03 / 1.1.14; la bodega se revisa como cualquier salida), compra (compra_linea_id de una compra que no entró al inventario; 422 linea_de_inventario si entró) o una cuenta de activo (cuenta_codigo); servicio: canje sin puntos reservado para la próxima factura. ISR retenido a 2.1.05 si el premio lo pide. Evento sorteo.premio_entregado.' +
             ERRORES_SORTEO,
         etiqueta: 'lealtad',
         permiso: 'sorteos.entregar',
         cuerpo: v.entregarPremioValidator,
         idempotente: true,
         respuesta: { status: 200, descripcion: 'Sorteo', esquema: SorteoDetalle },
-        handler: (ctx, { cuerpo, params }) =>
-            new EntregarPremioSorteo().execute(
+        handler: async (ctx, { cuerpo, params }) => {
+            if (cuerpo.contrapartida === 'inventario' && cuerpo.bodega_id) {
+                await exigirBodega(ctx, cuerpo.bodega_id)
+            }
+            return new EntregarPremioSorteo().execute(
                 { ...cuerpo, sorteo_id: Number(params.id), ganador_id: Number(params.ganadorId) },
                 ctx.contextoAccion(),
-            ),
+            )
+        },
     }),
     definirRuta({
         metodo: 'post',

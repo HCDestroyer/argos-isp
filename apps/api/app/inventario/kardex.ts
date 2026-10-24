@@ -43,6 +43,8 @@ export const TIPOS_MOVIMIENTO = [
     'ajuste',
     'baja',
     'saldo_inicial',
+    'premio',
+    'reverso_premio',
 ] as const
 export type TipoMovimiento = (typeof TIPOS_MOVIMIENTO)[number]
 
