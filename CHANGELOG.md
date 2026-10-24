@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.1.0](https://github.com/HCDestroyer/argos-isp/compare/v1.0.0...v1.1.0) (2026-10-24)
+
+
+### Funcionalidades
+
+* **core:** catálogo de permisos y roles base en el OpenAPI; Router sin api_ca ([#167](https://github.com/HCDestroyer/argos-isp/issues/167)) ([7c30717](https://github.com/HCDestroyer/argos-isp/commit/7c30717345f88544b29797b4afbecf3a13dd89d3))
+* **core:** contratos obligatorios, catálogo de campos personalizados y contacto de routers ([#157](https://github.com/HCDestroyer/argos-isp/issues/157)) ([5f97332](https://github.com/HCDestroyer/argos-isp/commit/5f97332ec2f77438fcc1cd355f09cabe6d1d4bad))
+* **core:** Rol.base, alcances de tokens tipados, CA del router oculta y origen externo de clientes y servicios ([#161](https://github.com/HCDestroyer/argos-isp/issues/161)) ([0e8c38e](https://github.com/HCDestroyer/argos-isp/commit/0e8c38e41ce97cde96d5135f6fa910f5160129e7))
+* **inventario:** inventario interno completo (productos, bodegas, kardex, comodato, ventas, conteos) ([#165](https://github.com/HCDestroyer/argos-isp/issues/165)) ([1d553c8](https://github.com/HCDestroyer/argos-isp/commit/1d553c80309db9ebd22c2b078de05c4da95f9906))
+* **inventario:** pantallas del inventario en el panel y precio de venta del producto ([#169](https://github.com/HCDestroyer/argos-isp/issues/169)) ([a4b9a82](https://github.com/HCDestroyer/argos-isp/commit/a4b9a82d072e2cbbf469a0fcb117de2816b358e1))
+* **ledger:** cierre de saldos de apertura, H27, egresos del cajero, canje espejo y pasarela Recurrente ([#160](https://github.com/HCDestroyer/argos-isp/issues/160)) ([f566b70](https://github.com/HCDestroyer/argos-isp/commit/f566b70ef8352983935cfbe299f80eb4dd707956))
+* **network:** contacto periódico de los routers (accounting, RouterOS y sondeo) ([#163](https://github.com/HCDestroyer/argos-isp/issues/163)) ([d3c8506](https://github.com/HCDestroyer/argos-isp/commit/d3c8506b8e45d428374b08d1fba7a34a8b8f52f7))
+* **notify:** aviso de contracargo a contabilidad y variables de Recurrente en los compose ([#164](https://github.com/HCDestroyer/argos-isp/issues/164)) ([6bda4f1](https://github.com/HCDestroyer/argos-isp/commit/6bda4f161a1b283edae13316ab4561b37d6326f2))
+* **notify:** catálogo de eventos y vista previa de plantillas; walled garden de Recurrente ([#159](https://github.com/HCDestroyer/argos-isp/issues/159)) ([16b83ba](https://github.com/HCDestroyer/argos-isp/commit/16b83ba719cc9300a935b60db3a38afe6668edac))
+* **web:** plantillas, usuarios/roles/tokens y pantallas pendientes del panel (tareas 8 y 9) ([#166](https://github.com/HCDestroyer/argos-isp/issues/166)) ([fcd2084](https://github.com/HCDestroyer/argos-isp/commit/fcd2084556080a33f661650163ca3e22e92c4c1e))
+
+
+### Correcciones
+
+* **billing:** H60–H64, disputas de la pasarela y pedidos del panel ([#162](https://github.com/HCDestroyer/argos-isp/issues/162)) ([92770ed](https://github.com/HCDestroyer/argos-isp/commit/92770edb3f943daefe3db5a4088c7a982d3a401c))
+* **billing:** regla única de comisión en reembolsos de la pasarela (H72, H73) ([#168](https://github.com/HCDestroyer/argos-isp/issues/168)) ([4734756](https://github.com/HCDestroyer/argos-isp/commit/4734756ef34b18af0f3e0dde427442bcafe53368))
+* **notify:** recordatorios solo de deuda cobrable y avisos de los eventos contables, de lealtad y de sorteos ([#158](https://github.com/HCDestroyer/argos-isp/issues/158)) ([e2646cb](https://github.com/HCDestroyer/argos-isp/commit/e2646cbbf6d7c1a7d098ec1b56e8bd0e0f907c12))
+* **portal:** facturas castigadas y acreditadas sin saldo en el portal ([#155](https://github.com/HCDestroyer/argos-isp/issues/155)) ([94a45e9](https://github.com/HCDestroyer/argos-isp/commit/94a45e9924df15cd6c2624fd285ff97bfa27a347))
+
 ## [1.0.0](https://github.com/HCDestroyer/argos-isp/compare/v0.9.2...v1.0.0) (2026-10-23)
 
 
