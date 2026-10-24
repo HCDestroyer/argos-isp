@@ -84,6 +84,7 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         excepciones: cliente.id === 11 && sucursal ? { dias_gracia: 10 } : {},
         // Como la API (lealtad): siempre viene; null sin plan temporal programado ni activo.
         plan_temporal: null,
+        externo: null,
         version: 1,
         created_at: instalado.toISOString(),
         updated_at: instalado.toISOString(),

@@ -33,6 +33,7 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         // Una credencial reemplazada por otra también es un cambio, aunque ambas estén "definidas".
         if (typeof datos.api_password === 'string' && a.api_password) a.api_password = 'anterior'
         if (typeof datos.radius_secret === 'string' && a.radius_secret) a.radius_secret = 'anterior'
+        if (typeof datos.api_ca === 'string' && a.api_ca) a.api_ca = 'anterior'
         await t.registrarCambios({ tipo: 'router', id }, a, d)
         if (
             antes.capacidad_bajada_kbps !== despues.capacidad_bajada_kbps ||

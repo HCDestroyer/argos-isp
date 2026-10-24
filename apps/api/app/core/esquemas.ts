@@ -145,10 +145,40 @@ export const Usuario = definirEsquema(
 
 export const Rol = definirEsquema(
     'Rol',
-    objeto({ id, nombre: texto, descripcion: nulable(texto), permisos: lista(texto), ...auditable }),
+    objeto({
+        id,
+        nombre: texto,
+        descripcion: nulable(texto),
+        base: {
+            ...booleano,
+            description:
+                'Rol base del seed (admin, cajero, soporte, tecnico, contabilidad, lectura): sus permisos se ' +
+                'definen en código; PUT con `permisos` responde 409 `rol_base`. Se puede editar la descripción',
+        },
+        permisos: lista(texto),
+        ...auditable,
+    }),
 )
 
 export const Permiso = definirEsquema('Permiso', objeto({ id, nombre: texto, descripcion: nulable(texto) }))
+
+/** Alcances de un token de API: cada clave ausente es "sin recorte" en esa dimensión. */
+export const AlcancesToken = definirEsquema('AlcancesToken', {
+    type: 'object',
+    additionalProperties: false,
+    description:
+        'Recortes del token sobre los permisos y alcances de su usuario (Y lógico). Una clave ausente no ' +
+        'recorta esa dimensión; `{}` = mismos permisos y alcance que el usuario',
+    properties: {
+        permisos: {
+            ...lista(texto),
+            description: 'Solo estos permisos (nombres de `GET /permisos`), y solo si el usuario los tiene',
+        },
+        routers: { ...lista(id), description: 'Solo recursos de estos routers' },
+        zonas: { ...lista(id), description: 'Solo recursos de estas zonas' },
+        cajas: { ...lista(id), description: 'Solo estas cajas' },
+    },
+})
 
 export const TokenApi = definirEsquema(
     'TokenApi',
@@ -156,7 +186,7 @@ export const TokenApi = definirEsquema(
         id,
         usuario_id: id,
         nombre: texto,
-        alcances: jsonLibre,
+        alcances: AlcancesToken,
         ultimo_uso: nulable(instante),
         revocado_en: nulable(instante),
         created_at: instante,
@@ -289,6 +319,13 @@ export const Cliente = definirEsquema(
                 'Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos ' +
                 'con el primer servicio en cada empresa)',
         },
+        externo: {
+            ...nulable(
+                objeto({ sistema: { ...texto, description: 'Sistema de origen: `mikrowisp`' }, id: texto }),
+            ),
+            description:
+                'Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos',
+        },
         ...auditable,
     }),
 )
@@ -405,6 +442,16 @@ export const Servicio = definirEsquema(
                 description:
                     'Plan temporal programado o activo (lealtad), o null. Activo: `plan_id` del servicio ya es ' +
                     'el temporal (RADIUS, RouterOS y facturación lo usan) y vuelve a `plan_original_id` al terminar',
+            },
+            externo: {
+                ...nulable(
+                    objeto({
+                        sistema: { ...texto, description: 'Sistema de origen: `mikrowisp`' },
+                        id: texto,
+                    }),
+                ),
+                description:
+                    'Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos',
             },
             ...auditable,
             warnings: {

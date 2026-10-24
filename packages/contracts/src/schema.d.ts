@@ -8106,6 +8106,17 @@ export interface components {
             movimiento: components["schemas"]["MovimientoPuntos"];
             saldo: number;
         };
+        /** @description Recortes del token sobre los permisos y alcances de su usuario (Y lógico). Una clave ausente no recorta esa dimensión; `{}` = mismos permisos y alcance que el usuario */
+        AlcancesToken: {
+            /** @description Solo estos permisos (nombres de `GET /permisos`), y solo si el usuario los tiene */
+            permisos?: string[];
+            /** @description Solo recursos de estos routers */
+            routers?: number[];
+            /** @description Solo recursos de estas zonas */
+            zonas?: number[];
+            /** @description Solo estas cajas */
+            cajas?: number[];
+        };
         Anuncio: {
             id: number;
             empresa_id: number;
@@ -9393,6 +9404,12 @@ export interface components {
                 empresa_id: number;
                 codigo: string;
             }[];
+            /** @description Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos */
+            externo: {
+                /** @description Sistema de origen: `mikrowisp` */
+                sistema: string;
+                id: string;
+            } | null;
             /** @description Control optimista: envíala al editar */
             version: number;
             /** Format: date-time */
@@ -14753,6 +14770,8 @@ export interface components {
             id: number;
             nombre: string;
             descripcion: string | null;
+            /** @description Rol base del seed (admin, cajero, soporte, tecnico, contabilidad, lectura): sus permisos se definen en código; PUT con `permisos` responde 409 `rol_base`. Se puede editar la descripción */
+            base: boolean;
             permisos: string[];
             /** @description Control optimista: envíala al editar */
             version: number;
@@ -14784,8 +14803,14 @@ export interface components {
             api_url: string | null;
             /** @description Verificar el certificado TLS del router */
             api_tls_verificar: boolean;
-            /** @description CA en PEM para routers con certificado propio */
-            api_ca: string | null;
+            /** @description Hay una CA propia cargada (PEM); el PEM nunca sale por la API, como api_password */
+            tiene_api_ca: boolean;
+            /**
+             * @deprecated
+             * @description Obsoleto: `***` si hay CA cargada, null si no (nunca el PEM); usar tiene_api_ca. Para cambiarla, PUT /routers/:id con el PEM nuevo o null
+             * @enum {string|null}
+             */
+            api_ca: "***" | null;
             /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
             dhcp_servidor: string | null;
             /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES */
@@ -14928,6 +14953,12 @@ export interface components {
                 origen: "lealtad" | "manual";
                 origen_id: number | null;
                 version: number;
+            } | null;
+            /** @description Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos */
+            externo: {
+                /** @description Sistema de origen: `mikrowisp` */
+                sistema: string;
+                id: string;
             } | null;
             /** @description Control optimista: envíala al editar */
             version: number;
@@ -15325,9 +15356,7 @@ export interface components {
             id: number;
             usuario_id: number;
             nombre: string;
-            alcances: {
-                [key: string]: unknown;
-            };
+            alcances: components["schemas"]["AlcancesToken"];
             /** Format: date-time */
             ultimo_uso: string | null;
             /** Format: date-time */
