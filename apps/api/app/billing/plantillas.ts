@@ -14,6 +14,10 @@ export interface Plantilla extends PlantillaBase {
     id: number
     /** la plantilla que usa un servicio creado sin `plantilla_facturacion_id` (a lo sumo una) */
     por_defecto: boolean
+    /** retirada (`plantillas.retirar`): sigue facturando a sus servicios, no se asigna a nuevos */
+    retirada_en: Date | null
+    retirada_por: number | null
+    motivo_retiro: string | null
     version: number
     created_at: Date
     updated_at: Date
@@ -35,6 +39,9 @@ const COLUMNAS = (cliente: QueryClientContract) => [
     'certificar_al',
     'reglas_promesa',
     'por_defecto',
+    'retirada_en',
+    'retirada_por',
+    'motivo_retiro',
     'version',
     'created_at',
     'updated_at',

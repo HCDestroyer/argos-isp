@@ -83,6 +83,13 @@ export const PlantillaFacturacion = definirEsquema(
                 description:
                     'Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una)',
             },
+            retirada_en: {
+                ...nulable(instante),
+                description:
+                    'Retirada (POST /plantillas-facturacion/:id/retirar): sigue facturando a sus servicios y no se asigna a nuevos; null si vigente',
+            },
+            retirada_por: nulable(id),
+            motivo_retiro: nulable(texto),
             ...auditable,
         },
         ['por_defecto'],

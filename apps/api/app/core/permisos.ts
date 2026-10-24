@@ -75,6 +75,8 @@ export const PERMISOS = {
     'plantillas.ver': 'Ver plantillas de facturación',
     'plantillas.crear': 'Crear plantillas de facturación',
     'plantillas.editar': 'Editar plantillas de facturación',
+    'plantillas.retirar':
+        'Retirar una plantilla de facturación (sigue con sus servicios; no se asigna a nuevos)',
     'facturas.ver': 'Ver facturas',
     'facturas.generar': 'Generar facturas',
     'facturas.anular': 'Anular facturas',
@@ -413,6 +415,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'plantillas.ver',
             'plantillas.crear',
             'plantillas.editar',
+            'plantillas.retirar',
             'facturas.ver',
             'facturas.generar',
             'facturas.anular',

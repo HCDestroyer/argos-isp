@@ -796,3 +796,72 @@ export async function puntosDelCliente(
     }
     return salida
 }
+
+export interface CanjeableEmpresa {
+    empresa_id: number
+    saldo: number
+    /** lo que se puede canjear hoy: el saldo si el programa está activo y llega al mínimo; si no, 0 */
+    canjeable: number
+    minimo_canje: number | null
+    programa_activo: boolean
+    /** el cliente puede canjear desde el portal (visible_portal y canje_portal) */
+    canje_portal: boolean
+    /** por qué no hay nada canjeable; null si sí */
+    motivo: 'sin_programa' | 'saldo_negativo' | 'bajo_minimo' | 'sin_puntos' | null
+}
+
+/**
+ * Saldo canjeable del cliente por empresa (pedido de A4): una fila por empresa con programa o con
+ * puntos del cliente. Los puntos de un canje reservado ya salieron al crearlo, así que no cuentan.
+ */
+export async function canjeablesDelCliente(
+    clienteId: number,
+    empresas: number[] | null,
+): Promise<CanjeableEmpresa[]> {
+    const saldos = (await db
+        .from('lealtad.movimientos')
+        .where('cliente_id', clienteId)
+        .if(empresas !== null, (q) => q.whereIn('empresa_id', empresas!))
+        .groupBy('empresa_id')
+        .select('empresa_id', db.raw('sum(puntos)::int as saldo'))) as Array<{
+        empresa_id: number
+        saldo: number
+    }>
+    const programas = (await db
+        .from('lealtad.programas')
+        .where('activo', true)
+        .if(empresas !== null, (q) => q.whereIn('empresa_id', empresas!))
+        .select('empresa_id', 'minimo_canje', 'visible_portal', 'canje_portal')) as Array<{
+        empresa_id: number
+        minimo_canje: number
+        visible_portal: boolean
+        canje_portal: boolean
+    }>
+    const porEmpresa = new Map(programas.map((p) => [Number(p.empresa_id), p]))
+    const ids = [...new Set([...saldos.map((s) => Number(s.empresa_id)), ...porEmpresa.keys()])].sort(
+        (a, b) => a - b,
+    )
+    return ids.map((empresaId) => {
+        const saldo = Number(saldos.find((s) => Number(s.empresa_id) === empresaId)?.saldo ?? 0)
+        const programa = porEmpresa.get(empresaId)
+        const minimo = programa ? Number(programa.minimo_canje) : null
+        const motivo: CanjeableEmpresa['motivo'] = !programa
+            ? 'sin_programa'
+            : saldo < 0
+              ? 'saldo_negativo'
+              : saldo === 0
+                ? 'sin_puntos'
+                : saldo < minimo!
+                  ? 'bajo_minimo'
+                  : null
+        return {
+            empresa_id: empresaId,
+            saldo,
+            canjeable: motivo === null ? saldo : 0,
+            minimo_canje: minimo,
+            programa_activo: Boolean(programa),
+            canje_portal: Boolean(programa?.visible_portal && programa?.canje_portal),
+            motivo,
+        }
+    })
+}

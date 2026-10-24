@@ -105,3 +105,17 @@ export async function estadoApertura(
         cierres: await cierresApertura(c, empresaId),
     }
 }
+
+/**
+ * ¿El saldo importado con fecha `fecha` ya entró en un cierre de apertura? Sí si hay un cierre
+ * vigente con fecha ≥ `fecha` (H64). Lo usan la anulación de una factura importada y la de un saldo
+ * inicial (H63): en ese caso responden 409 para no reabrir 2.9.01.
+ */
+export async function aperturaCerradaPara(
+    c: QueryClientContract,
+    empresaId: number,
+    fecha: string,
+): Promise<boolean> {
+    const cierres = await cierresApertura(c, empresaId)
+    return cierres.some((x) => x.fecha >= fecha)
+}

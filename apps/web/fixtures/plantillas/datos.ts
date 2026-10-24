@@ -1,7 +1,15 @@
 import type { Schema } from '@argosisp/contracts'
 
 const creado = '2026-09-01T15:00:00.000Z'
-const meta = { version: 1, created_at: creado, updated_at: creado }
+// vigentes: la API devuelve los campos del retiro en null (plantillas.retirar)
+const meta = {
+    version: 1,
+    created_at: creado,
+    updated_at: creado,
+    retirada_en: null,
+    retirada_por: null,
+    motivo_retiro: null,
+}
 
 // Espejo de REGLAS_PROMESA_POR_DEFECTO (apps/api/app/billing/reglas_promesa.ts): la API
 // siempre devuelve las reglas normalizadas con todos los campos.
@@ -69,7 +77,10 @@ export const plantillas: Schema<'PlantillaFacturacion'>[] = [
         // Empresas: la promesa que pide un operador queda pendiente de aprobación.
         reglas_promesa: {
             ...structuredClone(reglasPromesa),
-            canales: { ...structuredClone(reglasPromesa.canales), operador: { ...sinLimitesCanal, requiere_aprobacion: true } },
+            canales: {
+                ...structuredClone(reglasPromesa.canales),
+                operador: { ...sinLimitesCanal, requiere_aprobacion: true },
+            },
         },
         ...meta,
     },

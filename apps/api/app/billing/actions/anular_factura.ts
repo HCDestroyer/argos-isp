@@ -12,17 +12,17 @@ import { ERROR_DOCUMENTO_ANULADO, dteVigente, finPlazoAnulacion, type DteFila } 
 import { AnulacionFueraDePlazo, DteEnProceso } from '#fiscal/fel/errores'
 import { diferimientoDeFactura } from '#ledger/diferidos'
 import { CUENTAS } from '#ledger/plan_cuentas'
-import { cierresApertura } from '#ledger/apertura'
+import { aperturaCerradaPara } from '#ledger/apertura'
 
 /**
- * H50 (decisión del líder): con la apertura ya cerrada, anular una importada (`CxC / 2.9.01`) la
- * devolvería a 2.9.01 y reabriría el saldo trasladado a patrimonio. Lo correcto es una rebaja de
- * ventas del periodo: se acredita con una nota de crédito (IVA a 2.1.02, base a ingresos). 409
- * `importada_con_apertura_cerrada`. Con la apertura abierta, anularla corrige la importación (vuelve
- * a 2.9.01, que todavía no se trasladó).
+ * H50 / H64 (decisiones del líder): si el saldo de una importada (`CxC / 2.9.01`) ya entró en un
+ * cierre de apertura (cierre vigente con fecha ≥ la de su asiento), anularla lo devolvería a 2.9.01 y
+ * reabriría el saldo trasladado a patrimonio: se acredita con una nota de crédito (rebaja de ventas
+ * del periodo). 409 `importada_con_apertura_cerrada`. Una importada posterior al último cierre se
+ * anula normal contra 2.9.01 (corrige la importación).
  */
 async function exigirAnulableImportada(t: Transaccion, facturaId: number, empresaId: number) {
-    const importada = await t.trx
+    const importada = (await t.trx
         .from('ledger.asientos as a')
         .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
         .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
@@ -31,13 +31,12 @@ async function exigirAnulableImportada(t: Transaccion, facturaId: number, empres
         .whereNull('a.reversa_de')
         .where('c.codigo', CUENTAS.SALDOS_APERTURA)
         .where('m.haber', '>', 0)
-        .select('a.id')
-        .first()
+        .select(t.trx.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`))
+        .first()) as { fecha: string } | null
     if (!importada) return
-    const cierres = await cierresApertura(t.trx, empresaId)
-    if (cierres.length === 0) return
+    if (!(await aperturaCerradaPara(t.trx, empresaId, importada.fecha))) return
     throw new Conflicto(
-        `La factura ${facturaId} es importada y la apertura ya se cerró: acredítala con una nota de crédito (rebaja de ventas del periodo)`,
+        `La factura ${facturaId} es importada y su saldo ya entró en el cierre de apertura: acredítala con una nota de crédito (rebaja de ventas del periodo)`,
         'importada_con_apertura_cerrada',
         'Importada con la apertura cerrada',
     )
