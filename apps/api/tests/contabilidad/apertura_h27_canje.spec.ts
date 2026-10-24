@@ -30,7 +30,8 @@ import AbrirCaja from '#ledger/actions/abrir_caja'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import CerrarCaja from '#ledger/actions/cerrar_caja'
 import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
-import EditarProveedorCobro from '#ledger/actions/editar_proveedor_cobro'
+import LiquidarCobros from '#ledger/actions/liquidar_cobros'
+import ConciliarPasarela from '#billing/actions/conciliar_pasarela'
 import AnularFactura from '#billing/actions/anular_factura'
 import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
@@ -61,7 +62,8 @@ import type { ContextoAccion } from '#shared/contexto'
  * - Egresos del cajero.
  *
  * Hallazgos de la primera revisión: H48 a H53 (arreglados por A3 en 28ee679; H49 desapareció con H50).
- * Verificación final de 28ee679: H60 a H64 (`.fails`, fila en `a3.md`).
+ * Verificación final de 28ee679: H60 a H64 (arreglados por A3 en 9f4a260).
+ * Verificación de 9f4a260 (`a3/pedidos-panel`): H65 en adelante (`.fails`, fila en `a3.md`).
  */
 
 async function importar(
@@ -426,6 +428,9 @@ test.group('Auditor contable · canje revertido como reverso espejo', (group) =>
     })
 })
 
+/** total del checkout que responde la consulta simulada cuando la prueba no lo fija */
+let totalSimulado = 0
+
 const SECRETO = `whsec_${Buffer.from('secreto-del-auditor-recurrente-32').toString('base64')}`
 
 function webhook(cuerpo: Record<string, unknown>, id: string) {
@@ -457,7 +462,7 @@ async function conRecurrente<T>(checkout: string, total: number, fn: () => Promi
         globalThis.fetch = (async (url: string) => {
             const cuerpo = String(url).endsWith('/checkouts')
                 ? { id: checkout, checkout_url: `https://app.recurrente.com/c/${checkout}` }
-                : { id: checkout, status: 'paid', total_in_cents: total }
+                : { id: checkout, status: 'paid', total_in_cents: total || totalSimulado }
             return new Response(JSON.stringify(cuerpo), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' },
@@ -697,6 +702,7 @@ async function cobroPagado(e: Empresas, checkout: string, extra: Record<string, 
         contextoSistema('portal'),
     )
     const centavos = Number(dec(cobro.monto).times(100).toFixed(0))
+    totalSimulado = centavos
     const pago = await new ProcesarWebhookPasarela().execute(
         {
             proveedor: 'recurrente',
@@ -754,7 +760,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H60: un reembolso parcial de Recurrente anula el pago completo y la deuda vuelve entera', async ({
+    test('H60 (arreglado en 9f4a260): un reembolso parcial de Recurrente deja deuda solo por lo reembolsado', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -786,7 +792,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
             assert.equal(await deudaDe(e.B, s.clienteId), deCentavosTexto(parcial))
             assert.notEqual(await deudaDe(e.B, s.clienteId), cobro.monto)
         })
-    }).fails('H60: refund.* anula el pago entero sin mirar customer_refunded_amount_in_cents')
+    })
 
     test('reembolso total: anula el pago, la deuda vuelve y el libro cuadra', async ({ assert }) => {
         const e = await prepararEmpresasGt()
@@ -853,7 +859,7 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H61: con Recurrente configurado como proveedor de cobro, un pago con `vat_withheld` no se registra (el webhook falla y Recurrente reintenta sin fin)', async ({
+    test('H61 (arreglado en 9f4a260): con Recurrente como proveedor de cobro, un pago con `vat_withheld` se registra (retención a 1.1.05, puente por monto − retenido)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -869,20 +875,16 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
             e.ctx,
         )
         const checkout = `ch_${unico('pc')}`
-        try {
-            await conRecurrente(checkout, 0, async () => {
-                const { pago } = await cobroPagado(e, checkout, { vat_withheld: 482 })
-                assert.isNotNull(pago.pago_id)
-            })
-        } finally {
-            await new EditarProveedorCobro().execute(
-                { id: proveedor.id, version: proveedor.version, activo: false },
-                e.ctx,
-            )
-        }
-    }).fails('H61: RegistrarPago rechaza retenciones con proveedor de cobro (retencion_con_proveedor_cobro)')
+        await conRecurrente(checkout, 0, async () => {
+            const { pago } = await cobroPagado(e, checkout, { vat_withheld: 482 })
+            assert.isNotNull(pago.pago_id)
+            const fila = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+            assert.include(fila, { retenido: '4.82', proveedor_cobro_id: proveedor.id })
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 
-    test('H62: en pequeño contribuyente la importada desglosa IVA 12 % y su nota de crédito debita 2.1.02; y una nota de importada sin IVA no sale en el libro de ventas', async ({
+    test('H62 (arreglado en 9f4a260): en pequeño contribuyente la importada va sin IVA, su nota no toca 2.1.02 y sale en el libro de ventas por su total', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -907,16 +909,14 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
             {
                 iva_importada: f.iva,
                 iva_nota: nota.iva,
-                debito: await saldoCuenta(e.B, '2.1.02'),
+                debito: aTexto(await saldoCuenta(e.B, '2.1.02')),
                 total_libro: ventas.reporte.totales.total,
             },
             { iva_importada: '0.00', iva_nota: '0.00', debito: '0.00', total_libro: '-50.00' },
         )
-    }).fails(
-        'H62: importar_factura_pendiente calcula IVA 12 % sin mirar el régimen y libroVentasLegal pide n.iva > 0',
-    )
+    })
 
-    test('H63: anular un saldo inicial con la apertura ya cerrada reabre 2.9.01 (la factura importada responde 409)', async ({
+    test('H63 (arreglado en 9f4a260): anular un saldo inicial que ya entró en el cierre de apertura es 409 y 2.9.01 no se reabre', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -938,12 +938,12 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
                 { saldo_inicial_id: saldo.saldo_inicial_id, motivo: 'auditoría: tras el cierre' },
                 e.ctx,
             ),
-        ).catch(() => null)
-        // o lo rechaza como la importada, o no reabre 2.9.01
-        if (r === null || r.status !== 409) assert.equal(await apertura(e.B), '0.00')
-    }).fails('H63: anular_saldo_inicial revierte a 2.9.01 aunque la apertura ya se cerró')
+        )
+        assert.deepEqual([r.status, r.codigo], [409, 'saldo_con_apertura_cerrada'])
+        assert.equal(await apertura(e.B), '0.00')
+    })
 
-    test('H64: una importada tardía (entra después del cierre, nunca trasladada) tampoco se puede anular: un error de importación termina como rebaja de ventas', async ({
+    test('H64 (arreglado en 9f4a260): una importada con fecha posterior al último cierre se anula contra 2.9.01', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -955,9 +955,283 @@ test.group('Auditor contable · verificación final de 28ee679', (group) => {
             e.ctx,
         )
         assert.equal(await apertura(e.B), '0.00')
-    }).fails('H64: exigirAnulableImportada mira si existe algún cierre, no si incluyó esa importada')
+    })
 })
 
 function deCentavosTexto(centavos: number) {
     return aTexto(dec(String(centavos)).div(100))
 }
+
+/** Aviso de reembolso de Recurrente (`refund.update` hecho) por `centavos`. */
+function reembolso(checkout: string, id: string, centavos: number) {
+    return new ProcesarWebhookPasarela().execute(
+        {
+            proveedor: 'recurrente',
+            ...webhook(
+                {
+                    event_type: 'refund.update',
+                    refund: { id, status: 'succeeded', customer_refunded_amount_in_cents: centavos },
+                    intentable: { checkout: { id: checkout } },
+                },
+                `msg_${unico('re')}`,
+            ),
+        },
+        contextoSistema('webhook'),
+    )
+}
+
+async function bancoNeto(empresaId: number) {
+    const { rows } = await db.rawQuery(
+        `SELECT coalesce(sum(m.debe - m.haber), 0)::numeric(14,2)::text AS s
+           FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+           JOIN ledger.cuentas c ON c.id = m.cuenta_id
+          WHERE a.empresa_id = ? AND c.codigo LIKE '1.1.02%'`,
+        [empresaId],
+    )
+    return rows[0].s as string
+}
+
+test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
+    test('reembolsos parciales repetidos y uno total al final: la deuda sigue lo reembolsado, el banco baja por cada reembolso, la comisión queda una vez y la conciliación cuadra', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('rr')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, pago } = await cobroPagado(e, checkout)
+            const bruto = dec(cobro.monto)
+            const banco0 = dec(await bancoNeto(e.B))
+            const r1 = await reembolso(checkout, 're_a', 5000)
+            assert.isDefined(r1.pago_reemplazo_id)
+            assert.equal(await deudaDe(e.B, s.clienteId), '50.00')
+            // el mismo reembolso otra vez (otro svix-id): no se aplica dos veces
+            const repetido = await reembolso(checkout, 're_a', 5000)
+            assert.equal(repetido.ignorado, 'reembolso_ya_aplicado')
+            assert.equal(await deudaDe(e.B, s.clienteId), '50.00')
+            const r2 = await reembolso(checkout, 're_b', 2525)
+            assert.isDefined(r2.pago_reemplazo_id)
+            assert.equal(await deudaDe(e.B, s.clienteId), '75.25')
+            assert.equal(aTexto(dec(await bancoNeto(e.B)).minus(banco0)), '-75.25')
+            assert.equal(await saldoCuenta(e.B, '5.1.02'), '10.50')
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepEqual(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id),
+                [],
+            )
+            // el resto completo: anula el último pago de reemplazo
+            const resto = Number(bruto.minus('75.25').times(100).toFixed(0))
+            const r3 = await reembolso(checkout, 're_c', resto)
+            assert.isUndefined(r3.pago_reemplazo_id)
+            assert.equal(await deudaDe(e.B, s.clienteId), aTexto(bruto))
+            assert.equal(
+                aTexto(dec(await bancoNeto(e.B)).minus(banco0)),
+                aTexto(CERO.minus(bruto).plus('10.50')),
+            )
+            const vigentes = await db
+                .from('billing.pagos')
+                .where('cliente_id', s.clienteId)
+                .where('estado', 'registrado')
+                .count('* as n')
+                .firstOrFail()
+            assert.equal(Number(vigentes.n), 0)
+            assert.isNotNull(pago.pago_id)
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H65: un reembolso que deja menos que la comisión (casi total) no se aplica: el webhook responde error_de_negocio, el pago sigue vigente y la conciliación lo da por bueno', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('rc')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, centavos } = await cobroPagado(e, checkout)
+            // devuelve todo menos Q5.00 (la comisión es Q10.50)
+            const r = await reembolso(checkout, 're_casi', centavos - 500)
+            assert.isUndefined(r.ignorado, r.error)
+            assert.equal(await deudaDe(e.B, s.clienteId), aTexto(dec(cobro.monto).minus('5.00')))
+        })
+    }).fails(
+        'H65: RegistrarPago del pago de reemplazo exige comisión < monto y el savepoint deshace el reembolso entero',
+    )
+
+    test('una disputa repetida emite pago.disputa_abierta una sola vez y no toca el libro', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('d')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { pago } = await cobroPagado(e, checkout)
+            const antes = await bancoNeto(e.B)
+            for (const tipo of ['dispute.create', 'dispute.update', 'dispute.update']) {
+                await new ProcesarWebhookPasarela().execute(
+                    {
+                        proveedor: 'recurrente',
+                        ...webhook(
+                            { event_type: tipo, id: 'dp_1', reason: 'fraude', checkout: { id: checkout } },
+                            `msg_${unico('dp')}`,
+                        ),
+                    },
+                    contextoSistema('webhook'),
+                )
+            }
+            const eventos = await db
+                .from('audit.outbox')
+                .where('evento', 'pago.disputa_abierta')
+                .whereRaw(`(payload->>'pago_id')::bigint = ?`, [pago.pago_id!])
+                .count('* as n')
+                .firstOrFail()
+            assert.equal(Number(eventos.n), 1)
+            assert.equal(await bancoNeto(e.B), antes)
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('proveedor de cobro con retención: pago, liquidación por monto − retenido y contracargo del reembolso; el puente vuelve a 0', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const banco = await cuentaBancariaPrueba('Banrural', e.B)
+        const proveedor = await new CrearProveedorCobro().execute(
+            {
+                empresa_id: e.B,
+                metodo: 'pasarela',
+                pasarela: 'recurrente',
+                nombre: 'Recurrente',
+                cuenta_bancaria_id: banco.id,
+            },
+            e.ctx,
+        )
+        const checkout = `ch_${unico('lq')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, pago, centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
+            const fila = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+            assert.include(fila, { monto: cobro.monto, retenido: '4.82', proveedor_cobro_id: proveedor.id })
+            const puente = aTexto(dec(cobro.monto).minus('4.82'))
+            assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), puente)
+            assert.equal(await saldoCuenta(e.B, '1.1.05'), '4.82')
+            await new LiquidarCobros().execute(
+                {
+                    proveedor_cobro_id: proveedor.id,
+                    referencia: unico('liq'),
+                    bruto: puente,
+                    comision: '10.50',
+                    pagos: [pago.pago_id!],
+                    cuenta_bancaria_id: banco.id,
+                },
+                e.ctx,
+            )
+            assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), '0.00')
+            // reembolso total después de liquidado: contracargo pendiente (−puente) que se liquida
+            await reembolso(checkout, 're_lq', centavos)
+            assert.equal(await deudaDe(e.B, s.clienteId), cobro.monto)
+            assert.equal(await saldoCuenta(e.B, '1.1.05'), '0.00')
+            assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), aTexto(CERO.minus(puente)))
+            await new LiquidarCobros().execute(
+                {
+                    proveedor_cobro_id: proveedor.id,
+                    referencia: unico('liq'),
+                    bruto: aTexto(CERO.minus(puente)),
+                    comision: '0.00',
+                    pagos: [],
+                    contracargos: [pago.pago_id!],
+                    cuenta_bancaria_id: banco.id,
+                },
+                e.ctx,
+            )
+            assert.equal(await saldoCuenta(e.B, proveedor.cuenta_codigo), '0.00')
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('un webhook con error de negocio responde 2xx sin dejar nada a medias (ni pago, ni asiento, ni evento de pago)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('eb')}`
+        await conRecurrente(checkout, 0, async () => {
+            const s = await servicioFacturado(e.B, '2026-10-01', {
+                precio: '300.00',
+                instalacion: '2026-09-01',
+            })
+            const cobro = await new CrearCobroPasarela().execute(
+                { cliente_id: s.clienteId },
+                contextoSistema('portal'),
+            )
+            const centavos = Number(dec(cobro.monto).times(100).toFixed(0))
+            const asientos = await db
+                .from('ledger.asientos')
+                .where('empresa_id', e.B)
+                .count('* as n')
+                .firstOrFail()
+            // comisión mayor que el pago: RegistrarPago la rechaza (error de negocio)
+            const r = await new ProcesarWebhookPasarela().execute(
+                {
+                    proveedor: 'recurrente',
+                    ...webhook(
+                        {
+                            event_type: 'payment_intent.succeeded',
+                            checkout: { id: checkout },
+                            amount_in_cents: centavos,
+                            fee: centavos + 100,
+                        },
+                        `msg_${unico('eb')}`,
+                    ),
+                },
+                contextoSistema('webhook'),
+            )
+            assert.equal(r.ignorado, 'error_de_negocio')
+            const despues = await db
+                .from('ledger.asientos')
+                .where('empresa_id', e.B)
+                .count('* as n')
+                .firstOrFail()
+            assert.equal(Number(despues.n), Number(asientos.n))
+            const pagos = await db
+                .from('billing.pagos')
+                .where('referencia', checkout)
+                .count('* as n')
+                .firstOrFail()
+            assert.equal(Number(pagos.n), 0)
+            const filaCobro = await db.from('billing.pasarela_cobros').where('id', cobro.id).firstOrFail()
+            assert.notEqual(filaCobro.estado, 'pagado')
+            const nuevos = await db
+                .from('audit.outbox')
+                .where('id', '>', 0)
+                .whereIn('evento', ['pago.registrado', 'servicio.estado_cambiado'])
+                .whereRaw(`(payload->>'cliente_id')::bigint = ?`, [s.clienteId])
+                .count('* as n')
+                .firstOrFail()
+            assert.equal(Number(nuevos.n), 0)
+            // la conciliación lo reporta
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepInclude(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id).map((d) => d.tipo),
+                'pago_sin_registrar',
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H66: una importada tardía con fecha anterior al cierre (entró después de él, nunca trasladada) responde 409 al anularla', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        await importar(e.ctx, e.B, '50.00', '2026-09-05')
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: hoyGuatemala() }, e.ctx)
+        const tardia = await importar(e.ctx, e.B, '112.00', '2026-09-20')
+        await new AnularFactura().execute(
+            { factura_id: tardia.id, motivo: 'auditoría: importación tardía errónea' },
+            e.ctx,
+        )
+        assert.equal(await apertura(e.B), '0.00')
+    }).fails('H66: aperturaCerradaPara decide por la fecha del asiento, no por si entró en el cierre')
+})

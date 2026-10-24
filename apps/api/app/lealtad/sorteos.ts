@@ -479,6 +479,8 @@ export interface GanadorVista {
     /** unidades de la línea que consumió esta entrega y la parte de la base que le tocó */
     compra_unidades: number | null
     compra_base: string | null
+    /** fase C del inventario: el movimiento `premio` del bien que salió del kardex */
+    movimiento_inventario_id: number | null
     entregado_en: Date | null
     /**
      * El premio que le toca: el de su puesto (titular) o, si es un suplente que tomó el premio de un
@@ -520,6 +522,7 @@ export async function ganadoresDe(
             'g.compra_linea_id',
             'g.compra_unidades',
             'g.compra_base',
+            'g.movimiento_inventario_id',
             'g.entregado_en',
             'g.premio_sustitucion',
             'g.sustituye_a',
@@ -540,6 +543,7 @@ export async function ganadoresDe(
         egreso_id: n(f.egreso_id),
         canje_id: n(f.canje_id),
         compra_linea_id: n(f.compra_linea_id),
+        movimiento_inventario_id: n(f.movimiento_inventario_id),
         premio: n(f.premio_posicion) ?? n(f.premio_sustitucion),
         premio_sustitucion: n(f.premio_sustitucion),
         sustituye_a: n(f.sustituye_a),

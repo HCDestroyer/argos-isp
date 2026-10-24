@@ -11,7 +11,11 @@ import {
     type DatosEvaluacion,
     type ResultadoEvaluacion,
 } from '#billing/promesas'
-import type { CanalPromesa } from '#billing/reglas_promesa'
+import {
+    normalizarReglasPromesa,
+    type CanalPromesa,
+    type ReglasPromesaParciales,
+} from '#billing/reglas_promesa'
 import { diasEntre } from '#billing/periodos'
 
 /**
@@ -34,6 +38,11 @@ export interface EntradaSimulacion {
     monto?: string
     /** instante de referencia (simular otro día); por defecto ahora */
     ahora?: Date
+    /**
+     * Reglas a probar sin guardarlas (simulador dentro de la plantilla, pedido de A4): se aplican sobre
+     * las efectivas del servicio (plantilla + excepciones); las claves que falten quedan como están.
+     */
+    reglas_promesa?: ReglasPromesaParciales | null
 }
 
 export interface Validacion {
@@ -122,8 +131,14 @@ export async function simularPromesa(
     if (servicio.estado === 'retirado') {
         throw new ReglaNegocio('El servicio está retirado', 'servicio_retirado')
     }
-    const config = await configuracionDeServicio(cliente, servicio)
-    if (!config) throw new ReglaNegocio('El servicio no tiene plantilla de facturación', 'sin_plantilla')
+    const efectiva = await configuracionDeServicio(cliente, servicio)
+    if (!efectiva) throw new ReglaNegocio('El servicio no tiene plantilla de facturación', 'sin_plantilla')
+    const config = entrada.reglas_promesa
+        ? {
+              ...efectiva,
+              reglas_promesa: normalizarReglasPromesa(entrada.reglas_promesa, efectiva.reglas_promesa),
+          }
+        : efectiva
 
     const datos = await datosEvaluacion(cliente, servicio, config, {
         canal: entrada.canal,

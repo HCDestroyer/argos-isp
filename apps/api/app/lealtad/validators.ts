@@ -537,13 +537,26 @@ export const entregarPremioValidator = vine.compile(
         banco_id: idEntidad().nullable().optional(),
         cuenta_bancaria_id: idEntidad().nullable().optional(),
         contrapartida: vine
-            .enum(['compra', 'proveedor', 'cuenta'] as const)
+            .enum(['inventario', 'compra', 'proveedor', 'cuenta'] as const)
             .nullable()
             .optional()
             .meta({
                 description:
-                    'Solo bien: compra (compra_linea_id: el bien se compró con factura; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control, p. ej. inventario de premios); proveedor responde 422 (registra la compra)',
+                    'Solo bien: inventario (producto_id, bodega_id y unidad_id o cantidad: sale del kardex a su costo, 5.1.03 / 1.1.14), compra (compra_linea_id: el bien se compró con factura y no entró al inventario; gasto 5.1.03 por la base sin IVA) o cuenta (cuenta_codigo de activo fuera de las cuentas control); proveedor responde 422 (registra la compra)',
             }),
+        producto_id: idEntidad().nullable().optional().meta({ description: 'Con contrapartida inventario' }),
+        bodega_id: idEntidad().nullable().optional().meta({ description: 'Con contrapartida inventario' }),
+        unidad_id: idEntidad().nullable().optional().meta({
+            description:
+                'Con contrapartida inventario, producto de serie: la unidad disponible que se entrega',
+        }),
+        cantidad: vine
+            .string()
+            .trim()
+            .regex(/^\d{1,11}(\.\d{1,3})?$/)
+            .nullable()
+            .optional()
+            .meta({ description: 'Con contrapartida inventario, producto por cantidad (1 por defecto)' }),
         cuenta_codigo: vine.string().trim().maxLength(30).nullable().optional(),
         constancia_archivo_id: idEntidad().nullable().optional().meta({
             description:

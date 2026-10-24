@@ -592,6 +592,13 @@ export const simularPagoFalsaValidator = vine.compile(
     }),
 )
 
+export const retirarPlantillaValidator = vine.compile(
+    vine.object({
+        version: vine.number().withoutDecimals().min(1),
+        motivo: motivo(),
+    }),
+)
+
 export const simularPromesaValidator = vine.compile(
     vine.object({
         servicio_id: idEntidad(),
@@ -604,6 +611,10 @@ export const simularPromesaValidator = vine.compile(
         evaluar_en: instanteIso()
             .optional()
             .meta({ description: 'Simular como si fuera este instante (por defecto ahora)' }),
+        reglas_promesa: reglasPromesaSchema().optional().meta({
+            description:
+                'Reglas a probar sin guardarlas (simulador de la plantilla): se aplican sobre las efectivas del servicio; las claves que falten quedan como están',
+        }),
     }),
 )
 
@@ -651,6 +662,16 @@ export const cargoUnicoValidator = vine.compile(
                                 'Precio bruto con IVA incluido (> 0), hasta 2 decimales; lo regalado va como descuento',
                             examples: ['150.00'],
                         }),
+                    producto_id: idEntidad().nullable().optional().meta({
+                        description:
+                            'Inventario: vende este producto (sale del kardex con su costo de ventas)',
+                    }),
+                    bodega_id: idEntidad().nullable().optional().meta({
+                        description: 'Inventario: bodega de la que sale (obligatoria con producto_id)',
+                    }),
+                    unidad_id: idEntidad().nullable().optional().meta({
+                        description: 'Inventario: la unidad vendida de un producto de serie (cantidad 1)',
+                    }),
                     descuentos: vine
                         .array(
                             vine.object({

@@ -53,6 +53,10 @@ export interface LineaCalculada {
     servicio_adicional_id?: number | null
     /** periodo que cobra la línea del adicional (el de la factura o su primer periodo prorrateado) */
     adicional_periodo?: string | null
+    /** inventario (fase C): la línea de un cargo único que vende del inventario */
+    producto_id?: number | null
+    bodega_id?: number | null
+    unidad_id?: number | null
 }
 
 /**

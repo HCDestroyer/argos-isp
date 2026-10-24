@@ -91,6 +91,12 @@ x-api-env: &api-env
   PASARELA_FALSA_SECRETO: ${PASARELA_FALSA_SECRETO:-}
   PASARELA_URL_PUBLICA: ${PASARELA_URL_PUBLICA:-https://${DOMINIO_API}}
   PASARELA_RETORNO_ORIGENES: ${PASARELA_RETORNO_ORIGENES:-https://${DOMINIO_PORTAL},http://${DOMINIO_PORTAL}}
+  # Recurrente (PASARELA_PROVEEDOR=recurrente, contratos/pago-en-linea.md § Recurrente). URL y horas
+  # con valor por defecto: vacías romperían la URL base (la API no la completa si llega '').
+  RECURRENTE_SECRET_KEY: ${RECURRENTE_SECRET_KEY:-}
+  RECURRENTE_WEBHOOK_SECRETO: ${RECURRENTE_WEBHOOK_SECRETO:-}
+  RECURRENTE_API_URL: ${RECURRENTE_API_URL:-https://app.recurrente.com/api}
+  RECURRENTE_EXPIRA_HORAS: ${RECURRENTE_EXPIRA_HORAS:-24}
   COMPROBANTES_DIR: /comprobantes
 
 x-proceso-fondo: &proceso-fondo

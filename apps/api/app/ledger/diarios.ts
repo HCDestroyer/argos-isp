@@ -149,6 +149,8 @@ const DIARIO_POR_ORIGEN: Record<string, string> = {
     bonificacion: 'VAR',
     // fase 6 PR C: el cierre anual va al diario de cierre
     cierre_anual: 'CIE',
+    // inventario fase A: movimientos propios del kardex (consumo, ajuste, baja, saldo inicial)
+    inventario: 'VAR',
 }
 
 export interface DiarioAsiento {

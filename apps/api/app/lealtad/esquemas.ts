@@ -178,6 +178,34 @@ export const LotePuntos = definirEsquema(
     }),
 )
 
+export const PuntosCanjeables = definirEsquema(
+    'PuntosCanjeables',
+    objeto({
+        cliente_id: id,
+        empresas: lista(
+            objeto({
+                empresa_id: id,
+                saldo: { ...entero, description: 'Σ movimientos (puede ser negativo tras un reverso)' },
+                canjeable: {
+                    ...entero,
+                    description:
+                        'Lo que se puede canjear hoy: el saldo si el programa está activo y llega al mínimo; si no, 0',
+                },
+                minimo_canje: {
+                    ...nulable(entero),
+                    description: 'Mínimo del programa activo; null sin programa',
+                },
+                programa_activo: booleano,
+                canje_portal: { ...booleano, description: 'El cliente puede canjear desde el portal' },
+                motivo: {
+                    ...nulable(enumerado(['sin_programa', 'saldo_negativo', 'bajo_minimo', 'sin_puntos'])),
+                    description: 'Por qué no hay nada canjeable; null si sí',
+                },
+            }),
+        ),
+    }),
+)
+
 export const PuntosCliente = definirEsquema(
     'PuntosCliente',
     objeto({
@@ -470,6 +498,11 @@ const GanadorSorteo = objeto(
         no_reclamado_en: nulable(instante),
         constancia_archivo_id: nulable(id),
         compra_unidades: { ...nulable(entero), description: 'Unidades de esa línea que consumió la entrega' },
+        movimiento_inventario_id: {
+            ...nulable(id),
+            description:
+                'Contrapartida inventario: el movimiento premio del kardex (5.1.03 / 1.1.14 al costo)',
+        },
         compra_base: {
             ...nulable(Dinero),
             description:
@@ -488,6 +521,7 @@ const GanadorSorteo = objeto(
         'constancia_archivo_id',
         'compra_unidades',
         'compra_base',
+        'movimiento_inventario_id',
     ],
 )
 

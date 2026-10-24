@@ -72,8 +72,8 @@ export { DATOS_POR_METODO } from '#billing/datos_bancarios'
  *   (`billing.pagos.monto`, con la parte retenida en `retenido`) y su asiento lleva `1.1.05 IVA
  *   retenido por clientes` o `1.1.06 ISR retenido por clientes` en el debe por cada constancia, con
  *   su etiqueta (`+RET_IVA_REC`, `+RET_ISR_REC`). Un pago con constancias es de una sola empresa
- *   (422 `retencion_en_cobro_repartido`) y no va a un proveedor de cobro (422
- *   `retencion_con_proveedor_cobro`); número de constancia repetido entre pagos vigentes: 409
+ *   (422 `retencion_en_cobro_repartido`); con proveedor de cobro (H61) el puente 1.1.10.NN recibe
+ *   `monto − retenido` y la liquidación lo cuenta así; número de constancia repetido entre pagos vigentes: 409
  *   `constancia_duplicada`. Una constancia de IVA en un pago que recupera (total o parcialmente)
  *   un aviso castigado sin DTE: 422 `retencion_sin_documento_fiscal` (H19; no hay DTE que la
  *   respalde).
@@ -548,12 +548,8 @@ export default class RegistrarPago extends DomainAction<EntradaRegistrarPago, Re
             hoyGuatemala(),
         )
         const comision = proveedor ? CERO : datos.comision
-        if (proveedor && retenido.gt(0)) {
-            throw new ReglaNegocio(
-                `El pago por ${input.metodo} va al proveedor de cobro ${proveedor.id} (1.1.10.NN): sus retenciones las trae la liquidación, no el pago`,
-                'retencion_con_proveedor_cobro',
-            )
-        }
+        // H61: con proveedor de cobro, la retención de IVA de la emisora (que avisa la pasarela) va a
+        // 1.1.05 en el pago y el puente 1.1.10.NN recibe el resto; la liquidación lo cuenta así
         await exigirReferenciaLibre(
             t.trx,
             input.metodo,

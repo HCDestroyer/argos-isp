@@ -4,11 +4,11 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 /**
  * `node ace routeros:worker`: dispatcher de servicios sin PPPoE (A2, semana 2). Consume el grupo
  * `routeros` del bus de eventos (`ConsumidorRouterOS` → `AplicarRedServicio`) y corre los crons
- * del reconciliador (`recuperar` cada 30 s, `reconciliar` cada 15 min) y la cola `routeros-prefijos`
+ * del reconciliador (`recuperar` cada 30 s, `reconciliar` cada 15 min, `sondear` cada 5 min) y la cola `routeros-prefijos`
  * (prefijo delegado de las sesiones en modo `radius_pool`). Proceso aparte en el
  * docker-compose (servicio `routeros-worker`, A6). Lógica en `app/network/routeros`.
  *
- * `--una-vez reconciliar|recuperar` ejecuta un cron y termina (laboratorio, scripts).
+ * `--una-vez reconciliar|recuperar|sondear` ejecuta un cron y termina (laboratorio, scripts).
  */
 export default class RouterOSWorker extends BaseCommand {
     static commandName = 'routeros:worker'
@@ -20,7 +20,7 @@ export default class RouterOSWorker extends BaseCommand {
         staysAlive: true,
     }
 
-    @flags.string({ description: 'Ejecuta un solo cron (reconciliar, recuperar) y termina' })
+    @flags.string({ description: 'Ejecuta un solo cron (reconciliar, recuperar, sondear) y termina' })
     declare unaVez?: string
 
     @flags.boolean({ description: 'No consume el grupo routeros del bus de eventos' })

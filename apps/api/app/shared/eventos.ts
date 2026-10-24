@@ -318,6 +318,22 @@ export interface CatalogoEventos {
         monto: Dinero
     }
     /**
+     * Contracargo abierto en la pasarela sobre un pago registrado (Recurrente `dispute.*`): sin acción
+     * automática; A6 avisa a contabilidad. Una vez por pago (los `dispute.update` no lo repiten)
+     */
+    'pago.disputa_abierta': {
+        pago_id: number
+        empresa_id: number
+        /** cobro en línea (`billing.pasarela_cobros.id`) */
+        cobro_id: number
+        /** pagador */
+        cliente_id: number
+        monto: Dinero
+        proveedor: string
+        /** razón del emisor o del tarjetahabiente (`fraudulent`, `duplicate`…); null si no viene */
+        motivo: string | null
+    }
+    /**
      * Decisión del PM (19 oct): lo que sería una factura de Q0 (mes gratis, descuento del 100 %, cargo
      * sin costo, canje) es una bonificación interna; sin CxC ni documento para el cliente
      */
@@ -639,6 +655,46 @@ export interface CatalogoEventos {
         motivo: string
         valor_libros: Dinero
     }
+    /**
+     * Inventario (A3, `contratos/inventario.md` §7, fase A). `cantidad` con signo (+ entra, − sale)
+     * y hasta 3 decimales, como texto; `costo_total` con signo.
+     */
+    'inventario.movimiento_registrado': {
+        movimiento_id: number
+        empresa_id: number
+        tipo: string
+        producto_id: number
+        bodega_id: number
+        cantidad: string
+        costo_total: Dinero
+        unidad_id: number | null
+        servicio_id: number | null
+        origen_tipo: string | null
+        origen_id: number | null
+    }
+    /** Una unidad de serie se prestó en comodato a un servicio (fase B). */
+    'inventario.comodato_asignado': PayloadComodato
+    /** La unidad volvió del servicio a una bodega, a su valor en libros. */
+    'inventario.comodato_devuelto': PayloadComodato & { condicion: 'nuevo' | 'usado'; bodega_id: number }
+    /** El servicio se retiró con la unidad en comodato: queda por recuperar. */
+    'inventario.equipo_por_recuperar': PayloadComodato
+    /** La existencia total del producto cruzó su mínimo hacia abajo; `bodega_id` null = total. */
+    'inventario.existencia_minima': {
+        empresa_id: number
+        producto_id: number
+        bodega_id: number | null
+        cantidad: string
+        minimo: string
+    }
+    /** Se cerró un conteo físico (fase C): valor del faltante y del sobrante ajustados, y líneas contadas. */
+    'inventario.conteo_cerrado': {
+        conteo_id: number
+        empresa_id: number
+        bodega_id: number
+        faltante: Dinero
+        sobrante: Dinero
+        lineas: number
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -828,6 +884,17 @@ type PayloadHallazgoHorus = PayloadClienteHorus & {
 }
 
 /** Canje de lealtad (`contratos/lealtad.md` §13). */
+/** Unidad de serie en comodato (`contratos/inventario.md` §7). */
+interface PayloadComodato {
+    unidad_id: number
+    empresa_id: number
+    servicio_id: number
+    cliente_id: number
+    producto_id: number
+    serie: string | null
+    mac: string | null
+}
+
 interface PayloadCanjeLealtad {
     canje_id: number
     empresa_id: number
@@ -902,6 +969,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'pago.diferencia_cerrada',
+    'pago.disputa_abierta',
     'bonificacion.registrada',
     'nota_credito.emitida',
     'nota_credito.anulada',
@@ -944,6 +1012,12 @@ export const EVENTOS = [
     'compra.registrada',
     'compra.anulada',
     'activo.dado_de_baja',
+    'inventario.movimiento_registrado',
+    'inventario.comodato_asignado',
+    'inventario.comodato_devuelto',
+    'inventario.equipo_por_recuperar',
+    'inventario.existencia_minima',
+    'inventario.conteo_cerrado',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

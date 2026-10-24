@@ -25,6 +25,7 @@ import {
     variablesEjercicio,
     variablesLibroEmitido,
     variablesProcesoBloqueado,
+    variablesDisputa,
     variablesSorteoInterno,
 } from '#notify/avisos_internos'
 
@@ -67,6 +68,8 @@ export const EVENTOS_ALERTA = [
     'sorteo.entrega_anulada',
     'sorteo.premio_no_reclamado',
     'sorteo.acta_cerrada',
+    // Contracargo abierto en la pasarela (A3): al equipo y a contabilidad, sin acción automática
+    'pago.disputa_abierta',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',
     'horus.router_estado_cambiado',
@@ -144,6 +147,7 @@ function texto(valor: unknown): string {
  * | `ejercicio.cerrado` | `ejercicio-cerrado:<cierre_id>`, puntual, una vez | correo a contabilidad |
  * | `ejercicio.reabierto` | `ejercicio-reabierto:<cierre_id>`, puntual, una vez | Telegram y correo |
  * | `sorteo.*` (bases, corte, ejecutado, cancelado, entrega anulada, no reclamado, acta) | `sorteo-<fase>:<sorteo_id>[:<posicion>]`, puntual, una vez | Telegram al chat del equipo de la empresa |
+ * | `pago.disputa_abierta` | `pago-disputa:<pago_id>`, puntual, una vez por pago | Telegram y correo a contabilidad |
  *
  * Los fiscales y contables usan la configuración de canales de la empresa del evento
  * (`empresa_id`): Telegram al chat del equipo y correo a `correo.contabilidad`.
@@ -345,6 +349,24 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                     variablesBloqueo(p),
                     SOLO_CORREO,
                 )
+            }
+            case 'pago.disputa_abierta': {
+                // A3 lo emite una vez por pago; `unico` cubre una reemisión con otro id de outbox.
+                const { incidente, nuevo } = await unaVez(
+                    `pago-disputa:${texto(p.pago_id)}`,
+                    'pago_disputa',
+                    {
+                        pago_id: p.pago_id ?? null,
+                        cobro_id: p.cobro_id ?? null,
+                        proveedor: texto(p.proveedor) || null,
+                        motivo: texto(p.motivo) || null,
+                    },
+                )
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(incidente, 'abierto', 'alerta.pago.disputa_abierta', {
+                    ...variablesDisputa(p),
+                    cliente: await nombreCliente(t, p.cliente_id),
+                })
             }
             case 'libro.emitido': {
                 const { incidente, nuevo } = await unaVez(

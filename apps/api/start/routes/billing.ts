@@ -3,12 +3,14 @@
 | Rutas de facturación (A3): plantillas, facturas, pagos, promesas, estado de cuenta
 |--------------------------------------------------------------------------
 */
+import { exigirBodega } from '#inventario/acceso_http'
 import { definirRuta, redirigir, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#billing/validators'
 import { listarPlantillas, obtenerPlantilla, serializarPlantilla } from '#billing/plantillas'
 import CrearPlantilla from '#billing/actions/crear_plantilla'
 import EditarPlantilla from '#billing/actions/editar_plantilla'
+import RetirarPlantilla from '#billing/actions/retirar_plantilla'
 import GenerarFacturas from '#billing/actions/generar_facturas'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
@@ -204,6 +206,21 @@ const plantillas: Ruta[] = [
         handler: (ctx, { cuerpo, params }) =>
             new EditarPlantilla().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
     }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/plantillas-facturacion/:id/retirar',
+        operacion: 'plantillasRetirar',
+        resumen: 'Retirar una plantilla de facturación (con motivo)',
+        etiqueta: 'facturacion',
+        permiso: 'plantillas.retirar',
+        cuerpo: v.retirarPlantillaValidator,
+        idempotente: true,
+        descripcion:
+            'La plantilla sigue facturando a los servicios que ya la tienen y no se asigna a servicios nuevos (422 restriccion al crear o cambiar un servicio a ella). 409 plantilla_por_defecto (marca otra primero), 409 plantilla_retirada, 409 por version.',
+        respuesta: { status: 200, descripcion: 'Plantilla retirada', esquema: PlantillaFacturacion },
+        handler: (ctx, { cuerpo, params }) =>
+            new RetirarPlantilla().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
 ]
 
 const facturas: Ruta[] = [
@@ -250,6 +267,10 @@ const facturas: Ruta[] = [
             esquema: CargoUnicoEmitido,
         },
         handler: async (ctx, { cuerpo }) => {
+            // inventario: la bodega de la que sale cada venta (alcance y tope por técnico)
+            for (const linea of cuerpo.lineas) {
+                if (linea.bodega_id) await exigirBodega(ctx, linea.bodega_id)
+            }
             if (cuerpo.servicio_id) await exigirServicio(ctx, cuerpo.servicio_id)
             else if (cuerpo.cliente_id) {
                 const dimensiones = await dimensionesDeCliente(cuerpo.cliente_id).catch(() => {
@@ -633,7 +654,7 @@ const promesas: Ruta[] = [
         permiso: 'promesas.ver',
         cuerpo: v.simularPromesaValidator,
         descripcion:
-            'Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.',
+            'Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.',
         respuesta: { status: 200, descripcion: 'Simulación', esquema: SimulacionPromesa },
         handler: async (ctx, { cuerpo }) => {
             await exigirServicio(ctx, cuerpo.servicio_id)
@@ -646,6 +667,7 @@ const promesas: Ruta[] = [
                 vence_en: cuerpo.vence_en,
                 monto: cuerpo.monto,
                 ahora: cuerpo.evaluar_en,
+                reglas_promesa: cuerpo.reglas_promesa,
             })
         },
     }),

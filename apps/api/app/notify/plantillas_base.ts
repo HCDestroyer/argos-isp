@@ -322,6 +322,14 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
         'acta_cerrada',
         'Se cerró el acta de {{alerta.nombre}}.\nHuella del acta: {{alerta.acta_hash}}',
     ),
+    // Contracargo en la pasarela (A3, `pago.disputa_abierta`): al equipo y a contabilidad.
+    ...alertaFiscal(
+        'alerta.pago.disputa_abierta',
+        'Contracargo abierto: pago {{alerta.pago_id}} por {{alerta.monto_q}} ({{empresa.nombre}})',
+        'El banco del tarjetahabiente abrió un contracargo en {{alerta.proveedor}} sobre el pago {{alerta.pago_id}} por {{alerta.monto_q}}{{#alerta.cliente}} del cliente {{alerta.cliente}}{{/alerta.cliente}}.' +
+            '{{#alerta.motivo_texto}}\nMotivo: {{alerta.motivo_texto}}{{/alerta.motivo_texto}}{{#alerta.cobro_id}}\nCobro en línea: {{alerta.cobro_id}}{{/alerta.cobro_id}}' +
+            '\nEl sistema no hace nada por su cuenta: el pago sigue registrado y la factura pagada. Responde la disputa en el panel de {{alerta.proveedor}} con la evidencia del servicio. Si el contracargo se pierde, anula el pago en ArgosIsp (Pagos → el pago → Anular pago) para que la deuda vuelva al cliente.',
+    ),
     // Horus Flow (contratos/horus.md §3.4): avisos, nunca cortes.
     {
         evento: 'alerta.horus.hallazgo',

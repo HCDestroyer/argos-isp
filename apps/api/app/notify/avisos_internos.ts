@@ -243,3 +243,32 @@ export async function variablesSorteoInterno(
         motivo: texto(p.motivo),
     }
 }
+
+// ── Pasarela ─────────────────────────────────────────────────────────────────────────────────
+
+/** Motivos de contracargo de la pasarela (`reason` de Recurrente, el de Stripe) en español. */
+const MOTIVOS_DISPUTA: Record<string, string> = {
+    fraudulent: 'el titular dice que no reconoce el cargo (fraude)',
+    duplicate: 'cargo duplicado',
+    product_not_received: 'servicio no recibido',
+    product_unacceptable: 'servicio no aceptable',
+    subscription_canceled: 'suscripción cancelada',
+    credit_not_processed: 'reembolso no procesado',
+    unrecognized: 'cargo no reconocido',
+    general: 'motivo general',
+}
+
+const PROVEEDORES: Record<string, string> = { recurrente: 'Recurrente', falsa: 'pasarela de prueba' }
+
+/** `pago.disputa_abierta`: pago, cobro, monto, proveedor y motivo legible. */
+export function variablesDisputa(p: Payload): Record<string, unknown> {
+    const motivo = texto(p.motivo)
+    return {
+        pago_id: texto(p.pago_id),
+        cobro_id: texto(p.cobro_id),
+        monto_q: montoQ(p.monto),
+        proveedor: PROVEEDORES[texto(p.proveedor)] ?? texto(p.proveedor),
+        motivo,
+        motivo_texto: motivo ? (MOTIVOS_DISPUTA[motivo] ?? motivo) : '',
+    }
+}
