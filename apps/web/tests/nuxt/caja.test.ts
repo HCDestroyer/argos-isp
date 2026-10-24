@@ -90,15 +90,24 @@ describe('tarea 12 · caja', () => {
         useUsuarioActual().value = null
     })
 
-    it('sin egresos.ver (cajero) no hay esperado provisional y lo dice', async () => {
+    it('el cajero (solo cajas.ver) lee los egresos de su turno y ve el esperado provisional', async () => {
         useUsuarioActual().value = meCajero
+        const turno = bd.turnos.find(t => t.caja_id === 1 && t.cerrado_en === null)
+        const oficial = turno ? esperadoDelTurno(turno) : new Decimal(0)
         const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
         await esperar(() => expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(true))
-        await esperar(() => expect(vista.find('[data-prueba="sin-esperado"]').text()).toContain('egresos.ver'))
-        expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(false)
-        expect(vista.text()).toContain('Efectivo cobrado')
+        await esperar(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
+        expect(vista.get('[data-prueba="turno-esperado"]').text()).toContain(formatearQuetzales(oficial))
+        expect(vista.find('[data-prueba="sin-esperado"]').exists()).toBe(false)
         vista.unmount()
         useUsuarioActual().value = null
+    })
+
+    it('con solo cajas.ver, GET /egresos exige caja_id o turno_id (como la API)', async () => {
+        const sinCaja = await useEgresos().listar({})
+        expect(!sinCaja.ok && sinCaja.problema.status).toBe(422)
+        const conTurno = await useEgresos().listar({ caja_id: 1, turno_id: 41 })
+        expect(conTurno.ok).toBe(true)
     })
 
     it('abrir turno con fondo inicial; abrir dos veces es 409', async () => {
