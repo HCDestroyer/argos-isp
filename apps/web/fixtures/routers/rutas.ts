@@ -33,6 +33,33 @@ const IPV4 = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[
 const CIDR_V4 = /^(\d{1,3}\.){3}\d{1,3}\/([0-9]|[12][0-9]|3[0-2])$/
 const CIDR_V6 = /^[0-9a-fA-F:]+\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/
 
+/** IPv6 en CIDR a (red, largo) como BigInt, para saber si un pool cae dentro de su bloque. */
+function redV6(cidr: string): { red: bigint, largo: number } | null {
+    const [direccion = '', largoTexto = ''] = cidr.split('/')
+    const [izquierda = '', derecha] = direccion.split('::')
+    const partes = (texto: string) => (texto ? texto.split(':') : [])
+    const grupos = derecha === undefined
+        ? partes(izquierda)
+        : [...partes(izquierda), ...Array<string>(8 - partes(izquierda).length - partes(derecha).length).fill('0'), ...partes(derecha)]
+    if (grupos.length !== 8) {
+        return null
+    }
+    const valor = grupos.reduce((total, grupo) => (total << 16n) + BigInt(parseInt(grupo || '0', 16)), 0n)
+    const largo = Number(largoTexto)
+    const mascara = largo === 0 ? 0n : ((1n << BigInt(largo)) - 1n) << BigInt(128 - largo)
+    return { red: valor & mascara, largo }
+}
+
+function dentroDe(pool: string, bloque: string): boolean {
+    const p = redV6(pool)
+    const b = redV6(bloque)
+    if (!p || !b || p.largo < b.largo) {
+        return false
+    }
+    const mascara = b.largo === 0 ? 0n : ((1n << BigInt(b.largo)) - 1n) << BigInt(128 - b.largo)
+    return (p.red & mascara) === b.red
+}
+
 /** Como `camposConexionApi` (A1): los cinco campos de conexión, opcionales y nulables. */
 function erroresConexion(cuerpo: Record<string, unknown>): NonNullable<Problem['errors']> {
     const errores: NonNullable<Problem['errors']> = []
@@ -282,6 +309,9 @@ export const rutasRouters: RutasFixture = {
         const tamano = cuerpo.tamano_entrega === 64 || cuerpo.tamano_entrega === 48 ? cuerpo.tamano_entrega : 56
         if (!CIDR_V6.test(prefijo)) {
             return datosInvalidos([{ field: 'prefijo', message: 'El prefijo debe estar en notación CIDR', rule: 'regex' }])
+        }
+        if (!dentroDe(prefijo, bloque.prefijo)) {
+            return datosInvalidos([{ field: 'prefijo', message: `El pool ${prefijo} no está dentro del bloque ${bloque.prefijo}`, rule: 'dentro_del_bloque' }])
         }
         if (tipo === 'enlace' && tamano !== 64) {
             return datosInvalidos([{ field: 'tamano_entrega', message: 'Un pool de enlace entrega /64', rule: 'coherencia' }])
