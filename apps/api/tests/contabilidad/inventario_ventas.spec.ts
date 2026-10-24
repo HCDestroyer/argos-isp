@@ -44,13 +44,13 @@ import DarDeBajaInventario from '#inventario/actions/dar_de_baja_inventario'
  * nuevos: 24.venta_distinta_de_su_factura, 24.premio_del_kardex_mal_ligado y el inv. 16 con
  * `contrapartida: inventario`.
  *
- * Hallazgos (`.fails` mientras estén abiertos; detalle en `.claude/integration/a3.md`):
+ * Hallazgos (arreglados por A3 en efd7341; detalle en `.claude/integration/a3.md`):
  *
- * - **H55** (media): un consumo o un faltante con fecha pasada sale al promedio de hoy. El chequeo
+ * - **H55** (media, arreglado: 409 `fecha_con_movimientos_posteriores` y el valor también se revisa): un consumo o un faltante con fecha pasada sale al promedio de hoy. El chequeo
  *   `existencia_insuficiente_en_fecha` solo mira la cantidad: si entre la fecha pedida y hoy entró
  *   mercadería a otro precio, el valor de la bodega en las fechas intermedias queda negativo, o con
  *   valor y sin existencia (y así el reporte valorizado y 1.1.14 a esas fechas).
- * - **H56** (media): un conteo toma lo esperado al cerrar, no al capturar. Si entre la captura y el
+ * - **H56** (media, arreglado: lo esperado se guarda al capturar): un conteo toma lo esperado al cerrar, no al capturar. Si entre la captura y el
  *   cierre hay ventas o consumos, la diferencia se registra como sobrante a 4.2.04 (o faltante a 5.6.02)
  *   que no existe.
  */
@@ -458,7 +458,7 @@ test.group('Auditor contable · inventario fase C', (group) => {
         }
     })
 
-    test('H55: un consumo con fecha pasada al promedio de hoy deja el valor de la bodega negativo en una fecha intermedia', async ({
+    test('H55 (arreglado): un consumo con fecha pasada al promedio de hoy deja el valor de la bodega negativo en una fecha intermedia', async ({
         assert,
     }) => {
         const { e, cable, bodega } = await escenario()
@@ -479,9 +479,9 @@ test.group('Auditor contable · inventario fase C', (group) => {
             { rechazado: true, valor_intermedio_negativo: false },
         )
         await afirmarLibro(assert, [e.B, e.C])
-    }).fails('H55: fecha pasada al promedio de hoy, sin revisar el valor en las fechas intermedias')
+    })
 
-    test('H56: un conteo con ventas entre la captura y el cierre registra un sobrante que no existe', async ({
+    test('H56 (arreglado): un conteo con ventas entre la captura y el cierre registra un sobrante que no existe', async ({
         assert,
     }) => {
         const { e, cable, bodega, servicioId, conceptoId } = await escenario()
@@ -504,5 +504,117 @@ test.group('Auditor contable · inventario fase C', (group) => {
             { saldo: await saldoInventario(cable.id, bodega.id), sobrante: dec(sobrante).toFixed(2) },
             { saldo: ['8.000', '40.00'], sobrante: '0.00' },
         )
-    }).fails('H56: el conteo toma lo esperado al cerrar y no al capturar')
+    })
+
+    test('H55 variantes: con solo salidas posteriores la fecha pasada entra y cuadra; un reingreso posterior (reverso de venta) la bloquea; ninguna fecha queda negativa', async ({
+        assert,
+    }) => {
+        const { e, cable, bodega, servicioId, conceptoId } = await escenario()
+        await comprar(e, e.B, cable.id, bodega.id, 10, '56.00', haceMeses(2, 5))
+        await new ConsumirInventario().execute(
+            { producto_id: cable.id, bodega_id: bodega.id, cantidad: '3', fecha: haceMeses(1, 20) },
+            e.ctx,
+        )
+        // una salida fechada antes de otra salida: el promedio no cambió
+        await new ConsumirInventario().execute(
+            { producto_id: cable.id, bodega_id: bodega.id, cantidad: '2', fecha: haceMeses(1, 10) },
+            e.ctx,
+        )
+        await afirmarLibro(assert, [e.B, e.C])
+        // hoy se vende y se anula: el reverso reingresa (cantidad > 0) con fecha de hoy
+        const venta = await vender(e, servicioId, conceptoId, {
+            producto_id: cable.id,
+            bodega_id: bodega.id,
+            cantidad: '1',
+        })
+        await new AnularFactura().execute({ factura_id: venta.id, motivo: 'auditoría' }, e.ctx)
+        const bloqueada = await errorDe(
+            new ConsumirInventario().execute(
+                { producto_id: cable.id, bodega_id: bodega.id, cantidad: '1', fecha: haceMeses(1, 25) },
+                e.ctx,
+            ),
+        )
+        assert.equal(bloqueada.codigo, 'fecha_con_movimientos_posteriores')
+        // más de lo que había en la fecha: 409 aunque hoy alcance
+        const otra = await productoEn(e.B, e.ctx)
+        await comprar(e, e.B, otra.id, bodega.id, 2, '22.40', haceMeses(2, 5))
+        await new ConsumirInventario().execute(
+            { producto_id: otra.id, bodega_id: bodega.id, cantidad: '1' },
+            e.ctx,
+        )
+        const negativa = await errorDe(
+            new ConsumirInventario().execute(
+                { producto_id: otra.id, bodega_id: bodega.id, cantidad: '2', fecha: haceMeses(1, 1) },
+                e.ctx,
+            ),
+        )
+        assert.equal(negativa.status, 409)
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('H56 variantes: entradas entre la captura y el cierre no son sobrante; una unidad contada y vendida antes del cierre no falla ni ajusta; recapturar toma la existencia de nuevo', async ({
+        assert,
+    }) => {
+        const { e, cable, bodega, servicioId, conceptoId } = await escenario()
+        const router = await productoEn(e.B, e.ctx, {
+            nombre: 'Router',
+            tipo: 'equipo',
+            seguimiento: 'serie',
+        })
+        await comprar(e, e.B, cable.id, bodega.id, 10, '56.00')
+        const proveedor = await proveedorEn(e.B, e.ctx)
+        const series = [unico('RT'), unico('RT')]
+        const compra = await new RegistrarCompra().execute(
+            {
+                proveedor_id: proveedor.id,
+                tipo_documento: 'FACT',
+                numero: unico('F'),
+                fecha_documento: hoyGuatemala(),
+                condicion: 'credito',
+                lineas: [
+                    {
+                        descripcion: 'Routers',
+                        tipo: 'bien',
+                        total: '672.00',
+                        cantidad: 2,
+                        producto_id: router.id,
+                        bodega_id: bodega.id,
+                        unidades: series.map((serie) => ({ serie })),
+                    },
+                ],
+            } as never,
+            e.ctx,
+        )
+        const unidades = await db.from('inventario.unidades').where('compra_id', compra.id).orderBy('id')
+        const conteo = await new AbrirConteo().execute({ bodega_id: bodega.id, motivo: 'auditoría' }, e.ctx)
+        await new ContarInventario().execute(
+            { conteo_id: conteo.id, producto_id: cable.id, contado: '7' },
+            e.ctx,
+        )
+        // recaptura: la existencia sigue en 10; el contado es 9 (falta 1)
+        await new ContarInventario().execute(
+            { conteo_id: conteo.id, producto_id: cable.id, contado: '9' },
+            e.ctx,
+        )
+        await new ContarInventario().execute({ conteo_id: conteo.id, producto_id: router.id, series }, e.ctx)
+        // después de capturar: entran 5 de cable y se vende un router contado
+        await comprar(e, e.B, cable.id, bodega.id, 5, '28.00')
+        await vender(e, servicioId, conceptoId, {
+            producto_id: router.id,
+            bodega_id: bodega.id,
+            unidad_id: Number(unidades[0].id),
+            precio: '560.00',
+        })
+        await new CerrarConteo().execute({ id: conteo.id }, e.ctx)
+        assert.deepEqual(
+            await saldoInventario(cable.id, bodega.id),
+            ['14.000', '70.00'],
+            'solo el faltante de 1',
+        )
+        assert.deepEqual(await saldoInventario(router.id, bodega.id), ['1.000', '300.00'])
+        const sobrante = await saldoCuenta(e.B, CUENTAS_GT.SOBRANTES_INVENTARIO)
+        assert.equal(dec(sobrante).toFixed(2), '0.00')
+        assert.equal(await saldoCuenta(e.B, CUENTAS_GT.MERMAS_INVENTARIO), '5.00')
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 })
