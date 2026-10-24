@@ -129,6 +129,8 @@ import {
     Usuario,
     Zona,
     CampoPersonalizado,
+    RolBase,
+    rolesBase,
 } from '#core/esquemas'
 
 /** Pone la cookie del panel y arma `SesionPanel` (mismo cuerpo que `POST /auth/sesion`). */
@@ -468,9 +470,26 @@ const usuarios: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
+        ruta: '/roles/base',
+        operacion: 'rolesBase',
+        resumen: 'Roles base del seed con sus permisos (definidos en código)',
+        descripcion:
+            'Los seis roles de `ROLES_BASE` (`app/core/permisos.ts`), tal como los sincroniza el seed. Los mismos ' +
+            'datos van en `x-roles-base` del esquema `RolBase`.',
+        etiqueta: 'acl',
+        permiso: 'roles.ver',
+        respuesta: { status: 200, descripcion: 'Roles base', esquema: lista(RolBase) },
+        handler: async () => rolesBase(),
+    }),
+    definirRuta({
+        metodo: 'get',
         ruta: '/permisos',
         operacion: 'permisosListar',
         resumen: 'Catálogo de permisos',
+        descripcion:
+            'Todos los permisos de `app/core/permisos.ts` con su descripción, también los que ninguna ruta pide ' +
+            '(acciones del sistema o anidadas). El mismo catálogo está en el esquema `NombrePermiso` ' +
+            '(`enum` y `x-enum-descriptions`).',
         etiqueta: 'acl',
         permiso: 'roles.ver',
         respuesta: { status: 200, descripcion: 'Permisos', esquema: { type: 'array', items: Permiso } },

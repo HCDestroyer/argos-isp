@@ -60,13 +60,16 @@ function correoRepetido(email: string, excepto: number | null): RespuestaFixture
     return repetido ? problemaTipado(409, 'email_duplicado', 'Conflicto', `Ya existe un usuario con el correo ${email}`) : null
 }
 
-function permisosValidos(valor: unknown, campo: string): { permisos: string[] } | { errores: Errores } {
+type NombrePermiso = Schema<'Permiso'>['nombre']
+
+function permisosValidos(valor: unknown, campo: string): { permisos: NombrePermiso[] } | { errores: Errores } {
     const lista = Array.isArray(valor) ? valor.filter((p): p is string => typeof p === 'string') : []
     const desconocidos = lista.filter(p => !catalogoPermisos.some(c => c.nombre === p))
     if (desconocidos.length) {
         return { errores: desconocidos.map(p => ({ field: campo, message: `Permiso desconocido: ${p}`, rule: 'exists' })) }
     }
-    return { permisos: [...new Set(lista)].sort() }
+    // Sin desconocidos: cada uno es un nombre del catálogo del contrato.
+    return { permisos: ([...new Set(lista)] as NombrePermiso[]).sort() }
 }
 
 function actorDe(solicitud: SolicitudFixture) {
