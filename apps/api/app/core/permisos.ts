@@ -190,6 +190,12 @@ export const PERMISOS = {
     'inventario.devolver_comodato': 'Recibir de vuelta un equipo en comodato (baja del activo sin resultado)',
     'inventario.declarar_perdida_comodato':
         'Declarar perdido un equipo en comodato (baja del activo a pérdida)',
+    // fase C (`contratos/inventario.md` §5)
+    'inventario.abrir_conteo': 'Abrir un conteo físico de una bodega',
+    'inventario.contar': 'Capturar lo contado en un conteo físico abierto',
+    'inventario.cerrar_conteo': 'Cerrar un conteo físico (ajusta faltantes y sobrantes con su asiento)',
+    'inventario.cancelar_conteo': 'Cancelar un conteo físico abierto sin ajustar',
+    'inventario.marcar_reparada': 'Devolver a disponible una unidad en reparación',
     'libros.ver': 'Ver los libros legales (vista previa) y sus habilitaciones',
     'libros.emitir': 'Emitir libros legales con folio sobre un periodo bloqueado',
     'libros.habilitar': 'Registrar habilitaciones de folios de libros',
@@ -417,6 +423,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'inventario.trasladar',
             'inventario.asignar_comodato',
             'inventario.devolver_comodato',
+            'inventario.contar',
+            'inventario.marcar_reparada',
         ],
     },
     contabilidad: {
@@ -483,6 +491,11 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'inventario.ajustar',
             'inventario.cargar_saldo_inicial',
             'inventario.dar_de_baja',
+            'inventario.abrir_conteo',
+            'inventario.contar',
+            'inventario.cerrar_conteo',
+            'inventario.cancelar_conteo',
+            'inventario.marcar_reparada',
             'productos.crear',
             'productos.editar',
             'productos.desactivar',

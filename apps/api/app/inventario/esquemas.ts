@@ -15,6 +15,7 @@ import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
 import { TIPOS_BODEGA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
+import { ESTADOS_CONTEO } from '#inventario/conteos'
 import { lista } from '#shared/openapi/esquemas'
 
 /**
@@ -189,5 +190,52 @@ export const EquipoServicio = definirEsquema(
         ...camposUnidad,
         valor_libros: { ...nulable(texto), description: 'Costo − depreciación acumulada del activo' },
         fecha_asignacion: nulable(fecha),
+    }),
+)
+
+const CostoUnitario = { type: 'string', description: 'Costo unitario con 6 decimales' }
+
+const camposConteo = {
+    id,
+    empresa_id: id,
+    bodega_id: id,
+    bodega_nombre: texto,
+    estado: enumerado(ESTADOS_CONTEO),
+    fecha_corte: fecha,
+    motivo: nulable(texto),
+    abierto_por: nulable(id),
+    cerrado_por: nulable(id),
+    cerrado_en: nulable(instante),
+    faltante: { ...Dinero, description: 'Valor del faltante ajustado al cerrar' },
+    sobrante: { ...Dinero, description: 'Valor del sobrante ajustado al cerrar' },
+    version: id,
+    created_at: instante,
+}
+
+export const ConteoInventario = definirEsquema('ConteoInventario', objeto(camposConteo))
+
+export const ConteoInventarioDetalle = definirEsquema(
+    'ConteoInventarioDetalle',
+    objeto({
+        ...camposConteo,
+        lineas: lista(
+            objeto({
+                id,
+                producto_id: id,
+                producto_sku: texto,
+                producto_nombre: texto,
+                seguimiento: enumerado(SEGUIMIENTOS),
+                contado: Cantidad,
+                series: lista(texto),
+                costo_unitario: nulable(CostoUnitario),
+                esperado: { ...Cantidad, description: 'Cerrado: lo que había al cerrar; abierto: lo de hoy' },
+                diferencia: { ...Cantidad, description: 'contado − esperado' },
+                valor_diferencia: {
+                    ...nulable(DineroConSigno),
+                    description:
+                        'Cerrado: lo ajustado; abierto: estimado al costo de hoy (null sin costo conocido)',
+                },
+            }),
+        ),
     }),
 )

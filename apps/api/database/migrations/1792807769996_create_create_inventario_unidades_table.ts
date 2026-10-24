@@ -119,8 +119,18 @@ export default class extends BaseSchema {
                 CHECK (tipo IN ('venta', 'retiro', 'anulacion')) NOT VALID;
             ALTER TABLE ledger.activos DROP COLUMN IF EXISTS unidad_id;
             DROP INDEX IF EXISTS inventario.movimientos_saldo_inicial;
-            CREATE UNIQUE INDEX movimientos_saldo_inicial ON inventario.movimientos (producto_id, bodega_id)
-                WHERE tipo = 'saldo_inicial';
+            -- con saldos iniciales de varias unidades del mismo producto y bodega el índice de antes no
+            -- se puede crear: el rollback no falla por los datos de prueba
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM inventario.movimientos WHERE tipo = 'saldo_inicial'
+                     GROUP BY producto_id, bodega_id HAVING count(*) > 1
+                ) THEN
+                    CREATE UNIQUE INDEX movimientos_saldo_inicial ON inventario.movimientos (producto_id, bodega_id)
+                        WHERE tipo = 'saldo_inicial';
+                END IF;
+            END $$;
             ALTER TABLE inventario.movimientos
                 DROP CONSTRAINT IF EXISTS movimientos_unidad_fk,
                 DROP CONSTRAINT IF EXISTS movimientos_unidad_una,

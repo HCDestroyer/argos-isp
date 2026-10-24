@@ -6,6 +6,7 @@ import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
 import { TIPOS_BODEGA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
+import { ESTADOS_CONTEO } from '#inventario/conteos'
 
 /**
  * Validadores del inventario (`contratos/inventario.md` §6, fase A). Las cantidades viajan como
@@ -314,5 +315,52 @@ export const porRecuperarValidator = vine.compile(
         ...reglasPaginacion,
         cliente_id: idEntidad().optional(),
         producto_id: idEntidad().optional(),
+    }),
+)
+
+/*
+| Conteos físicos (fase C)
+*/
+
+export const abrirConteoValidator = vine.compile(
+    vine.object({
+        bodega_id: idEntidad(),
+        motivo: texto(500).nullable().optional(),
+    }),
+)
+
+export const contarValidator = vine.compile(
+    vine.object({
+        producto_id: idEntidad(),
+        contado: vine
+            .string()
+            .trim()
+            .regex(/^\d{1,11}(\.\d{1,3})?$/)
+            .nullable()
+            .optional()
+            .meta({ description: 'Producto por cantidad: lo contado (≥ 0, hasta 3 decimales)' }),
+        series: vine.array(texto(100)).maxLength(5000).nullable().optional().meta({
+            description: 'Producto de serie: serie o MAC de cada unidad encontrada',
+        }),
+        costo_unitario: costoUnitario().nullable().optional().meta({
+            description: 'Costo de un sobrante si la bodega no tiene existencia del producto (> 0)',
+        }),
+    }),
+)
+
+export const cerrarConteoValidator = vine.compile(
+    vine.object({
+        version: versionEsperada().nullable().optional(),
+    }),
+)
+
+export const cancelarConteoValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const listarConteosValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        bodega_id: idEntidad().optional(),
+        estado: vine.enum(ESTADOS_CONTEO).optional(),
     }),
 )

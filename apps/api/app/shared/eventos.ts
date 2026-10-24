@@ -670,6 +670,15 @@ export interface CatalogoEventos {
         cantidad: string
         minimo: string
     }
+    /** Se cerró un conteo físico (fase C): valor del faltante y del sobrante ajustados, y líneas contadas. */
+    'inventario.conteo_cerrado': {
+        conteo_id: number
+        empresa_id: number
+        bodega_id: number
+        faltante: Dinero
+        sobrante: Dinero
+        lineas: number
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -991,6 +1000,7 @@ export const EVENTOS = [
     'inventario.comodato_devuelto',
     'inventario.equipo_por_recuperar',
     'inventario.existencia_minima',
+    'inventario.conteo_cerrado',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

@@ -243,6 +243,37 @@ export async function bodegaMovible(
     }
 }
 
+/**
+ * Costo unitario de un sobrante (H41 del auditor): con existencia en la bodega, su promedio (el
+ * `costo_unitario` pedido se ignora); sin existencia, el `costo_unitario` pedido (> 0) o el del último
+ * movimiento con costo del producto. Sin ninguno, o con `costo_unitario` ≤ 0: 422 `costo_requerido`.
+ */
+export async function costoDeSobrante(
+    t: Transaccion,
+    producto: { id: number; sku: string },
+    bodegaId: number,
+    pedido?: string | null,
+): Promise<Dec> {
+    const saldo = await saldoDe(t, producto.id, bodegaId)
+    if (saldo.cantidad.gt(0)) return saldo.valor.div(saldo.cantidad)
+    const requerido = (mensaje: string) =>
+        new ValidacionFallida([{ field: 'costo_unitario', message: mensaje, rule: 'costo_requerido' }])
+    if (pedido !== undefined && pedido !== null && pedido !== '') {
+        const unitario = dec(pedido)
+        if (unitario.lte(0)) throw requerido('El costo unitario de un sobrante es mayor que 0')
+        return unitario
+    }
+    const ultimo = (await t.trx
+        .from('inventario.movimientos')
+        .where('producto_id', producto.id)
+        .where('costo_unitario', '>', 0)
+        .orderBy('id', 'desc')
+        .select('costo_unitario')
+        .first()) as { costo_unitario: string } | null
+    if (!ultimo) throw requerido(`El producto ${producto.sku} no tiene costo conocido: indica costo_unitario`)
+    return dec(ultimo.costo_unitario)
+}
+
 /** Cantidad válida de una operación: > 0 con hasta 3 decimales. */
 export function cantidadValida(valor: string | number, campo = 'cantidad', conSigno = false): Dec {
     const cantidad = dec(String(valor))

@@ -15,6 +15,8 @@ import { exigirAcceso } from '#billing/empresa'
 import * as v from '#inventario/validators'
 import {
     Bodega,
+    ConteoInventario,
+    ConteoInventarioDetalle,
     EquipoServicio,
     Existencia,
     MovimientoInventario,
@@ -45,6 +47,11 @@ import TrasladarInventario from '#inventario/actions/trasladar_inventario'
 import AjustarInventario from '#inventario/actions/ajustar_inventario'
 import DarDeBajaInventario from '#inventario/actions/dar_de_baja_inventario'
 import CargarSaldoInicial from '#inventario/actions/cargar_saldo_inicial'
+import AbrirConteo from '#inventario/actions/abrir_conteo'
+import ContarInventario from '#inventario/actions/contar_inventario'
+import CerrarConteo from '#inventario/actions/cerrar_conteo'
+import CancelarConteo from '#inventario/actions/cancelar_conteo'
+import { empresaDeConteo, listarConteos, verConteo } from '#inventario/conteos'
 
 const acceso = accesoBodegas
 
@@ -454,4 +461,111 @@ const comodato: Ruta[] = [
     }),
 ]
 
-export default [...productos, ...bodegas, ...lecturas, ...operaciones, ...unidades, ...comodato]
+/** El conteo es de una empresa del usuario y su bodega la puede operar (403). */
+async function exigirConteo(ctx: Parameters<typeof exigirBodega>[0], conteoId: number) {
+    const conteo = await empresaDeConteo(conteoId)
+    exigirAcceso(ctx, { empresa_id: conteo.empresa_id })
+    await exigirBodega(ctx, conteo.bodega_id)
+}
+
+const conteos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/inventario/conteos',
+        operacion: 'inventarioConteos',
+        resumen: 'Conteos físicos',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        query: v.listarConteosValidator,
+        respuesta: { status: 200, descripcion: 'Página de conteos', esquema: pagina(ConteoInventario) },
+        handler: (ctx, { query }) =>
+            listarConteos(query, empresasDeLaLista(ctx.empresa, query.empresas), acceso(ctx)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/inventario/conteos/:id',
+        operacion: 'inventarioConteoVer',
+        resumen: 'Un conteo con sus líneas y la diferencia valorizada',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        descripcion:
+            'Abierto: lo esperado es la existencia de hoy y el valor de la diferencia, un estimado al costo de hoy. Cerrado: lo que había al cerrar y lo ajustado.',
+        respuesta: { status: 200, descripcion: 'Conteo', esquema: ConteoInventarioDetalle },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirConteo(ctx, id)
+            return verConteo(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/inventario/conteos',
+        operacion: 'inventarioAbrirConteo',
+        resumen: 'Abrir el conteo físico de una bodega',
+        etiqueta: 'inventario',
+        permiso: 'inventario.abrir_conteo',
+        cuerpo: v.abrirConteoValidator,
+        idempotente: true,
+        descripcion:
+            'Uno abierto por bodega (409 conteo_abierto). La bodega sigue operando mientras se cuenta.',
+        respuesta: { status: 201, descripcion: 'Conteo', esquema: ConteoInventarioDetalle },
+        handler: async (ctx, { cuerpo }) => {
+            await exigirBodega(ctx, cuerpo.bodega_id)
+            return new AbrirConteo().execute(cuerpo, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/inventario/conteos/:id/lineas',
+        operacion: 'inventarioContar',
+        resumen: 'Capturar lo contado de un producto (reemplaza la captura anterior)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.contar',
+        cuerpo: v.contarValidator,
+        idempotente: true,
+        descripcion:
+            'Por cantidad, contado; por serie, series (serie o MAC de cada unidad encontrada; 422 requiere_unidades o no_aplica). 409 conteo_no_abierto.',
+        respuesta: { status: 200, descripcion: 'Conteo', esquema: ConteoInventarioDetalle },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirConteo(ctx, id)
+            return new ContarInventario().execute({ ...cuerpo, conteo_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/inventario/conteos/:id/cerrar',
+        operacion: 'inventarioCerrarConteo',
+        resumen: 'Cerrar un conteo: faltante 5.6.02 / 1.1.14, sobrante 1.1.14 / 4.2.04',
+        etiqueta: 'inventario',
+        permiso: 'inventario.cerrar_conteo',
+        cuerpo: v.cerrarConteoValidator,
+        idempotente: true,
+        descripcion:
+            'Ajusta con movimientos ajuste_conteo (origen conteo) solo los productos contados: el faltante sale al promedio (por serie, cada unidad no contada a su costo y queda dada de baja) y el sobrante entra al promedio o, sin existencia, al costo_unitario de la línea o al último costo (422 costo_requerido). Series contadas vivas en otra parte: 422 serie_duplicada. Fecha de hoy; respeta los bloqueos del libro. 409 conteo_no_abierto; version distinta 409. Emite inventario.conteo_cerrado.',
+        respuesta: { status: 200, descripcion: 'Conteo cerrado', esquema: ConteoInventarioDetalle },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirConteo(ctx, id)
+            return new CerrarConteo().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/inventario/conteos/:id/cancelar',
+        operacion: 'inventarioCancelarConteo',
+        resumen: 'Cancelar un conteo abierto sin ajustar',
+        etiqueta: 'inventario',
+        permiso: 'inventario.cancelar_conteo',
+        cuerpo: v.cancelarConteoValidator,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Conteo cancelado', esquema: ConteoInventarioDetalle },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirConteo(ctx, id)
+            return new CancelarConteo().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+]
+
+export default [...productos, ...bodegas, ...lecturas, ...operaciones, ...unidades, ...comodato, ...conteos]
