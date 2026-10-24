@@ -18,7 +18,10 @@ export const EVENTOS_NOTIFICABLES = [
     'promesa.creada',
     'promesa.cumplida',
     'promesa.incumplida',
-    // lealtad (`lealtad.ts`): los demás `lealtad.*` no avisan al cliente (README, "Avisos de lealtad")
+    // un periodo o cargo en Q0 no tiene factura: se avisa al cliente (`lealtad.ts`)
+    'bonificacion.registrada',
+    // lealtad y sorteos (`lealtad.ts`): los demás `lealtad.*` no avisan al cliente y los demás
+    // `sorteo.*` son alertas internas (README, "Avisos de lealtad")
     ...EVENTOS_LEALTAD_CLIENTE,
 ] as const
 

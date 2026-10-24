@@ -43,7 +43,8 @@ export type TipoAviso = (typeof TIPOS_AVISO)[number]
 
 /** Qué eventos cubre cada tipo (para la documentación y las pantallas). */
 export const DESCRIPCION_AVISOS: Record<TipoAviso, string> = {
-    factura: 'Factura emitida o anulada (`factura.emitida`, `factura.anulada`)',
+    factura:
+        'Factura emitida o anulada y periodos sin costo (`factura.emitida`, `factura.anulada`, `bonificacion.registrada`)',
     vencimiento: 'Factura vencida (`factura.vencida`)',
     recordatorio: 'Recordatorios de pago antes y después del vencimiento (`recordatorio.1` a `.3`)',
     corte: 'Cambio de estado del servicio: limitado, suspendido, reactivado (`servicio.estado_cambiado`)',
@@ -51,19 +52,19 @@ export const DESCRIPCION_AVISOS: Record<TipoAviso, string> = {
     promesa: 'Promesas de pago (`promesa.*`)',
     comprobante: 'Comprobantes de depósito recibidos, aprobados o rechazados (`comprobante.*`)',
     lealtad:
-        'Programa de lealtad: puntos ganados, puntos por vencer y referido calificado (`lealtad.puntos_acumulados`, `lealtad.puntos_por_vencer`, `lealtad.referido_calificado`)',
+        'Programa de lealtad: puntos ganados y por vencer, referido calificado, canjes y premios de sorteos (`lealtad.puntos_acumulados`, `lealtad.puntos_por_vencer`, `lealtad.referido_calificado`, `lealtad.canje_*`, `sorteo.ganador_notificado`, `sorteo.premio_entregado`)',
 }
 
 /** Tipo de aviso de un evento de plantilla; `null` = no se puede apagar por tipo. */
 export function tipoDeAviso(evento: string): TipoAviso | null {
     if (evento === 'factura.vencida') return 'vencimiento'
-    if (evento.startsWith('factura.')) return 'factura'
+    if (evento.startsWith('factura.') || evento === 'bonificacion.registrada') return 'factura'
     if (evento.startsWith('recordatorio.')) return 'recordatorio'
     if (evento === 'servicio.estado_cambiado') return 'corte'
     if (evento.startsWith('pago.')) return 'pago'
     if (evento.startsWith('promesa.')) return 'promesa'
     if (evento.startsWith('comprobante.')) return 'comprobante'
-    if (evento.startsWith('lealtad.')) return 'lealtad'
+    if (evento.startsWith('lealtad.') || evento.startsWith('sorteo.')) return 'lealtad'
     return null
 }
 

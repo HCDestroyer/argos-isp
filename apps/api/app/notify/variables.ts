@@ -6,7 +6,7 @@ import { CAMPOS_EMPRESA, verEmpresa } from '#portal/empresa'
 import { EMPRESA_PRINCIPAL, urlLogoEmpresa } from '#core/empresas'
 import type { CanalNotificacion } from '#shared/eventos'
 import { empresaDelEvento } from '#notify/configuracion'
-import { variablesLealtad } from '#notify/lealtad'
+import { variablesBonificacion, variablesCanje, variablesLealtad, variablesSorteo } from '#notify/lealtad'
 import {
     diasEntre,
     fechaCalendario,
@@ -521,6 +521,11 @@ export async function construirVariables(
     // lealtad.* (`lealtad.ts`): puntos, vencimiento, saldo y, del referido calificado, quién fue
     if (evento.startsWith('lealtad.')) {
         Object.assign(variables, await variablesLealtad(cliente, evento, payload, destinatario.clienteId))
+    }
+    if (evento.startsWith('lealtad.canje_')) variables.canje = await variablesCanje(cliente, payload)
+    if (evento.startsWith('sorteo.')) variables.sorteo = await variablesSorteo(cliente, evento, payload)
+    if (evento === 'bonificacion.registrada') {
+        variables.bonificacion = await variablesBonificacion(cliente, payload)
     }
 
     return variables
