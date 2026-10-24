@@ -13,6 +13,7 @@ import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaE
 import { asientoFactura, fechaGuatemala } from '../libro/datos'
 import { COLUMNAS_EMPRESA, csv, totales } from '../reportes/rutas'
 import { asientoBonificacion, baseSinIva } from './datos'
+import { extrasDetalle } from '../facturacion/detalle'
 
 type Bonificacion = Schema<'Bonificacion'>
 type Factura = Schema<'Factura'>
@@ -199,7 +200,7 @@ function emitirCargoUnico(solicitud: SolicitudFixture): RespuestaFixture {
         bd.lineasCargoUnico[id] = filas
         bd.asientos.push(asientoFactura(siguienteId(bd.asientos), factura))
         registrarAccion(solicitud, 'facturas.emitir_cargo_unico', { tipo: 'factura', id }, cuerpo)
-        const respuesta: Schema<'CargoUnicoEmitido'> = { documento: 'factura', factura: { ...factura, notas_credito: [], lineas: structuredClone(filas), reglas_snapshot: {} }, bonificacion: null }
+        const respuesta: Schema<'CargoUnicoEmitido'> = { documento: 'factura', factura: { ...factura, notas_credito: [], ...extrasDetalle(factura.id), lineas: structuredClone(filas), reglas_snapshot: {} }, bonificacion: null }
         return { status: 201, cuerpo: respuesta }
     }
 

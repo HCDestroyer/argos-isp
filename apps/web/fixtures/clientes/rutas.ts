@@ -130,6 +130,7 @@ const VACIO: CamposCliente = {
     referido_por_id: null,
     referido_empresa_id: null,
     codigos_referido: [],
+    externo: null,
 }
 
 const GRAVEDAD: Record<Schema<'Servicio'>['estado'], number> = { suspendido: 3, limitado: 2, activo: 1, retirado: 0 }

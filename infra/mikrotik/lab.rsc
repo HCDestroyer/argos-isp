@@ -73,10 +73,15 @@
 # la alternativa comentada en la sección 9.
 :local portalV6 "2001:db8:ffff::20"
 :local portalFqdn "portal.argosisp.example"
-# Walled garden: dominios que un suspendido puede alcanzar además del portal (pasarela de pago, etc.).
-# A5 los define. Vacío hasta la semana 2: el portal no carga nada externo. Ejemplo con dominios:
-#   :local walledGarden {"pagos.argosisp.example";"pasarela.example"}
-:local walledGarden [:toarray ""]
+# Walled garden: dominios que un suspendido puede alcanzar además del portal (pasarela de pago, etc.),
+# por FQDN (el router los resuelve, IPv4 e IPv6). El portal no carga nada externo.
+# - app.recurrente.com: página de pago de Recurrente (`/checkout-session/<ch_…>`) y su API
+#   (`contratos/pago-en-linea.md`, § Recurrente). Con la pasarela falsa no hace falta: su página
+#   sale de la API.
+# - PENDIENTE de laboratorio (`docs/laboratorio/validacion-fisica.md`, 2.5b): los dominios de recursos
+#   que cargue el checkout (CDN, analítica) y los del 3-D Secure del banco emisor; agrégalos aquí.
+# El webhook de Recurrente (Svix) llega al servidor, no del cliente: no va aquí.
+:local walledGarden {"app.recurrente.com"}
 
 # --- DNS ---
 # Resolutores que el router usa y que los suspendidos pueden consultar

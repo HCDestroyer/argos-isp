@@ -515,6 +515,8 @@ services:
       AAA_RESPALDO: ${AAA_RESPALDO:-api}
       AAA_API_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
       API_INTERNAL_URL: ${AAA_API_URL:-http://api:3333/api/v1/}
+      # consultas simultáneas en un lote (POST internal/aaa/servicios); 0 = una GET por usuario
+      AAA_API_LOTES: ${AAA_API_LOTES:-1}
       AAA_INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
       # Misma clave que el servicio api (cifra pass_ppp y radius_secret, formato v1).
       AAA_PPP_KEY: ${AAA_PPP_KEY:-}

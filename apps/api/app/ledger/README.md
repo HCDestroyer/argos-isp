@@ -158,6 +158,11 @@ El libro ya es inmutable frente a la aplicación (triggers y `REVOKE`); la caden
 - Tablas (solo inserción, trigger y `REVOKE`): `ledger.cierres_anuales` (ISR, `resultado_antes_isr`, `resultado`, `reserva_legal`, `resumen`) y `ledger.reaperturas_anuales`. `ledger.ejercicio_cerrado(fecha, empresa)` = cierre sin reapertura; un trigger impide dos vigentes. Con el ejercicio cerrado ningún mes del año se reabre (409 `ejercicio_cerrado`) y sus asientos no se revierten directo.
 - Lecturas (`libro.ver`): `GET /libro/ejercicios` (consolidable, `estado`, `anio`), `GET /libro/ejercicios/:id` (con `asientos[]`) y `GET /libro/comprobacion?desde&hasta&sin_cierre_anual` (por cuenta y grupo; `cuadra`). El estado de resultados excluye la partida de cierre (los asientos del cierre que tocan `3.3.03`) y su reverso; el balance separa `resultado_ejercicios_sin_cerrar` de `resultado_ejercicio`.
 
+## Cierre de los saldos de apertura (`apertura.ts`, contrato de localización fiscal §23)
+
+- `libro.cerrar_apertura` (`POST /libro/apertura/cerrar`, idempotente): terminada la importación, traslada el saldo neto de `2.9.01` con fecha hasta `fecha` a `3.3.01` (por defecto) o `3.1.01`. Asiento `ajuste` sin `origen_id`, diario `VAR`; sin saldo no escribe (`asiento: null`). Respeta mes cerrado y bloqueos; una empresa por vez (lock `3050`). Se corrige revirtiendo su asiento. Sin evento.
+- `GET /libro/apertura` (`libro.ver`): saldo de 2.9.01 al día y los cierres vigentes. Con 2.9.01 en cero, el check `apertura_cero` pasa solo.
+
 ## Libros legales con folio (fase 6 · PR D)
 
 Viven en `app/fiscal` (`libros_legales.ts`, `libros_pdf.ts`, `libros_emisiones.ts`; ver su README): leen `ledger.asientos`, `movimientos`, `asientos_partidas`, `asientos_numeros`, `ledger.compras` y `ledger.cierres_mensuales` (último sello y hash del mes) y exigen meses cerrados con bloqueo `global` o `duro`. No escriben en `ledger`.
@@ -172,6 +177,10 @@ Viven en `app/fiscal` (`libros_legales.ts`, `libros_pdf.ts`, `libros_emisiones.t
 - Inmutable como el libro: `ledger.egresos` y `ledger.egresos_anulaciones` rechazan UPDATE/DELETE (trigger y `REVOKE`). El estado (`registrado`/`anulado`) y el asiento se derivan (por origen), no se escriben en la fila.
 - Efectivo: el egreso queda en el turno abierto de la caja (`turno_id`) y `cerrarCaja` lo resta del esperado (`fondo + cobros − egresos vigentes del turno`).
 - Alcance por caja: un usuario con rol acotado a una caja solo ve y registra egresos de esa caja.
+
+## Egresos del cajero (decisión del PM, contrato de localización fiscal §24)
+
+Sin `egresos.registrar_sin_limite` (el rol `cajero`), `egresos.registrar` solo acepta efectivo de la caja abierta propia, con motivo (`descripcion`) y hasta `egreso_cajero_maximo` de la empresa (gt-2026.3, Q500.00): 403 `egreso_solo_caja`, `caja_ajena`, `egreso_sobre_limite`, `egreso_sin_limite_configurado`; 422 `caja_no_abierta` y `descripcion` requerida. Contabilidad (`egresos.registrar_sin_limite`) registra lo que pasa del tope.
 
 ## Endpoints
 

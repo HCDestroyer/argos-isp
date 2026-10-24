@@ -1,3 +1,4 @@
+import type { Schema } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
@@ -86,7 +87,7 @@ describe('tarea 13 · promesas', () => {
     it('leerEvaluacion: sin la forma estable, solo la decisión del estado (nada inventado)', () => {
         expect(leerEvaluacion({ estado: 'rechazada', resultado_evaluacion: null })).toEqual({ decision: 'rechazada', evaluacion: null })
         // La forma vieja que proponía el panel ya no se interpreta.
-        const vieja = leerEvaluacion({ estado: 'activa', resultado_evaluacion: { decision: 'aprobada', regla: 'plazo_max_dias', verificaciones: [] } })
+        const vieja = leerEvaluacion({ estado: 'activa', resultado_evaluacion: { decision: 'aprobada', regla: 'plazo_max_dias', verificaciones: [] } as unknown as Schema<'EvaluacionPromesa'> })
         expect(vieja).toEqual({ decision: 'aprobada', evaluacion: null })
         expect(esEvaluacionPromesa({ resultado: 'aprobada', regla: null, motivo: 'x', canal: 'portal', evaluada_en: '2026-10-15T00:00:00Z', reglas: [{ regla: 'habilitadas', ok: 'si' }], deuda: {}, historial: {} })).toBe(false)
         expect(etiquetaRegla('requiere_aprobacion')).toBe('Requiere aprobación')

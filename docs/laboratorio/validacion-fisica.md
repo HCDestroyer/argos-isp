@@ -407,6 +407,40 @@ Con el teléfono: conéctate al Wi-Fi del CPE y abre `http://example.com`. Crono
 
 **Si falla.** HTTP IPv4 no llega a `/corte`: revisa `portalV4` y que el 80 del servidor responda (`curl -i http://<portalV4>/` desde el router: `/tool fetch url=http://<portalV4>/ keep-result=no`). IPv6 tarda: busca reglas con `drop` en `argos-corte` de IPv6 (no debe haber). Conexiones que siguen abiertas: FastTrack (`argosisp-verificar-fasttrack`).
 
+### 2.5b Pago en línea con el servicio cortado (walled garden de Recurrente)
+
+**Objetivo.** Un cliente suspendido puede pagar con Recurrente desde la página de corte, y sabemos qué dominios necesita la página de pago además de `app.recurrente.com`. Los recursos del checkout (CDN, analítica) y el 3-D Secure del banco emisor no se pueden listar de antemano: hay que verlos aquí.
+
+**Requisitos.** El servicio de 2.5 sigue suspendido. La API con `PASARELA_PROVEEDOR=recurrente` y la llave `sk_test_…` de un Sandbox de Recurrente. Una tarjeta de prueba del Sandbox y, si se puede, una tarjeta real con 3-D Secure de un banco local (monto mínimo, se anula después).
+
+1. Desde el teléfono en el Wi-Fi del CPE: página de corte → «Pagar en línea». Debe abrir `https://app.recurrente.com/checkout-session/ch_…`.
+2. Mientras carga, en el router mira qué resolvió y qué se rechazó:
+
+    ```
+    # [RouterOS]
+    /ip dns cache print where name~"recurrente|stripe|cloudfront|visa|mastercard|3ds|secure"
+    /ip firewall address-list print where list=argos-walled
+    /log print where topics~"firewall"
+    ```
+
+    Si la página no termina de cargar o el 3-D Secure queda en blanco, en una PC detrás del CPE abre las herramientas del navegador (pestaña Red) y anota cada dominio que falla con `ERR_CONNECTION_RESET`.
+
+3. Agrega cada dominio que falte, en IPv4 e IPv6, y repite el paso 1:
+
+    ```
+    # [RouterOS]
+    /ip firewall address-list add list=argos-walled address=<dominio> comment="argosisp: walled garden"
+    /ipv6 firewall address-list add list=argos-walled address=<dominio> comment="argosisp: walled garden"
+    ```
+
+4. Paga con la tarjeta de prueba (y con la de 3-D Secure, si la hay).
+
+**Resultado esperado.** La página de pago y el 3-D Secure cargan completos con el servicio cortado; el pago aprobado vuelve a `/corte` con «Tu pago fue aprobado» y el servicio se reactiva solo (el webhook llega al servidor, no por el walled garden). Ningún dominio fuera de la lista final carga.
+
+**Qué enviar.** La lista final de dominios (además de `app.recurrente.com`) en `02-pppoe/walled-garden.txt`, con cuál pidió cada uno (checkout, 3-D Secure de qué banco), y la salida del router del paso 2. Con eso se actualiza `walledGarden` en `infra/mikrotik/lab.rsc`.
+
+**Si falla.** El checkout no abre: `app.recurrente.com` no está en `argos-walled` de IPv4 o IPv6, o el DNS del cliente no es el del router (`argos-dns`). Abre pero el pago no se completa: falta un dominio del 3-D Secure (paso 2). El pago se aprueba y el servicio no vuelve: el webhook no llega al servidor (firewall sin las IP de Svix, https://docs.svix.com/webhook-ips); no es del walled garden.
+
 ### 2.6 Reactivar
 
 **Objetivo.** Reactivar devuelve el plan completo en menos de 5 s. Se hace con Disconnect: el CPE reconecta y entra con el perfil normal (en 7.24.5 un CoA de reactivación deja IPv6 cortado).
@@ -910,29 +944,30 @@ Cópiala en `/root/argosisp-lab/salida/RESULTADOS.md` y llénala (va en el paque
 Equipo: <modelo> · RouterOS <versión> · ArgosIsp <versión> · Servidor <CPU, RAM>
 CPE: <modelo, firmware>
 
-| #   | Prueba                                            | Resultado (OK / FALLA / N/A) | Dato medido             | Nota |
-| --- | ------------------------------------------------- | ---------------------------- | ----------------------- | ---- |
-| 1.2 | lab.rsc en el físico                              |                              |                         |      |
-| 2.1 | radtest por estado                                |                              |                         |      |
-| 2.2 | CPE con IPv4 + /64 + /56 y velocidad del plan     |                              | Mbps:                   |      |
-| 2.3 | Accounting Start/Interim/Stop                     |                              |                         |      |
-| 2.4 | Cambio de plan por CoA sin reconectar             |                              | ms:                     |      |
-| 2.5 | Suspender < 5 s, sin reconectar                   |                              | ms:                     |      |
-| 2.5 | Teléfono ve /corte                                |                              | s:                      |      |
-| 2.6 | Reactivar < 5 s                                   |                              | s:                      |      |
-| 2.7 | Limitar / quitar límite                           |                              |                         |      |
-| 2.8 | Cambio de IP y prefijo → Disconnect               |                              | s:                      |      |
-| 3.1 | Sesiones vivas sin RADIUS                         |                              | min sin corte:          |      |
-| 3.2 | Failover a la segunda /radius                     |                              | s:                      |      |
-| 3.3 | Secrets de emergencia (import, prioridad, retiro) |                              |                         |      |
-| 3.4 | Reintento del CPE                                 |                              | intervalo s / vuelta s: |      |
-| 4.1 | simple con reuso 1:4                              |                              |                         |      |
-| 4.2 | arbol_pcq (árbol, PCQ, mangle, limitar)           |                              |                         |      |
-| 4.3 | Vuelta a simple                                   |                              |                         |      |
-| 5   | Binding DHCPv6-PD en radius_pool                  |                              | nombre del server:      |      |
-| 6   | IP real en el portal (IPv4 / IPv6)                |                              |                         |      |
-| 7   | Carga 200 (p95 caliente / vacío)                  |                              | ms: /                   |      |
-| 7   | Carga 500                                         |                              | ms: /                   |      |
+| #    | Prueba                                              | Resultado (OK / FALLA / N/A) | Dato medido             | Nota |
+| ---- | --------------------------------------------------- | ---------------------------- | ----------------------- | ---- |
+| 1.2  | lab.rsc en el físico                                |                              |                         |      |
+| 2.1  | radtest por estado                                  |                              |                         |      |
+| 2.2  | CPE con IPv4 + /64 + /56 y velocidad del plan       |                              | Mbps:                   |      |
+| 2.3  | Accounting Start/Interim/Stop                       |                              |                         |      |
+| 2.4  | Cambio de plan por CoA sin reconectar               |                              | ms:                     |      |
+| 2.5  | Suspender < 5 s, sin reconectar                     |                              | ms:                     |      |
+| 2.5  | Teléfono ve /corte                                  |                              | s:                      |      |
+| 2.5b | Pago con Recurrente cortado (checkout y 3-D Secure) |                              | dominios extra:         |      |
+| 2.6  | Reactivar < 5 s                                     |                              | s:                      |      |
+| 2.7  | Limitar / quitar límite                             |                              |                         |      |
+| 2.8  | Cambio de IP y prefijo → Disconnect                 |                              | s:                      |      |
+| 3.1  | Sesiones vivas sin RADIUS                           |                              | min sin corte:          |      |
+| 3.2  | Failover a la segunda /radius                       |                              | s:                      |      |
+| 3.3  | Secrets de emergencia (import, prioridad, retiro)   |                              |                         |      |
+| 3.4  | Reintento del CPE                                   |                              | intervalo s / vuelta s: |      |
+| 4.1  | simple con reuso 1:4                                |                              |                         |      |
+| 4.2  | arbol_pcq (árbol, PCQ, mangle, limitar)             |                              |                         |      |
+| 4.3  | Vuelta a simple                                     |                              |                         |      |
+| 5    | Binding DHCPv6-PD en radius_pool                    |                              | nombre del server:      |      |
+| 6    | IP real en el portal (IPv4 / IPv6)                  |                              |                         |      |
+| 7    | Carga 200 (p95 caliente / vacío)                    |                              | ms: /                   |      |
+| 7    | Carga 500                                           |                              | ms: /                   |      |
 ```
 
 ## Scripts

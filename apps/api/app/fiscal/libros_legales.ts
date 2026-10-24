@@ -504,7 +504,8 @@ interface DocumentoVenta {
  *   (Guatemala), con el receptor del DTE;
  * - sin FEL: facturas que no son aviso de cobro, no importadas (`clave_externa`) y sin DTE
  *   certificado hasta `hasta`, en la fecha de su asiento (la del IVA débito); y sus notas de crédito
- *   sin NCRE hasta `hasta`, en la fecha de la nota. El receptor es el guardado al emitirlas
+ *   sin NCRE hasta `hasta`, en la fecha de la nota. Las notas sobre importadas con IVA también salen
+ *   (H48): rebajan 2.1.02 del mes aunque la importada no esté en el libro. El receptor es el guardado al emitirlas
  *   (`billing.facturas.receptor`, `billing.notas_credito.receptor`), no el dato actual del cliente.
  * - Anulación (como el desvío c del libro de compras): en el mismo mes del documento, la fila sale en
  *   cero; en un mes posterior, la fila original queda vigente y en el mes de la anulación (fecha del
@@ -632,7 +633,8 @@ export async function libroVentasLegal(
                     n.monto::text AS total, n.iva::text AS iva, NULL::text AS informativo, NULL::text AS referencia
                FROM billing.notas_credito n
                JOIN debito o ON o.clase = 'nota_credito' AND o.id = n.id
-               JOIN billing.facturas f ON f.id = n.factura_id AND f.clave_externa IS NULL
+               -- H48: la nota sobre una importada (sin FEL) es una rebaja de ventas del mes: sale si mueve 2.1.02
+               JOIN billing.facturas f ON f.id = n.factura_id AND (f.clave_externa IS NULL OR n.iva > 0)
               WHERE n.empresa_id = :empresa
                 AND NOT EXISTS (SELECT 1 FROM fiscal.dte d WHERE d.documento_tipo = 'nota_credito'
                                    AND d.documento_id = n.id AND d.autorizacion IS NOT NULL

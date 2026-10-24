@@ -31398,6 +31398,232 @@
         "x-implementado": true
       }
     },
+    "/api/v1/libro/apertura": {
+      "get": {
+        "operationId": "libroApertura",
+        "summary": "Saldo de 2.9.01 Saldos de apertura y sus cierres",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresa_id",
+            "in": "query",
+            "required": false,
+            "description": "Empresa cuyo 2.9.01 se cierra o se consulta; por defecto la activa (X-Empresa-Id)",
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            }
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "description": "Saldo de 2.9.01 al día (por defecto hoy, Guatemala)",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saldo de apertura",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoApertura"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/libro/apertura/cerrar": {
+      "post": {
+        "operationId": "libroCerrarApertura",
+        "summary": "Cerrar los saldos de apertura (2.9.01 → patrimonio)",
+        "description": "Terminada la importación, traslada el saldo neto de 2.9.01 con fecha hasta fecha a la cuenta de patrimonio elegida (3.3.01 por defecto, o 3.1.01): asiento ajuste del diario VAR. Con el saldo en 0.00 no escribe nada (asiento: null). Respeta cierres y bloqueos: 422 periodo_cerrado, 409 bloqueo_duro, 422 periodo_bloqueado. Se corrige revirtiendo su asiento (POST /libro/asientos/:id/revertir).",
+        "tags": [
+          "libro"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Empresa cuyo 2.9.01 se cierra o se consulta; por defecto la activa (X-Empresa-Id)"
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del asiento y corte del saldo de 2.9.01 (por defecto hoy, Guatemala; no futura)"
+                  },
+                  "cuenta_destino": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "3.3.01",
+                          "3.1.01"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Cuenta de patrimonio que recibe el saldo: 3.3.01 Utilidades acumuladas (por defecto) o 3.1.01 Capital social"
+                  },
+                  "nota": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Se agrega a la descripción del asiento (p. ej. «importación desde Mikrowisp terminada»)"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saldos de apertura cerrados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CierreApertura"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso libro.cerrar_apertura; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "libro.cerrar_apertura",
+        "x-implementado": true
+      }
+    },
     "/api/v1/libro/asientos/{id}": {
       "get": {
         "operationId": "libroVerAsiento",
@@ -38383,6 +38609,61 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notificaciones/eventos": {
+      "get": {
+        "operationId": "notificacionesEventosListar",
+        "summary": "Eventos con plantilla y sus variables Mustache (con ejemplos)",
+        "description": "Avisos al cliente, recordatorios y alertas al equipo. Las variables son las que arma el aviso real para ese evento; la empresa es la activa (o la principal), con sus datos reales.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventoNotificacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/notificaciones/plantillas": {
       "get": {
         "operationId": "notificacionesPlantillasListar",
@@ -38565,6 +38846,114 @@
           }
         },
         "x-permiso": "notificaciones.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/plantillas/vista-previa": {
+      "post": {
+        "operationId": "notificacionesPlantillasVistaPrevia",
+        "summary": "Vista previa de una plantilla con datos de ejemplo del evento (no guarda)",
+        "description": "Renderiza asunto y cuerpo como el envío real, con el ejemplo de `GET /notificaciones/eventos` y la empresa activa. 422 si el evento no tiene plantilla o el Mustache no es válido. `variables_desconocidas` lista lo que la plantilla usa y el evento no trae.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Evento de la plantilla (`GET /notificaciones/eventos`)"
+                  },
+                  "canal": {
+                    "type": "string",
+                    "enum": [
+                      "correo",
+                      "telegram",
+                      "whatsapp"
+                    ]
+                  },
+                  "asunto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Asunto Mustache (en Telegram va como primera línea del mensaje)"
+                  },
+                  "cuerpo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "description": "Cuerpo Mustache sin guardar"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "canal",
+                  "cuerpo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaPlantilla"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
         "x-implementado": true
       }
     },
@@ -45723,14 +46112,9 @@
       "get": {
         "operationId": "portalImagenPremioSorteo",
         "summary": "Imagen de un premio de un sorteo anunciado en el portal",
-        "description": "Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.",
+        "description": "Sin sesión (página pública del sorteo): solo de sorteos con las bases publicadas, aviso_portal y no cancelados (404 si no). Con sesión del portal, además de una empresa del cliente (404 si no). Solo la imagen. Mismo origen, ETag y Cache-Control: private, max-age=300.",
         "tags": [
           "portal"
-        ],
-        "security": [
-          {
-            "portal": []
-          }
         ],
         "parameters": [
           {
@@ -45765,16 +46149,6 @@
           },
           "304": {
             "description": "Sin cambios: el `If-None-Match` coincide con el `ETag` actual"
-          },
-          "401": {
-            "description": "Sin sesión del portal (cookie vencida o ausente)",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           },
           "404": {
             "description": "No encontrado",
@@ -49786,6 +50160,7 @@
                         "documentos.ver",
                         "egresos.anular",
                         "egresos.registrar",
+                        "egresos.registrar_sin_limite",
                         "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
@@ -49832,6 +50207,7 @@
                         "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
+                        "libro.cerrar_apertura",
                         "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
                         "libro.desbloquear",
@@ -50086,6 +50462,7 @@
                         "documentos.ver",
                         "egresos.anular",
                         "egresos.registrar",
+                        "egresos.registrar_sin_limite",
                         "egresos.ver",
                         "empresa.editar",
                         "empresa.ver",
@@ -50132,6 +50509,7 @@
                         "lealtad.ver",
                         "libro.bloquear",
                         "libro.bloquear_duro",
+                        "libro.cerrar_apertura",
                         "libro.cerrar_ejercicio",
                         "libro.cerrar_periodo",
                         "libro.desbloquear",
@@ -56159,6 +56537,7 @@
                             "documentos.ver",
                             "egresos.anular",
                             "egresos.registrar",
+                            "egresos.registrar_sin_limite",
                             "egresos.ver",
                             "empresa.editar",
                             "empresa.ver",
@@ -56205,6 +56584,7 @@
                             "lealtad.ver",
                             "libro.bloquear",
                             "libro.bloquear_duro",
+                            "libro.cerrar_apertura",
                             "libro.cerrar_ejercicio",
                             "libro.cerrar_periodo",
                             "libro.desbloquear",
@@ -58400,6 +58780,44 @@
           }
         }
       },
+      "AlcancesToken": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Recortes del token sobre los permisos y alcances de su usuario (Y lógico). Una clave ausente no recorta esa dimensión; `{}` = mismos permisos y alcance que el usuario",
+        "properties": {
+          "permisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Solo estos permisos (nombres de `GET /permisos`), y solo si el usuario los tiene"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Solo recursos de estos routers"
+          },
+          "zonas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Solo recursos de estas zonas"
+          },
+          "cajas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Solo estas cajas"
+          }
+        }
+      },
       "Anuncio": {
         "type": "object",
         "required": [
@@ -58709,12 +59127,14 @@
       "Asiento": {
         "type": "object",
         "required": [
+          "empresa_id",
           "id",
           "fecha",
           "descripcion",
           "origen_tipo",
           "origen_id",
           "reversa_de",
+          "diario",
           "created_by",
           "created_at",
           "movimientos"
@@ -58723,7 +59143,7 @@
           "empresa_id": {
             "type": "integer",
             "minimum": 1,
-            "description": "Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+            "description": "Empresa (NIT) (multiempresa)"
           },
           "id": {
             "type": "integer",
@@ -63108,6 +63528,104 @@
           }
         }
       },
+      "CierreApertura": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "fecha",
+          "cuenta",
+          "saldo",
+          "cierres",
+          "cuenta_destino",
+          "trasladado",
+          "asiento"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Corte del saldo"
+          },
+          "cuenta": {
+            "type": "string",
+            "description": "Siempre 2.9.01"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 al corte (debe − haber; negativo = acreedor). 0.00 = el check apertura_cero pasa"
+          },
+          "cierres": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CierreAperturaAsiento"
+            },
+            "description": "Cierres de apertura vigentes (sin reverso), el más reciente primero"
+          },
+          "cuenta_destino": {
+            "type": "string",
+            "enum": [
+              "3.3.01",
+              "3.1.01"
+            ],
+            "description": "Cuenta de patrimonio que recibió el saldo"
+          },
+          "trasladado": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 que se trasladó (debe − haber antes del cierre); 0.00 si ya estaba en cero"
+          },
+          "asiento": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Asiento"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Asiento del cierre; null si no había saldo (idempotente)"
+          }
+        }
+      },
+      "CierreAperturaAsiento": {
+        "type": "object",
+        "required": [
+          "asiento_id",
+          "fecha",
+          "cuenta_destino",
+          "monto",
+          "created_at"
+        ],
+        "properties": {
+          "asiento_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "cuenta_destino": {
+            "type": "string",
+            "enum": [
+              "3.3.01",
+              "3.1.01"
+            ],
+            "description": "Cuenta de patrimonio que recibió el saldo"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 que canceló (debe − haber antes del cierre; negativo = acreedor)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CierrePeriodo": {
         "type": "object",
         "required": [
@@ -63285,6 +63803,7 @@
           "referido_por_id",
           "referido_empresa_id",
           "codigos_referido",
+          "externo",
           "version",
           "created_at",
           "updated_at"
@@ -63469,6 +63988,26 @@
               }
             },
             "description": "Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos con el primer servicio en cada empresa)"
+          },
+          "externo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "sistema",
+              "id"
+            ],
+            "properties": {
+              "sistema": {
+                "type": "string",
+                "description": "Sistema de origen: `mikrowisp`"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "description": "Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos"
           },
           "version": {
             "type": "integer",
@@ -69337,6 +69876,42 @@
           }
         }
       },
+      "EstadoApertura": {
+        "type": "object",
+        "required": [
+          "empresa_id",
+          "fecha",
+          "cuenta",
+          "saldo",
+          "cierres"
+        ],
+        "properties": {
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Corte del saldo"
+          },
+          "cuenta": {
+            "type": "string",
+            "description": "Siempre 2.9.01"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de 2.9.01 al corte (debe − haber; negativo = acreedor). 0.00 = el check apertura_cero pasa"
+          },
+          "cierres": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CierreAperturaAsiento"
+            },
+            "description": "Cierres de apertura vigentes (sin reverso), el más reciente primero"
+          }
+        }
+      },
       "EstadoConectorHorus": {
         "type": "object",
         "required": [
@@ -69959,6 +70534,104 @@
           }
         }
       },
+      "EventoNotificacion": {
+        "type": "object",
+        "required": [
+          "evento",
+          "nombre",
+          "grupo",
+          "tipo_aviso",
+          "canales",
+          "variables"
+        ],
+        "properties": {
+          "evento": {
+            "type": "string",
+            "description": "Evento de la plantilla (`factura.emitida`, `recordatorio.1`, `alerta.…`)"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre legible en español"
+          },
+          "grupo": {
+            "type": "string",
+            "enum": [
+              "cliente",
+              "recordatorio",
+              "alerta"
+            ]
+          },
+          "tipo_aviso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Interruptor de `avisos` de la configuración que lo apaga; null = no se apaga por tipo"
+          },
+          "canales": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "correo",
+                "telegram",
+                "whatsapp"
+              ]
+            },
+            "description": "Canales con plantilla de fábrica"
+          },
+          "variables": {
+            "type": "array",
+            "description": "Variables Mustache por grupo, las mismas que arma el aviso real. En las alertas, `alerta.*` sale de sus plantillas de fábrica y el ejemplo es el nombre",
+            "items": {
+              "type": "object",
+              "required": [
+                "grupo",
+                "etiqueta",
+                "variables"
+              ],
+              "properties": {
+                "grupo": {
+                  "type": "string",
+                  "description": "Primer nivel: `empresa`, `factura`, `alerta`…"
+                },
+                "etiqueta": {
+                  "type": "string"
+                },
+                "variables": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "nombre",
+                      "tipo",
+                      "ejemplo"
+                    ],
+                    "properties": {
+                      "nombre": {
+                        "type": "string",
+                        "description": "Nombre completo para Mustache: `factura.total_q`"
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "texto",
+                          "numero",
+                          "booleano"
+                        ]
+                      },
+                      "ejemplo": {
+                        "type": "string",
+                        "description": "Valor de ejemplo (el de la vista previa), como texto"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "EventoRed": {
         "type": "object",
         "required": [
@@ -70300,6 +70973,7 @@
         "type": "object",
         "required": [
           "id",
+          "empresa_id",
           "cliente_id",
           "servicio_id",
           "periodo",
@@ -70327,7 +71001,7 @@
           "empresa_id": {
             "type": "integer",
             "minimum": 1,
-            "description": "Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+            "description": "Empresa (NIT) del documento (multiempresa)"
           },
           "empresa_nombre": {
             "type": "string",
@@ -70553,6 +71227,74 @@
           }
         }
       },
+      "FacturaAsiento": {
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "origen_tipo",
+          "descripcion",
+          "diario",
+          "numero",
+          "total",
+          "reversa_de",
+          "revertido_por"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "origen_tipo": {
+            "type": "string",
+            "enum": [
+              "factura",
+              "mora"
+            ]
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "diario": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Código del diario (VEN…)"
+          },
+          "numero": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Número en su diario y año"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Σ debe del asiento"
+          },
+          "reversa_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento que este revierte"
+          },
+          "revertido_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Reverso de este asiento, si lo hay"
+          }
+        }
+      },
       "FacturaDetalle": {
         "allOf": [
           {
@@ -70562,7 +71304,10 @@
             "type": "object",
             "required": [
               "lineas",
-              "reglas_snapshot"
+              "reglas_snapshot",
+              "pagos",
+              "asientos",
+              "diferencia_cobro_tope"
             ],
             "properties": {
               "lineas": {
@@ -70585,6 +71330,31 @@
               "emisor": {
                 "$ref": "#/components/schemas/EmisorFactura",
                 "description": "Empresa que emite la factura con sus datos fiscales (FEL)"
+              },
+              "pagos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FacturaPagoAplicado"
+                },
+                "description": "Pagos aplicados a la factura, en orden (también los de pagos anulados)"
+              },
+              "asientos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FacturaAsiento"
+                },
+                "description": "Asientos de la factura (origen factura o mora), los reversos incluidos; vacío en una importada sin asiento o por certificar"
+              },
+              "diferencia_cobro_tope": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Dinero"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Tope vigente de la empresa para POST /pagos/:id/cerrar-diferencia (diferencia_cobro_tope); null sin localización"
               }
             }
           }
@@ -70656,6 +71426,68 @@
               "null"
             ],
             "description": "Cuenta de ingreso de la línea (concepto de un cargo único); null = la de su tipo"
+          }
+        }
+      },
+      "FacturaPagoAplicado": {
+        "type": "object",
+        "required": [
+          "aplicacion_id",
+          "pago_id",
+          "cobro_id",
+          "monto",
+          "pago_monto",
+          "metodo",
+          "referencia",
+          "estado",
+          "historico",
+          "aplicado_en"
+        ],
+        "properties": {
+          "aplicacion_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pago_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cobro_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Cobro repartido del pago (multiempresa); null si no"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Lo aplicado de ese pago a esta factura"
+          },
+          "pago_monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Monto total del pago"
+          },
+          "metodo": {
+            "type": "string"
+          },
+          "referencia": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "description": "Estado del pago (registrado, anulado…): una aplicación de un pago anulado ya no cuenta"
+          },
+          "historico": {
+            "type": "boolean",
+            "description": "Pago histórico importado (sin caja ni banco)"
+          },
+          "aplicado_en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -73926,6 +74758,8 @@
         "type": "object",
         "required": [
           "id",
+          "empresa_id",
+          "cobro_id",
           "cliente_id",
           "metodo",
           "monto",
@@ -73949,7 +74783,7 @@
           "empresa_id": {
             "type": "integer",
             "minimum": 1,
-            "description": "Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados"
+            "description": "Empresa (NIT) del documento (multiempresa)"
           },
           "cobro_id": {
             "type": [
@@ -78422,12 +79256,15 @@
             "minimum": 1
           },
           "resultado_evaluacion": {
-            "type": [
-              "object",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvaluacionPromesa"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "additionalProperties": true,
-            "description": "Forma estable: components.schemas.EvaluacionPromesa (Schema<\"EvaluacionPromesa\">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md"
+            "description": "Por qué se aprobó, rechazó o quedó pendiente (aprobacion y cierre se agregan después); ver contratos/promesas.md"
           },
           "servicio": {
             "$ref": "#/components/schemas/ServicioEvaluado",
@@ -84900,6 +85737,7 @@
           "id",
           "nombre",
           "descripcion",
+          "base",
           "permisos",
           "version",
           "created_at",
@@ -84918,6 +85756,10 @@
               "string",
               "null"
             ]
+          },
+          "base": {
+            "type": "boolean",
+            "description": "Rol base del seed (admin, cajero, soporte, tecnico, contabilidad, lectura): sus permisos se definen en código; PUT con `permisos` responde 409 `rol_base`. Se puede editar la descripción"
           },
           "permisos": {
             "type": "array",
@@ -84956,6 +85798,7 @@
           "capacidad_subida_kbps",
           "api_url",
           "api_tls_verificar",
+          "tiene_api_ca",
           "api_ca",
           "dhcp_servidor",
           "interfaz_clientes",
@@ -85034,12 +85877,20 @@
             "type": "boolean",
             "description": "Verificar el certificado TLS del router"
           },
+          "tiene_api_ca": {
+            "type": "boolean",
+            "description": "Hay una CA propia cargada (PEM); el PEM nunca sale por la API, como api_password"
+          },
           "api_ca": {
             "type": [
               "string",
               "null"
             ],
-            "description": "CA en PEM para routers con certificado propio"
+            "enum": [
+              "***"
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: `***` si hay CA cargada, null si no (nunca el PEM); usar tiene_api_ca. Para cambiarla, PUT /routers/:id con el PEM nuevo o null"
           },
           "dhcp_servidor": {
             "type": [
@@ -85336,6 +86187,7 @@
           "zona_nombre",
           "excepciones",
           "plan_temporal",
+          "externo",
           "version",
           "created_at",
           "updated_at"
@@ -85571,6 +86423,26 @@
               }
             },
             "description": "Plan temporal programado o activo (lealtad), o null. Activo: `plan_id` del servicio ya es el temporal (RADIUS, RouterOS y facturación lo usan) y vuelve a `plan_original_id` al terminar"
+          },
+          "externo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "sistema",
+              "id"
+            ],
+            "properties": {
+              "sistema": {
+                "type": "string",
+                "description": "Sistema de origen: `mikrowisp`"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "description": "Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos"
           },
           "version": {
             "type": "integer",
@@ -87160,8 +88032,7 @@
             "type": "string"
           },
           "alcances": {
-            "type": "object",
-            "additionalProperties": true
+            "$ref": "#/components/schemas/AlcancesToken"
           },
           "ultimo_uso": {
             "type": [
@@ -88032,6 +88903,50 @@
                 }
               }
             }
+          }
+        }
+      },
+      "VistaPreviaPlantilla": {
+        "type": "object",
+        "required": [
+          "evento",
+          "canal",
+          "asunto",
+          "cuerpo",
+          "mensaje",
+          "variables_desconocidas"
+        ],
+        "properties": {
+          "evento": {
+            "type": "string"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "correo",
+              "telegram",
+              "whatsapp"
+            ]
+          },
+          "asunto": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuerpo": {
+            "type": "string"
+          },
+          "mensaje": {
+            "type": "string",
+            "description": "Lo que recibe el destinatario: en Telegram, asunto y cuerpo en un solo texto (máx. 4096)"
+          },
+          "variables_desconocidas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Variables que la plantilla usa y el evento no trae: se renderizan vacías"
           }
         }
       },

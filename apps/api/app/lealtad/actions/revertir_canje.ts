@@ -11,7 +11,7 @@ import { bloquearClienteLealtad, devolverCanje, movimientoPorClave } from '#leal
  * `lealtad.revertir_canje`, `Idempotency-Key`): un canje `reservado`, o `aplicado` a una factura que se
  * anuló (§5). Los puntos vuelven
  * en un lote nuevo por cada lote que pagó el canje, con su vencimiento original y su valor
- * (`devolverCanje`: `ajuste` positivo con origen `canje`, asiento `4.1.05 / 2.1.10`); nunca se edita el
+ * (`devolverCanje`: `reverso` positivo de la salida, origen `canje`, asiento espejo `4.1.06 / 2.1.10`); nunca se edita el
  * movimiento del canje. Si el
  * premio lleva existencias, se devuelve la unidad. Un canje aplicado (nota de crédito emitida o plan
  * temporal programado) responde 409 `canje_no_revertible`. Evento `lealtad.canje_revertido`.

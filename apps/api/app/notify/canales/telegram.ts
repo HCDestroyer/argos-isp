@@ -10,7 +10,7 @@ export interface ConfigTelegram {
 }
 
 /** Límite de Telegram para el texto de un mensaje. */
-const MAXIMO_TEXTO = 4096
+export const MAXIMO_TEXTO = 4096
 
 /**
  * Canal de Telegram (grammY, solo la Bot API, sin polling). El destino es el `chat_id`

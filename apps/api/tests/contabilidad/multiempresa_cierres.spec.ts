@@ -12,7 +12,8 @@ import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import ReabrirPeriodo from '#ledger/actions/reabrir_periodo'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
-import RevisarCheck from '#ledger/actions/revisar_check'
+import CerrarApertura from '#ledger/actions/cerrar_apertura'
+import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { balanceSaldos } from '#ledger/estados_financieros'
 import { saldoCliente } from '#ledger/consultas'
 import { saldoAnticipos } from '#billing/cobros'
@@ -33,25 +34,19 @@ import {
  */
 
 /**
- * Cierra septiembre de B con la factura importada aún en 2.9.01: el check `apertura_cero` (§10.5) da
- * anomalía mientras no exista el cierre de apertura (pendiente en `pendientes_fases.spec.ts`), y aquí
- * se supervisa con su nota, como haría el contador; los demás checks tienen que pasar solos.
+ * Cierra septiembre de B: primero el cierre de apertura (`libro.cerrar_apertura`, §23) traslada lo que
+ * la importación dejó en 2.9.01 a 3.3.01, así `apertura_cero` (§10.5) pasa solo; con 2.9.01 en cero
+ * no escribe nada (reabrir y volver a cerrar deja la misma foto).
  */
 async function cerrarSeptiembreConApertura(e: { B: number; ctx: Parameters<CerrarPeriodo['execute']>[1] }) {
+    await new CerrarApertura().execute({ empresa_id: e.B, fecha: '2026-09-30' }, e.ctx)
     const verificacion = await new VerificarCierre().execute(
         { empresa_id: e.B, tipo: 'mensual', periodo: '2026-09' },
         e.ctx,
     )
     const apertura = verificacion.checks.find((c) => c.clave === 'apertura_cero')!
     if (apertura.estado === 'anomalia') {
-        await new RevisarCheck().execute(
-            {
-                check_id: apertura.id,
-                estado: 'supervisado',
-                nota: 'Importación en curso: 2.9.01 se cancela con el cierre de apertura',
-            },
-            e.ctx,
-        )
+        throw new Error('apertura_cero en anomalía después del cierre de apertura')
     }
     return new CerrarPeriodo().execute({ empresa_id: e.B, anio: 2026, mes: 9 }, e.ctx)
 }
@@ -125,7 +120,7 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
     test('7. periodo cerrado: 422 al registrar, el reverso va a hoy, y reabrir y volver a cerrar deja la misma foto', async ({
         assert,
     }) => {
-        const e = await prepararEmpresas()
+        const e = await prepararEmpresasGt()
         const s = await servicioEn(e.B)
         // septiembre con movimiento histórico
         const factura = await new ImportarFacturaPendiente().execute(
@@ -155,8 +150,9 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
         )
         const primero = await cerrarSeptiembreConApertura(e)
         const foto = normalizarResumen(primero.resumen)
-        assert.equal(foto.asientos, 2)
-        assert.equal(foto.debe, '345.67')
+        // importada, gasto y el cierre de apertura (2.9.01 / 3.3.01 por 300.00)
+        assert.equal(foto.asientos, 3)
+        assert.equal(foto.debe, '645.67')
 
         const antes = await contarAsientos([e.B])
         const intentos = [
@@ -271,8 +267,9 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
         )
         const cierre = await cerrarSeptiembreConApertura(e)
         const tercero = normalizarResumen(cierre.resumen)
-        assert.equal(tercero.asientos, foto.asientos + 1)
-        assert.equal(tercero.debe, dec(foto.debe).plus('100.00').toFixed(2))
+        // el pago histórico (2.9.01 / CxC) y el nuevo cierre de apertura que traslada esos 100.00
+        assert.equal(tercero.asientos, foto.asientos + 2)
+        assert.equal(tercero.debe, dec(foto.debe).plus('200.00').toFixed(2))
         await afirmarLibro(assert, [e.B, e.C])
     })
 

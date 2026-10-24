@@ -95,6 +95,14 @@ export function fechaGuatemala(instante: string): string {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(new Date(instante))
 }
 
+/** Diario de un pago como `diarioDeAsiento`: el de su caja, el de su cuenta bancaria o `COB`. */
+export function diarioDePago(pago: Schema<'Pago'>): string {
+    if (pago.metodo === 'caja') {
+        return `CAJ-${pago.caja_id ?? 1}`
+    }
+    return pago.cuenta_bancaria_id ? `BAN-${pago.cuenta_bancaria_id}` : 'COB'
+}
+
 /** Cuenta de destino de un pago según su método, como `registrarPago`. */
 export function cuentaDePago(pago: Schema<'Pago'>): number {
     if (pago.metodo === 'caja') {
@@ -112,6 +120,7 @@ export function asientoFactura(id: number, factura: Schema<'Factura'>): Asiento 
         descripcion: `Factura ${factura.id} · servicio ${factura.servicio_id ?? '—'} · periodo ${factura.periodo}`,
         origen_tipo: 'factura',
         origen_id: factura.id,
+        diario: 'VEN',
         reversa_de: null,
         created_by: null,
         created_at: factura.emitida_en,
@@ -132,6 +141,7 @@ export function asientoPago(id: number, pago: Schema<'Pago'>): Asiento {
         descripcion: `Pago ${pago.id} · ${pago.metodo}${pago.referencia ? ` · ref. ${pago.referencia}` : ''} · facturas ${pago.aplicaciones.map(a => a.factura_id).join(', ')}`,
         origen_tipo: 'pago',
         origen_id: pago.id,
+        diario: diarioDePago(pago),
         reversa_de: null,
         created_by: pago.registrado_por,
         created_at: pago.created_at,
@@ -152,6 +162,8 @@ export function asientoReverso(id: number, original: Asiento, descripcion: strin
         descripcion,
         origen_tipo: original.origen_tipo,
         origen_id: original.origen_id,
+        // un reverso cae en el diario de su original
+        diario: original.diario,
         reversa_de: original.id,
         created_by: usuario,
         created_at: instante,

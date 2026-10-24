@@ -126,7 +126,7 @@ export const rutasRouters: RutasFixture = {
             return datosInvalidos(errores)
         }
         const capacidad = (campo: 'capacidad_bajada_kbps' | 'capacidad_subida_kbps') => (campo in cuerpo ? (cuerpo[campo] as number | null) : router[campo] ?? null)
-        const conexion = <K extends 'api_url' | 'api_tls_verificar' | 'api_ca' | 'dhcp_servidor' | 'interfaz_clientes'>(campo: K): Schema<'Router'>[K] => {
+        const conexion = <K extends 'api_url' | 'api_tls_verificar' | 'dhcp_servidor' | 'interfaz_clientes'>(campo: K): Schema<'Router'>[K] => {
             const valor = campo in cuerpo ? cuerpo[campo] : router[campo]
             return (typeof valor === 'string' ? valor.trim() : valor) as Schema<'Router'>[K]
         }
@@ -135,7 +135,9 @@ export const rutasRouters: RutasFixture = {
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
             api_url: conexion('api_url'),
             api_tls_verificar: conexion('api_tls_verificar'),
-            api_ca: conexion('api_ca'),
+            // Como la API (fila 57 de a4.md): el PEM nunca sale; solo si hay CA cargada.
+            tiene_api_ca: 'api_ca' in cuerpo ? typeof cuerpo.api_ca === 'string' : router.tiene_api_ca,
+            api_ca: ('api_ca' in cuerpo ? typeof cuerpo.api_ca === 'string' : router.tiene_api_ca) ? '***' : null,
             dhcp_servidor: conexion('dhcp_servidor'),
             interfaz_clientes: conexion('interfaz_clientes'),
             // Multiempresa (A1): `empresa_sugerida_id` (null la quita); sin el campo, se conserva.
