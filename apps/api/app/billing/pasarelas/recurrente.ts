@@ -62,15 +62,20 @@ export function configRecurrente(): ConfigRecurrente {
     }
 }
 
-/** Centavos enteros de un string decimal ("150.25" → 15025). */
-export function aCentavos(monto: string): number {
-    return Number(dec(monto).times(100).toFixed(0))
+/** Centavos enteros de un string decimal ("150.25" → "15025"), sin pasar por `number`. */
+export function aCentavos(monto: string): string {
+    return dec(monto).times(100).toFixed(0)
+}
+
+/** Entero JSON sin `number` de JS (Recurrente pide `amount_in_cents` numérico). */
+function enteroJson(texto: string): unknown {
+    return (JSON as unknown as { rawJSON(t: string): unknown }).rawJSON(texto)
 }
 
 /** String decimal de centavos (15025 → "150.25"). */
 export function deCentavos(centavos: unknown): string {
-    const n = Number(centavos ?? 0)
-    return aTexto(Number.isFinite(n) ? dec(String(n)).div(100) : CERO)
+    const texto = String(centavos ?? 0).trim()
+    return /^-?\d+$/.test(texto) ? aTexto(dec(texto).div(100)) : aTexto(CERO)
 }
 
 /** Firma Svix (`v1,<base64>`) de un cuerpo: la usan las pruebas para simular a Recurrente. */
@@ -148,7 +153,7 @@ export class PasarelaRecurrente implements Pasarela {
 
     async crearCobro(entrada: EntradaCrearCobro): Promise<CobroCreado> {
         const centavos = aCentavos(entrada.monto)
-        if (centavos < MINIMO_CENTAVOS_GTQ) {
+        if (dec(centavos).lt(MINIMO_CENTAVOS_GTQ)) {
             throw new ValidacionFallida([
                 {
                     field: 'monto',
@@ -169,7 +174,7 @@ export class PasarelaRecurrente implements Pasarela {
                 {
                     name: entrada.descripcion.slice(0, 120),
                     currency: 'GTQ',
-                    amount_in_cents: centavos,
+                    amount_in_cents: enteroJson(centavos),
                     quantity: 1,
                     charge_type: 'one_time',
                     tax_category: 'service',

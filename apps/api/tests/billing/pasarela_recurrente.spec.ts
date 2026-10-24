@@ -126,7 +126,7 @@ test.group('billing · pasarela Recurrente (simulada)', () => {
         assert.equal(cuerpo.cancel_url, 'https://portal.isp.gt/corte?pago=42&estado=pendiente')
         assert.deepEqual(cuerpo.metadata, { referencia: '42', cliente_id: 7 })
         assert.isString(cuerpo.expires_at)
-        assert.equal(aCentavos('0.10'), 10)
+        assert.equal(aCentavos('0.10'), '10')
     })
 
     test('crearCobro: bajo Q5.00 es 422 y un error del proveedor es 502', async ({ assert }) => {
