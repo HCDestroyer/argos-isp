@@ -150,7 +150,12 @@ export async function sorteoPublico(id: number): Promise<SorteoPublico> {
                 nombre: p.nombre,
                 cantidad: Number(p.cantidad),
                 valor: String(p.valor),
-                imagen_url: p.imagen_url,
+                // la imagen subida (A3), por la ruta del portal (mismo origen; el walled garden no
+                // carga URLs externas ni la del panel): `imagen_url` de la fila es la del panel o libre
+                imagen_url:
+                    p.imagen_archivo_id && s.aviso_portal && s.estado !== 'cancelado'
+                        ? `/api/v1/portal/sorteos/${s.id}/premios/${p.posicion}/imagen`
+                        : null,
             })),
         bases: {
             mecanica: textoONulo(bases.mecanica),

@@ -348,15 +348,22 @@ export const PortalFactura = definirEsquema(
         emitida_en: instante,
         vence_en: fecha,
         estado: {
-            ...enumerado(['emitida', 'parcial', 'pagada', 'vencida', 'anulada']),
-            description: 'Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal',
+            ...enumerado(['emitida', 'parcial', 'pagada', 'vencida', 'anulada', 'castigada', 'acreditada']),
+            description:
+                'Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal. ' +
+                'acreditada: cubierta entera por notas de crédito internas. castigada: dada de baja ' +
+                'como incobrable; ya no se cobra a la factura (saldo 0.00)',
         },
         subtotal: Dinero,
         iva: Dinero,
         total: Dinero,
         pagado: { ...Dinero, description: 'Cubierto: pagos, saldos a favor y notas de crédito' },
         acreditado: { ...Dinero, description: 'Parte de pagado que viene de notas de crédito vigentes' },
-        saldo: { ...Dinero, description: 'total - pagado (0.00 si está anulada)' },
+        saldo: {
+            ...Dinero,
+            description:
+                'total - pagado solo si está emitida, parcial o vencida; 0.00 en cualquier otro estado',
+        },
         fel_uuid: {
             ...nulable(texto),
             description: 'Autorización del DTE certificado (igual a dte.autorizacion)',
