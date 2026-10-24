@@ -7,10 +7,9 @@ import { errorDe, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { partidas } from '#tests/ledger/ayudas_compras'
 import { programaConReglas } from '#tests/lealtad/ayudas_lealtad'
-import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import {
+    afirmarCuadre,
     bodegaEn,
-    cuadreInventario,
     comprarInventario,
     productoEn,
     saldoInventario,
@@ -32,43 +31,6 @@ import { REQUISITOS_PARA_EJECUTAR } from '#lealtad/sorteos'
  * inventario entregado como premio de un sorteo sale a su costo con `5.1.03 / 1.1.14`; anular la
  * entrega lo reingresa.
  */
-
-/**
- * 1.1.14 = Σ kardex y los invariantes del libro. El premio desde el inventario no lleva asiento
- * `sorteo` por el bien (va en el del kardex, origen `inventario`): el auditor lo suma a
- * 16.premio_de_sorteo_mal_contabilizado (`a3.md`); mientras, solo las filas de esos ganadores se
- * descartan aquí.
- */
-async function afirmarCuadre(
-    assert: { deepEqual: (a: unknown, b: unknown, m?: string) => void },
-    empresaId: number,
-) {
-    const cuadre = await cuadreInventario(empresaId)
-    assert.deepEqual(cuadre.libro, cuadre.kardex, '1.1.14 = Σ kardex')
-    const ganadores = await db
-        .from('lealtad.sorteos_ganadores')
-        .whereNotNull('movimiento_inventario_id')
-        .orWhereIn(
-            'id',
-            db.from('inventario.movimientos').where('origen_tipo', 'sorteo_ganador').select('origen_id'),
-        )
-        .select('id')
-    const desdeInventario = ganadores.map((g) => Number(g.id))
-    const todas = await verificarLibro(empresaId)
-    const violaciones = todas
-        .map((v) =>
-            /^16\.premio_de_sorteo_mal_contabilizado/.test(v.invariante)
-                ? {
-                      ...v,
-                      detalle: (v.detalle as Array<{ id: number }>).filter(
-                          (d) => !desdeInventario.includes(Number(d.id)),
-                      ),
-                  }
-                : v,
-        )
-        .filter((v) => !Array.isArray(v.detalle) || v.detalle.length > 0)
-    assert.deepEqual(violaciones, [])
-}
 
 const AYER = new Date(Date.now() - 24 * 3600 * 1000)
 const MANANA = new Date(Date.now() + 24 * 3600 * 1000)

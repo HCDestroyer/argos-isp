@@ -10754,12 +10754,20 @@ export interface components {
                 series: string[];
                 /** @description Costo unitario con 6 decimales */
                 costo_unitario: string | null;
-                /** @description Cerrado: lo que había al cerrar; abierto: lo de hoy */
+                /** @description Lo que había al capturar la línea (H56) */
                 esperado: string;
                 /** @description contado − esperado */
                 diferencia: string;
                 /** @description Cerrado: lo ajustado; abierto: estimado al costo de hoy (null sin costo conocido) */
                 valor_diferencia: components["schemas"]["Dinero"] | null;
+                /** Format: date-time */
+                capturado_en: string | null;
+                /** @description Existencia de la bodega al capturar la línea (H56) */
+                esperado_captura: string | null;
+                /** @description Valor de la bodega al capturar la línea */
+                valor_captura: components["schemas"]["Dinero"] | null;
+                /** @description Movimientos del producto en la bodega después de la captura (ya están en el kardex; no son diferencia) */
+                movimientos_desde_captura: number;
             }[];
         };
         CorridasFacturacion: {

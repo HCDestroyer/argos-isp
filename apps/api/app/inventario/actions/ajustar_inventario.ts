@@ -9,6 +9,7 @@ import {
     costoDeSobrante,
     costoSalida,
     exigirExistenciaDesde,
+    exigirPromedioSinCambiosDesde,
     exigirSeguimiento,
     fechaDeOperacion,
     productoMovible,
@@ -39,8 +40,9 @@ import {
  *   4.2.04 Sobrantes`. Sin costo, o con costo ≤ 0: 422 `costo_requerido`.
  *
  * `fecha` (fase C, decisión del líder; por defecto hoy): una pasada solo dentro de un periodo abierto
- * (422 `periodo_cerrado`), al costo del momento de registrar; un faltante no deja existencia negativa en
- * ninguna fecha desde la suya (409 `existencia_insuficiente_en_fecha`) y el de una unidad no queda antes
+ * (422 `periodo_cerrado`) y, por cantidad, si después de ella no hay movimientos que cambiaran el
+ * promedio (H55: 409 `fecha_con_movimientos_posteriores`); un faltante no deja existencia ni valor
+ * negativos en ninguna fecha (409 `existencia_insuficiente_en_fecha`) y el de una unidad no queda antes
  * de su último movimiento (422 `fecha_anterior`). Respeta los bloqueos de siempre.
  */
 
@@ -132,7 +134,8 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
                 bodega.id,
             ).neg()
         }
-        if (!entra) await exigirExistenciaDesde(t, producto, bodega.id, fecha, cantidad.abs())
+        if (!porUnidad) await exigirPromedioSinCambiosDesde(t, producto, bodega.id, fecha)
+        if (!entra) await exigirExistenciaDesde(t, producto, bodega.id, fecha, cantidad.abs(), costo.abs())
         const id = await registrarMovimientoConAsiento(
             t,
             {

@@ -12,10 +12,11 @@ import { EN_BODEGA, normalizarMac, normalizarSerie } from '#inventario/unidades'
  * con lo esperado. Las acciones (`inventario.abrir_conteo`, `contar`, `cerrar_conteo`,
  * `cancelar_conteo`) viven en `actions/`.
  *
- * - Por cantidad: esperado = existencia de la bodega al cerrar; diferencia = contado − esperado. El
+ * - Por cantidad: esperado = existencia de la bodega **al capturar la línea** (H56); diferencia =
+ *   contado − esperado. El
  *   faltante sale al promedio (`5.6.02 / 1.1.14`) y el sobrante entra al promedio de la bodega (sin
  *   existencia, al `costo_unitario` de la línea o al último costo del producto; `1.1.14 / 4.2.04`).
- * - Por serie: las series o MAC contadas contra las unidades de la bodega (disponibles o en reparación).
+ * - Por serie: las series o MAC contadas contra las unidades que había al capturar (`planDeLinea`).
  *   Las que faltan salen a su costo y quedan `dada_de_baja`; las que sobran entran como unidades nuevas
  *   (usadas) al costo de la línea o al último costo del producto.
  */
@@ -32,11 +33,17 @@ export interface LineaConteoVista {
     contado: string
     series: string[]
     costo_unitario: string | null
-    /** al cerrar, lo guardado; abierto, lo que hay hoy en la bodega */
+    /** lo que había al capturar la línea (H56); cerrado, lo guardado al cerrar */
     esperado: string
     diferencia: string
     /** valor de la diferencia (negativo = faltante); abierto, estimado al costo de hoy */
     valor_diferencia: string | null
+    /** H56: cuándo se capturó y lo que había en la bodega en ese momento */
+    capturado_en: Date | null
+    esperado_captura: string | null
+    valor_captura: string | null
+    /** movimientos del producto en la bodega después de la captura (no son diferencia del conteo) */
+    movimientos_desde_captura: number
 }
 
 export interface ConteoVista {
@@ -121,6 +128,11 @@ export interface FilaLinea {
     esperado: string | null
     diferencia: string | null
     valor_diferencia: string | null
+    esperado_captura: string | null
+    valor_captura: string | null
+    unidades_captura: number[] | null
+    ultimo_movimiento_id: number | null
+    capturado_en: Date | null
 }
 
 export async function lineasDelConteo(cliente: QueryClientContract, conteoId: number): Promise<FilaLinea[]> {
@@ -141,56 +153,129 @@ export async function lineasDelConteo(cliente: QueryClientContract, conteoId: nu
             cliente.raw('l.esperado::text as esperado'),
             cliente.raw('l.diferencia::text as diferencia'),
             cliente.raw('l.valor_diferencia::text as valor_diferencia'),
+            cliente.raw('l.esperado_captura::text as esperado_captura'),
+            cliente.raw('l.valor_captura::text as valor_captura'),
+            'l.unidades_captura',
+            'l.ultimo_movimiento_id',
+            'l.capturado_en',
         )) as FilaLinea[]
 }
 
-/** Lo esperado hoy de una línea en la bodega y su diferencia estimada (vista previa del conteo). */
-async function estimar(
+export interface UnidadDeBodega {
+    id: number
+    serie: string | null
+    mac: string | null
+    costo: string
+}
+
+/**
+ * Lo que una línea ajusta (H56): la diferencia es **contado − esperado al capturar**; lo que se movió
+ * en la bodega después de la captura ya está en el kardex.
+ *
+ * - Por cantidad: `diferencia` = contado − cantidad al capturar.
+ * - Por serie: faltan las unidades que estaban al capturar, no se contaron y **siguen** en la bodega (las
+ *   que salieron después ya tienen su movimiento); sobran las series contadas que no eran de la bodega
+ *   al capturar ni lo son ahora.
+ *
+ * Una línea sin captura guardada (anterior a H56) toma lo de ahora.
+ */
+export async function planDeLinea(
     cliente: QueryClientContract,
     bodegaId: number,
     l: FilaLinea,
-): Promise<{ esperado: Dec; diferencia: Dec; valor: Dec | null }> {
-    const saldo = (await cliente
+): Promise<{
+    esperado: Dec
+    diferencia: Dec
+    faltan: UnidadDeBodega[]
+    nuevas: string[]
+    saldo: { cantidad: Dec; valor: Dec }
+    movimientosDesdeCaptura: number
+}> {
+    const fila = (await cliente
         .from('inventario.saldos')
         .where({ producto_id: l.producto_id, bodega_id: bodegaId })
         .select('cantidad', 'valor')
         .first()) as { cantidad: string; valor: string } | null
-    const cantidad = dec(saldo?.cantidad ?? '0')
-    const valor = dec(saldo?.valor ?? '0')
+    const saldo = { cantidad: dec(fila?.cantidad ?? '0'), valor: dec(fila?.valor ?? '0') }
+    const posteriores = (await cliente
+        .from('inventario.movimientos')
+        .where({ producto_id: l.producto_id, bodega_id: bodegaId })
+        .if(l.ultimo_movimiento_id !== null, (q) => q.where('id', '>', l.ultimo_movimiento_id!))
+        // los ajustes del propio cierre no cuentan (un conteo abierto por bodega)
+        .whereRaw(`origen_tipo IS DISTINCT FROM 'conteo'`)
+        .if(l.ultimo_movimiento_id === null && l.capturado_en === null, (q) => q.whereRaw('false'))
+        .count('* as n')
+        .first()) as { n: string | number }
+    const movimientosDesdeCaptura = Number(posteriores.n)
     if (l.seguimiento === 'serie') {
-        const unidades = (await cliente
+        const ahora = (await cliente
             .from('inventario.unidades')
             .where({ producto_id: l.producto_id, bodega_id: bodegaId })
             .whereIn('estado', EN_BODEGA as string[])
-            .select('serie', 'mac', 'costo')) as Array<{
-            serie: string | null
-            mac: string | null
-            costo: string
-        }>
-        const faltan = unidades.filter((u) => !l.series.some((v) => coincide(v, u)))
-        const sobran = l.series.length - (unidades.length - faltan.length)
-        const costoFaltante = faltan.reduce((s, u) => s.plus(dec(u.costo)), CERO)
-        // la regla del cierre: con existencia, al promedio de la bodega
-        const unitario = cantidad.gt(0)
-            ? valor.div(cantidad)
-            : l.costo_unitario
-              ? dec(l.costo_unitario)
-              : null
+            .orderBy('id')
+            .select('id', 'serie', 'mac', 'costo')) as UnidadDeBodega[]
+        const capturadas = l.unidades_captura ?? ahora.map((u) => Number(u.id))
+        const alCapturar =
+            capturadas.length === 0
+                ? []
+                : ((await cliente
+                      .from('inventario.unidades')
+                      .whereIn('id', capturadas)
+                      .select('id', 'serie', 'mac', 'costo')) as UnidadDeBodega[])
+        const faltan = ahora.filter(
+            (u) => capturadas.includes(Number(u.id)) && !l.series.some((v) => coincide(v, u)),
+        )
+        const nuevas = l.series.filter(
+            (v) => !alCapturar.some((u) => coincide(v, u)) && !ahora.some((u) => coincide(v, u)),
+        )
         return {
-            esperado: dec(String(unidades.length)),
-            diferencia: dec(String(l.series.length - unidades.length)),
-            valor:
-                unitario || sobran === 0
-                    ? redondear((unitario ?? CERO).times(sobran).minus(costoFaltante))
-                    : null,
+            esperado: dec(String(capturadas.length)),
+            diferencia: dec(String(l.series.length - capturadas.length)),
+            faltan,
+            nuevas,
+            saldo,
+            movimientosDesdeCaptura,
         }
     }
-    const diferencia = dec(l.contado).minus(cantidad)
-    const promedio = cantidad.gt(0) ? valor.div(cantidad) : l.costo_unitario ? dec(l.costo_unitario) : null
+    const esperado = l.esperado_captura === null ? saldo.cantidad : dec(l.esperado_captura)
     return {
-        esperado: cantidad,
-        diferencia,
-        valor: diferencia.isZero() ? CERO : promedio ? redondear(diferencia.times(promedio)) : null,
+        esperado,
+        diferencia: dec(l.contado).minus(esperado),
+        faltan: [],
+        nuevas: [],
+        saldo,
+        movimientosDesdeCaptura,
+    }
+}
+
+/** Vista previa de una línea abierta: su plan valuado al costo de hoy (null si no hay costo conocido). */
+async function estimar(
+    cliente: QueryClientContract,
+    bodegaId: number,
+    l: FilaLinea,
+): Promise<{ esperado: Dec; diferencia: Dec; valor: Dec | null; movimientos: number }> {
+    const plan = await planDeLinea(cliente, bodegaId, l)
+    const { cantidad, valor } = plan.saldo
+    const promedio = cantidad.gt(0) ? valor.div(cantidad) : l.costo_unitario ? dec(l.costo_unitario) : null
+    let estimado: Dec | null
+    if (l.seguimiento === 'serie') {
+        const costoFaltante = plan.faltan.reduce((s, u) => s.plus(dec(u.costo)), CERO)
+        estimado =
+            promedio || plan.nuevas.length === 0
+                ? redondear((promedio ?? CERO).times(plan.nuevas.length).minus(costoFaltante))
+                : null
+    } else {
+        estimado = plan.diferencia.isZero()
+            ? CERO
+            : promedio
+              ? redondear(plan.diferencia.times(promedio))
+              : null
+    }
+    return {
+        esperado: plan.esperado,
+        diferencia: plan.diferencia,
+        valor: estimado,
+        movimientos: plan.movimientosDesdeCaptura,
     }
 }
 
@@ -206,6 +291,11 @@ export async function verConteo(
     for (const l of lineas) {
         const cerrado = conteo.estado === 'cerrado' && l.esperado !== null
         const estimado = cerrado ? null : await estimar(cliente, conteo.bodega_id, l)
+        let movimientos = estimado?.movimientos ?? 0
+        if (!estimado) {
+            const plan = await planDeLinea(cliente, conteo.bodega_id, l)
+            movimientos = plan.movimientosDesdeCaptura
+        }
         conteo.lineas.push({
             id: Number(l.id),
             producto_id: Number(l.producto_id),
@@ -222,6 +312,10 @@ export async function verConteo(
                 : estimado!.valor === null
                   ? null
                   : aTexto(estimado!.valor),
+            capturado_en: l.capturado_en,
+            esperado_captura: l.esperado_captura,
+            valor_captura: l.valor_captura,
+            movimientos_desde_captura: movimientos,
         })
     }
     return conteo

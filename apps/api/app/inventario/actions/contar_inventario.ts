@@ -3,8 +3,16 @@ import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { usuarioDelActor } from '#shared/contexto'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { dec } from '#ledger/dinero'
-import { aCantidad, cantidadValida, productoMovible } from '#inventario/kardex'
-import { normalizarMac, normalizarSerie } from '#inventario/unidades'
+import {
+    aCantidad,
+    bloquearProducto,
+    cantidadValida,
+    productoMovible,
+    saldoDe,
+    type ProductoMovible,
+} from '#inventario/kardex'
+import { EN_BODEGA, normalizarMac, normalizarSerie } from '#inventario/unidades'
+import { aTexto } from '#ledger/dinero'
 import { verConteo, type ConteoVista } from '#inventario/conteos'
 
 /**
@@ -16,7 +24,9 @@ import { verConteo, type ConteoVista } from '#inventario/conteos'
  * - `costo_unitario` (opcional, > 0): costo de un sobrante si la bodega no tiene existencia del
  *   producto (con existencia, el sobrante entra a su promedio, como en un ajuste).
  *
- * Conteo cerrado o cancelado: 409 `conteo_no_abierto`.
+ * Guarda lo esperado **al capturar** (H56): cantidad y valor de la bodega, por serie sus unidades, y el
+ * último movimiento; capturar otra vez lo vuelve a tomar. Conteo cerrado o cancelado: 409
+ * `conteo_no_abierto`.
  */
 
 export interface EntradaContar {
@@ -51,6 +61,45 @@ export async function conteoAbierto(
         empresa_id: Number(fila.empresa_id),
         bodega_id: Number(fila.bodega_id),
         version: Number(fila.version),
+    }
+}
+
+/**
+ * Lo que la bodega tiene de un producto ahora (H56): cantidad y valor del saldo, las unidades en la
+ * bodega (serie) y el último movimiento del producto allí.
+ */
+export async function fotoDeLaBodega(
+    t: Transaccion,
+    producto: ProductoMovible,
+    bodegaId: number,
+): Promise<{
+    cantidad: string
+    valor: string
+    unidades: number[] | null
+    ultimoMovimientoId: number | null
+}> {
+    const saldo = await saldoDe(t, producto.id, bodegaId)
+    const unidades =
+        producto.seguimiento === 'serie'
+            ? (
+                  (await t.trx
+                      .from('inventario.unidades')
+                      .where({ producto_id: producto.id, bodega_id: bodegaId })
+                      .whereIn('estado', EN_BODEGA as string[])
+                      .orderBy('id')
+                      .select('id')) as Array<{ id: number }>
+              ).map((u) => Number(u.id))
+            : null
+    const ultimo = (await t.trx
+        .from('inventario.movimientos')
+        .where({ producto_id: producto.id, bodega_id: bodegaId })
+        .max('id as id')
+        .first()) as { id: number | null } | null
+    return {
+        cantidad: aCantidad(saldo.cantidad),
+        valor: aTexto(saldo.valor),
+        unidades,
+        ultimoMovimientoId: ultimo?.id ? Number(ultimo.id) : null,
     }
 }
 
@@ -123,7 +172,15 @@ export default class ContarInventario extends DomainAction<EntradaContar, Conteo
             }
             costoUnitario = unitario.toFixed(6)
         }
+        // H56: lo esperado al capturar (con el lock del producto, una foto coherente con el kardex)
+        await bloquearProducto(t, producto.id)
+        const captura = await fotoDeLaBodega(t, producto, conteo.bodega_id)
         const datos = {
+            esperado_captura: captura.cantidad,
+            valor_captura: captura.valor,
+            unidades_captura: captura.unidades === null ? null : JSON.stringify(captura.unidades),
+            ultimo_movimiento_id: captura.ultimoMovimientoId,
+            capturado_en: t.trx.knexRawQuery('now()'),
             contado,
             series: JSON.stringify(guardadas),
             costo_unitario: costoUnitario,

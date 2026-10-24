@@ -306,9 +306,45 @@ export async function fechaDeOperacion(
 }
 
 /**
- * Una salida con fecha pasada no deja la bodega en negativo en ninguna fecha desde la suya (con el lock
- * del producto): la existencia acumulada por fecha menos lo que sale, en su fecha y en cada fecha
- * posterior con movimientos. Si no alcanza: 409 `existencia_insuficiente_en_fecha`.
+ * H55 (decisión del líder): un consumo o un ajuste por cantidad con fecha pasada solo se acepta si el
+ * producto, en esa bodega, no tiene después de esa fecha ningún movimiento que cambie el promedio: una
+ * entrada (compra, traslado que llega, sobrante, reverso…) o una salida a un costo que no es el promedio
+ * (anulación de compra, devolución al proveedor). Así el promedio de esa fecha es el de hoy y el
+ * movimiento se valúa bien. Si no: 409 `fecha_con_movimientos_posteriores` (se registra con la fecha de
+ * hoy).
+ */
+export async function exigirPromedioSinCambiosDesde(
+    t: Transaccion,
+    producto: { id: number; sku: string },
+    bodegaId: number,
+    fecha: string,
+): Promise<void> {
+    if (fecha >= hoyGuatemala()) return
+    const posterior = (await t.trx
+        .from('inventario.movimientos')
+        .where({ producto_id: producto.id, bodega_id: bodegaId })
+        .where('fecha', '>', fecha)
+        .where((q) =>
+            q.where('cantidad', '>', 0).orWhereIn('tipo', ['reverso_compra', 'devolucion_proveedor']),
+        )
+        .orderBy('fecha')
+        .orderBy('id')
+        .select('id', 'tipo', t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`))
+        .first()) as { id: number; tipo: string; fecha: string } | null
+    if (posterior) {
+        throw new Conflicto(
+            `El producto ${producto.sku} tiene en la bodega ${bodegaId} un movimiento posterior al ${fecha} que cambió su costo promedio (${posterior.tipo.replaceAll('_', ' ')} del ${posterior.fecha}, movimiento ${posterior.id}): regístralo con la fecha de hoy`,
+            'fecha_con_movimientos_posteriores',
+            'Movimientos posteriores a la fecha',
+        )
+    }
+}
+
+/**
+ * Un movimiento con fecha pasada no deja la bodega en negativo en ninguna fecha desde la suya (con el
+ * lock del producto): ni la existencia ni el valor acumulados por fecha, más lo que el movimiento suma o
+ * resta, en su fecha y en cada fecha posterior con movimientos. Si no alcanza: 409
+ * `existencia_insuficiente_en_fecha`.
  */
 export async function exigirExistenciaDesde(
     t: Transaccion,
@@ -316,28 +352,48 @@ export async function exigirExistenciaDesde(
     bodegaId: number,
     fecha: string,
     sale: Dec,
+    costo: Dec = dec('0'),
 ): Promise<void> {
     if (fecha >= hoyGuatemala()) return
     const { rows } = (await t.trx.rawQuery(
         `WITH por_dia AS (
-             SELECT fecha, sum(sum(cantidad)) OVER (ORDER BY fecha) AS acumulado
+             SELECT fecha, sum(sum(cantidad)) OVER (ORDER BY fecha) AS cantidad,
+                    sum(sum(costo_total)) OVER (ORDER BY fecha) AS valor
                FROM inventario.movimientos
               WHERE producto_id = ? AND bodega_id = ?
               GROUP BY fecha
-         )
-         SELECT least(
+         ), puntos AS (
+             SELECT ?::date AS fecha,
                     (SELECT coalesce(sum(cantidad), 0) FROM inventario.movimientos
-                      WHERE producto_id = ? AND bodega_id = ? AND fecha <= ?::date),
-                    (SELECT min(acumulado) FROM por_dia WHERE fecha >= ?::date)
-                )::text AS minimo,
-                (SELECT to_char(fecha, 'YYYY-MM-DD') FROM por_dia WHERE fecha >= ?::date
-                  ORDER BY acumulado, fecha LIMIT 1) AS en`,
-        [producto.id, bodegaId, producto.id, bodegaId, fecha, fecha, fecha],
-    )) as { rows: Array<{ minimo: string; en: string | null }> }
-    const minimo = dec(rows[0]!.minimo)
-    if (sale.gt(minimo)) {
+                      WHERE producto_id = ? AND bodega_id = ? AND fecha <= ?::date) AS cantidad,
+                    (SELECT coalesce(sum(costo_total), 0) FROM inventario.movimientos
+                      WHERE producto_id = ? AND bodega_id = ? AND fecha <= ?::date) AS valor
+             UNION ALL
+             SELECT fecha, cantidad, valor FROM por_dia WHERE fecha > ?::date
+         )
+         SELECT to_char(fecha, 'YYYY-MM-DD') AS en, cantidad::text, valor::text
+           FROM puntos
+          WHERE cantidad - ? < 0 OR valor - ? < 0
+          ORDER BY fecha LIMIT 1`,
+        [
+            producto.id,
+            bodegaId,
+            fecha,
+            producto.id,
+            bodegaId,
+            fecha,
+            producto.id,
+            bodegaId,
+            fecha,
+            fecha,
+            aCantidad(sale),
+            aTexto(costo),
+        ],
+    )) as { rows: Array<{ en: string; cantidad: string }> }
+    const negativo = rows[0]
+    if (negativo) {
         throw new Conflicto(
-            `Con fecha ${fecha} el producto ${producto.sku} quedaría en negativo en la bodega ${bodegaId} (mínimo ${aCantidad(minimo)}${rows[0]!.en ? ` el ${rows[0]!.en}` : ''}); se piden ${aCantidad(sale)}`,
+            `Con fecha ${fecha} el producto ${producto.sku} quedaría en negativo en la bodega ${bodegaId} el ${negativo.en} (había ${aCantidad(dec(negativo.cantidad))}); se piden ${aCantidad(sale)}`,
             'existencia_insuficiente_en_fecha',
             'Existencia insuficiente en la fecha',
         )

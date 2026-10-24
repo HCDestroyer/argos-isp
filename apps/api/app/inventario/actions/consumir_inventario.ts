@@ -7,6 +7,7 @@ import {
     cantidadValida,
     costoSalida,
     exigirExistenciaDesde,
+    exigirPromedioSinCambiosDesde,
     exigirSeguimiento,
     fechaDeOperacion,
     productoMovible,
@@ -23,8 +24,9 @@ import {
  * `existencia_insuficiente` sin escribir nada.
  *
  * `fecha` (fase C, decisión del líder; por defecto hoy): una pasada solo dentro de un periodo abierto
- * (422 `periodo_cerrado`), al costo promedio del momento de registrar, y sin dejar existencia negativa en
- * ninguna fecha desde la suya (409 `existencia_insuficiente_en_fecha`).
+ * (422 `periodo_cerrado`) y si después de ella no hay movimientos que cambiaran el promedio (H55: 409
+ * `fecha_con_movimientos_posteriores`); se valúa al promedio, que es el de esa fecha. Nunca deja
+ * existencia ni valor negativos en ninguna fecha (409 `existencia_insuficiente_en_fecha`).
  */
 
 export interface EntradaConsumo {
@@ -60,7 +62,8 @@ export default class ConsumirInventario extends DomainAction<EntradaConsumo, Mov
         const fecha = await fechaDeOperacion(t, empresaId, input.fecha)
         await bloquearProducto(t, producto.id)
         const costo = costoSalida(await saldoDe(t, producto.id, bodega.id), cantidad, producto, bodega.id)
-        await exigirExistenciaDesde(t, producto, bodega.id, fecha, cantidad)
+        await exigirPromedioSinCambiosDesde(t, producto, bodega.id, fecha)
+        await exigirExistenciaDesde(t, producto, bodega.id, fecha, cantidad, costo)
         const id = await registrarMovimientoConAsiento(
             t,
             {

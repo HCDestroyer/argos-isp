@@ -71316,7 +71316,11 @@
                 "costo_unitario",
                 "esperado",
                 "diferencia",
-                "valor_diferencia"
+                "valor_diferencia",
+                "capturado_en",
+                "esperado_captura",
+                "valor_captura",
+                "movimientos_desde_captura"
               ],
               "properties": {
                 "id": {
@@ -71361,7 +71365,7 @@
                 "esperado": {
                   "type": "string",
                   "pattern": "^-?\\d+\\.\\d{3}$",
-                  "description": "Cerrado: lo que había al cerrar; abierto: lo de hoy"
+                  "description": "Lo que había al capturar la línea (H56)"
                 },
                 "diferencia": {
                   "type": "string",
@@ -71379,6 +71383,37 @@
                     }
                   ],
                   "description": "Cerrado: lo ajustado; abierto: estimado al costo de hoy (null sin costo conocido)"
+                },
+                "capturado_en": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "esperado_captura": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^-?\\d+\\.\\d{3}$",
+                  "description": "Existencia de la bodega al capturar la línea (H56)"
+                },
+                "valor_captura": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Dinero"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Valor de la bodega al capturar la línea"
+                },
+                "movimientos_desde_captura": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Movimientos del producto en la bodega después de la captura (ya están en el kardex; no son diferencia)"
                 }
               }
             }

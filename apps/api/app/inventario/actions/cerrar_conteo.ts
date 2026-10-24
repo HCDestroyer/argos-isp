@@ -16,18 +16,24 @@ import {
     type ProductoMovible,
 } from '#inventario/kardex'
 import {
-    EN_BODEGA,
     actualizarUnidad,
     crearUnidades,
+    unidadesDeBodega,
     validarUnidadesNuevas,
-    type UnidadFila,
 } from '#inventario/unidades'
-import { coincide, lineasDelConteo, unidadContada, verConteo, type ConteoVista } from '#inventario/conteos'
+import {
+    lineasDelConteo,
+    planDeLinea,
+    unidadContada,
+    verConteo,
+    type ConteoVista,
+    type UnidadDeBodega,
+} from '#inventario/conteos'
 import { conteoAbierto } from '#inventario/actions/contar_inventario'
 
 /**
- * `inventario.cerrar_conteo` (`POST /inventario/conteos/:id/cerrar`): compara lo contado con la
- * existencia de la bodega en ese momento y ajusta la diferencia con movimientos `ajuste_conteo`
+ * `inventario.cerrar_conteo` (`POST /inventario/conteos/:id/cerrar`): compara lo contado con lo que
+ * había **al capturar cada línea** (H56; lo movido después ya está en el kardex) y ajusta la diferencia con movimientos `ajuste_conteo`
  * (origen `conteo`), cada uno con su asiento (§5, caso 5):
  *
  * - **Faltante**: sale al promedio de la bodega (por serie, cada unidad no contada a su costo, y queda
@@ -71,16 +77,15 @@ export default class CerrarConteo extends DomainAction<EntradaCerrarConteo, Cont
         let sobrante = CERO
         for (const l of lineas) {
             const producto = await productoMovible(t, Number(l.producto_id), { empresaId: conteo.empresa_id })
+            // H56: contado − esperado al capturar; lo movido después ya está en el kardex
+            const plan = await planDeLinea(t.trx, bodega.id, l)
             const saldo = await saldoDe(t, producto.id, bodega.id)
-            let esperado: Dec
+            const esperado = plan.esperado
             let ajustes: Ajuste[]
             if (producto.seguimiento === 'serie') {
-                const r = await this.porSerie(t, conteo, producto, l.series, l.costo_unitario)
-                esperado = r.esperado
-                ajustes = r.ajustes
+                ajustes = await this.porSerie(t, conteo, producto, plan.faltan, plan.nuevas, l.costo_unitario)
             } else {
-                esperado = saldo.cantidad
-                const diferencia = dec(l.contado).minus(saldo.cantidad)
+                const diferencia = plan.diferencia
                 ajustes = []
                 if (diferencia.lt(0)) {
                     ajustes.push({
@@ -157,30 +162,34 @@ export default class CerrarConteo extends DomainAction<EntradaCerrarConteo, Cont
         return verConteo(conteo.id, t.trx)
     }
 
-    /** Unidades de la bodega no contadas (salen a su costo) y series contadas que no son de ella (entran). */
+    /** Unidades capturadas no contadas (salen a su costo) y series contadas que no eran de la bodega (entran). */
     private async porSerie(
         t: Transaccion,
         conteo: { empresa_id: number; bodega_id: number },
         producto: ProductoMovible,
-        series: string[],
+        faltan: UnidadDeBodega[],
+        nuevas: string[],
         costoUnitario: string | null,
-    ): Promise<{ esperado: Dec; ajustes: Ajuste[] }> {
-        const unidades = (await t.trx
-            .from('inventario.unidades')
-            .where({ producto_id: producto.id, bodega_id: conteo.bodega_id })
-            .whereIn('estado', EN_BODEGA as string[])
-            .orderBy('id')
-            .forUpdate()
-            .select('*')) as UnidadFila[]
+    ): Promise<Ajuste[]> {
         const ajustes: Ajuste[] = []
-        const nuevas = series.filter((v) => !unidades.some((u) => coincide(v, u)))
         // el costo del sobrante se toma antes de sacar los faltantes (promedio de lo que había)
         const unitario =
             nuevas.length > 0 ? await costoDeSobrante(t, producto, conteo.bodega_id, costoUnitario) : CERO
-        for (const u of unidades) {
-            if (series.some((v) => coincide(v, u))) continue
-            await actualizarUnidad(t, Number(u.id), { estado: 'dada_de_baja', bodega_id: null })
-            ajustes.push({ cantidad: dec('-1'), costo: dec(u.costo).neg(), unidadId: Number(u.id) })
+        if (faltan.length > 0) {
+            const filas = await unidadesDeBodega(
+                t,
+                faltan.map((u) => Number(u.id)),
+                {
+                    empresaId: conteo.empresa_id,
+                    productoId: producto.id,
+                    bodegaId: conteo.bodega_id,
+                    campo: 'series',
+                },
+            )
+            for (const u of filas) {
+                await actualizarUnidad(t, u.id, { estado: 'dada_de_baja', bodega_id: null })
+                ajustes.push({ cantidad: dec('-1'), costo: dec(u.costo).neg(), unidadId: u.id })
+            }
         }
         if (nuevas.length > 0) {
             const normalizadas = await validarUnidadesNuevas(
@@ -200,6 +209,6 @@ export default class CerrarConteo extends DomainAction<EntradaCerrarConteo, Cont
             })
             for (const u of creadas) ajustes.push({ cantidad: dec('1'), costo, unidadId: u.id })
         }
-        return { esperado: dec(String(unidades.length)), ajustes }
+        return ajustes
     }
 }

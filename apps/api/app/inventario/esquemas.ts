@@ -228,12 +228,24 @@ export const ConteoInventarioDetalle = definirEsquema(
                 contado: Cantidad,
                 series: lista(texto),
                 costo_unitario: nulable(CostoUnitario),
-                esperado: { ...Cantidad, description: 'Cerrado: lo que había al cerrar; abierto: lo de hoy' },
+                esperado: { ...Cantidad, description: 'Lo que había al capturar la línea (H56)' },
                 diferencia: { ...Cantidad, description: 'contado − esperado' },
                 valor_diferencia: {
                     ...nulable(DineroConSigno),
                     description:
                         'Cerrado: lo ajustado; abierto: estimado al costo de hoy (null sin costo conocido)',
+                },
+                capturado_en: nulable(instante),
+                esperado_captura: {
+                    ...nulable(Cantidad),
+                    description: 'Existencia de la bodega al capturar la línea (H56)',
+                },
+                valor_captura: { ...nulable(Dinero), description: 'Valor de la bodega al capturar la línea' },
+                movimientos_desde_captura: {
+                    type: 'integer',
+                    minimum: 0,
+                    description:
+                        'Movimientos del producto en la bodega después de la captura (ya están en el kardex; no son diferencia)',
                 },
             }),
         ),
