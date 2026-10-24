@@ -1307,40 +1307,175 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H70: la constancia de IVA retenido salta según si lo que queda supera lo retenido: un centavo más de reembolso baja 1.1.05 en casi todo lo retenido (Q4.78 de Q4.82)', async ({
+    test('H70 (decisión del líder, cb9201a): las constancias del reemplazo se prorratean siempre: sin salto entre dejar Q4.83 y Q4.82, y 1.1.05 + banco bajan juntos lo reembolsado', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const resultado: string[] = []
+        const resultado: Array<{ ret: string; dinero: string }> = []
         for (const queda of [483, 482]) {
             const checkout = `ch_${unico('h70')}`
             await conRecurrente(checkout, 0, async () => {
                 const { centavos } = await cobroPagado(e, checkout, { vat_withheld: 482 })
-                const antes = dec(await saldoCuenta(e.B, '1.1.05'))
+                const ret0 = dec(await saldoCuenta(e.B, '1.1.05'))
+                const banco0 = dec(await bancoNeto(e.B))
                 await reembolso(checkout, `re_${queda}`, centavos - queda)
-                resultado.push(aTexto(dec(await saldoCuenta(e.B, '1.1.05')).minus(antes)))
+                const dRet = dec(await saldoCuenta(e.B, '1.1.05')).minus(ret0)
+                const dBanco = dec(await bancoNeto(e.B)).minus(banco0)
+                resultado.push({ ret: aTexto(dRet), dinero: aTexto(dRet.plus(dBanco)) })
+                // 1.1.05 y el banco juntos bajan exactamente lo reembolsado (sin el monto de la cuenta)
+                assert.equal(
+                    aTexto(dRet.plus(dBanco)),
+                    aTexto(
+                        dec(String(centavos - queda))
+                            .div(100)
+                            .negated(),
+                    ),
+                )
             })
         }
-        // la constancia de la emisora es un documento de la venta original: queda igual en los dos casos
-        assert.deepEqual(resultado, ['0.00', '0.00'])
-    }).fails(
-        'H70: §15 #105 provisional, constancias en proporción solo cuando lo que queda no supera lo retenido',
-    )
+        // un centavo más de reembolso mueve 1.1.05 a lo sumo un centavo
+        assert.isTrue(
+            dec(resultado[0]!.ret).minus(resultado[1]!.ret).abs().lte('0.01'),
+            JSON.stringify(resultado),
+        )
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 
-    test('H71: el reembolso mueve el banco por lo devuelto al cliente, no por lo que Recurrente debitó al comercio (`account_refunded_amount_in_cents`)', async ({
+    test('H71 (arreglado en cb9201a): parcial con comisión devuelta: la deuda vuelve por lo del cliente, el banco baja lo debitado a la cuenta y 5.1.02 baja la diferencia; la conciliación cuadra', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
         const checkout = `ch_${unico('h71')}`
         await conRecurrente(checkout, 0, async () => {
-            await cobroPagado(e, checkout)
+            const { s, cobro } = await cobroPagado(e, checkout)
             const antes = dec(await bancoNeto(e.B))
             // devuelve Q100.00 al cliente; a la cuenta del comercio le debitan Q95.00 (devuelve Q5.00 de comisión)
             await reembolsoConCuenta(checkout, 're_cta', 10000, 9500)
             assert.equal(aTexto(dec(await bancoNeto(e.B)).minus(antes)), '-95.00')
+            assert.equal(await deudaDe(e.B, s.clienteId), '100.00')
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '5.50')
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepEqual(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id),
+                [],
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('reembolso total con comisión devuelta en parte: la deuda vuelve entera, el banco baja lo debitado a la cuenta y 5.1.02 queda con la parte no devuelta (ajuste sin documento que el verificador acepta)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('tot')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, centavos } = await cobroPagado(e, checkout)
+            const antes = dec(await bancoNeto(e.B))
+            // devuelve todo al cliente; a la cuenta le debitan todo menos Q3.00 (comisión devuelta)
+            await reembolsoConCuenta(checkout, 're_tot', centavos, centavos - 300)
+            assert.equal(await deudaDe(e.B, s.clienteId), cobro.monto)
+            assert.equal(
+                aTexto(dec(await bancoNeto(e.B)).minus(antes)),
+                aTexto(
+                    dec(String(centavos - 300))
+                        .div(100)
+                        .negated(),
+                ),
+            )
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '7.50')
+            const conciliacion = await new ConciliarPasarela().execute(
+                { fecha: hoyGuatemala() },
+                contextoSistema('cron'),
+            )
+            assert.deepEqual(
+                conciliacion.diferencias.filter((d) => d.cobro_id === cobro.id),
+                [],
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('proveedor de cobro con el monto de la cuenta: la comisión devuelta no toca el pago (sale en la liquidación); reemplazo y contracargo se liquidan y el puente vuelve a 0', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const banco = await cuentaBancariaPrueba('Banrural', e.B)
+        const proveedor = await new CrearProveedorCobro().execute(
+            {
+                empresa_id: e.B,
+                metodo: 'pasarela',
+                pasarela: 'recurrente',
+                nombre: 'Recurrente',
+                cuenta_bancaria_id: banco.id,
+            },
+            e.ctx,
+        )
+        const checkout = `ch_${unico('pmc')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, pago } = await cobroPagado(e, checkout)
+            const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+            await new LiquidarCobros().execute(
+                {
+                    proveedor_cobro_id: proveedor.id,
+                    referencia: unico('liq'),
+                    bruto: original.monto,
+                    comision: '10.50',
+                    pagos: [pago.pago_id!],
+                    cuenta_bancaria_id: banco.id,
+                },
+                e.ctx,
+            )
+            const r = await reembolsoConCuenta(checkout, 're_pmc', 10000, 9500)
+            assert.isUndefined(r.ignorado, r.error)
+            assert.equal(await deudaDe(e.B, s.clienteId), '100.00')
+            const reemplazo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+            assert.equal(reemplazo.comision, '0.00')
+            // en el puente: −pago (contracargo pendiente) + reemplazo
+            assert.equal(
+                aTexto(await saldoCuenta(e.B, proveedor.cuenta_codigo)),
+                aTexto(dec(reemplazo.monto).minus(original.monto)),
+            )
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H72: un reembolso en el que la cuenta del comercio paga más que lo devuelto al cliente (cargo por reembolso) no se aplica: 422 reembolso_monto_cuenta, la deuda no vuelve', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('h72')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s } = await cobroPagado(e, checkout)
+            // devuelve Q100.00 al cliente y le cobran Q102.00 a la cuenta (Q2.00 de cargo por reembolso)
+            const r = await reembolsoConCuenta(checkout, 're_cargo', 10000, 10200)
+            assert.isUndefined(r.ignorado, r.error)
+            assert.equal(await deudaDe(e.B, s.clienteId), '100.00')
         })
     }).fails(
-        'H71: procesar_webhook_pasarela ignora account_refunded_amount_in_cents (y refund_application_fee)',
+        'H72: devuelta negativa (cargo por reembolso) responde 422 reembolso_monto_cuenta y el reembolso no se aplica',
+    )
+
+    test('H73: sin el monto de la cuenta, un reembolso total revierte la comisión entera y uno que deja Q0.01 la conserva entera: Q10.50 de diferencia por un centavo', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const comisiones: string[] = []
+        for (const deja of [1, 0]) {
+            const checkout = `ch_${unico('h73')}`
+            await conRecurrente(checkout, 0, async () => {
+                const { centavos } = await cobroPagado(e, checkout)
+                const antes = dec(await saldoCuenta(e.B, '5.1.02'))
+                await reembolso(checkout, `re_${deja}`, centavos - deja)
+                comisiones.push(aTexto(dec(await saldoCuenta(e.B, '5.1.02')).minus(antes)))
+            })
+        }
+        // la misma regla en los dos: la comisión cobrada se queda (§15 #104) o se devuelve, no según el centavo
+        assert.equal(comisiones[0], comisiones[1], JSON.stringify(comisiones))
+    }).fails(
+        'H73: sin account_refunded_amount_in_cents el total revierte la comisión y el parcial la conserva',
     )
 
     test('proveedor de cobro: reembolso que deja menos que la comisión y que lo retenido; el reemplazo se liquida y el puente vuelve a 0', async ({
