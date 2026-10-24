@@ -38,7 +38,8 @@ test('cargo único sin costo: queda como bonificación con su motivo', async ({ 
     await expect(page.getByText('Descuentos y bonificaciones').first()).toBeVisible()
 
     await page.goto('/reportes/bonificaciones')
-    await expect(page.getByText('Programa de lealtad').first()).toBeVisible()
+    // `page.goto` a una pantalla aún sin compilar en `nuxt dev` tarda más que los 5 s por defecto
+    await expect(page.getByText('Programa de lealtad').first()).toBeVisible({ timeout: 15_000 })
     // En el teléfono los filtros van plegados tras el botón «Filtros».
     const filtros = page.getByRole('button', { name: /^Filtros/ })
     if (await filtros.isVisible()) {
