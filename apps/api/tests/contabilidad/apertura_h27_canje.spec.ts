@@ -65,7 +65,7 @@ import type { ContextoAccion } from '#shared/contexto'
  * Hallazgos de la primera revisión: H48 a H53 (arreglados por A3 en 28ee679; H49 desapareció con H50).
  * Verificación final de 28ee679: H60 a H64 (arreglados por A3 en 9f4a260).
  * Verificación de 9f4a260 (`a3/pedidos-panel`): H65 y H66 (arreglados por A3 en a693f85).
- * Verificación de `a3/ajustes-reembolso`: H70 en adelante (`.fails`, fila en `a3.md`).
+ * Verificación de `a3/ajustes-reembolso` y `a3/reembolso-montos`: H70–H73 (arreglados por A3 en cb9201a y 5c6f26d).
  */
 
 async function importar(
@@ -1030,10 +1030,10 @@ test.group('Auditor contable · verificación de 9f4a260 (a3/pedidos-panel)', (g
             const r3 = await reembolso(checkout, 're_c', resto)
             assert.isUndefined(r3.pago_reemplazo_id)
             assert.equal(await deudaDe(e.B, s.clienteId), aTexto(bruto))
-            assert.equal(
-                aTexto(dec(await bancoNeto(e.B)).minus(banco0)),
-                aTexto(CERO.minus(bruto).plus('10.50')),
-            )
+            // H73 (5c6f26d): sin el monto de la cuenta la comisión se conserva también en el total: el
+            // banco baja todo lo reembolsado y 5.1.02 queda con la comisión una sola vez
+            assert.equal(aTexto(dec(await bancoNeto(e.B)).minus(banco0)), aTexto(CERO.minus(bruto)))
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '10.50')
             const vigentes = await db
                 .from('billing.pagos')
                 .where('cliente_id', s.clienteId)
@@ -1442,23 +1442,34 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H72: un reembolso en el que la cuenta del comercio paga más que lo devuelto al cliente (cargo por reembolso) no se aplica: 422 reembolso_monto_cuenta, la deuda no vuelve', async ({
+    test('H72 (arreglado en 5c6f26d): si la cuenta del comercio paga más que lo devuelto al cliente, el exceso es gasto 5.1.02: deuda por lo del cliente, banco por lo de la cuenta', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
         const checkout = `ch_${unico('h72')}`
         await conRecurrente(checkout, 0, async () => {
             const { s } = await cobroPagado(e, checkout)
+            const antes = dec(await bancoNeto(e.B))
             // devuelve Q100.00 al cliente y le cobran Q102.00 a la cuenta (Q2.00 de cargo por reembolso)
             const r = await reembolsoConCuenta(checkout, 're_cargo', 10000, 10200)
             assert.isUndefined(r.ignorado, r.error)
             assert.equal(await deudaDe(e.B, s.clienteId), '100.00')
+            assert.equal(aTexto(dec(await bancoNeto(e.B)).minus(antes)), '-102.00')
+            assert.equal(aTexto(await saldoCuenta(e.B, '5.1.02')), '12.50')
         })
-    }).fails(
-        'H72: devuelta negativa (cargo por reembolso) responde 422 reembolso_monto_cuenta y el reembolso no se aplica',
-    )
+        // una comisión devuelta mayor que la del pago sigue siendo 422 (y el reembolso no se aplica)
+        const otro = `ch_${unico('h72b')}`
+        await conRecurrente(otro, 0, async () => {
+            const x = await cobroPagado(e, otro)
+            const malo = await reembolsoConCuenta(otro, 're_malo', 10000, 8000)
+            assert.equal(malo.ignorado, 'error_de_negocio')
+            assert.include(malo.error ?? '', 'reembolso_monto_cuenta')
+            assert.equal(await deudaDe(e.B, x.s.clienteId), '0.00')
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 
-    test('H73: sin el monto de la cuenta, un reembolso total revierte la comisión entera y uno que deja Q0.01 la conserva entera: Q10.50 de diferencia por un centavo', async ({
+    test('H73 (arreglado en 5c6f26d): sin el monto de la cuenta la comisión se conserva igual en el total y en el que deja Q0.01; el banco baja todo lo reembolsado', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -1472,11 +1483,10 @@ test.group('Auditor contable · verificación de a3/ajustes-reembolso', (group) 
                 comisiones.push(aTexto(dec(await saldoCuenta(e.B, '5.1.02')).minus(antes)))
             })
         }
-        // la misma regla en los dos: la comisión cobrada se queda (§15 #104) o se devuelve, no según el centavo
-        assert.equal(comisiones[0], comisiones[1], JSON.stringify(comisiones))
-    }).fails(
-        'H73: sin account_refunded_amount_in_cents el total revierte la comisión y el parcial la conserva',
-    )
+        // la misma regla en los dos: la comisión cobrada se queda (§15 #104)
+        assert.deepEqual(comisiones, ['0.00', '0.00'])
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 
     test('proveedor de cobro: reembolso que deja menos que la comisión y que lo retenido; el reemplazo se liquida y el puente vuelve a 0', async ({
         assert,
