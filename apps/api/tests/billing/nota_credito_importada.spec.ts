@@ -107,7 +107,8 @@ test.group('Facturación · nota de crédito sobre una factura importada (H27)',
     test('por línea: la base de la línea va a 2.9.01, no al ingreso', async ({ assert }) => {
         const e = await prepararEmpresasGt()
         const f = await importada(e.ctx, e.B, '112.00')
-        const linea = (await verFactura(f.id)).lineas[0]!
+        const detalle = await verFactura(f.id)
+        const linea = detalle.lineas[0]!
         const nota = await new EmitirNotaCredito().execute(
             { factura_id: f.id, lineas: [{ linea_id: linea.id, monto: '112.00' }], motivo: 'H27: por línea' },
             e.ctx,

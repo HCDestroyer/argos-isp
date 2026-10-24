@@ -38,6 +38,7 @@ export async function afirmarLibro(
     empresaId?: number | number[] | null,
 ) {
     const reversos = await reversosDeCanje()
-    const violaciones = (await verificarLibro(empresaId)).filter((v) => !soloReversosDeCanje(v, reversos))
+    const todas = await verificarLibro(empresaId)
+    const violaciones = todas.filter((v) => !soloReversosDeCanje(v, reversos))
     assert.deepEqual(violaciones, [], 'Invariantes contables rotos')
 }
