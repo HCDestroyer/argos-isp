@@ -247,12 +247,16 @@ export async function premiosPortal(clienteId: number): Promise<PremioPortal[]> 
 }
 
 /**
- * Premio que el cliente puede pedir desde el portal: activo, con `en_portal` y de un programa
- * visible suyo. Cualquier otro responde 404, igual que uno inexistente.
+ * Premio que el cliente puede pedir desde el portal: activo, con `en_portal`, de un programa
+ * visible suyo y de un tipo que se canjea aquí (no `bien` ni `boletos`). Cualquier otro responde
+ * 404, igual que uno inexistente. El portal lo exige por su cuenta, sin depender de que
+ * `lealtad.canjear` (A3) bloquee un premio sin `en_portal` cuando el actor es el cliente. Las demás
+ * reglas (canje del portal apagado, saldo, existencias) son de la acción.
  */
 export async function exigirPremioDelPortal(clienteId: number, premioId: number): Promise<void> {
     const premios = await premiosPortal(clienteId)
-    if (!premios.some((p) => p.id === premioId)) {
+    const premio = premios.find((p) => p.id === premioId)
+    if (!premio || premio.motivo_no_canjeable === 'no_disponible_en_portal') {
         throw new NoEncontrado('Ese premio no está disponible en el portal')
     }
 }

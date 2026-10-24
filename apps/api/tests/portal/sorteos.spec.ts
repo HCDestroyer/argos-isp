@@ -12,6 +12,7 @@ import CerrarCorteSorteo from '#lealtad/actions/cerrar_corte_sorteo'
 import MarcarRequisitoSorteo from '#lealtad/actions/marcar_requisito_sorteo'
 import EjecutarSorteo from '#lealtad/actions/ejecutar_sorteo'
 import CambiarAvisoPortalSorteo from '#lealtad/actions/cambiar_aviso_portal_sorteo'
+import SubirImagenPremioSorteo from '#lealtad/actions/subir_imagen_premio_sorteo'
 import db from '@adonisjs/lucid/services/db'
 import { REQUISITOS_PARA_EJECUTAR } from '#lealtad/sorteos'
 
@@ -185,6 +186,35 @@ test.group('Portal: sorteos', (group) => {
         await estado(client.get(`/api/v1/portal/sorteos/${sorteo.id}/verificacion`), 404)
     })
 
+    test('imagen de un premio: la página pública la sirve por la ruta del portal, nunca la del panel', async ({
+        client,
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const sorteo = await sorteoEn(e, new Date(Date.now() + 2 * DIA), new Date(Date.now() + 3 * DIA))
+        await new SubirImagenPremioSorteo().execute(
+            { sorteo_id: sorteo.id, posicion: 1, nombre: 'efectivo.png', contenido: png(128, 128) },
+            e.ctx,
+        )
+        await abrir(e, sorteo.id)
+        const imagenes = async () => {
+            const publico = await cuerpo(client.get(`/api/v1/portal/sorteos/${sorteo.id}/publico`), 200)
+            return publico.premios.map((p: { imagen_url: string | null }) => p.imagen_url)
+        }
+        // con el aviso apagado, la ruta de la imagen del portal responde 404: no se ofrece
+        assert.deepEqual(await imagenes(), [null, null])
+        await aviso(e, sorteo.id, true)
+        assert.deepEqual(await imagenes(), [`/api/v1/portal/sorteos/${sorteo.id}/premios/1/imagen`, null])
+
+        const s = await crearServicio({ estado: 'activo', empresaId: e.B, sinFacturas: true })
+        const { cookie } = await sesionDirecta(s.clienteId)
+        const imagen = await client
+            .get(`/api/v1/portal/sorteos/${sorteo.id}/premios/1/imagen`)
+            .header('Cookie', cookie)
+        imagen.assertStatus(200)
+        assert.match(String(imagen.header('content-type')), /^image\/png/)
+    })
+
     test('al ejecutar: sale del aviso, ganadores por seudónimo y datos para verificar, sin nombres', async ({
         client,
         assert,
@@ -239,3 +269,21 @@ test.group('Portal: sorteos', (group) => {
         assert.notInclude(JSON.stringify(verificacion), 'cliente_id')
     })
 })
+
+/** PNG mínimo con su cabecera IHDR (ancho × alto); basta para la firma y las dimensiones. */
+function png(ancho: number, alto: number): Buffer {
+    const u32 = (n: number) => {
+        const b = Buffer.alloc(4)
+        b.writeUInt32BE(n)
+        return b
+    }
+    return Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        u32(13),
+        Buffer.from('IHDR', 'latin1'),
+        u32(ancho),
+        u32(alto),
+        Buffer.from([8, 6, 0, 0, 0]),
+        Buffer.alloc(4),
+    ])
+}

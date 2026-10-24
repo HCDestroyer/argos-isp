@@ -363,6 +363,16 @@ test.group('Portal: subir comprobante de depósito', (group) => {
         )
         assert.equal(propio.body().servicio_id, mio.servicioId)
         assert.equal(propio.body().archivo_tipo, 'application/pdf')
+        // con la sesión, el actor es el cliente (`registrado_por` sigue null: no es un usuario del panel)
+        const auditoria = await db
+            .from('audit.acciones')
+            .where('accion', 'comprobantes.registrar')
+            .where('entidad_id', propio.body().id)
+            .firstOrFail()
+        assert.include(auditoria, { actor_tipo: 'cliente', canal: 'portal' })
+        assert.equal(Number(auditoria.actor_id), mio.clienteId)
+        const fila = await db.from('billing.comprobantes').where('id', propio.body().id).firstOrFail()
+        assert.isNull(fila.registrado_por)
     })
 
     test('lista de la sesión: solo los del cliente, con el motivo del rechazo', async ({
