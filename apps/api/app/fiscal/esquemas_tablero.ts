@@ -335,7 +335,11 @@ const DatosUtilidades = objeto({
 
 const DatosIsoPiso = objeto(
     {
-        costo_ventas: { ...dinero, description: 'Gastos del grupo 5.6 de los meses leídos (§15 #79)' },
+        costo_ventas: {
+            ...dinero,
+            description:
+                'Costo del equipo vendido (5.6.01) de los meses leídos; las mermas son gasto (§15 #79)',
+        },
         margen_bruto: { ...porciento, description: '(ingresos − costo de ventas) / ingresos del mayor' },
         umbral_margen: { ...porciento, description: 'iso_umbral_margen' },
         aplica: { ...booleano, description: 'El margen bruto pasa del umbral: hay ISO' },

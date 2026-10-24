@@ -226,14 +226,18 @@ export interface ResultadosRango {
     ingresos: Dec
     gastos: Dec
     no_deducibles: Dec
-    /** gastos del grupo `5.6 Costo de ventas` (inventario, fase C: equipo vendido, mermas y faltantes) */
+    /** costo de lo vendido, `5.6.01` (inventario, fase C; las mermas 5.6.02 son gasto, decisión del líder) */
     costo_ventas: Dec
     renglones: RenglonDeclaracion[]
 }
 
-/** ¿La cuenta es del grupo `5.6 Costo de ventas` (`contratos/inventario.md` §3, §15 #79)? */
+/**
+ * ¿La cuenta es costo de lo vendido para el margen bruto del ISO (§15 #79)? Solo `5.6.01` y sus hijas:
+ * las mermas y faltantes (`5.6.02`) son gasto, no costo de ventas (decisión del líder; §15 #103).
+ */
 export function esCostoDeVentas(codigo: string): boolean {
-    return codigo === CUENTAS_GT.COSTO_VENTAS || codigo.startsWith(`${CUENTAS_GT.COSTO_VENTAS}.`)
+    const c = CUENTAS_GT.COSTO_EQUIPO_VENDIDO
+    return codigo === c || codigo.startsWith(`${c}.`)
 }
 
 /** Ingresos y gastos del rango sin el cierre anual; los no deducibles por `categoria_fiscal`. */
@@ -647,7 +651,7 @@ async function isoTrimestral(c: QueryClientContract, empresaId: number, desde: s
     const activo = await saldoActivo(c, empresaId, corte)
     const resultados = await resultadosDelRango(c, empresaId, `${anio}-01-01`, corte)
     const ingresos = resultados.ingresos
-    // fase C del inventario (§15 #79): el costo de ventas sale de 5.6 (equipo vendido, mermas y faltantes)
+    // fase C del inventario (§15 #79): el costo de ventas es 5.6.01 (las mermas 5.6.02 son gasto)
     const costo = resultados.costo_ventas
     const margen = ingresos.gt(0) ? redondear(ingresos.minus(costo).times(100).dividedBy(ingresos)) : CERO
     const baseActivo = redondear(max0(activo).dividedBy(4))
@@ -658,7 +662,7 @@ async function isoTrimestral(c: QueryClientContract, empresaId: number, desde: s
     const impuesto = aplica ? pct(base, tasa) : CERO
     const notas = [
         `Base: activo neto al ${corte} y ingresos brutos de ${anio} (iso_base_periodo = anio_anterior)`,
-        `Costo de ventas ${aTexto(costo)}: gastos del grupo 5.6 de ${anio} (costo del equipo vendido, mermas y faltantes del inventario; §15 #79)`,
+        `Costo de ventas ${aTexto(costo)}: 5.6.01 de ${anio} (costo del equipo vendido; las mermas 5.6.02 son gasto; §15 #79)`,
         regla4x === null
             ? 'iso_regla_4x sin valor: no se aplica la regla de activo neto mayor que 4 veces los ingresos (§15 #4)'
             : `iso_regla_4x = ${String(regla4x)}${por4x ? ': se usa la base de ingresos' : ''}`,

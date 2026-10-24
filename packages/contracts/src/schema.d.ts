@@ -9023,7 +9023,7 @@ export interface components {
             error: components["schemas"]["Problem"] | null;
             /** @description ISO anual como piso (solo con estado ok) */
             datos: {
-                /** @description Gastos del grupo 5.6 de los meses leídos (§15 #79) */
+                /** @description Costo del equipo vendido (5.6.01) de los meses leídos; las mermas son gasto (§15 #79) */
                 costo_ventas?: string;
                 /** @description (ingresos − costo de ventas) / ingresos del mayor */
                 margen_bruto?: string;

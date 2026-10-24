@@ -15,7 +15,7 @@ import CerrarPeriodo from '#ledger/actions/cerrar_periodo'
 import CerrarEjercicio from '#ledger/actions/cerrar_ejercicio'
 
 /**
- * Inventario interno, fase C (§15 #79): el costo de ventas (`5.6`) entra al margen bruto del ISO
+ * Inventario interno, fase C (§15 #79): el costo de ventas (`5.6.01`; las mermas 5.6.02 son gasto) entra al margen bruto del ISO
  * trimestral y del ISO como piso del comparador; sin pasar de `iso_umbral_margen` (4 %) no hay ISO.
  */
 
@@ -72,9 +72,11 @@ test.group('Inventario · fase C · costo de ventas en el ISO y el comparador', 
             await asiento(e.ctx, id, '2021-01-04', BANCO, '3.1.01', '120000.00')
             await asiento(e.ctx, id, '2021-03-10', BANCO, '4.1.01', '8000.00')
         }
-        // B: costo de ventas 7,800 (margen 2.5 %); C: 1,000 (margen 87.5 %)
+        // B: costo de ventas 7,800 (margen 2.5 %); C: 1,000 de costo y 7,000 de mermas, que son gasto
+        // y no costo de ventas (margen 87.5 %)
         await asiento(e.ctx, e.B, '2021-05-20', CUENTAS_GT.COSTO_EQUIPO_VENDIDO, BANCO, '7800.00')
-        await asiento(e.ctx, e.C, '2021-05-20', CUENTAS_GT.MERMAS_INVENTARIO, BANCO, '1000.00')
+        await asiento(e.ctx, e.C, '2021-05-20', CUENTAS_GT.COSTO_EQUIPO_VENDIDO, BANCO, '1000.00')
+        await asiento(e.ctx, e.C, '2021-06-20', CUENTAS_GT.MERMAS_INVENTARIO, BANCO, '7000.00')
         for (const id of [e.B, e.C]) {
             for (let mes = 1; mes <= 11; mes++) {
                 await new CerrarPeriodo().execute({ empresa_id: id, anio: 2021, mes }, e.ctx)
@@ -96,12 +98,12 @@ test.group('Inventario · fase C · costo de ventas en el ISO y el comparador', 
         })
         assert.isTrue((sinIso.detalle.notas ?? []).some((n) => n.startsWith('Costo de ventas 7800.00')))
         const conIso = await calcular(e.C)
-        // activo neto 127,000 (120,000 + 8,000 − 1,000): ¼ al 1 %
+        // activo neto 120,000 (120,000 + 8,000 − 1,000 − 7,000): ¼ al 1 %
         assert.include(conIso.totales, {
             costo_ventas: '1000.00',
             margen_bruto: '87.50',
-            base: '31750.00',
-            impuesto: '317.50',
+            base: '30000.00',
+            impuesto: '300.00',
         })
         await afirmarLibro(assert, [e.B, e.C])
     })
