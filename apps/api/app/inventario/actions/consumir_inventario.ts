@@ -7,6 +7,7 @@ import {
     bodegaMovible,
     cantidadValida,
     costoSalida,
+    exigirSeguimiento,
     productoMovible,
     registrarMovimientoConAsiento,
     saldoDe,
@@ -36,6 +37,8 @@ export default class ConsumirInventario extends DomainAction<EntradaConsumo, Mov
         const producto = await productoMovible(t, input.producto_id)
         const empresaId = producto.empresa_id
         t.fijarEmpresa(empresaId)
+        // un equipo de serie no se consume: se presta en comodato o se da de baja
+        exigirSeguimiento(producto, false)
         const bodega = await bodegaMovible(t, input.bodega_id, empresaId)
         const cantidad = cantidadValida(input.cantidad)
         if (input.servicio_id) {

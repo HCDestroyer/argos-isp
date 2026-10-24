@@ -8,22 +8,32 @@ import {
     bodegaMovible,
     cantidadValida,
     costoSalida,
+    exigirSeguimiento,
     productoMovible,
     registrarMovimientoConAsiento,
     saldoDe,
     verMovimiento,
     type MovimientoVista,
 } from '#inventario/kardex'
+import {
+    actualizarUnidad,
+    crearUnidades,
+    unidadesDeBodega,
+    validarUnidadesNuevas,
+    type UnidadNueva,
+} from '#inventario/unidades'
 
 /**
  * `inventario.ajustar` (`POST /inventario/ajustes`): ajuste manual con motivo obligatorio, como un
- * conteo (§5). `cantidad` con signo:
+ * conteo (§5).
  *
- * - **Faltante** (negativa): sale al costo promedio; `5.6.02 Mermas y faltantes / 1.1.14`. Más que la
+ * - **Faltante**: por cantidad, `cantidad` negativa al costo promedio; por serie, `unidad_id` (la
+ *   unidad sale a su costo y queda `dada_de_baja`). `5.6.02 Mermas y faltantes / 1.1.14`. Más que la
  *   existencia: 409 `existencia_insuficiente`.
- * - **Sobrante** (positiva): entra al último costo promedio (el de la bodega; sin existencia, el del
- *   último movimiento del producto) o al `costo_unitario` dado; `1.1.14 / 4.2.04 Sobrantes`. Sin
- *   costo conocido ni dado: 422 `costo_requerido`.
+ * - **Sobrante**: por cantidad, `cantidad` positiva al último costo promedio (el de la bodega; sin
+ *   existencia, el del último movimiento del producto) o al `costo_unitario` dado; por serie,
+ *   `unidad` (serie o MAC nueva) a ese mismo costo. `1.1.14 / 4.2.04 Sobrantes`. Sin costo conocido
+ *   ni dado: 422 `costo_requerido`.
  *
  * Fecha de hoy; respeta los bloqueos de siempre.
  */
@@ -31,7 +41,9 @@ import {
 export interface EntradaAjuste {
     producto_id: number
     bodega_id: number
-    cantidad: string
+    cantidad?: string | null
+    unidad_id?: number | null
+    unidad?: UnidadNueva | null
     motivo: string
     costo_unitario?: string | null
 }
@@ -60,15 +72,29 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
                 { field: 'motivo', message: 'El ajuste lleva su motivo', rule: 'required' },
             ])
         }
-        const cantidad = cantidadValida(input.cantidad, 'cantidad', true)
+        const porUnidad = Boolean(input.unidad_id || input.unidad)
+        if (input.unidad_id && input.unidad) {
+            throw new ValidacionFallida([
+                {
+                    field: 'unidad',
+                    message: 'Un faltante lleva unidad_id; un sobrante, unidad',
+                    rule: 'no_aplica',
+                },
+            ])
+        }
+        const cantidad = porUnidad
+            ? dec(input.unidad ? '1' : '-1')
+            : cantidadValida(input.cantidad ?? '', 'cantidad', true)
         const entra = cantidad.gt(0)
         const producto = await productoMovible(t, input.producto_id, { entrada: entra })
         const empresaId = producto.empresa_id
         t.fijarEmpresa(empresaId)
+        exigirSeguimiento(producto, porUnidad, input.unidad ? 'unidad' : 'unidad_id')
         const bodega = await bodegaMovible(t, input.bodega_id, empresaId, { entrada: entra })
         await bloquearProducto(t, producto.id)
 
         let costo: Dec
+        let unidadId: number | null = null
         if (entra) {
             const unitario = input.costo_unitario
                 ? dec(input.costo_unitario)
@@ -83,6 +109,28 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
                 ])
             }
             costo = redondear(cantidad.times(unitario))
+            if (input.unidad) {
+                const [nueva] = await validarUnidadesNuevas(t, empresaId, [input.unidad], 'unidad')
+                const [unidad] = await crearUnidades(t, {
+                    empresaId,
+                    productoId: producto.id,
+                    bodegaId: bodega.id,
+                    unidades: [nueva!],
+                    costos: [costo],
+                    condicion: 'usado',
+                })
+                unidadId = unidad!.id
+            }
+        } else if (input.unidad_id) {
+            const [unidad] = await unidadesDeBodega(t, [input.unidad_id], {
+                empresaId,
+                productoId: producto.id,
+                bodegaId: bodega.id,
+                campo: 'unidad_id',
+            })
+            costo = dec(unidad!.costo).neg()
+            unidadId = unidad!.id
+            await actualizarUnidad(t, unidad!.id, { estado: 'dada_de_baja', bodega_id: null })
         } else {
             costo = costoSalida(
                 await saldoDe(t, producto.id, bodega.id),
@@ -101,6 +149,7 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
                 bodegaId: bodega.id,
                 cantidad,
                 costoTotal: costo,
+                unidadId,
                 motivo,
             },
             {

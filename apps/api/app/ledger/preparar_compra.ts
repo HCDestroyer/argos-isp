@@ -153,14 +153,6 @@ export async function prepararCompra(
     }
     if (tipo === 'NCRE') {
         input.lineas.forEach((linea, i) => {
-            if (linea.producto_id || linea.bodega_id) {
-                errores.push({
-                    field: `lineas.${i}.producto_id`,
-                    message:
-                        'Una NCRE no saca existencias del inventario: la devolución al proveedor llega con una fase posterior',
-                    rule: 'no_aplica',
-                })
-            }
             if (linea.tipo === 'activo_fijo' || linea.diferir_meses) {
                 errores.push({
                     field: `lineas.${i}.tipo`,

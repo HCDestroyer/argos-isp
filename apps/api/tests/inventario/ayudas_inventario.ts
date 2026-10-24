@@ -7,7 +7,8 @@ import { haceMeses, proveedorEn } from '#tests/ledger/ayudas_compras'
 import CrearProducto, { type EntradaCrearProducto } from '#inventario/actions/crear_producto'
 import CrearBodega, { type EntradaCrearBodega } from '#inventario/actions/crear_bodega'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
-import { valorKardex } from '#inventario/kardex'
+import { existenciasDelKardex, valorKardex } from '#inventario/kardex'
+import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { dec } from '#ledger/dinero'
 
 /**
@@ -106,4 +107,75 @@ export async function contarMovimientos(empresaId: number) {
         .count('* as n')
         .first()
     return { kardex: Number(kardex.n), asientos: Number(asientos.n) }
+}
+
+/** 1.1.14 = Σ kardex, saldos = Σ kardex por producto y bodega, y los invariantes del libro. */
+export async function afirmarCuadre(
+    assert: {
+        deepEqual: (a: unknown, b: unknown, m?: string) => void
+        equal: (a: unknown, b: unknown, m?: string) => void
+    },
+    empresaId: number,
+) {
+    const cuadre = await cuadreInventario(empresaId)
+    assert.equal(cuadre.libro, cuadre.kardex, '1.1.14 = Σ kardex')
+    const proyeccion = (await db
+        .from('inventario.saldos')
+        .where('empresa_id', empresaId)
+        .orderBy(['producto_id', 'bodega_id'])
+        .select('producto_id', 'bodega_id', 'cantidad', 'valor')) as Array<{
+        producto_id: number
+        bodega_id: number
+        cantidad: string
+        valor: string
+    }>
+    assert.deepEqual(
+        proyeccion.map((p) => ({ ...p, producto_id: Number(p.producto_id), bodega_id: Number(p.bodega_id) })),
+        await existenciasDelKardex(empresaId),
+        'inventario.saldos = Σ kardex por producto y bodega',
+    )
+    // el auditor agrega el origen `inventario` a 9.origen_de_asiento_desconocido con los checks de §8
+    // (`.claude/integration/a3.md`); mientras, solo ese caso se descarta aquí
+    // fase B: el alta y la baja de un activo en comodato (`ledger.activos.unidad_id`) llevan el asiento
+    // del movimiento (origen `inventario`) y la devolución es una baja `devolucion_comodato`; el
+    // auditor los suma a 15.alta_… y 15.baja_…; mientras, solo esas filas se descartan
+    const comodato = new Set(
+        (
+            (await db
+                .from('ledger.activos')
+                .where('empresa_id', empresaId)
+                .whereNotNull('unidad_id')
+                .select('id')) as Array<{
+                id: number
+            }>
+        ).map((a) => Number(a.id)),
+    )
+    const todas = await verificarLibro(empresaId)
+    const violaciones = todas
+        .map((v) => {
+            if (v.invariante.startsWith('15.alta_de_activo_mal_contabilizada')) {
+                return {
+                    ...v,
+                    detalle: (v.detalle as Array<{ id: number }>).filter((d) => !comodato.has(Number(d.id))),
+                }
+            }
+            if (v.invariante.startsWith('15.baja_de_activo_mal_contabilizada')) {
+                return {
+                    ...v,
+                    detalle: (v.detalle as Array<{ activo_id: number; tipo: string }>).filter(
+                        (d) => !(comodato.has(Number(d.activo_id)) && d.tipo === 'devolucion_comodato'),
+                    ),
+                }
+            }
+            return v
+        })
+        .filter((v) => !Array.isArray(v.detalle) || v.detalle.length > 0)
+        .filter(
+            (v) =>
+                !(
+                    v.invariante.startsWith('9.origen_de_asiento_desconocido') &&
+                    (v.detalle as Array<{ origen_tipo: string }>).every((d) => d.origen_tipo === 'inventario')
+                ),
+        )
+    assert.deepEqual(violaciones, [], `Invariantes contables rotos (empresa ${empresaId})`)
 }

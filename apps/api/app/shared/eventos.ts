@@ -656,6 +656,12 @@ export interface CatalogoEventos {
         origen_tipo: string | null
         origen_id: number | null
     }
+    /** Una unidad de serie se prestó en comodato a un servicio (fase B). */
+    'inventario.comodato_asignado': PayloadComodato
+    /** La unidad volvió del servicio a una bodega, a su valor en libros. */
+    'inventario.comodato_devuelto': PayloadComodato & { condicion: 'nuevo' | 'usado'; bodega_id: number }
+    /** El servicio se retiró con la unidad en comodato: queda por recuperar. */
+    'inventario.equipo_por_recuperar': PayloadComodato
     /** La existencia total del producto cruzó su mínimo hacia abajo; `bodega_id` null = total. */
     'inventario.existencia_minima': {
         empresa_id: number
@@ -853,6 +859,17 @@ type PayloadHallazgoHorus = PayloadClienteHorus & {
 }
 
 /** Canje de lealtad (`contratos/lealtad.md` §13). */
+/** Unidad de serie en comodato (`contratos/inventario.md` §7). */
+interface PayloadComodato {
+    unidad_id: number
+    empresa_id: number
+    servicio_id: number
+    cliente_id: number
+    producto_id: number
+    serie: string | null
+    mac: string | null
+}
+
 interface PayloadCanjeLealtad {
     canje_id: number
     empresa_id: number
@@ -970,6 +987,9 @@ export const EVENTOS = [
     'compra.anulada',
     'activo.dado_de_baja',
     'inventario.movimiento_registrado',
+    'inventario.comodato_asignado',
+    'inventario.comodato_devuelto',
+    'inventario.equipo_por_recuperar',
     'inventario.existencia_minima',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',

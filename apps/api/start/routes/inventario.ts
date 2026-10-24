@@ -8,15 +8,31 @@
 | cada bodega) y llaman a la acción.
 |
 */
-import type { HttpContext } from '@adonisjs/core/http'
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { pagina } from '#shared/openapi/esquemas'
 import { empresasDeLaLista } from '#shared/empresa_activa'
 import { exigirAcceso } from '#billing/empresa'
 import * as v from '#inventario/validators'
-import { Bodega, Existencia, MovimientoInventario, Producto, TrasladoInventario } from '#inventario/esquemas'
+import {
+    Bodega,
+    EquipoServicio,
+    Existencia,
+    MovimientoInventario,
+    Producto,
+    TrasladoInventario,
+    Unidad,
+    UnidadConHistorial,
+} from '#inventario/esquemas'
+import { lista } from '#shared/openapi/esquemas'
+import { exigirServicio } from '#core/acceso_empresa'
+import { empresaDeUnidad, historialUnidad, listarUnidades } from '#inventario/unidades'
+import { equiposDelServicio, equiposPorRecuperar } from '#inventario/comodato'
+import AsignarComodato from '#inventario/actions/asignar_comodato'
+import DevolverComodato from '#inventario/actions/devolver_comodato'
+import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
 import { empresaDeProducto, listarProductos, verProducto } from '#inventario/productos'
-import { exigirOperarBodega, listarBodegas, verBodega, type AccesoBodegas } from '#inventario/bodegas'
+import { listarBodegas, verBodega } from '#inventario/bodegas'
+import { accesoBodegas, exigirBodega } from '#inventario/acceso_http'
 import { listarExistencias, listarKardex } from '#inventario/kardex'
 import CrearProducto from '#inventario/actions/crear_producto'
 import EditarProducto from '#inventario/actions/editar_producto'
@@ -30,17 +46,7 @@ import AjustarInventario from '#inventario/actions/ajustar_inventario'
 import DarDeBajaInventario from '#inventario/actions/dar_de_baja_inventario'
 import CargarSaldoInicial from '#inventario/actions/cargar_saldo_inicial'
 
-function acceso(ctx: HttpContext): AccesoBodegas {
-    return { alcance: ctx.alcance, usuarioId: ctx.auth.user?.id ?? null }
-}
-
-/** La bodega existe (404), es de una empresa del usuario (403) y la puede mover (403). */
-async function exigirBodega(ctx: HttpContext, bodegaId: number, destino = false): Promise<void> {
-    const bodega = await verBodega(bodegaId)
-    exigirAcceso(ctx, { empresa_id: bodega.empresa_id })
-    // el destino de un traslado puede ser la bodega de otro técnico (se le entrega); solo el alcance
-    exigirOperarBodega(acceso(ctx), destino ? { ...bodega, tipo: 'bodega' } : bodega)
-}
+const acceso = accesoBodegas
 
 const DESCRIPCION_COSTO =
     'Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo.'
@@ -321,4 +327,131 @@ const operaciones: Ruta[] = [
     }),
 ]
 
-export default [...productos, ...bodegas, ...lecturas, ...operaciones]
+/** La unidad es de una empresa del usuario (403) y, si está en una bodega, la puede ver (403). */
+async function exigirUnidad(ctx: Parameters<typeof exigirBodega>[0], unidadId: number) {
+    const unidad = await empresaDeUnidad(unidadId)
+    exigirAcceso(ctx, { empresa_id: unidad.empresa_id })
+    if (unidad.bodega_id !== null) await exigirBodega(ctx, unidad.bodega_id)
+}
+
+const unidades: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/inventario/unidades',
+        operacion: 'inventarioUnidades',
+        resumen: 'Unidades por serie o MAC, con su estado, bodega o servicio',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        query: v.listarUnidadesValidator,
+        respuesta: { status: 200, descripcion: 'Página de unidades', esquema: pagina(Unidad) },
+        handler: (ctx, { query }) =>
+            listarUnidades(query, empresasDeLaLista(ctx.empresa, query.empresas), acceso(ctx)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/inventario/unidades/:id',
+        operacion: 'inventarioUnidadVer',
+        resumen: 'Una unidad con su historial en el kardex',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        respuesta: { status: 200, descripcion: 'Unidad', esquema: UnidadConHistorial },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirUnidad(ctx, id)
+            return historialUnidad(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/equipos-por-recuperar',
+        operacion: 'reportesEquiposPorRecuperar',
+        resumen: 'Equipos en comodato de servicios retirados (por recuperar)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        query: v.porRecuperarValidator,
+        respuesta: { status: 200, descripcion: 'Página de equipos', esquema: pagina(EquipoServicio) },
+        handler: (ctx, { query }) =>
+            equiposPorRecuperar(query, empresasDeLaLista(ctx.empresa, query.empresas)),
+    }),
+]
+
+const comodato: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/servicios/:id/equipos',
+        operacion: 'serviciosEquipos',
+        resumen: 'Equipos en comodato (o por recuperar) de un servicio, con su valor en libros',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        respuesta: { status: 200, descripcion: 'Equipos', esquema: lista(EquipoServicio) },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return equiposDelServicio(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/equipos',
+        operacion: 'serviciosAsignarEquipo',
+        resumen: 'Prestar una unidad en comodato al servicio (activo fijo 1.2.01.NN / 1.1.14)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.asignar_comodato',
+        cuerpo: v.asignarComodatoValidator,
+        idempotente: true,
+        descripcion:
+            'La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.',
+        respuesta: { status: 201, descripcion: 'Unidad en comodato', esquema: Unidad },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            await exigirUnidad(ctx, cuerpo.unidad_id)
+            return new AsignarComodato().execute({ ...cuerpo, servicio_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/equipos/:unidadId/devolver',
+        operacion: 'serviciosDevolverEquipo',
+        resumen: 'Devolver un equipo en comodato a una bodega (baja del activo sin resultado)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.devolver_comodato',
+        cuerpo: v.devolverComodatoValidator,
+        idempotente: true,
+        descripcion:
+            'Deprecia lo pendiente, da de baja el activo (1.1.14 valor en libros + 1.2.02 / 1.2.01) y la unidad vuelve usada (o en reparación) a su valor en libros. 409 unidad_sin_comodato. Emite inventario.comodato_devuelto y activo.dado_de_baja.',
+        respuesta: { status: 200, descripcion: 'Unidad devuelta', esquema: Unidad },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            await exigirBodega(ctx, cuerpo.bodega_id, true)
+            return new DevolverComodato().execute(
+                { ...cuerpo, servicio_id: id, unidad_id: Number(params.unidadId) },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/equipos/:unidadId/perdida',
+        operacion: 'serviciosPerdidaEquipo',
+        resumen: 'Declarar perdido un equipo en comodato (baja del activo a 5.3.06)',
+        etiqueta: 'inventario',
+        permiso: 'inventario.declarar_perdida_comodato',
+        cuerpo: v.perdidaComodatoValidator,
+        idempotente: true,
+        descripcion:
+            'Sin kardex: el activo se da de baja como retiro (pérdida en 5.3.06) y la unidad queda dada de baja. Cobrarlo al cliente es un cargo único aparte. 409 unidad_sin_comodato.',
+        respuesta: { status: 200, descripcion: 'Unidad dada de baja', esquema: Unidad },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new DeclararPerdidaComodato().execute(
+                { ...cuerpo, servicio_id: id, unidad_id: Number(params.unidadId) },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+]
+
+export default [...productos, ...bodegas, ...lecturas, ...operaciones, ...unidades, ...comodato]

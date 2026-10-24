@@ -5,6 +5,7 @@ import { CLAVES_CLASE_ACTIVO } from '#ledger/compras'
 import { SEGUIMIENTOS, TIPOS_PRODUCTO } from '#inventario/productos'
 import { TIPOS_BODEGA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
+import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 
 /**
  * Validadores del inventario (`contratos/inventario.md` §6, fase A). Las cantidades viajan como
@@ -43,6 +44,13 @@ const cuenta = () =>
         .trim()
         .regex(/^\d+(\.\d+)*$/)
         .maxLength(30)
+
+/** Unidad nueva de un producto de serie: serie o MAC (al menos una). */
+const unidadNueva = () =>
+    vine.object({
+        serie: texto(100).nullable().optional(),
+        mac: texto(30).nullable().optional().meta({ description: 'Con o sin separadores' }),
+    })
 
 /*
 | Productos
@@ -202,7 +210,10 @@ export const trasladoValidator = vine.compile(
         producto_id: idEntidad(),
         bodega_origen_id: idEntidad(),
         bodega_destino_id: idEntidad(),
-        cantidad: cantidad(),
+        cantidad: cantidad().nullable().optional().meta({ description: 'Producto por cantidad' }),
+        unidad_ids: vine.array(idEntidad()).minLength(1).maxLength(500).nullable().optional().meta({
+            description: 'Producto de serie: las unidades que se trasladan',
+        }),
         motivo: texto(500).nullable().optional(),
     }),
 )
@@ -211,7 +222,12 @@ export const ajusteValidator = vine.compile(
     vine.object({
         producto_id: idEntidad(),
         bodega_id: idEntidad(),
-        cantidad: cantidadConSigno(),
+        cantidad: cantidadConSigno().nullable().optional(),
+        unidad_id: idEntidad().nullable().optional().meta({ description: 'Serie: faltante de esta unidad' }),
+        unidad: unidadNueva()
+            .nullable()
+            .optional()
+            .meta({ description: 'Serie: sobrante de esta unidad nueva' }),
         motivo: motivo(),
         costo_unitario: costoUnitario().nullable().optional().meta({
             description: 'Sobrante sin costo conocido: el costo unitario con que entra',
@@ -223,7 +239,8 @@ export const bajaValidator = vine.compile(
     vine.object({
         producto_id: idEntidad(),
         bodega_id: idEntidad(),
-        cantidad: cantidad(),
+        cantidad: cantidad().nullable().optional().meta({ description: 'Producto por cantidad' }),
+        unidad_id: idEntidad().nullable().optional().meta({ description: 'Producto de serie: la unidad' }),
         causa: vine.enum(CAUSAS_BAJA),
         motivo: motivo(),
     }),
@@ -233,12 +250,68 @@ export const saldoInicialValidator = vine.compile(
     vine.object({
         producto_id: idEntidad(),
         bodega_id: idEntidad(),
-        cantidad: cantidad(),
+        cantidad: cantidad()
+            .nullable()
+            .optional()
+            .meta({ description: 'Producto por cantidad (en serie, 1)' }),
+        unidad: unidadNueva().nullable().optional().meta({ description: 'Producto de serie: la unidad' }),
         costo_unitario: costoUnitario().nullable().optional().meta({
             description: 'Costo unitario (o costo_total; uno de los dos)',
         }),
         costo_total: dinero().nullable().optional().meta({ description: 'Costo total (o costo_unitario)' }),
         fecha: fechaIso().nullable().optional().meta({ description: 'Fecha del saldo (por defecto hoy)' }),
         motivo: texto(500).nullable().optional(),
+    }),
+)
+
+/*
+| Unidades y comodato
+*/
+
+export const listarUnidadesValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        estado: vine.enum(ESTADOS_UNIDAD).optional(),
+        producto_id: idEntidad().optional(),
+        bodega_id: idEntidad().optional(),
+        servicio_id: idEntidad().optional(),
+        q: texto(100).optional().meta({ description: 'Serie (contiene) o MAC (con o sin separadores)' }),
+    }),
+)
+
+export const asignarComodatoValidator = vine.compile(
+    vine.object({
+        unidad_id: idEntidad(),
+        fecha: fechaIso().nullable().optional().meta({
+            description:
+                'Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)',
+        }),
+    }),
+)
+
+export const devolverComodatoValidator = vine.compile(
+    vine.object({
+        bodega_id: idEntidad(),
+        condicion: vine.enum(CONDICIONES).nullable().optional().meta({ description: 'Por defecto usado' }),
+        en_reparacion: vine.boolean().nullable().optional(),
+        fecha: fechaIso().nullable().optional(),
+        motivo: texto(500).nullable().optional(),
+    }),
+)
+
+export const perdidaComodatoValidator = vine.compile(
+    vine.object({
+        motivo: motivo(),
+        fecha: fechaIso().nullable().optional(),
+    }),
+)
+
+export const porRecuperarValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        ...reglasPaginacion,
+        cliente_id: idEntidad().optional(),
+        producto_id: idEntidad().optional(),
     }),
 )

@@ -6,7 +6,7 @@ import { exigirAccesoEmpresa, filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { D, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
-import RegistrarAsiento from '#ledger/actions/registrar_asiento'
+import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { filtrarBodegasVisibles, type AccesoBodegas } from '#inventario/bodegas'
 
 /**
@@ -32,6 +32,7 @@ export const LOCK_PRODUCTO = 3060
 export const TIPOS_MOVIMIENTO = [
     'entrada_compra',
     'reverso_compra',
+    'devolucion_proveedor',
     'venta',
     'reverso_venta',
     'consumo',
@@ -122,6 +123,7 @@ export interface ProductoMovible {
     sku: string
     nombre: string
     seguimiento: string
+    clase_activo: string | null
     activo: boolean
     existencia_minima: string | null
     cuenta_costo: string | null
@@ -140,9 +142,9 @@ export interface BodegaMovible {
 }
 
 /**
- * Producto de un movimiento de la fase A: existe, es de la empresa (404 si es de otra), está
- * activo (para entrar) y se lleva por cantidad (los de serie esperan a `unidades`, fase B: 422
- * `requiere_unidades`).
+ * Producto de un movimiento: existe, es de la empresa (404 si es de otra) y está activo (para
+ * entrar). `seguimiento` dice si el movimiento va por cantidad o por unidades
+ * (`exigirSeguimiento`).
  */
 export async function productoMovible(
     t: Transaccion,
@@ -159,6 +161,7 @@ export async function productoMovible(
             'sku',
             'nombre',
             'seguimiento',
+            'clase_activo',
             'activo',
             t.trx.raw('existencia_minima::text as existencia_minima'),
             'cuenta_costo',
@@ -169,21 +172,41 @@ export async function productoMovible(
         throw new NoEncontrado(`El producto ${productoId} no existe`)
     }
     exigirAccesoEmpresa(t.ctx, Number(fila.empresa_id))
-    if (fila.seguimiento === 'serie') {
-        throw new ValidacionFallida([
-            {
-                field: campo,
-                message: `El producto ${fila.sku} se lleva por serie: sus unidades llegan con la fase B del inventario`,
-                rule: 'requiere_unidades',
-            },
-        ])
-    }
     if (opciones.entrada && !fila.activo) {
         throw new ValidacionFallida([
             { field: campo, message: `El producto ${fila.sku} está desactivado`, rule: 'producto_inactivo' },
         ])
     }
     return { ...fila, id: Number(fila.id), empresa_id: Number(fila.empresa_id) }
+}
+
+/**
+ * 422 si la operación no corresponde al seguimiento del producto: uno por cantidad no lleva
+ * unidades (`no_aplica`) y uno por serie no va por cantidad (`requiere_unidades`).
+ */
+export function exigirSeguimiento(
+    producto: ProductoMovible,
+    conUnidades: boolean,
+    campo = conUnidades ? 'unidad_id' : 'cantidad',
+): void {
+    if (producto.seguimiento === 'serie' && !conUnidades) {
+        throw new ValidacionFallida([
+            {
+                field: campo,
+                message: `El producto ${producto.sku} se lleva por serie: indica sus unidades`,
+                rule: 'requiere_unidades',
+            },
+        ])
+    }
+    if (producto.seguimiento !== 'serie' && conUnidades) {
+        throw new ValidacionFallida([
+            {
+                field: campo,
+                message: `El producto ${producto.sku} se lleva por cantidad: no lleva unidades`,
+                rule: 'no_aplica',
+            },
+        ])
+    }
 }
 
 /** Bodega de un movimiento: existe y es de la empresa (404 si no), activa para recibir. */
@@ -254,6 +277,8 @@ export interface MovimientoNuevo {
     /** con signo, a centavos */
     costoTotal: Dec
     servicioId?: number | null
+    /** movimiento de una unidad de serie (cantidad ±1 a su costo) */
+    unidadId?: number | null
     asientoId?: number | null
     origen?: { tipo: string; id: number } | null
     trasladoId?: number | null
@@ -295,6 +320,7 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
             costo_unitario: costoUnitario(m.costoTotal, m.cantidad),
             costo_total: aTexto(m.costoTotal),
             servicio_id: m.servicioId ?? null,
+            unidad_id: m.unidadId ?? null,
             asiento_id: m.asientoId ?? null,
             origen_tipo: m.origen?.tipo ?? null,
             origen_id: m.origen?.id ?? null,
@@ -316,7 +342,7 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
         bodega_id: m.bodegaId,
         cantidad: aCantidad(m.cantidad),
         costo_total: aTexto(m.costoTotal),
-        unidad_id: null,
+        unidad_id: m.unidadId ?? null,
         servicio_id: m.servicioId ?? null,
         origen_tipo: m.origen?.tipo ?? null,
         origen_id: m.origen?.id ?? null,
@@ -346,13 +372,20 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
 export async function registrarMovimientoConAsiento(
     t: Transaccion,
     m: Omit<MovimientoNuevo, 'id' | 'asientoId'>,
-    asiento: { contrapartida: string; descripcion: string },
+    asiento: {
+        contrapartida?: string | number
+        descripcion: string
+        /** partidas propias (la devolución de comodato); por defecto 1.1.14 contra `contrapartida` */
+        movimientos?: LineaAsiento[]
+    },
+    id: number | null = null,
 ): Promise<number> {
-    const id = await reservarMovimiento(t)
+    id ??= await reservarMovimiento(t)
     let asientoId: number | null = null
-    if (!m.costoTotal.isZero()) {
+    if (!m.costoTotal.isZero() || asiento.movimientos) {
         const monto = aTexto(m.costoTotal.abs())
         const sale = m.cantidad.lt(0)
+        const contrapartida = asiento.contrapartida!
         const registrado = await new RegistrarAsiento().execute(
             {
                 empresa_id: m.empresaId,
@@ -360,9 +393,9 @@ export async function registrarMovimientoConAsiento(
                 descripcion: asiento.descripcion,
                 origen_tipo: 'inventario',
                 origen_id: id,
-                movimientos: [
-                    { cuenta: sale ? asiento.contrapartida : CUENTAS_GT.INVENTARIOS, debe: monto },
-                    { cuenta: sale ? CUENTAS_GT.INVENTARIOS : asiento.contrapartida, haber: monto },
+                movimientos: asiento.movimientos ?? [
+                    { cuenta: sale ? contrapartida : CUENTAS_GT.INVENTARIOS, debe: monto },
+                    { cuenta: sale ? CUENTAS_GT.INVENTARIOS : contrapartida, haber: monto },
                 ],
             },
             t.ctx,

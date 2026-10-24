@@ -1,11 +1,10 @@
 # inventario (A3)
 
 Inventario interno del ISP: productos, bodegas (lugares y técnicos), kardex a costo promedio y su
-asiento en el libro. Contrato: `.claude/integration/contratos/inventario.md`. Esta es la **fase A**
-(§11): modelo, cuentas, productos, bodegas, saldo inicial, compras que entran al inventario,
-consumo, traslado, ajuste, baja, existencias y kardex. Unidades por serie y comodato (B), venta,
-conteos y reporte valorizado (C) llegan después; el modelo ya tiene sus tipos de movimiento y la
-columna `unidad_id`.
+asiento en el libro. Contrato: `.claude/integration/contratos/inventario.md`. Fases **A** (modelo,
+cuentas, productos, bodegas, saldo inicial, compras, consumo, traslado, ajuste, baja, existencias y
+kardex) y **B** (unidades por serie o MAC, comodato con su activo fijo, equipos por recuperar y
+devolución al proveedor con NCRE). Venta, conteos y reporte valorizado (C) llegan después.
 
 ## Piezas
 
@@ -13,9 +12,11 @@ columna `unidad_id`.
 | --- | --- |
 | `productos.ts`, `bodegas.ts` | Lectura, alcance ACL de bodegas y tope por técnico |
 | `kardex.ts` | Única puerta de `inventario.movimientos`: costo, lock por producto, asiento propio, eventos; existencias, kardex y las lecturas del auditor (`valorKardex`, `existenciasDelKardex`) |
-| `compras.ts` | Ganchos de `compras.registrar` (entrada) y `compras.anular` (reverso) |
-| `actions/` | `productos.crear/editar/desactivar`, `bodegas.crear/editar/desactivar`, `inventario.cargar_saldo_inicial`, `inventario.consumir`, `inventario.trasladar`, `inventario.ajustar`, `inventario.dar_de_baja` |
-| `start/routes/inventario.ts` | `/productos`, `/bodegas`, `/inventario/existencias`, `/inventario/movimientos`, `/inventario/{consumos,traslados,ajustes,bajas,saldos-iniciales}` |
+| `compras.ts` | Ganchos de `compras.registrar` (entrada; NCRE = devolución al proveedor) y `compras.anular` (reverso) |
+| `unidades.ts` | Unidades por serie o MAC: validación (`serie_duplicada`), alta, salida de bodega, lecturas e historial |
+| `comodato.ts`, `consumidor.ts` | Lo común del comodato, equipos del servicio y por recuperar; consumidor de `servicio.estado_cambiado` |
+| `actions/` | `productos.*`, `bodegas.*`, `inventario.cargar_saldo_inicial`, `consumir`, `trasladar`, `ajustar`, `dar_de_baja`, `asignar_comodato`, `devolver_comodato`, `declarar_perdida_comodato` y la interna `revisar_comodatos` |
+| `start/routes/inventario.ts` | `/productos`, `/bodegas`, `/inventario/existencias`, `/inventario/movimientos`, `/inventario/unidades`, `/inventario/{consumos,traslados,ajustes,bajas,saldos-iniciales}`, `/servicios/:id/equipos[...]`, `/reportes/equipos-por-recuperar` |
 
 ## Reglas
 
@@ -32,10 +33,16 @@ columna `unidad_id`.
 - Consumo, traslado, ajuste y baja llevan fecha de hoy (nunca hay existencia negativa a ninguna
   fecha); saldo inicial y compras pueden ir a una fecha pasada. Los bloqueos del libro aplican por el
   asiento.
+- Serie: costo específico por unidad; un movimiento de una unidad mueve ±1 a su costo. Comodato:
+  `1.2.01.NN / 1.1.14` y alta del activo (`ledger.activos.unidad_id`); devolución `1.1.14 (valor en
+  libros) + 1.2.02 / 1.2.01` sin resultado; pérdida con `activos.dar_de_baja` (5.3.06).
 - Con el inventario sin usar, compras, facturas y cargos únicos se comportan igual que antes.
 
 ## Eventos
 
 - Emite: `inventario.movimiento_registrado` (cada movimiento), `inventario.existencia_minima` (la
-  existencia total cruza el mínimo hacia abajo).
-- Consume: ninguno en la fase A (`servicio.estado_cambiado` llega con la fase B).
+  existencia total cruza el mínimo hacia abajo), `inventario.comodato_asignado`,
+  `inventario.comodato_devuelto`, `inventario.equipo_por_recuperar` (y `activo.dado_de_baja` al
+  devolver o perder un comodato).
+- Consume: `servicio.estado_cambiado` (grupo `inventario`, `billing:worker`): retirado → equipos por
+  recuperar; de vuelta a otro estado → en comodato.

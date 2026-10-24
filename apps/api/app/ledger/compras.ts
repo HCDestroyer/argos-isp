@@ -89,6 +89,10 @@ export interface LineaCompraEntrada {
      */
     producto_id?: number | null
     bodega_id?: number | null
+    /** inventario fase B: unidades nuevas (serie o MAC) de un producto de serie, una por `cantidad` */
+    unidades?: Array<{ serie?: string | null; mac?: string | null }> | null
+    /** inventario fase B: en una NCRE del proveedor, las unidades que se le devuelven */
+    unidad_ids?: number[] | null
 }
 
 export interface CuentaLinea {
@@ -111,6 +115,8 @@ export interface LineaCompraCalculada {
     cantidad: number
     producto_id: number | null
     bodega_id: number | null
+    unidades: Array<{ serie?: string | null; mac?: string | null }>
+    unidad_ids: number[]
 }
 
 export interface TotalesCompra {
@@ -209,6 +215,8 @@ export function calcularLineas(
             cantidad: entrada.cantidad ?? 1,
             producto_id: entrada.producto_id ?? null,
             bodega_id: entrada.producto_id ? (entrada.bodega_id ?? null) : null,
+            unidades: entrada.unidades ?? [],
+            unidad_ids: entrada.unidad_ids ?? [],
         }
     })
     if (errores.length > 0) throw new ValidacionFallida(errores)

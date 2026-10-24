@@ -7,16 +7,22 @@ import {
     bloquearProducto,
     bodegaMovible,
     cantidadValida,
+    exigirSeguimiento,
     productoMovible,
     registrarMovimientoConAsiento,
     verMovimiento,
     type MovimientoVista,
 } from '#inventario/kardex'
+import { crearUnidades, validarUnidadesNuevas, type UnidadNueva } from '#inventario/unidades'
 
 /**
  * `inventario.cargar_saldo_inicial` (`POST /inventario/saldos-iniciales`): la existencia con la que
- * empieza un producto en una bodega, una sola vez y antes de cualquier otro movimiento de ese
- * producto en esa bodega (409 `saldo_inicial_registrado` / `saldo_inicial_con_movimientos`).
+ * empieza un producto en una bodega, antes de cualquier otro movimiento de ese producto en esa bodega
+ * (409 `saldo_inicial_con_movimientos`).
+ *
+ * - Por cantidad: una sola vez por producto y bodega (409 `saldo_inicial_registrado`).
+ * - Por serie (fase B): una `unidad` (serie o MAC) por petición, `cantidad` 1; el importador repite
+ *   la petición por equipo. 422 `serie_duplicada`.
  *
  * Asiento `1.1.14 Inventarios / 2.9.01 Saldos de apertura` por el costo (origen `inventario`). El
  * costo es `costo_total` o `cantidad × costo_unitario` (uno de los dos, mayor que 0). `fecha` (por
@@ -26,7 +32,8 @@ import {
 export interface EntradaSaldoInicial {
     producto_id: number
     bodega_id: number
-    cantidad: string
+    cantidad?: string | null
+    unidad?: UnidadNueva | null
     costo_unitario?: string | null
     costo_total?: string | null
     fecha?: string | null
@@ -40,8 +47,15 @@ export default class CargarSaldoInicial extends DomainAction<EntradaSaldoInicial
         const producto = await productoMovible(t, input.producto_id, { entrada: true })
         const empresaId = producto.empresa_id
         t.fijarEmpresa(empresaId)
+        exigirSeguimiento(producto, Boolean(input.unidad), input.unidad ? 'unidad' : 'cantidad')
         const bodega = await bodegaMovible(t, input.bodega_id, empresaId, { entrada: true })
-        const cantidad = cantidadValida(input.cantidad)
+        const serie = producto.seguimiento === 'serie'
+        if (serie && input.cantidad && !dec(input.cantidad).eq(1)) {
+            throw new ValidacionFallida([
+                { field: 'cantidad', message: 'Una unidad de serie entra de una en una', rule: 'cantidad' },
+            ])
+        }
+        const cantidad = serie ? dec('1') : cantidadValida(input.cantidad ?? '')
         const hoy = hoyGuatemala()
         const fecha = input.fecha ? fechaValida(input.fecha) : hoy
         if (fecha > hoy) {
@@ -76,6 +90,7 @@ export default class CargarSaldoInicial extends DomainAction<EntradaSaldoInicial
         const previo = (await t.trx
             .from('inventario.movimientos')
             .where({ producto_id: producto.id, bodega_id: bodega.id })
+            .if(serie, (q) => q.whereNot('tipo', 'saldo_inicial'))
             .orderBy('id')
             .select('id', 'tipo')
             .first()) as { id: number; tipo: string } | null
@@ -92,6 +107,18 @@ export default class CargarSaldoInicial extends DomainAction<EntradaSaldoInicial
                       'Producto con movimientos',
                   )
         }
+        let unidadId: number | null = null
+        if (serie) {
+            const [nueva] = await validarUnidadesNuevas(t, empresaId, [input.unidad!], 'unidad')
+            const [unidad] = await crearUnidades(t, {
+                empresaId,
+                productoId: producto.id,
+                bodegaId: bodega.id,
+                unidades: [nueva!],
+                costos: [costo],
+            })
+            unidadId = unidad!.id
+        }
         const id = await registrarMovimientoConAsiento(
             t,
             {
@@ -102,6 +129,7 @@ export default class CargarSaldoInicial extends DomainAction<EntradaSaldoInicial
                 bodegaId: bodega.id,
                 cantidad,
                 costoTotal: costo,
+                unidadId,
                 motivo: input.motivo ?? null,
             },
             {

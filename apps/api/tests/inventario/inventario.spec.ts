@@ -5,7 +5,6 @@ import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { hoyGuatemala } from '#ledger/fechas'
 import { errorDe } from '#tests/contabilidad/ayudas_contabilidad'
-import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { haceMeses, partidas, proveedorEn } from '#tests/ledger/ayudas_compras'
 import { crearZonaFila } from '#tests/core/fabricas'
@@ -13,11 +12,11 @@ import {
     bodegaEn,
     comprarInventario,
     contarMovimientos,
+    afirmarCuadre,
     cuadreInventario,
     productoEn,
     saldoInventario,
 } from '#tests/inventario/ayudas_inventario'
-import { existenciasDelKardex } from '#inventario/kardex'
 import EditarProducto from '#inventario/actions/editar_producto'
 import DesactivarProducto from '#inventario/actions/desactivar_producto'
 import DesactivarBodega from '#inventario/actions/desactivar_bodega'
@@ -36,43 +35,6 @@ import BloquearLibro from '#ledger/actions/bloquear_libro'
  * más productos, bodegas, saldo inicial, ajustes, bajas, traslados, el tope por técnico y las
  * lecturas. Cada prueba usa empresas nuevas y termina con el libro y el kardex cuadrados.
  */
-
-async function afirmarCuadre(
-    assert: {
-        deepEqual: (a: unknown, b: unknown, m?: string) => void
-        equal: (a: unknown, b: unknown, m?: string) => void
-    },
-    empresaId: number,
-) {
-    const cuadre = await cuadreInventario(empresaId)
-    assert.equal(cuadre.libro, cuadre.kardex, '1.1.14 = Σ kardex')
-    const proyeccion = (await db
-        .from('inventario.saldos')
-        .where('empresa_id', empresaId)
-        .orderBy(['producto_id', 'bodega_id'])
-        .select('producto_id', 'bodega_id', 'cantidad', 'valor')) as Array<{
-        producto_id: number
-        bodega_id: number
-        cantidad: string
-        valor: string
-    }>
-    assert.deepEqual(
-        proyeccion.map((p) => ({ ...p, producto_id: Number(p.producto_id), bodega_id: Number(p.bodega_id) })),
-        await existenciasDelKardex(empresaId),
-        'inventario.saldos = Σ kardex por producto y bodega',
-    )
-    // el auditor agrega el origen `inventario` a 9.origen_de_asiento_desconocido con los checks de §8
-    // (`.claude/integration/a3.md`); mientras, solo ese caso se descarta aquí
-    const todas = await verificarLibro(empresaId)
-    const violaciones = todas.filter(
-        (v) =>
-            !(
-                v.invariante.startsWith('9.origen_de_asiento_desconocido') &&
-                (v.detalle as Array<{ origen_tipo: string }>).every((d) => d.origen_tipo === 'inventario')
-            ),
-    )
-    assert.deepEqual(violaciones, [], `Invariantes contables rotos (empresa ${empresaId})`)
-}
 
 test.group('Inventario · fase A', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
@@ -553,7 +515,7 @@ test.group('Inventario · fase A', (group) => {
         await afirmarCuadre(assert, e.B)
     })
 
-    test('10. compras sin producto, líneas mal formadas y compras desde egreso o NCRE con producto', async ({
+    test('10. compras sin producto, líneas mal formadas, sin crédito fiscal y NCRE de devolución', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -643,28 +605,27 @@ test.group('Inventario · fase A', (group) => {
         const partidasSinCredito = await partidas('compra', sinCredito.id)
         assert.deepEqual(partidasSinCredito[0]!.slice(0, 3), [CUENTAS_GT.INVENTARIOS, '22.40', '0.00'])
         assert.deepEqual(await saldoInventario(producto.id, bodega.id), ['4.000', '22.40'])
-        const ncre = await errorDe(
-            new RegistrarCompra().execute(
-                {
-                    ...base,
-                    tipo_documento: 'NCRE',
-                    numero: unico('NC'),
-                    compra_referencia_id: sinCredito.id,
-                    lineas: [
-                        {
-                            descripcion: 'x',
-                            tipo: 'bien',
-                            total: '5.60',
-                            producto_id: producto.id,
-                            bodega_id: bodega.id,
-                        },
-                    ],
-                },
-                e.ctx,
-            ),
+        // fase B: la NCRE con producto devuelve al proveedor (sin crédito fiscal: Q5.60 la grapa con IVA)
+        await new RegistrarCompra().execute(
+            {
+                ...base,
+                tipo_documento: 'NCRE',
+                numero: unico('NC'),
+                compra_referencia_id: sinCredito.id,
+                lineas: [
+                    {
+                        descripcion: 'x',
+                        tipo: 'bien',
+                        total: '5.60',
+                        producto_id: producto.id,
+                        bodega_id: bodega.id,
+                    },
+                ],
+            },
+            e.ctx,
         )
-        assert.equal(ncre.status, 422)
-        assert.deepEqual(await contarMovimientos(e.B), { kardex: 1, asientos: 0 })
+        assert.deepEqual(await contarMovimientos(e.B), { kardex: 2, asientos: 0 })
+        assert.deepEqual(await saldoInventario(producto.id, bodega.id), ['3.000', '16.80'])
         await afirmarCuadre(assert, e.B)
     })
 
@@ -849,7 +810,7 @@ test.group('Inventario · fase A', (group) => {
         assert.equal(lista.body().data[0].existencia, '87.500')
         assert.equal(lista.body().data[0].valor, '218.75')
 
-        // roles base: lectura y cajero ven; contabilidad ajusta pero no crea productos
+        // roles base: lectura y cajero ven; contabilidad ajusta y crea productos (decisión del líder, fase B)
         const lectura = await usuarioConRoles(['lectura'])
         await estado(
             client.get('/api/v1/inventario/existencias').bearerToken(lectura.token).headers(cabecera),
@@ -870,7 +831,7 @@ test.group('Inventario · fase A', (group) => {
                 .bearerToken(contador.token)
                 .headers(cabecera)
                 .json({ sku: unico('X'), nombre: 'Otro', tipo: 'otro', seguimiento: 'cantidad' }),
-            403,
+            201,
         )
         await afirmarCuadre(assert, e.B)
     })

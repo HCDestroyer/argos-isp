@@ -10587,7 +10587,7 @@
       "post": {
         "operationId": "comprasRegistrar",
         "summary": "Registrar una compra al contado o al crédito (Gasto/Activo + IVA crédito / Caja|Banco|Proveedores)",
-        "description": "Solo inserción. Al contado crea el egreso que la paga (un solo asiento, el de la compra). Al crédito queda en 2.1.03 con el auxiliar del proveedor. FPEQ, FCAP y RECIBO sin crédito fiscal; crédito fuera de la ventana: 422 credito_fiscal_extemporaneo. 409 compra_duplicada. Retenciones sugeridas si no se indican. Emite compra.registrada.",
+        "description": "Solo inserción. Una línea bien con producto_id y bodega_id entra al inventario (1.1.14; producto de serie con unidades[]); una NCRE con producto devuelve al proveedor (unidad_ids en serie). Al contado crea el egreso que la paga (un solo asiento, el de la compra). Al crédito queda en 2.1.03 con el auxiliar del proveedor. FPEQ, FCAP y RECIBO sin crédito fiscal; crédito fuera de la ventana: 422 credito_fiscal_extemporaneo. 409 compra_duplicada. Retenciones sugeridas si no se indican. Emite compra.registrada.",
         "tags": [
           "compras"
         ],
@@ -10890,6 +10890,47 @@
                           ],
                           "minimum": 1,
                           "description": "Inventario: bodega donde entra el producto (obligatoria con producto_id)"
+                        },
+                        "unidades": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serie": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "maxLength": 100
+                              },
+                              "mac": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "maxLength": 30
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 1000,
+                          "description": "Inventario, producto de serie: una unidad (serie o MAC) por cantidad"
+                        },
+                        "unidad_ids": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "maxItems": 1000,
+                          "description": "Inventario, NCRE del proveedor: unidades de serie que se le devuelven"
                         }
                       },
                       "required": [
@@ -11712,6 +11753,47 @@
                           ],
                           "minimum": 1,
                           "description": "Inventario: bodega donde entra el producto (obligatoria con producto_id)"
+                        },
+                        "unidades": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serie": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "maxLength": 100
+                              },
+                              "mac": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "maxLength": 30
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 1000,
+                          "description": "Inventario, producto de serie: una unidad (serie o MAC) por cantidad"
+                        },
+                        "unidad_ids": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "maxItems": 1000,
+                          "description": "Inventario, NCRE del proveedor: unidades de serie que se le devuelven"
                         }
                       },
                       "required": [
@@ -25235,12 +25317,49 @@
                     "minimum": 1
                   },
                   "cantidad": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "pattern": "^-?\\d{1,11}(\\.\\d{1,3})?$",
                     "description": "Cantidad con signo (+ sobrante, − faltante), distinta de 0, hasta 3 decimales",
                     "examples": [
                       "-2"
                     ]
+                  },
+                  "unidad_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Serie: faltante de esta unidad"
+                  },
+                  "unidad": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "serie": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 100
+                      },
+                      "mac": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 30,
+                        "description": "Con o sin separadores"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Serie: sobrante de esta unidad nueva"
                   },
                   "motivo": {
                     "type": "string",
@@ -25262,7 +25381,6 @@
                 "required": [
                   "producto_id",
                   "bodega_id",
-                  "cantidad",
                   "motivo"
                 ],
                 "additionalProperties": false
@@ -25371,12 +25489,23 @@
                     "minimum": 1
                   },
                   "cantidad": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
-                    "description": "Cantidad mayor que 0 con hasta 3 decimales, como string",
+                    "description": "Producto por cantidad",
                     "examples": [
                       "12.5"
                     ]
+                  },
+                  "unidad_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Producto de serie: la unidad"
                   },
                   "causa": {
                     "type": "string",
@@ -25396,7 +25525,6 @@
                 "required": [
                   "producto_id",
                   "bodega_id",
-                  "cantidad",
                   "causa",
                   "motivo"
                 ],
@@ -25833,6 +25961,7 @@
               "enum": [
                 "entrada_compra",
                 "reverso_compra",
+                "devolucion_proveedor",
                 "venta",
                 "reverso_venta",
                 "consumo",
@@ -25956,12 +26085,41 @@
                     "minimum": 1
                   },
                   "cantidad": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
-                    "description": "Cantidad mayor que 0 con hasta 3 decimales, como string",
+                    "description": "Producto por cantidad (en serie, 1)",
                     "examples": [
                       "12.5"
                     ]
+                  },
+                  "unidad": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "serie": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 100
+                      },
+                      "mac": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 30,
+                        "description": "Con o sin separadores"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Producto de serie: la unidad"
                   },
                   "costo_unitario": {
                     "type": [
@@ -26004,8 +26162,7 @@
                 },
                 "required": [
                   "producto_id",
-                  "bodega_id",
-                  "cantidad"
+                  "bodega_id"
                 ],
                 "additionalProperties": false
               }
@@ -26117,12 +26274,28 @@
                     "minimum": 1
                   },
                   "cantidad": {
-                    "type": "string",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
-                    "description": "Cantidad mayor que 0 con hasta 3 decimales, como string",
+                    "description": "Producto por cantidad",
                     "examples": [
                       "12.5"
                     ]
+                  },
+                  "unidad_ids": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "description": "Producto de serie: las unidades que se trasladan"
                   },
                   "motivo": {
                     "type": [
@@ -26135,8 +26308,7 @@
                 "required": [
                   "producto_id",
                   "bodega_origen_id",
-                  "bodega_destino_id",
-                  "cantidad"
+                  "bodega_destino_id"
                 ],
                 "additionalProperties": false
               }
@@ -26196,6 +26368,247 @@
           }
         },
         "x-permiso": "inventario.trasladar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades": {
+      "get": {
+        "operationId": "inventarioUnidades",
+        "summary": "Unidades por serie o MAC, con su estado, bodega o servicio",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "disponible",
+                "en_comodato",
+                "por_recuperar",
+                "en_reparacion",
+                "vendida",
+                "dada_de_baja",
+                "anulada",
+                "devuelta_proveedor"
+              ]
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "bodega_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "servicio_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Serie (contiene) o MAC (con o sin separadores)",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de unidades",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UnidadInventario"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/unidades/{id}": {
+      "get": {
+        "operationId": "inventarioUnidadVer",
+        "summary": "Una unidad con su historial en el kardex",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadInventarioHistorial"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
         "x-implementado": true
       }
     },
@@ -50841,6 +51254,138 @@
         "x-implementado": true
       }
     },
+    "/api/v1/reportes/equipos-por-recuperar": {
+      "get": {
+        "operationId": "reportesEquiposPorRecuperar",
+        "summary": "Equipos en comodato de servicios retirados (por recuperar)",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de equipos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EquipoServicio"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/facturado-vs-cobrado": {
       "get": {
         "operationId": "reportesFacturadoCobrado",
@@ -51742,9 +52287,12 @@
                         "horus.revocar_token",
                         "horus.ver",
                         "inventario.ajustar",
+                        "inventario.asignar_comodato",
                         "inventario.cargar_saldo_inicial",
                         "inventario.consumir",
                         "inventario.dar_de_baja",
+                        "inventario.declarar_perdida_comodato",
+                        "inventario.devolver_comodato",
                         "inventario.trasladar",
                         "inventario.ver",
                         "ip.resolver",
@@ -52050,9 +52598,12 @@
                         "horus.revocar_token",
                         "horus.ver",
                         "inventario.ajustar",
+                        "inventario.asignar_comodato",
                         "inventario.cargar_saldo_inicial",
                         "inventario.consumir",
                         "inventario.dar_de_baja",
+                        "inventario.declarar_perdida_comodato",
+                        "inventario.devolver_comodato",
                         "inventario.trasladar",
                         "inventario.ver",
                         "ip.resolver",
@@ -56223,6 +56774,527 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/equipos": {
+      "get": {
+        "operationId": "serviciosEquipos",
+        "summary": "Equipos en comodato (o por recuperar) de un servicio, con su valor en libros",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Equipos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EquipoServicio"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "serviciosAsignarEquipo",
+        "summary": "Prestar una unidad en comodato al servicio (activo fijo 1.2.01.NN / 1.1.14)",
+        "description": "La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "unidad_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)"
+                  }
+                },
+                "required": [
+                  "unidad_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Unidad en comodato",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.asignar_comodato; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.asignar_comodato",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/equipos/{unidadId}/devolver": {
+      "post": {
+        "operationId": "serviciosDevolverEquipo",
+        "summary": "Devolver un equipo en comodato a una bodega (baja del activo sin resultado)",
+        "description": "Deprecia lo pendiente, da de baja el activo (1.1.14 valor en libros + 1.2.02 / 1.2.01) y la unidad vuelve usada (o en reparación) a su valor en libros. 409 unidad_sin_comodato. Emite inventario.comodato_devuelto y activo.dado_de_baja.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "unidadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bodega_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "condicion": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "nuevo",
+                          "usado"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Por defecto usado"
+                  },
+                  "en_reparacion": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "bodega_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unidad devuelta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.devolver_comodato; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.devolver_comodato",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/equipos/{unidadId}/perdida": {
+      "post": {
+        "operationId": "serviciosPerdidaEquipo",
+        "summary": "Declarar perdido un equipo en comodato (baja del activo a 5.3.06)",
+        "description": "Sin kardex: el activo se da de baja como retiro (pérdida en 5.3.06) y la unidad queda dada de baja. Cobrarlo al cliente es un cargo único aparte. 409 unidad_sin_comodato.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "unidadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unidad dada de baja",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnidadInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.declarar_perdida_comodato; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.declarar_perdida_comodato",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/horus": {
       "get": {
         "operationId": "horusServicio360",
@@ -58131,9 +59203,12 @@
                             "horus.revocar_token",
                             "horus.ver",
                             "inventario.ajustar",
+                            "inventario.asignar_comodato",
                             "inventario.cargar_saldo_inicial",
                             "inventario.consumir",
                             "inventario.dar_de_baja",
+                            "inventario.declarar_perdida_comodato",
+                            "inventario.devolver_comodato",
                             "inventario.trasladar",
                             "inventario.ver",
                             "ip.resolver",
@@ -71201,6 +72276,158 @@
           }
         }
       },
+      "EquipoServicio": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "serie",
+          "mac",
+          "estado",
+          "condicion",
+          "bodega_id",
+          "bodega_nombre",
+          "costo",
+          "servicio_id",
+          "cliente_id",
+          "activo_id",
+          "compra_id",
+          "version",
+          "created_at",
+          "updated_at",
+          "valor_libros",
+          "fecha_asignacion"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "AA:BB:CC:DD:EE:FF"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "en_reparacion",
+              "vendida",
+              "dada_de_baja",
+              "anulada",
+              "devuelta_proveedor"
+            ]
+          },
+          "condicion": {
+            "type": "string",
+            "enum": [
+              "nuevo",
+              "usado"
+            ]
+          },
+          "bodega_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Costo específico (al volver de comodato, su valor en libros)"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "activo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Activo fijo mientras está en comodato"
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "valor_libros": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Costo − depreciación acumulada del activo"
+          },
+          "fecha_asignacion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          }
+        }
+      },
       "EstablecimientoFiscal": {
         "type": "object",
         "required": [
@@ -75209,6 +76436,7 @@
             "enum": [
               "entrada_compra",
               "reverso_compra",
+              "devolucion_proveedor",
               "venta",
               "reverso_venta",
               "consumo",
@@ -89710,10 +90938,394 @@
             "minimum": 1
           },
           "salida": {
-            "$ref": "#/components/schemas/MovimientoInventario"
+            "$ref": "#/components/schemas/MovimientoInventario",
+            "description": "Primer par: salida"
           },
           "entrada": {
-            "$ref": "#/components/schemas/MovimientoInventario"
+            "$ref": "#/components/schemas/MovimientoInventario",
+            "description": "Primer par: entrada"
+          },
+          "movimientos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovimientoInventario"
+            },
+            "description": "Todos los movimientos (un par por unidad de serie)"
+          }
+        }
+      },
+      "UnidadInventario": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "serie",
+          "mac",
+          "estado",
+          "condicion",
+          "bodega_id",
+          "bodega_nombre",
+          "costo",
+          "servicio_id",
+          "cliente_id",
+          "activo_id",
+          "compra_id",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "AA:BB:CC:DD:EE:FF"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "en_reparacion",
+              "vendida",
+              "dada_de_baja",
+              "anulada",
+              "devuelta_proveedor"
+            ]
+          },
+          "condicion": {
+            "type": "string",
+            "enum": [
+              "nuevo",
+              "usado"
+            ]
+          },
+          "bodega_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Costo específico (al volver de comodato, su valor en libros)"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "activo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Activo fijo mientras está en comodato"
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UnidadInventarioHistorial": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "serie",
+          "mac",
+          "estado",
+          "condicion",
+          "bodega_id",
+          "bodega_nombre",
+          "costo",
+          "servicio_id",
+          "cliente_id",
+          "activo_id",
+          "compra_id",
+          "version",
+          "created_at",
+          "updated_at",
+          "historial"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "serie": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mac": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "AA:BB:CC:DD:EE:FF"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "en_comodato",
+              "por_recuperar",
+              "en_reparacion",
+              "vendida",
+              "dada_de_baja",
+              "anulada",
+              "devuelta_proveedor"
+            ]
+          },
+          "condicion": {
+            "type": "string",
+            "enum": [
+              "nuevo",
+              "usado"
+            ]
+          },
+          "bodega_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Costo específico (al volver de comodato, su valor en libros)"
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cliente_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "activo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Activo fijo mientras está en comodato"
+          },
+          "compra_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "historial": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "tipo",
+                "fecha",
+                "bodega_id",
+                "bodega_nombre",
+                "cantidad",
+                "costo_total",
+                "servicio_id",
+                "asiento_id",
+                "origen_tipo",
+                "origen_id",
+                "motivo",
+                "created_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "entrada_compra",
+                    "reverso_compra",
+                    "devolucion_proveedor",
+                    "venta",
+                    "reverso_venta",
+                    "consumo",
+                    "traslado",
+                    "asignacion_comodato",
+                    "devolucion_comodato",
+                    "ajuste_conteo",
+                    "ajuste",
+                    "baja",
+                    "saldo_inicial"
+                  ]
+                },
+                "fecha": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "bodega_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "bodega_nombre": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "string",
+                  "pattern": "^-?\\d+\\.\\d{3}$",
+                  "description": "Cantidad con 3 decimales"
+                },
+                "costo_total": {
+                  "$ref": "#/components/schemas/Dinero",
+                  "description": "Monto con signo (+ entra, − sale)"
+                },
+                "servicio_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "asiento_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "origen_tipo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "origen_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
           }
         }
       },
