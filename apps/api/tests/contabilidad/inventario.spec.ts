@@ -54,6 +54,7 @@ import { REQUISITOS_PARA_EJECUTAR } from '#lealtad/sorteos'
  * - **H40** (media): una empresa del régimen de pequeño contribuyente toma crédito fiscal por
  *   defecto en una FACT con IVA (`prepararCompra` solo mira el documento): el IVA va a 1.1.04 y el
  *   inventario entra a la base, cuando su IVA no es acreditable y es costo.
+ * - Fase B (rama `a3/inventario-b`): los de comodato y unidades están en `inventario_comodato.spec.ts`.
  * - **H41** (menor): un ajuste positivo (sobrante) acepta `costo_unitario` a voluntad aunque el
  *   producto tenga existencia y promedio en la bodega (§5: «al último costo promedio»), y acepta
  *   `costo_unitario = 0` sin costo conocido (entra a Q0, sin asiento), en vez de 422 `costo_requerido`.
@@ -433,41 +434,51 @@ test.group('Auditor contable · inventario fase A', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('NCRE con producto y compra desde un egreso con producto: 422 no_aplica (la devolución al proveedor es de la fase B), sin tocar el kardex', async ({
+    test('NCRE de devolución por cantidad (fase B): al costo de la compra, el residuo en la última, sin crédito con el IVA; la cuenta 1.1.14 a mano sigue en 422', async ({
         assert,
     }) => {
         const { e, producto, bodega } = await escenario()
         const proveedor = await proveedorEn(e.B, e.ctx)
+        // 3 a Q10.00 sin crédito fiscal (Q3.33, Q3.33 y Q3.34) y otra compra a otro precio en la bodega
         const original = await compra(
             e,
             e.B,
-            { total: '112.00', cantidad: 2, producto_id: producto.id, bodega_id: bodega.id },
-            {},
+            { total: '10.00', cantidad: 3, producto_id: producto.id, bodega_id: bodega.id },
+            { credito_fiscal: false },
             proveedor,
         )
-        const ncre = await errorDe(
+        await compra(e, e.B, { total: '112.00', cantidad: 1, producto_id: producto.id, bodega_id: bodega.id })
+        const ncre = (total: string, cantidad: number, numero = unico('NC')) =>
             compra(
                 e,
                 e.B,
-                { total: '56.00', cantidad: 1, producto_id: producto.id, bodega_id: bodega.id },
-                { tipo_documento: 'NCRE', compra_referencia_id: original.id },
+                { total, cantidad, producto_id: producto.id, bodega_id: bodega.id },
+                { tipo_documento: 'NCRE', compra_referencia_id: original.id, numero },
                 proveedor,
-            ),
-        )
-        assert.equal(ncre.status, 422)
-        assert.include(ncre.reglas, 'no_aplica')
+            )
+        const primera = await ncre('3.33', 1)
+        const segunda = await ncre('3.33', 1)
+        const ultima = await errorDe(ncre('3.33', 1))
+        assert.equal(ultima.codigo, 'devolucion_distinta_del_costo', 'la última lleva el residuo: Q3.34')
+        const tercera = await ncre('3.34', 1)
+        const nadaMas = await errorDe(ncre('0.01', 1))
+        assert.equal(nadaMas.status, 422, 'nada más que devolver')
+        assert.deepEqual(await saldoInventario(producto.id, bodega.id), ['1.000', '100.00'])
+        // anular la de en medio la reingresa al mismo costo
+        await new AnularCompra().execute({ compra_id: segunda.id, motivo: 'auditoría' }, e.ctx)
+        assert.deepEqual(await saldoInventario(producto.id, bodega.id), ['2.000', '103.33'])
+        assert.isOk(primera.id && tercera.id)
         // ni siquiera con la cuenta de inventario a mano
         const aMano = await errorDe(
             compra(
                 e,
                 e.B,
-                { total: '56.00', cuenta: CUENTAS_GT.INVENTARIOS },
+                { total: '5.00', cuenta: CUENTAS_GT.INVENTARIOS },
                 { tipo_documento: 'NCRE', compra_referencia_id: original.id },
                 proveedor,
             ),
         )
         assert.equal(aMano.status, 422)
-        assert.deepEqual(await saldoInventario(producto.id, bodega.id), ['2.000', '100.00'])
         await afirmarLibro(assert, [e.B, e.C])
     })
 
