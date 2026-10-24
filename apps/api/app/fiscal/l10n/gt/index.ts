@@ -1,5 +1,9 @@
 import type { DefinicionFrase, DefinicionTipoDte, PaqueteLocalizacion } from '#fiscal/localizacion'
-import { CUENTAS_PAQUETE_GT, CUENTAS_PAQUETE_GT_2026_2 } from '#fiscal/l10n/gt/cuentas'
+import {
+    CUENTAS_PAQUETE_GT,
+    CUENTAS_PAQUETE_GT_2026_2,
+    CUENTAS_PAQUETE_GT_2026_3,
+} from '#fiscal/l10n/gt/cuentas'
 import { PARAMETROS_GT, REGIMENES_GT, type RegimenGt } from '#fiscal/l10n/gt/parametros'
 import { CUADRICULAS_GT, IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
 
@@ -129,4 +133,17 @@ export const PAQUETE_GT_2026_2: PaqueteLocalizacion = {
     version: '2026.2.0',
     publicada_en: '2026-10-18',
     cuentas: CUENTAS_PAQUETE_GT_2026_2,
+}
+
+/**
+ * `gt-2026.3` (inventario interno, `contratos/inventario.md` §3): igual que 2026.2 más `1.1.14
+ * Inventarios`, `5.2.07`, `4.2.04` y el grupo `5.6 Costo de ventas` (`5.6.01`, `5.6.02`). Instalarla
+ * sobre 2026.2 solo agrega esas cuentas.
+ */
+export const PAQUETE_GT_2026_3: PaqueteLocalizacion = {
+    ...PAQUETE_GT_2026_2,
+    codigo: 'gt-2026.3',
+    version: '2026.3.0',
+    publicada_en: '2026-10-24',
+    cuentas: CUENTAS_PAQUETE_GT_2026_3,
 }

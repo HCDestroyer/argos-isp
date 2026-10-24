@@ -639,6 +639,31 @@ export interface CatalogoEventos {
         motivo: string
         valor_libros: Dinero
     }
+    /**
+     * Inventario (A3, `contratos/inventario.md` §7, fase A). `cantidad` con signo (+ entra, − sale)
+     * y hasta 3 decimales, como texto; `costo_total` con signo.
+     */
+    'inventario.movimiento_registrado': {
+        movimiento_id: number
+        empresa_id: number
+        tipo: string
+        producto_id: number
+        bodega_id: number
+        cantidad: string
+        costo_total: Dinero
+        unidad_id: number | null
+        servicio_id: number | null
+        origen_tipo: string | null
+        origen_id: number | null
+    }
+    /** La existencia total del producto cruzó su mínimo hacia abajo; `bodega_id` null = total. */
+    'inventario.existencia_minima': {
+        empresa_id: number
+        producto_id: number
+        bodega_id: number | null
+        cantidad: string
+        minimo: string
+    }
     // lealtad (A3, `contratos/lealtad.md` §13). Puntos enteros (no dinero); fechas YYYY-MM-DD.
     /** cambió el programa o sus reglas: quien guarde reglas en caché las relee (regla 5) */
     'lealtad.programa_cambiado': {
@@ -944,6 +969,8 @@ export const EVENTOS = [
     'compra.registrada',
     'compra.anulada',
     'activo.dado_de_baja',
+    'inventario.movimiento_registrado',
+    'inventario.existencia_minima',
     'lealtad.programa_cambiado',
     'lealtad.puntos_acumulados',
     'lealtad.puntos_revertidos',

@@ -141,6 +141,13 @@ const lineaCompra = vine.object({
                 'Tasa anual de depreciación; por defecto el máximo legal de la clase (parámetro depreciacion)',
         }),
     activo_valor_residual: dinero().nullable().optional(),
+    producto_id: idEntidad().nullable().optional().meta({
+        description:
+            'Inventario: línea bien que entra al kardex por cantidad unidades (va a 1.1.14 en lugar de a un gasto)',
+    }),
+    bodega_id: idEntidad().nullable().optional().meta({
+        description: 'Inventario: bodega donde entra el producto (obligatoria con producto_id)',
+    }),
 })
 
 const retencion = vine.object({

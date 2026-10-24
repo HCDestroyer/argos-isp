@@ -72,6 +72,9 @@
       "name": "interno"
     },
     {
+      "name": "inventario"
+    },
+    {
       "name": "ipam"
     },
     {
@@ -5697,6 +5700,655 @@
         "x-implementado": true
       }
     },
+    "/api/v1/bodegas": {
+      "get": {
+        "operationId": "bodegasListar",
+        "summary": "Bodegas y bodegas de técnico",
+        "description": "Una bodega de técnico solo la ve su usuario o quien tenga el permiso sin alcance; una con zona o router, quien tenga ese alcance.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bodega",
+                "tecnico"
+              ]
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de bodegas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Bodega"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "bodegasCrear",
+        "summary": "Crear una bodega o la bodega de un técnico",
+        "description": "tipo tecnico lleva usuario_id (una activa por usuario y empresa: 409 bodega_tecnico_duplicada). Nombre único por empresa (409 bodega_duplicada).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 120
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "bodega",
+                      "tecnico"
+                    ]
+                  },
+                  "usuario_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Técnico dueño (solo tipo tecnico)"
+                  },
+                  "zona_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Zona para el alcance ACL"
+                  },
+                  "router_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Router para el alcance ACL"
+                  }
+                },
+                "required": [
+                  "nombre",
+                  "tipo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bodega creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bodega"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bodegas.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bodegas.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bodegas/{id}": {
+      "get": {
+        "operationId": "bodegasVer",
+        "summary": "Ver bodega",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bodega"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bodegas/{id}/desactivar": {
+      "post": {
+        "operationId": "bodegasDesactivar",
+        "summary": "Desactivar una bodega sin existencias",
+        "description": "409 bodega_con_existencias, bodega_inactiva.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bodega"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bodegas.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bodegas.desactivar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/bodegas/{id}/editar": {
+      "post": {
+        "operationId": "bodegasEditar",
+        "summary": "Editar una bodega (con version)",
+        "description": "Nombre, técnico, zona y router. Cambiar el técnico de una bodega con existencias: 409 bodega_con_existencias.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 120
+                  },
+                  "usuario_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Técnico dueño (solo tipo tecnico)"
+                  },
+                  "zona_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Zona para el alcance ACL"
+                  },
+                  "router_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Router para el alcance ACL"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bodega"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso bodegas.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "bodegas.editar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/bonificaciones": {
       "get": {
         "operationId": "bonificacionesListar",
@@ -10222,6 +10874,22 @@
                           "examples": [
                             "150.00"
                           ]
+                        },
+                        "producto_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Inventario: línea bien que entra al kardex por cantidad unidades (va a 1.1.14 en lugar de a un gasto)"
+                        },
+                        "bodega_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Inventario: bodega donde entra el producto (obligatoria con producto_id)"
                         }
                       },
                       "required": [
@@ -11028,6 +11696,22 @@
                           "examples": [
                             "150.00"
                           ]
+                        },
+                        "producto_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Inventario: línea bien que entra al kardex por cantidad unidades (va a 1.1.14 en lugar de a un gasto)"
+                        },
+                        "bodega_id": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1,
+                          "description": "Inventario: bodega donde entra el producto (obligatoria con producto_id)"
                         }
                       },
                       "required": [
@@ -24503,6 +25187,1015 @@
             }
           }
         },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/ajustes": {
+      "post": {
+        "operationId": "inventarioAjustar",
+        "summary": "Ajuste manual con motivo (faltante 5.6.02 / 1.1.14; sobrante 1.1.14 / 4.2.04)",
+        "description": "cantidad con signo. El sobrante entra al último costo promedio o al costo_unitario dado (422 costo_requerido si no hay ninguno). Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "producto_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bodega_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "cantidad": {
+                    "type": "string",
+                    "pattern": "^-?\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Cantidad con signo (+ sobrante, − faltante), distinta de 0, hasta 3 decimales",
+                    "examples": [
+                      "-2"
+                    ]
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  },
+                  "costo_unitario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,6})?$",
+                    "description": "Sobrante sin costo conocido: el costo unitario con que entra",
+                    "examples": [
+                      "5.25"
+                    ]
+                  }
+                },
+                "required": [
+                  "producto_id",
+                  "bodega_id",
+                  "cantidad",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Movimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovimientoInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ajustar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ajustar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/bajas": {
+      "post": {
+        "operationId": "inventarioDarDeBaja",
+        "summary": "Baja de existencias dañadas, robadas u obsoletas (5.6.02 / 1.1.14)",
+        "description": "Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "producto_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bodega_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "cantidad": {
+                    "type": "string",
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Cantidad mayor que 0 con hasta 3 decimales, como string",
+                    "examples": [
+                      "12.5"
+                    ]
+                  },
+                  "causa": {
+                    "type": "string",
+                    "enum": [
+                      "danado",
+                      "robado",
+                      "obsoleto",
+                      "otro"
+                    ]
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "producto_id",
+                  "bodega_id",
+                  "cantidad",
+                  "causa",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Movimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovimientoInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.dar_de_baja; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.dar_de_baja",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/consumos": {
+      "post": {
+        "operationId": "inventarioConsumir",
+        "summary": "Consumo de materiales (cuenta_consumo, por defecto 5.2.07 / 1.1.14)",
+        "description": "servicio_id opcional (misma empresa). Sale al costo promedio de la bodega (la salida que la vacía lleva todo su valor). Fecha de hoy; respeta los bloqueos del libro (422 periodo_cerrado o periodo_bloqueado, 409 bloqueo_duro). 409 existencia_insuficiente sin escribir nada. Productos con seguimiento serie: 422 requiere_unidades (fase B). Emite inventario.movimiento_registrado e inventario.existencia_minima al cruzar el mínimo.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "producto_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bodega_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "cantidad": {
+                    "type": "string",
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Cantidad mayor que 0 con hasta 3 decimales, como string",
+                    "examples": [
+                      "12.5"
+                    ]
+                  },
+                  "servicio_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Instalación o reparación en la que se usó (misma empresa)"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "producto_id",
+                  "bodega_id",
+                  "cantidad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Movimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovimientoInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.consumir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.consumir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/existencias": {
+      "get": {
+        "operationId": "inventarioExistencias",
+        "summary": "Existencias: cantidad, valor y costo promedio por producto × bodega",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "bodega_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "bajo_minimo",
+            "in": "query",
+            "required": false,
+            "description": "Solo productos cuya existencia total está bajo su existencia mínima",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de existencias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ExistenciaInventario"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/movimientos": {
+      "get": {
+        "operationId": "inventarioKardex",
+        "summary": "Kardex: movimientos en orden de registro con el saldo corrido por producto",
+        "description": "El saldo corrido es por producto (y por bodega si se filtra por bodega_id), calculado sobre toda la historia antes de filtrar por fecha o tipo.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "bodega_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+              "format": "date"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "entrada_compra",
+                "reverso_compra",
+                "venta",
+                "reverso_venta",
+                "consumo",
+                "traslado",
+                "asignacion_comodato",
+                "devolucion_comodato",
+                "ajuste_conteo",
+                "ajuste",
+                "baja",
+                "saldo_inicial"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página del kardex",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MovimientoInventario"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/saldos-iniciales": {
+      "post": {
+        "operationId": "inventarioSaldoInicial",
+        "summary": "Saldo inicial de un producto en una bodega (1.1.14 / 2.9.01)",
+        "description": "Una vez por producto y bodega y antes de cualquier otro movimiento (409 saldo_inicial_registrado, saldo_inicial_con_movimientos). costo_total o costo_unitario. fecha (por defecto hoy) respeta los bloqueos del libro.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "producto_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bodega_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "cantidad": {
+                    "type": "string",
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Cantidad mayor que 0 con hasta 3 decimales, como string",
+                    "examples": [
+                      "12.5"
+                    ]
+                  },
+                  "costo_unitario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,6})?$",
+                    "description": "Costo unitario (o costo_total; uno de los dos)",
+                    "examples": [
+                      "5.25"
+                    ]
+                  },
+                  "costo_total": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Costo total (o costo_unitario)",
+                    "examples": [
+                      "150.00"
+                    ]
+                  },
+                  "fecha": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+                    "format": "date",
+                    "description": "Fecha del saldo (por defecto hoy)"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "producto_id",
+                  "bodega_id",
+                  "cantidad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Movimiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovimientoInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.cargar_saldo_inicial; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.cargar_saldo_inicial",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/inventario/traslados": {
+      "post": {
+        "operationId": "inventarioTrasladar",
+        "summary": "Traslado entre bodegas o técnicos de la misma empresa (sin asiento)",
+        "description": "Dos movimientos con el mismo traslado_id al mismo costo. Una bodega de otra empresa: 404. 409 existencia_insuficiente. Fecha de hoy.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "producto_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bodega_origen_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bodega_destino_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "cantidad": {
+                    "type": "string",
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Cantidad mayor que 0 con hasta 3 decimales, como string",
+                    "examples": [
+                      "12.5"
+                    ]
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "producto_id",
+                  "bodega_origen_id",
+                  "bodega_destino_id",
+                  "cantidad"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Traslado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrasladoInventario"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.trasladar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.trasladar",
         "x-implementado": true
       }
     },
@@ -45587,6 +47280,798 @@
         "x-implementado": true
       }
     },
+    "/api/v1/productos": {
+      "get": {
+        "operationId": "productosListar",
+        "summary": "Productos del inventario con su existencia y valor totales",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "empresas",
+            "in": "query",
+            "required": false,
+            "description": "todas = consolidado de todas las empresas (solo con alcance global o acceso a todas); sin él, la empresa activa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todas"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Nombre (contiene) o SKU exacto",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "equipo",
+                "material",
+                "otro"
+              ]
+            }
+          },
+          {
+            "name": "seguimiento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cantidad",
+                "serie"
+              ]
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de productos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Producto"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "productosCrear",
+        "summary": "Crear un producto (SKU único por empresa)",
+        "description": "409 sku_duplicado. clase_activo solo con seguimiento serie (por defecto equipo_red). cuenta_costo y cuenta_consumo: cuentas de gasto (por defecto 5.6.01 y 5.2.07).",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "empresa_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Por defecto la empresa activa"
+                  },
+                  "sku": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "equipo",
+                      "material",
+                      "otro"
+                    ]
+                  },
+                  "seguimiento": {
+                    "type": "string",
+                    "enum": [
+                      "cantidad",
+                      "serie"
+                    ],
+                    "description": "cantidad (cable, conectores) o serie (router, ONU: unidades en la fase B)"
+                  },
+                  "unidad": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "description": "unidad (por defecto), metro, caja…"
+                  },
+                  "clase_activo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "equipo_red",
+                          "computacion",
+                          "mobiliario",
+                          "vehiculos",
+                          "herramientas",
+                          "edificios",
+                          "otros"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo seguimiento serie: clase de activo al prestarlo en comodato (por defecto equipo_red)"
+                  },
+                  "concepto_cargo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Concepto de cargo único con que se vende (fase C)"
+                  },
+                  "cuenta_costo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)*$",
+                    "maxLength": 30,
+                    "description": "Cuenta de costo de ventas (gasto); por defecto 5.6.01"
+                  },
+                  "cuenta_consumo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)*$",
+                    "maxLength": 30,
+                    "description": "Cuenta del consumo interno (gasto); por defecto 5.2.07"
+                  },
+                  "existencia_minima": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Existencia total bajo la cual se avisa (inventario.existencia_minima)"
+                  }
+                },
+                "required": [
+                  "sku",
+                  "nombre",
+                  "tipo",
+                  "seguimiento"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Producto creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Producto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso productos.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "productos.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/productos/{id}": {
+      "get": {
+        "operationId": "productosVer",
+        "summary": "Ver producto",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Producto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso inventario.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "inventario.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/productos/{id}/desactivar": {
+      "post": {
+        "operationId": "productosDesactivar",
+        "summary": "Desactivar un producto sin existencias",
+        "description": "409 producto_con_existencias, producto_inactivo. El kardex queda.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "motivo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Producto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso productos.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "productos.desactivar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/productos/{id}/editar": {
+      "post": {
+        "operationId": "productosEditar",
+        "summary": "Editar un producto (con version)",
+        "description": "Con version (409 si cambió) y audit.cambios. El seguimiento no cambia si hay movimientos (409 producto_con_movimientos). null limpia los opcionales.",
+        "tags": [
+          "inventario"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "sku": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "equipo",
+                          "material",
+                          "otro"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "seguimiento": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "cantidad",
+                          "serie"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "No cambia si el producto tiene movimientos (409 producto_con_movimientos)"
+                  },
+                  "unidad": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 30,
+                    "description": "unidad (por defecto), metro, caja…"
+                  },
+                  "clase_activo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "equipo_red",
+                          "computacion",
+                          "mobiliario",
+                          "vehiculos",
+                          "herramientas",
+                          "edificios",
+                          "otros"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Solo seguimiento serie: clase de activo al prestarlo en comodato (por defecto equipo_red)"
+                  },
+                  "concepto_cargo_id": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "description": "Concepto de cargo único con que se vende (fase C)"
+                  },
+                  "cuenta_costo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)*$",
+                    "maxLength": 30,
+                    "description": "Cuenta de costo de ventas (gasto); por defecto 5.6.01"
+                  },
+                  "cuenta_consumo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d+)*$",
+                    "maxLength": 30,
+                    "description": "Cuenta del consumo interno (gasto); por defecto 5.2.07"
+                  },
+                  "existencia_minima": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
+                    "description": "Existencia total bajo la cual se avisa (inventario.existencia_minima)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Producto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso productos.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "productos.editar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/promesas": {
       "get": {
         "operationId": "promesasListar",
@@ -49179,6 +51664,9 @@
                         "bancos.trasladar",
                         "bancos.ver",
                         "bitacora.ver",
+                        "bodegas.crear",
+                        "bodegas.desactivar",
+                        "bodegas.editar",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.crear",
@@ -49253,6 +51741,12 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "inventario.ajustar",
+                        "inventario.cargar_saldo_inicial",
+                        "inventario.consumir",
+                        "inventario.dar_de_baja",
+                        "inventario.trasladar",
+                        "inventario.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
@@ -49291,6 +51785,9 @@
                         "plantillas.crear",
                         "plantillas.editar",
                         "plantillas.ver",
+                        "productos.crear",
+                        "productos.desactivar",
+                        "productos.editar",
                         "promesas.aprobar",
                         "promesas.cancelar",
                         "promesas.crear",
@@ -49475,6 +51972,9 @@
                         "bancos.trasladar",
                         "bancos.ver",
                         "bitacora.ver",
+                        "bodegas.crear",
+                        "bodegas.desactivar",
+                        "bodegas.editar",
                         "cajas.abrir",
                         "cajas.cerrar",
                         "cajas.crear",
@@ -49549,6 +52049,12 @@
                         "horus.probar",
                         "horus.revocar_token",
                         "horus.ver",
+                        "inventario.ajustar",
+                        "inventario.cargar_saldo_inicial",
+                        "inventario.consumir",
+                        "inventario.dar_de_baja",
+                        "inventario.trasladar",
+                        "inventario.ver",
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
@@ -49587,6 +52093,9 @@
                         "plantillas.crear",
                         "plantillas.editar",
                         "plantillas.ver",
+                        "productos.crear",
+                        "productos.desactivar",
+                        "productos.editar",
                         "promesas.aprobar",
                         "promesas.cancelar",
                         "promesas.crear",
@@ -55544,6 +58053,9 @@
                             "bancos.trasladar",
                             "bancos.ver",
                             "bitacora.ver",
+                            "bodegas.crear",
+                            "bodegas.desactivar",
+                            "bodegas.editar",
                             "cajas.abrir",
                             "cajas.cerrar",
                             "cajas.crear",
@@ -55618,6 +58130,12 @@
                             "horus.probar",
                             "horus.revocar_token",
                             "horus.ver",
+                            "inventario.ajustar",
+                            "inventario.cargar_saldo_inicial",
+                            "inventario.consumir",
+                            "inventario.dar_de_baja",
+                            "inventario.trasladar",
+                            "inventario.ver",
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
@@ -55656,6 +58174,9 @@
                             "plantillas.crear",
                             "plantillas.editar",
                             "plantillas.ver",
+                            "productos.crear",
+                            "productos.desactivar",
+                            "productos.editar",
                             "promesas.aprobar",
                             "promesas.cancelar",
                             "promesas.crear",
@@ -61253,6 +63774,86 @@
               }
             },
             "description": "Obligaciones abiertas (solo con estado ok)"
+          }
+        }
+      },
+      "Bodega": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "nombre",
+          "tipo",
+          "usuario_id",
+          "usuario_nombre",
+          "zona_id",
+          "router_id",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "bodega",
+              "tecnico"
+            ]
+          },
+          "usuario_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "usuario_nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zona_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "router_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -69529,6 +72130,94 @@
         },
         "additionalProperties": false
       },
+      "ExistenciaInventario": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "unidad",
+          "bodega_id",
+          "bodega_nombre",
+          "bodega_tipo",
+          "cantidad",
+          "valor",
+          "costo_promedio",
+          "existencia_total",
+          "existencia_minima",
+          "bajo_minimo"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "unidad": {
+            "type": "string"
+          },
+          "bodega_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": "string"
+          },
+          "bodega_tipo": {
+            "type": "string",
+            "enum": [
+              "bodega",
+              "tecnico"
+            ]
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Cantidad con 3 decimales"
+          },
+          "valor": {
+            "$ref": "#/components/schemas/Dinero"
+          },
+          "costo_promedio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "valor / cantidad de la bodega, 6 decimales; null sin existencia"
+          },
+          "existencia_total": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Cantidad con 3 decimales"
+          },
+          "existencia_minima": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Cantidad con 3 decimales"
+          },
+          "bajo_minimo": {
+            "type": "boolean"
+          }
+        }
+      },
       "Extracto": {
         "type": "object",
         "required": [
@@ -71411,6 +74100,22 @@
           "cantidad": {
             "type": "integer",
             "description": "Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad"
+          },
+          "producto_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Inventario: producto que entró al kardex"
+          },
+          "bodega_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Inventario: bodega donde entró"
           }
         }
       },
@@ -72457,6 +75162,188 @@
           },
           "saldo": {
             "$ref": "#/components/schemas/Dinero"
+          }
+        }
+      },
+      "MovimientoInventario": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "tipo",
+          "fecha",
+          "producto_id",
+          "producto_sku",
+          "producto_nombre",
+          "bodega_id",
+          "bodega_nombre",
+          "cantidad",
+          "costo_unitario",
+          "costo_total",
+          "unidad_id",
+          "servicio_id",
+          "asiento_id",
+          "origen_tipo",
+          "origen_id",
+          "traslado_id",
+          "reverso_de",
+          "causa",
+          "motivo",
+          "actor_tipo",
+          "actor_id",
+          "created_at",
+          "saldo_cantidad",
+          "saldo_valor"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "entrada_compra",
+              "reverso_compra",
+              "venta",
+              "reverso_venta",
+              "consumo",
+              "traslado",
+              "asignacion_comodato",
+              "devolucion_comodato",
+              "ajuste_conteo",
+              "ajuste",
+              "baja",
+              "saldo_inicial"
+            ]
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "producto_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "producto_sku": {
+            "type": "string"
+          },
+          "producto_nombre": {
+            "type": "string"
+          },
+          "bodega_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bodega_nombre": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Con signo: + entra, − sale"
+          },
+          "costo_unitario": {
+            "type": "string",
+            "description": "Costo unitario con 6 decimales"
+          },
+          "costo_total": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Monto con signo (+ entra, − sale)"
+          },
+          "unidad_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "servicio_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "asiento_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Asiento del movimiento (o el de su compra); null sin efecto contable"
+          },
+          "origen_tipo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "traslado_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "reverso_de": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "causa": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "danado",
+              "robado",
+              "obsoleto",
+              "otro"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor_tipo": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "saldo_cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Saldo corrido después del movimiento"
+          },
+          "saldo_valor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor corrido después del movimiento"
           }
         }
       },
@@ -77533,6 +80420,123 @@
                 }
               }
             }
+          }
+        }
+      },
+      "Producto": {
+        "type": "object",
+        "required": [
+          "id",
+          "empresa_id",
+          "sku",
+          "nombre",
+          "unidad",
+          "tipo",
+          "seguimiento",
+          "clase_activo",
+          "concepto_cargo_id",
+          "cuenta_costo",
+          "cuenta_consumo",
+          "existencia_minima",
+          "activo",
+          "existencia",
+          "valor",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresa_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sku": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "unidad": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "equipo",
+              "material",
+              "otro"
+            ]
+          },
+          "seguimiento": {
+            "type": "string",
+            "enum": [
+              "cantidad",
+              "serie"
+            ]
+          },
+          "clase_activo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "concepto_cargo_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "cuenta_costo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null = 5.6.01"
+          },
+          "cuenta_consumo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null = 5.2.07"
+          },
+          "existencia_minima": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Cantidad con 3 decimales"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "existencia": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{3}$",
+            "description": "Existencia total en todas las bodegas"
+          },
+          "valor": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Valor del kardex del producto"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -86690,6 +89694,26 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "TrasladoInventario": {
+        "type": "object",
+        "required": [
+          "traslado_id",
+          "salida",
+          "entrada"
+        ],
+        "properties": {
+          "traslado_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "salida": {
+            "$ref": "#/components/schemas/MovimientoInventario"
+          },
+          "entrada": {
+            "$ref": "#/components/schemas/MovimientoInventario"
           }
         }
       },
