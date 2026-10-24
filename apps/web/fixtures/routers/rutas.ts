@@ -243,7 +243,6 @@ export const rutasRouters: RutasFixture = {
             api_tls_verificar: cuerpo.api_tls_verificar !== false,
             // Como la API: el PEM nunca sale; `***` solo si se cargó una CA.
             tiene_api_ca: typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.length > 0,
-            api_ca: typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.length > 0 ? '***' : null,
             dhcp_servidor: null,
             interfaz_clientes: null,
             empresa_sugerida_id: null,
