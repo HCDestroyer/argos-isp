@@ -15,7 +15,7 @@ import { clienteDeRouter } from '#network/routeros/router'
 import { bitacoraRed, type OpcionesDispatcher } from '#network/routeros/dispatcher'
 import { routerDispatcher } from '#network/routeros/consultas'
 import { cronsRouterOS, ejecutarCronRouterOS } from '#network/routeros/jobs'
-import type { ResultadoSondear } from '#network/routeros/actions/sondear_routers'
+import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions/sondear_routers'
 
 /**
  * Fuentes del contacto de los routers (`Router.en_linea`, fila 70 de `.claude/integration/a1.md`):
@@ -239,13 +239,74 @@ test.group('Contacto de routers · API REST y sondeo', (group) => {
         assert.equal(delSondeo?.fuente, 'sondeo')
         assert.isNull(await contacto(sinCredenciales), 'sin credenciales queda sin dato')
         assert.equal(delReciente?.fuente, 'routeros')
+    })
 
-        const audit = await db
-            .from('audit.acciones')
-            .where('accion', 'routeros.sondear')
-            .orderBy('created_at', 'desc')
-            .first()
-        assert.equal(audit?.resultado, 'ok')
+    async function filasAuditoria(requestId: string) {
+        return db.from('audit.acciones').where('accion', 'routeros.sondear').where('request_id', requestId)
+    }
+
+    async function filasRed(routerId: number) {
+        return db
+            .from('audit.red')
+            .where('router_id', routerId)
+            .whereRaw("comando->>'operacion' = 'sondear'")
+            .orderBy('created_at')
+    }
+
+    test('sondeo sin fallos: no deja fila en audit.acciones; cada GET queda en audit.red', async ({
+        assert,
+    }) => {
+        const a = await routerConApi()
+        const b = await routerConApi()
+        const c = ctx()
+        const salida = await new SondearRouters(OPCIONES).execute(
+            { sin_contacto_desde_s: 300, router_ids: [a, b] },
+            c,
+        )
+        assert.deepEqual(salida.respondieron, [a, b])
+        assert.lengthOf(await filasAuditoria(c.requestId), 0, 'corrida sin fallos: sin fila (regla 9)')
+        for (const id of [a, b]) {
+            const red = await filasRed(id)
+            assert.lengthOf(red, 1)
+            assert.isTrue(red[0].ok)
+            assert.equal(red[0].tipo, 'routeros')
+            assert.isNull(red[0].servicio_id)
+            assert.include(red[0].comando, {
+                metodo: 'GET',
+                ruta: '/system/resource',
+                request_id: c.requestId,
+            })
+            assert.equal(red[0].respuesta.status, 200)
+        }
+    })
+
+    test('sondeo con un router que no responde: deja fila en audit.acciones y el GET fallido en audit.red', async ({
+        assert,
+    }) => {
+        const bueno = await routerConApi()
+        const malo = await routerConApi()
+        // Puerto cerrado: conexión rechazada al instante
+        await db.from('network.routers').where('id', malo).update({ host: 'http://127.0.0.1:1' })
+        const c = ctx()
+        const salida = await new SondearRouters(OPCIONES).execute(
+            { sin_contacto_desde_s: 300, router_ids: [bueno, malo] },
+            c,
+        )
+        assert.deepEqual(salida.respondieron, [bueno])
+        assert.deepEqual(
+            salida.sin_respuesta.map((s) => s.router_id),
+            [malo],
+        )
+        const auditoria = await filasAuditoria(c.requestId)
+        assert.lengthOf(auditoria, 1)
+        assert.equal(auditoria[0].resultado, 'ok')
+        const [redMalo, redBueno] = await Promise.all([filasRed(malo), filasRed(bueno)])
+        assert.lengthOf(redMalo, 1)
+        assert.isFalse(redMalo[0].ok)
+        assert.isString(redMalo[0].respuesta.error)
+        assert.lengthOf(redBueno, 1)
+        assert.isTrue(redBueno[0].ok)
+        assert.isNull(await contacto(malo))
     })
 
     test('sondeo: router caído → sin_respuesta y no escribe', async ({ assert }) => {
