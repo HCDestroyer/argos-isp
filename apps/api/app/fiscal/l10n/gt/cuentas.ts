@@ -65,6 +65,18 @@ export const CUENTAS_GT = {
     MERMAS_INVENTARIO: '5.6.02',
 } as const
 
+/**
+ * H39 (auditor, inventario fase A): cuentas que solo mueve el kardex (`#inventario/kardex`), nunca una
+ * contrapartida elegida por el usuario (asiento manual, extracto, regla de conciliación, premio,
+ * línea de compra sin producto). Así 1.1.14 siempre cuadra con el kardex (§8.1).
+ */
+export const CUENTAS_DEL_KARDEX: readonly string[] = ['1.1.14']
+
+/** ¿Es una cuenta del kardex (o una hija suya)? */
+export function esCuentaDelKardex(codigo: string): boolean {
+    return CUENTAS_DEL_KARDEX.some((c) => codigo === c || codigo.startsWith(`${c}.`))
+}
+
 /** Clases de activo fijo: una cuenta de costo y una de depreciación acumulada por clase. */
 export const CLASES_ACTIVO = [
     { sufijo: '01', clave: 'equipo_red', nombre: 'Equipo de red' },

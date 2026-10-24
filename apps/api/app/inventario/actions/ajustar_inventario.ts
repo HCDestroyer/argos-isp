@@ -30,10 +30,10 @@ import {
  * - **Faltante**: por cantidad, `cantidad` negativa al costo promedio; por serie, `unidad_id` (la
  *   unidad sale a su costo y queda `dada_de_baja`). `5.6.02 Mermas y faltantes / 1.1.14`. Más que la
  *   existencia: 409 `existencia_insuficiente`.
- * - **Sobrante**: por cantidad, `cantidad` positiva al último costo promedio (el de la bodega; sin
- *   existencia, el del último movimiento del producto) o al `costo_unitario` dado; por serie,
- *   `unidad` (serie o MAC nueva) a ese mismo costo. `1.1.14 / 4.2.04 Sobrantes`. Sin costo conocido
- *   ni dado: 422 `costo_requerido`.
+ * - **Sobrante**: por cantidad, `cantidad` positiva; por serie, `unidad` (serie o MAC nueva). Con
+ *   existencia en la bodega entra a su promedio (el `costo_unitario` pedido se ignora, H41); sin
+ *   existencia, al `costo_unitario` pedido (> 0) o al del último movimiento del producto. `1.1.14 /
+ *   4.2.04 Sobrantes`. Sin costo, o con costo ≤ 0: 422 `costo_requerido`.
  *
  * Fecha de hoy; respeta los bloqueos de siempre.
  */
@@ -48,18 +48,35 @@ export interface EntradaAjuste {
     costo_unitario?: string | null
 }
 
-/** Último costo promedio del producto: el de la bodega o el del último movimiento del producto. */
-async function ultimoCosto(t: Transaccion, productoId: number, bodegaId: number): Promise<Dec | null> {
-    const saldo = await saldoDe(t, productoId, bodegaId)
+/**
+ * Costo unitario de un sobrante (H41 del auditor): con existencia en la bodega, su promedio (el
+ * `costo_unitario` pedido se ignora); sin existencia, el `costo_unitario` pedido (> 0) o el del último
+ * movimiento con costo del producto. Sin ninguno, o con `costo_unitario` ≤ 0: 422 `costo_requerido`.
+ */
+async function costoDeSobrante(
+    t: Transaccion,
+    producto: { id: number; sku: string },
+    bodegaId: number,
+    pedido?: string | null,
+): Promise<Dec> {
+    const saldo = await saldoDe(t, producto.id, bodegaId)
     if (saldo.cantidad.gt(0)) return saldo.valor.div(saldo.cantidad)
+    const requerido = (mensaje: string) =>
+        new ValidacionFallida([{ field: 'costo_unitario', message: mensaje, rule: 'costo_requerido' }])
+    if (pedido !== undefined && pedido !== null && pedido !== '') {
+        const unitario = dec(pedido)
+        if (unitario.lte(0)) throw requerido('El costo unitario de un sobrante es mayor que 0')
+        return unitario
+    }
     const ultimo = (await t.trx
         .from('inventario.movimientos')
-        .where('producto_id', productoId)
+        .where('producto_id', producto.id)
         .where('costo_unitario', '>', 0)
         .orderBy('id', 'desc')
         .select('costo_unitario')
         .first()) as { costo_unitario: string } | null
-    return ultimo ? dec(ultimo.costo_unitario) : null
+    if (!ultimo) throw requerido(`El producto ${producto.sku} no tiene costo conocido: indica costo_unitario`)
+    return dec(ultimo.costo_unitario)
 }
 
 export default class AjustarInventario extends DomainAction<EntradaAjuste, MovimientoVista> {
@@ -96,18 +113,7 @@ export default class AjustarInventario extends DomainAction<EntradaAjuste, Movim
         let costo: Dec
         let unidadId: number | null = null
         if (entra) {
-            const unitario = input.costo_unitario
-                ? dec(input.costo_unitario)
-                : await ultimoCosto(t, producto.id, bodega.id)
-            if (unitario === null) {
-                throw new ValidacionFallida([
-                    {
-                        field: 'costo_unitario',
-                        message: `El producto ${producto.sku} no tiene costo conocido: indica costo_unitario`,
-                        rule: 'costo_requerido',
-                    },
-                ])
-            }
+            const unitario = await costoDeSobrante(t, producto, bodega.id, input.costo_unitario)
             costo = redondear(cantidad.times(unitario))
             if (input.unidad) {
                 const [nueva] = await validarUnidadesNuevas(t, empresaId, [input.unidad], 'unidad')

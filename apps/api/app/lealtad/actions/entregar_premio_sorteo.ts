@@ -8,7 +8,7 @@ import type { ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
 import type { MetodoEgreso } from '#ledger/egresos'
-import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { CUENTAS_DEL_KARDEX, esCuentaDelKardex, CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { bloquearCliente } from '#billing/cobros'
 import { verPremio } from '#lealtad/premios'
 import { camposAuditables, verCanje } from '#lealtad/canjes'
@@ -88,6 +88,8 @@ const CONTROL_NO_PERMITIDAS = [
     '1.1.11',
     '1.1.12',
     '1.1.13',
+    // H39: la cuenta del kardex (1.1.14) solo la mueve el inventario
+    ...CUENTAS_DEL_KARDEX,
     '1.2',
 ]
 
@@ -402,6 +404,14 @@ async function contabilizarBien(
                     rule: 'compra',
                 },
             ])
+        }
+        // H39: una línea que entró al inventario (1.1.14) no se acredita aquí: el bien está en el kardex
+        // y su salida necesita su movimiento; mientras el inventario no tenga la salida por premio, 422
+        if (esCuentaDelKardex(linea.codigo)) {
+            throw new ReglaNegocio(
+                `La línea ${linea.id} de la compra ${linea.compra_id} entró al inventario (${linea.codigo}): el premio no se entrega desde la compra, porque el bien ya está en el kardex`,
+                'linea_de_inventario',
+            )
         }
         // observación del auditor: una línea que fue a propiedad, planta y equipo es un activo fijo;
         // un premio no la acredita (el activo se registra y se da de baja por su propia acción)

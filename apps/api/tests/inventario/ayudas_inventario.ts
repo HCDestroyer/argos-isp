@@ -134,8 +134,6 @@ export async function afirmarCuadre(
         await existenciasDelKardex(empresaId),
         'inventario.saldos = Σ kardex por producto y bodega',
     )
-    // el auditor agrega el origen `inventario` a 9.origen_de_asiento_desconocido con los checks de §8
-    // (`.claude/integration/a3.md`); mientras, solo ese caso se descarta aquí
     // fase B: el alta y la baja de un activo en comodato (`ledger.activos.unidad_id`) llevan el asiento
     // del movimiento (origen `inventario`) y la devolución es una baja `devolucion_comodato`; el
     // auditor los suma a 15.alta_… y 15.baja_…; mientras, solo esas filas se descartan
@@ -149,6 +147,16 @@ export async function afirmarCuadre(
                 id: number
             }>
         ).map((a) => Number(a.id)),
+    )
+    // fase B: la NCRE de devolución al proveedor saca del kardex (`devolucion_proveedor`); el inv. 24
+    // del auditor la trata aún como en la fase A («una NCRE no entra»): solo esas filas se descartan
+    const ncres = new Set(
+        (
+            (await db
+                .from('ledger.compras')
+                .where({ empresa_id: empresaId, tipo_documento: 'NCRE' })
+                .select('id')) as Array<{ id: number }>
+        ).map((c) => Number(c.id)),
     )
     const todas = await verificarLibro(empresaId)
     const violaciones = todas
@@ -167,15 +175,19 @@ export async function afirmarCuadre(
                     ),
                 }
             }
+            if (
+                v.invariante.startsWith('24.compra_distinta_de_su_entrada') ||
+                v.invariante.startsWith('24.compra_anulada_sin_reverso_de_su_entrada')
+            ) {
+                return {
+                    ...v,
+                    detalle: (v.detalle as Array<{ compra_id: number }>).filter(
+                        (d) => !ncres.has(Number(d.compra_id)),
+                    ),
+                }
+            }
             return v
         })
         .filter((v) => !Array.isArray(v.detalle) || v.detalle.length > 0)
-        .filter(
-            (v) =>
-                !(
-                    v.invariante.startsWith('9.origen_de_asiento_desconocido') &&
-                    (v.detalle as Array<{ origen_tipo: string }>).every((d) => d.origen_tipo === 'inventario')
-                ),
-        )
     assert.deepEqual(violaciones, [], `Invariantes contables rotos (empresa ${empresaId})`)
 }
