@@ -51,6 +51,11 @@ export interface NotificacionPasarela {
     comision: string
     /** IVA que retuvo la emisora de la tarjeta (H51; string decimal, 0.00 si no hay) */
     retenido_iva?: string
+    /**
+     * solo reembolsado (H71): lo debitado a la cuenta del comercio (string decimal), si el proveedor lo
+     * informa; `monto` es lo devuelto al cliente y la diferencia, comisión devuelta
+     */
+    monto_cuenta?: string | null
     /** id del reembolso o del contracargo en el proveedor (reembolsado, disputa) */
     referencia_evento?: string | null
     ocurrido_en: Date

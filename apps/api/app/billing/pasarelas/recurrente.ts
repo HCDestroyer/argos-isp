@@ -267,6 +267,11 @@ export class PasarelaRecurrente implements Pasarela {
             ),
             comision: deCentavos(fee),
             retenido_iva: deCentavos(retenido),
+            // H71: `account_refunded_amount_in_cents` = monto debitado de la cuenta del comercio
+            monto_cuenta:
+                estado === 'reembolsado' && datos.refund?.account_refunded_amount_in_cents !== undefined
+                    ? deCentavos(datos.refund.account_refunded_amount_in_cents)
+                    : null,
             referencia_evento: referencia ? String(referencia) : null,
             ocurrido_en: datos.created_at ? new Date(datos.created_at) : new Date(marca * 1000),
             payload: datos,

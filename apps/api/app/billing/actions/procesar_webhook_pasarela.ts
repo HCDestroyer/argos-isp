@@ -4,6 +4,9 @@ import logger from '@adonisjs/core/services/logger'
 import { aTexto, dec } from '#ledger/dinero'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
+import RegistrarAsiento from '#ledger/actions/registrar_asiento'
+import { CUENTAS } from '#ledger/plan_cuentas'
+import { hoyGuatemala } from '#ledger/fechas'
 import {
     FirmaInvalida,
     pasarela,
@@ -304,8 +307,9 @@ export default class ProcesarWebhookPasarela extends DomainAction<
      * (pago − reembolsado) a las mismas facturas, con la misma comisión (§15 #104) y sus constancias,
      * referencia `<referencia>:reembolso:<id>`; el cobro apunta al pago nuevo. Así la deuda vuelve solo
      * por lo reembolsado. H65: se aplica aunque lo que queda sea menor que la comisión (el banco recibe
-     * un neto negativo) o no supere lo retenido (constancias en proporción, §15 #105). Idempotente por
-     * id del reembolso.
+     * un neto negativo). H70: constancias siempre en proporción a lo que queda (§15 #105). H71: con
+     * `monto_cuenta`, el banco baja por lo debitado a la cuenta y la diferencia es comisión devuelta.
+     * Idempotente por id del reembolso.
      */
     private async reembolsar(
         t: Transaccion,
@@ -332,7 +336,16 @@ export default class ProcesarWebhookPasarela extends DomainAction<
         const pago = (await t.trx
             .from('billing.pagos')
             .where('id', cobro.pago_id)
-            .select('id', 'estado', 'monto', 'retenido', 'comision', 'referencia', 'cliente_id')
+            .select(
+                'id',
+                'estado',
+                'monto',
+                'retenido',
+                'comision',
+                'referencia',
+                'cliente_id',
+                'proveedor_cobro_id',
+            )
             .firstOrFail()) as {
             id: number
             estado: string
@@ -341,12 +354,32 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             comision: string
             referencia: string | null
             cliente_id: number
+            proveedor_cobro_id: number | null
         }
         if (pago.estado === 'anulado') {
             return { ...base, cobro_id: cobro.id, pago_id: cobro.pago_id, ignorado: 'pago_ya_anulado' }
         }
         const reembolsado = dec(aviso.monto)
         const queda = dec(pago.monto).minus(reembolsado)
+        // H71: lo devuelto al cliente vuelve a la deuda; el banco baja por lo debitado a la cuenta del
+        // comercio (`account_refunded_amount_in_cents`) y la diferencia es comisión devuelta (5.1.02).
+        // Sin el monto de la cuenta, la de antes: la comisión se conserva (parcial) o se revierte (total).
+        // Con proveedor de cobro la comisión real sale en la liquidación: no se ajusta aquí.
+        const devuelta =
+            aviso.monto_cuenta && pago.proveedor_cobro_id === null && reembolsado.gt(0)
+                ? reembolsado.minus(aviso.monto_cuenta)
+                : null
+        const comision = dec(pago.comision)
+        // comisión que queda de gasto tras el reembolso (H71)
+        const comisionFinal = devuelta === null ? comision : comision.minus(devuelta)
+        if (devuelta !== null && (devuelta.isNegative() || comisionFinal.isNegative())) {
+            throw new Problema(
+                422,
+                'reembolso_monto_cuenta',
+                'Monto de la cuenta inválido',
+                `El reembolso ${refundId} debita Q${aTexto(aviso.monto_cuenta!)} a la cuenta y devuelve Q${aTexto(reembolsado)} al cliente: la comisión devuelta (Q${aTexto(devuelta)}) no cabe en la comisión del pago (Q${aTexto(comision)})`,
+            )
+        }
         const facturas = (await t.trx
             .from('billing.pagos_aplicaciones')
             .where('pago_id', pago.id)
@@ -378,21 +411,24 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             t.ctx,
             { trx: t.trx },
         )
-        // total (o sin monto en el aviso): solo se anula
-        if (reembolsado.lte(0) || queda.lte(0)) return { ...base, cobro_id: cobro.id, pago_id: pago.id }
+        // total (o sin monto en el aviso): solo se anula; la anulación revierte la comisión entera y, con
+        // el monto de la cuenta (H71), la que no se devolvió vuelve a gasto contra el banco
+        if (reembolsado.lte(0) || queda.lte(0)) {
+            if (devuelta !== null && comisionFinal.gt(0)) {
+                await this.comisionRetenida(t, pago.id, Number(cobro.empresa_id), comisionFinal, refundId)
+            }
+            return { ...base, cobro_id: cobro.id, pago_id: pago.id }
+        }
 
-        // §15 #105 (provisional): las constancias se conservan completas mientras lo que queda supere lo
-        // retenido; si no lo supera, se conservan en proporción a lo que queda (queda / pago), porque un
-        // pago no puede tener retenido más que su monto
-        const retenido = dec(pago.retenido)
-        const proporcional = retenido.gt(0) && queda.lte(retenido)
+        // H70 · §15 #105 (decisión del líder, provisional): las constancias se prorratean siempre por lo
+        // que queda / pago, sin umbral; el reembolso total las deja en 0 (solo se anula)
         const factor = queda.div(pago.monto)
         const retenciones = constancias
             .map((c) => ({
                 codigo: c.impuesto_codigo,
                 numero: c.numero,
                 fecha: c.fecha,
-                monto: aTexto(proporcional ? dec(c.monto).times(factor) : dec(c.monto)),
+                monto: aTexto(dec(c.monto).times(factor)),
             }))
             .filter((c) => dec(c.monto).gt(0))
         const retenidoReemplazo = retenciones.reduce((a, c) => a.plus(c.monto), dec('0'))
@@ -401,8 +437,9 @@ export default class ProcesarWebhookPasarela extends DomainAction<
                 cliente_id: Number(pago.cliente_id),
                 metodo: 'pasarela',
                 monto: aTexto(queda.minus(retenidoReemplazo)),
-                // H65: la comisión se mantiene como gasto aunque supere lo que queda (§15 #104)
-                comision: dec(pago.comision).gt(0) ? aTexto(pago.comision) : null,
+                // H65: la comisión se mantiene como gasto aunque supere lo que queda (§15 #104), menos la
+                // que el proveedor devolvió (H71)
+                comision: comisionFinal.gt(0) ? aTexto(comisionFinal) : null,
                 reemplazo_de_reembolso: true,
                 pasarela: proveedor,
                 referencia: `${pago.referencia ?? aviso.id_proveedor}:reembolso:${refundId}`,
@@ -423,5 +460,46 @@ export default class ProcesarWebhookPasarela extends DomainAction<
                 updated_at: t.trx.knexRawQuery('now()'),
             } as Record<string, unknown>)
         return { ...base, cobro_id: cobro.id, pago_id: pago.id, pago_reemplazo_id: reemplazo.id }
+    }
+
+    /**
+     * Reembolso total con el monto de la cuenta (H71): la anulación revirtió la comisión entera; la que
+     * el proveedor no devolvió es gasto contra el mismo banco que recibió el pago (asiento `ajuste`
+     * sin documento, como un asiento manual sobre bancos).
+     */
+    private async comisionRetenida(
+        t: Transaccion,
+        pagoId: number,
+        empresaId: number,
+        monto: ReturnType<typeof dec>,
+        refundId: string,
+    ) {
+        const banco = (await t.trx
+            .from('ledger.asientos as a')
+            .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
+            .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+            .where({ 'a.origen_tipo': 'pago', 'a.origen_id': pagoId })
+            .whereNull('a.reversa_de')
+            .where('c.codigo', 'like', '1.1.02%')
+            .orderBy('m.id', 'asc')
+            .select('m.cuenta_id')
+            .first()) as { cuenta_id: number } | null
+        await new RegistrarAsiento().execute(
+            {
+                empresa_id: empresaId,
+                fecha: hoyGuatemala(),
+                descripcion: `Comisión no devuelta del pago ${pagoId} en el reembolso ${refundId}`,
+                origen_tipo: 'ajuste',
+                movimientos: [
+                    { cuenta: CUENTAS.COMISIONES_PASARELAS, debe: aTexto(monto) },
+                    {
+                        cuenta: banco ? Number(banco.cuenta_id) : CUENTAS.BANCO_PRINCIPAL,
+                        haber: aTexto(monto),
+                    },
+                ],
+            },
+            t.ctx,
+            { trx: t.trx },
+        )
     }
 }
