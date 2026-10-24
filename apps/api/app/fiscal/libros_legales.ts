@@ -508,7 +508,9 @@ interface DocumentoVenta {
  *   (H48, H62): rebajan las ventas (y 2.1.02) del mes aunque la importada no esté en el libro. Si el
  *   libro de ventas de ese mes se emitió sin ellas (`libros_emisiones.notas_importadas` NULL, antes
  *   de H48), ese libro no cambia: la nota va como fila de ajuste (con su referencia) en el primer
- *   mes siguiente sin un libro emitido así. El receptor es el guardado al emitirlas
+ *   mes siguiente sin un libro emitido así. Las notas viejas sobre importadas (antes de H50: base a
+ *   2.9.01, IVA 0) no salen: su asiento no toca 2.1.02 ni una cuenta de ingreso, no rebajaron
+ *   ventas. El receptor es el guardado al emitirlas
  *   (`billing.facturas.receptor`, `billing.notas_credito.receptor`), no el dato actual del cliente.
  * - Anulación (como el desvío c del libro de compras): en el mismo mes del documento, la fila sale en
  *   cero; en un mes posterior, la fila original queda vigente y en el mes de la anulación (fecha del
@@ -656,6 +658,14 @@ export async function libroVentasLegal(
                                    AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta
                                    AND date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
                                        = date_trunc('month', o.fecha))
+                -- decisión del líder: la nota vieja sobre una importada (antes de H50, base a 2.9.01 e IVA 0)
+                -- no rebajó ventas: su asiento no toca 2.1.02 ni una cuenta de ingreso y queda fuera
+                AND (f.clave_externa IS NULL OR EXISTS (
+                        SELECT 1 FROM ledger.asientos a
+                          JOIN ledger.movimientos m ON m.asiento_id = a.id
+                          JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                         WHERE a.origen_tipo = 'nota_credito' AND a.origen_id = n.id AND a.reversa_de IS NULL
+                           AND (c.codigo = :cuenta_debito OR c.tipo = 'ingreso')))
          ), notas AS (
              SELECT 'interno' AS origen, 'nota_credito' AS clase, n.id, NULL::bigint AS factura_id,
                     coalesce(n.ajuste_en, n.o_fecha) AS fecha_doc,

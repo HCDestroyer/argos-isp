@@ -17,6 +17,7 @@ import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
 import { construirLibro, finDeMes, type LibroLegal } from '#fiscal/libros_legales'
 import HabilitarLibro from '#fiscal/actions/habilitar_libro'
+import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { DateTime } from 'luxon'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
@@ -384,6 +385,52 @@ test.group('Facturación · nota de crédito sobre una factura importada (H27, H
         const siguiente = inicioDeMes(DateTime.fromISO(hoy).plus({ months: 1 }).toISODate()!)
         const despues = await construirLibro('ventas', e.B, { desde: siguiente, hasta: finDeMes(siguiente) })
         assert.notExists(despues.reporte.filas.find((x) => x.numero === String(nota.id)))
+    })
+
+    test('una nota vieja sobre una importada (antes de H50: base a 2.9.01, IVA 0) no sale en el libro de ventas', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        const f = await importada(e.ctx, e.B, '112.00', '2026-08-10')
+        const hoy = hoyGuatemala()
+        // la nota como la dejaba el código anterior a H50: CxC / 2.9.01 sin IVA
+        const [vieja] = (await db
+            .table('billing.notas_credito')
+            .insert({
+                factura_id: f.id,
+                cliente_id: f.clienteId,
+                empresa_id: e.B,
+                fecha: hoy,
+                subtotal: '30.00',
+                iva: '0.00',
+                monto: '30.00',
+                motivo: 'nota anterior a H50',
+                receptor: JSON.stringify({ id: 'CF', nombre: 'Consumidor final' }),
+            })
+            .returning('id')) as Array<{ id: number }>
+        await new RegistrarAsiento().execute(
+            {
+                empresa_id: e.B,
+                fecha: hoy,
+                descripcion: 'Nota anterior a H50',
+                origen_tipo: 'nota_credito',
+                origen_id: vieja!.id,
+                movimientos: [
+                    { cuenta: '2.9.01', debe: '30.00' },
+                    { cuenta: '1.1.03', haber: '30.00', cliente_id: f.clienteId },
+                ],
+            },
+            e.ctx,
+        )
+        const nueva = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '20.00', motivo: 'rebaja H50' },
+            e.ctx,
+        )
+        const ventas = await construirLibro('ventas', e.B, { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) })
+        const numeros = ventas.reporte.filas.map((x) => x.numero)
+        assert.notInclude(numeros, String(vieja!.id))
+        assert.include(numeros, String(nueva.id))
+        assert.equal(ventas.reporte.totales.total, '-20.00')
     })
 
     test('H62: en pequeño contribuyente la importada no desglosa IVA y su nota sale en el libro de ventas', async ({
