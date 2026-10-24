@@ -227,6 +227,7 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         suspension_manual_motivo: null,
         ...nombresDe(Number(cuerpo.cliente_id), Number(cuerpo.plan_id), routerId),
         excepciones: typeof cuerpo.excepciones === 'object' && cuerpo.excepciones !== null ? (cuerpo.excepciones as Schema<'ExcepcionesServicio'>) : {},
+        plan_temporal: null,
         version: 1,
         created_at: momento,
         updated_at: momento,

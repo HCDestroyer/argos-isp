@@ -211,6 +211,8 @@
         "logo_url": null
       }
     ],
-    "empresa_activa_id": null
+    "empresa_activa_id": null,
+    "expira_en": null,
+    "expira_max_en": null
   }
 }

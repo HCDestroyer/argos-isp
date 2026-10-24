@@ -18,11 +18,11 @@ test.group('Auth: login y /me', () => {
         assert.sameMembers(cuerpo.usuario.permisos, NOMBRES_PERMISOS)
 
         const me = await estado(client.get('/api/v1/me').bearerToken(cuerpo.token), 200)
-        const { expira_en: expiraEn, expira_max_en: expiraMaxEn, ...usuarioMe } = me.body()
-        assert.deepEqual(usuarioMe, cuerpo.usuario)
+        // el `usuario` del login es el mismo `Me` de GET /me, vencimientos incluidos
+        assert.deepEqual(me.body(), cuerpo.usuario)
         // Bearer de login: vencimiento fijo (ACCESS_TOKEN_EXPIRA), el tope es el mismo
-        assert.isString(expiraEn)
-        assert.equal(expiraMaxEn, expiraEn)
+        assert.isString(me.body().expira_en)
+        assert.equal(me.body().expira_max_en, me.body().expira_en)
         assert.exists(me.header('x-request-id'))
     })
 

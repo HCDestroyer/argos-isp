@@ -22,6 +22,7 @@ import { TIPOS_PLAN } from '#network/tipos_plan'
 import { TIPOS_ACTOR } from '#shared/contexto'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
+import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -31,7 +32,19 @@ import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 /** Forma exacta que usa el frontend desde la semilla de contracts. */
 export const Me = definirEsquema('Me', {
     type: 'object',
-    required: ['id', 'nombre', 'email', 'permisos', 'roles'],
+    // `csrf` es opcional de verdad: solo viene con la sesión del panel por cookie
+    required: [
+        'id',
+        'nombre',
+        'email',
+        'permisos',
+        'roles',
+        'expira_en',
+        'expira_max_en',
+        'alcance_global',
+        'empresas',
+        'empresa_activa_id',
+    ],
     properties: {
         id: { type: 'integer' },
         nombre: { type: 'string' },
@@ -46,14 +59,14 @@ export const Me = definirEsquema('Me', {
         expira_en: nulable({
             ...instante,
             description:
-                'Solo en `GET /me`: cuándo vence la credencial actual. Con la cookie del panel se renueva sola ' +
+                'Cuándo vence la credencial actual. Con la cookie del panel se renueva sola ' +
                 'mientras se usa (`ahora + PANEL_SESION_INACTIVIDAD_H`); con Bearer de login es fijo; ' +
                 'null con tokens de API (no vencen)',
         }),
         expira_max_en: nulable({
             ...instante,
             description:
-                'Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; ' +
+                'Tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; ' +
                 'igual a `expira_en` con Bearer de login; null con tokens de API)',
         }),
         alcance_global: {
@@ -81,28 +94,23 @@ export const Sesion = definirEsquema(
 
 export const SesionPanel = definirEsquema(
     'SesionPanel',
-    objeto(
-        {
-            usuario: Me,
-            csrf: {
-                type: 'string',
-                description: 'Valor de `X-CSRF-Token` en POST, PUT y DELETE mientras dure la sesión',
-            },
-            expira_en: nulable({
-                ...instante,
-                description:
-                    'Cuándo vence la sesión si no se usa. Cada petición la renueva hasta `ahora + ' +
-                    'PANEL_SESION_INACTIVIDAD_H` sin pasar de `expira_max_en`',
-            }),
-            expira_max_en: nulable({
-                ...instante,
-                description:
-                    'Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use. ' +
-                    'La API siempre lo manda; opcional en el esquema para no romper clientes ya generados',
-            }),
+    objeto({
+        usuario: Me,
+        csrf: {
+            type: 'string',
+            description: 'Valor de `X-CSRF-Token` en POST, PUT y DELETE mientras dure la sesión',
         },
-        ['expira_max_en'],
-    ),
+        expira_en: nulable({
+            ...instante,
+            description:
+                'Cuándo vence la sesión si no se usa. Cada petición la renueva hasta `ahora + ' +
+                'PANEL_SESION_INACTIVIDAD_H` sin pasar de `expira_max_en`',
+        }),
+        expira_max_en: nulable({
+            ...instante,
+            description: 'Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use',
+        }),
+    }),
 )
 
 export const AsignacionRol = definirEsquema(
@@ -117,25 +125,22 @@ export const AsignacionRol = definirEsquema(
 
 export const Usuario = definirEsquema(
     'Usuario',
-    objeto(
-        {
-            id,
-            nombre: texto,
-            email: { type: 'string', format: 'email' },
-            activo: booleano,
-            roles: lista(AsignacionRol),
-            alcance_global: {
-                ...booleano,
-                description: 'Ve y opera todas las empresas (multiempresa); siempre presente',
-            },
-            empresas: {
-                ...lista(id),
-                description: 'Empresas asignadas (vacía con alcance global); siempre presente',
-            },
-            ...auditable,
+    objeto({
+        id,
+        nombre: texto,
+        email: { type: 'string', format: 'email' },
+        activo: booleano,
+        roles: lista(AsignacionRol),
+        alcance_global: {
+            ...booleano,
+            description: 'Ve y opera todas las empresas (multiempresa); siempre presente',
         },
-        ['alcance_global', 'empresas'],
-    ),
+        empresas: {
+            ...lista(id),
+            description: 'Empresas asignadas (vacía con alcance global); siempre presente',
+        },
+        ...auditable,
+    }),
 )
 
 export const Rol = definirEsquema(
@@ -176,96 +181,116 @@ export const Zona = definirEsquema(
     }),
 )
 
+/** Campo del catálogo de campos personalizados del cliente (`GET /campos-personalizados`). */
+export const CampoPersonalizado = definirEsquema(
+    'CampoPersonalizado',
+    objeto({
+        id,
+        clave: {
+            ...texto,
+            pattern: '^[a-z][a-z0-9_]{0,39}$',
+            description: 'Clave en `Cliente.campos_personalizados`; no cambia',
+        },
+        etiqueta: { ...texto, description: 'Nombre que ve el operador en la ficha y el formulario' },
+        tipo: {
+            ...enumerado(TIPOS_CAMPO_PERSONALIZADO),
+            description:
+                'texto (string, hasta 500), numero (number), fecha (string AAAA-MM-DD), booleano, opcion ' +
+                '(string de `opciones`); no cambia',
+        },
+        opciones: { ...lista(texto), description: 'Valores permitidos (solo opcion; vacía en los demás)' },
+        requerido: {
+            ...booleano,
+            description: 'Se exige con valor al crear un cliente y al guardar sus campos personalizados',
+        },
+        orden: { ...entero, description: 'Orden en la ficha (menor primero)' },
+        activo: {
+            ...booleano,
+            description: 'Inactivo: no se muestra ni se valida; los valores guardados se conservan',
+        },
+        ...auditable,
+    }),
+)
+
 export const Cliente = definirEsquema(
     'Cliente',
-    objeto(
-        {
-            id,
-            codigo: {
-                type: 'string',
-                pattern: '^C-\\d{6,}$',
-                description:
-                    'Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. ' +
-                    'La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan',
-            },
-            codigo_externo: {
-                ...nulable(texto),
-                description: 'Código en el sistema anterior (importador); no reemplaza a `codigo`',
-            },
-            nombre: texto,
-            tipo: enumerado(['persona', 'empresa']),
-            tipo_documento_fiscal: {
-                ...enumerado(TIPOS_DOCUMENTO_FISCAL),
-                description: 'Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)',
-            },
-            nit_cui: {
-                ...nulable(texto),
-                description:
-                    'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf',
-            },
-            nit_cui_invalido: {
-                ...booleano,
-                description:
-                    'true: el número no pasó la validación al migrar a la localización fiscal (se conservó); ' +
-                    'se apaga al corregirlo',
-            },
-            nombre_fiscal: nulable(texto),
-            direccion_fiscal: nulable(texto),
-            pais_fiscal: {
-                ...texto,
-                pattern: '^[A-Z]{2}$',
-                description: 'País del receptor (ISO 3166-1 alfa-2)',
-            },
-            agente_retencion_iva: { ...booleano, description: 'Agente de retención de IVA' },
-            sector_publico: { ...booleano, description: 'Entidad del sector público' },
-            email: nulable(texto),
-            telefono: nulable(texto),
-            movil: nulable(texto),
-            direccion: nulable(texto),
-            coordenadas: nulable(texto),
-            zona_id: nulable(id),
-            campos_personalizados: jsonLibre,
-            canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
-            telegram_chat_id: nulable(texto),
-            responsable_pago_id: {
-                ...nulable(id),
-                description: 'Cliente que paga por este (responsable de pago); null si paga él mismo',
-            },
-            responsable_pago_nombre: {
-                ...nulable(texto),
-                description: 'Nombre del responsable de pago (solo lectura)',
-            },
-            referido_por_id: {
-                ...nulable(id),
-                description:
-                    'Cliente que lo refirió (programa de lealtad): el dueño del `codigo_referido` del alta',
-            },
-            referido_empresa_id: {
-                ...nulable(id),
-                description: 'Empresa (NIT) en la que cuenta el referido: la del código usado',
-            },
-            codigos_referido: {
-                ...lista(objeto({ empresa_id: id, codigo: { ...texto, pattern: '^[2-9A-HJKMNP-Z]{8}$' } })),
-                description:
-                    'Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos ' +
-                    'con el primer servicio en cada empresa)',
-            },
-            ...auditable,
+    objeto({
+        id,
+        codigo: {
+            type: 'string',
+            pattern: '^C-\\d{6,}$',
+            description:
+                'Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable',
         },
-        // Opcionales en el esquema hasta que los fixtures del panel los tengan; la API siempre los envía
-        [
-            'codigo',
-            'codigo_externo',
-            'tipo_documento_fiscal',
-            'nit_cui_invalido',
-            'pais_fiscal',
-            'agente_retencion_iva',
-            'sector_publico',
-            'referido_por_id',
-            'referido_empresa_id',
-            'codigos_referido',
-        ],
-    ),
+        codigo_externo: {
+            ...nulable(texto),
+            description: 'Código en el sistema anterior (importador); no reemplaza a `codigo`',
+        },
+        nombre: texto,
+        tipo: enumerado(['persona', 'empresa']),
+        tipo_documento_fiscal: {
+            ...enumerado(TIPOS_DOCUMENTO_FISCAL),
+            description: 'Documento del receptor para FEL: nit, cui, pasaporte o cf (consumidor final)',
+        },
+        nit_cui: {
+            ...nulable(texto),
+            description:
+                'Número del documento sin guiones ni espacios (NIT, CUI o pasaporte); CF o null en cf',
+        },
+        nit_cui_invalido: {
+            ...booleano,
+            description:
+                'true: el número no pasó la validación al migrar a la localización fiscal (se conservó); ' +
+                'se apaga al corregirlo',
+        },
+        nombre_fiscal: nulable(texto),
+        direccion_fiscal: nulable(texto),
+        pais_fiscal: {
+            ...texto,
+            pattern: '^[A-Z]{2}$',
+            description: 'País del receptor (ISO 3166-1 alfa-2)',
+        },
+        agente_retencion_iva: { ...booleano, description: 'Agente de retención de IVA' },
+        sector_publico: { ...booleano, description: 'Entidad del sector público' },
+        email: nulable(texto),
+        telefono: nulable(texto),
+        movil: nulable(texto),
+        direccion: nulable(texto),
+        coordenadas: nulable(texto),
+        zona_id: nulable(id),
+        campos_personalizados: {
+            ...jsonLibre,
+            description:
+                'Valores por clave del catálogo (GET /campos-personalizados); puede traer claves fuera ' +
+                'del catálogo (importador, campos desactivados)',
+        },
+        canal_preferido: enumerado(['correo', 'telegram', 'whatsapp']),
+        telegram_chat_id: nulable(texto),
+        responsable_pago_id: {
+            ...nulable(id),
+            description: 'Cliente que paga por este (responsable de pago); null si paga él mismo',
+        },
+        responsable_pago_nombre: {
+            ...nulable(texto),
+            description: 'Nombre del responsable de pago (solo lectura)',
+        },
+        referido_por_id: {
+            ...nulable(id),
+            description:
+                'Cliente que lo refirió (programa de lealtad): el dueño del `codigo_referido` del alta',
+        },
+        referido_empresa_id: {
+            ...nulable(id),
+            description: 'Empresa (NIT) en la que cuenta el referido: la del código usado',
+        },
+        codigos_referido: {
+            ...lista(objeto({ empresa_id: id, codigo: { ...texto, pattern: '^[2-9A-HJKMNP-Z]{8}$' } })),
+            description:
+                'Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos ' +
+                'con el primer servicio en cada empresa)',
+        },
+        ...auditable,
+    }),
 )
 
 /** Fila de `GET /clientes/:id/dependientes`. */
@@ -387,9 +412,8 @@ export const Servicio = definirEsquema(
                 description: 'Solo al crear o editar: advertencias del tipo de plan (nunca bloquean)',
             },
         },
-        // opcionales en el esquema hasta que los fixtures del panel los tengan (la API siempre los
-        // envía); `warnings` solo viene al crear o editar
-        ['plan_temporal', 'plan_tipo', 'warnings'],
+        // `warnings` es opcional de verdad: solo viene al crear o editar
+        ['warnings'],
     ),
 )
 
@@ -498,51 +522,46 @@ export const MotivoCortesia = definirEsquema(
 
 export const AdicionalServicio = definirEsquema(
     'AdicionalServicio',
-    objeto(
-        {
-            id: { ...id, description: 'Id de la asignación (`asignacionId` en las rutas)' },
-            empresa_id: id,
-            servicio_id: id,
-            adicional_id: id,
-            adicional_codigo: texto,
-            adicional_nombre: texto,
-            modalidad: enumerado(['incluido', 'cortesia', 'cobrado']),
-            identificador: { ...nulable(texto), description: 'Usuario de IPTV, correo de la cuenta…' },
-            tiene_credencial: {
-                ...booleano,
-                description: 'Si hay credencial guardada; se lee con GET …/credencial (queda auditado)',
-            },
-            precio: { ...nulable(Dinero), description: 'Solo con cobrado' },
-            motivo_id: { ...nulable(id), description: 'Motivo de cortesía (solo con cortesia)' },
-            motivo_nombre: nulable(texto),
-            motivo_detalle: nulable(texto),
-            plan_id: {
-                ...nulable(id),
-                description: 'Plan que lo trajo (solo incluido asignado por el plan)',
-            },
-            estado: enumerado(['activo', 'baja']),
-            bloqueo: {
-                ...enumerado(['vigente', 'bloqueado']),
-                description:
-                    'bloqueado mientras el servicio está suspendido (lo pone el estado del servicio)',
-            },
-            bloqueado_en: nulable(instante),
-            primer_periodo: {
-                ...nulable(enumerado(['prorrateado', 'sin_costo'])),
-                description: 'Solo con cobrado: cómo se cobra el periodo en curso (lo factura A3)',
-            },
-            cobrado_desde: { ...nulable(instante), description: 'Solo con cobrado: desde cuándo se cobra' },
-            alta_en: instante,
-            baja_en: nulable(instante),
-            motivo_baja: {
-                ...nulable(texto),
-                description: 'Texto de la baja, o retiro, cambio_plan, cambio_empresa',
-            },
-            ...auditable,
+    objeto({
+        id: { ...id, description: 'Id de la asignación (`asignacionId` en las rutas)' },
+        empresa_id: id,
+        servicio_id: id,
+        adicional_id: id,
+        adicional_codigo: texto,
+        adicional_nombre: texto,
+        modalidad: enumerado(['incluido', 'cortesia', 'cobrado']),
+        identificador: { ...nulable(texto), description: 'Usuario de IPTV, correo de la cuenta…' },
+        tiene_credencial: {
+            ...booleano,
+            description: 'Si hay credencial guardada; se lee con GET …/credencial (queda auditado)',
         },
-        // opcionales en el esquema hasta que los fixtures del panel los tengan; la API siempre los envía
-        ['bloqueo', 'bloqueado_en', 'primer_periodo', 'cobrado_desde'],
-    ),
+        precio: { ...nulable(Dinero), description: 'Solo con cobrado' },
+        motivo_id: { ...nulable(id), description: 'Motivo de cortesía (solo con cortesia)' },
+        motivo_nombre: nulable(texto),
+        motivo_detalle: nulable(texto),
+        plan_id: {
+            ...nulable(id),
+            description: 'Plan que lo trajo (solo incluido asignado por el plan)',
+        },
+        estado: enumerado(['activo', 'baja']),
+        bloqueo: {
+            ...enumerado(['vigente', 'bloqueado']),
+            description: 'bloqueado mientras el servicio está suspendido (lo pone el estado del servicio)',
+        },
+        bloqueado_en: nulable(instante),
+        primer_periodo: {
+            ...nulable(enumerado(['prorrateado', 'sin_costo'])),
+            description: 'Solo con cobrado: cómo se cobra el periodo en curso (lo factura A3)',
+        },
+        cobrado_desde: { ...nulable(instante), description: 'Solo con cobrado: desde cuándo se cobra' },
+        alta_en: instante,
+        baja_en: nulable(instante),
+        motivo_baja: {
+            ...nulable(texto),
+            description: 'Texto de la baja, o retiro, cambio_plan, cambio_empresa',
+        },
+        ...auditable,
+    }),
 )
 
 export const BloqueoAdicional = definirEsquema(
@@ -839,57 +858,52 @@ export const AaaServicio = definirEsquema(
 
 export const EmpresaGrupo = definirEsquema(
     'EmpresaGrupo',
-    objeto(
-        {
-            id,
-            nit: nulable(texto),
-            razon_social: nulable(texto),
-            nombre_comercial: texto,
-            direccion_fiscal: nulable(texto),
-            municipio: nulable(texto),
-            departamento: nulable(texto),
-            telefono: nulable(texto),
-            telefono_alterno: nulable(texto),
-            whatsapp: nulable(texto),
-            correo: nulable(texto),
-            sitio_web: nulable(texto),
-            horario: nulable(texto),
-            instrucciones_pago: nulable(texto),
-            color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
-            pais: {
-                ...texto,
-                pattern: '^[A-Z]{2}$',
-                description:
-                    'País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. ' +
-                    'La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan',
-            },
-            regimen_isr: {
-                ...nulable(enumerado(REGIMENES_ISR)),
-                description:
-                    'Solo lectura (localización fiscal): régimen vigente; cambia con POST /fiscal/regimen',
-            },
-            codigo_establecimiento: {
-                ...nulable(entero),
-                description: 'Solo lectura (localización fiscal): establecimiento por defecto en la SAT',
-            },
-            logo_url: {
-                ...nulable(texto),
-                description:
-                    'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
-            },
-            logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
-            activa: booleano,
-            principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
-            version: {
-                type: 'integer',
-                minimum: 0,
-                description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
-            },
-            created_at: instante,
-            updated_at: instante,
+    objeto({
+        id,
+        nit: nulable(texto),
+        razon_social: nulable(texto),
+        nombre_comercial: texto,
+        direccion_fiscal: nulable(texto),
+        municipio: nulable(texto),
+        departamento: nulable(texto),
+        telefono: nulable(texto),
+        telefono_alterno: nulable(texto),
+        whatsapp: nulable(texto),
+        correo: nulable(texto),
+        sitio_web: nulable(texto),
+        horario: nulable(texto),
+        instrucciones_pago: nulable(texto),
+        color_marca: { ...nulable(texto), description: '`#RRGGBB`; solo PDF y correo' },
+        pais: {
+            ...texto,
+            pattern: '^[A-Z]{2}$',
+            description:
+                'País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais',
         },
-        ['pais'],
-    ),
+        regimen_isr: {
+            ...nulable(enumerado(REGIMENES_ISR)),
+            description:
+                'Solo lectura (localización fiscal): régimen vigente; cambia con POST /fiscal/regimen',
+        },
+        codigo_establecimiento: {
+            ...nulable(entero),
+            description: 'Solo lectura (localización fiscal): establecimiento por defecto en la SAT',
+        },
+        logo_url: {
+            ...nulable(texto),
+            description: 'Ruta del logo (`/api/v1/empresas/:id/logo?v=…`, pública, con ETag); null sin logo',
+        },
+        logo_tipo: nulable(enumerado(['image/png', 'image/svg+xml'])),
+        activa: booleano,
+        principal: { ...booleano, description: 'La empresa 1 (la de la instalación original)' },
+        version: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Control optimista: envíala al editar (0 = la empresa 1 nunca se guardó)',
+        },
+        created_at: instante,
+        updated_at: instante,
+    }),
 )
 
 /** País con localización fiscal (`GET /empresas/paises`). */

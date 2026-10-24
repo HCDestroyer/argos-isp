@@ -17,9 +17,9 @@ test.group('OpenAPI', () => {
 
     test('conserva Me y Problem de la semilla, y los operationId del login', async ({ assert }) => {
         const doc = JSON.parse(await construirOpenApi())
-        // la semilla se conserva; `csrf` (solo con la cookie del panel), `expira_en` y `expira_max_en`
-        // (solo en GET /me) y los de multiempresa (`alcance_global`, `empresas`, `empresa_activa_id`)
-        // son opcionales
+        // la semilla se conserva; se agregaron `csrf` (opcional: solo con la cookie del panel),
+        // `expira_en`/`expira_max_en` y los de multiempresa (`alcance_global`, `empresas`,
+        // `empresa_activa_id`), obligatorios porque la API siempre los manda
         const {
             csrf,
             expira_en: expiraEn,
@@ -33,7 +33,18 @@ test.group('OpenAPI', () => {
             { ...doc.components.schemas.Me, properties: propiedades },
             {
                 type: 'object',
-                required: ['id', 'nombre', 'email', 'permisos', 'roles'],
+                required: [
+                    'id',
+                    'nombre',
+                    'email',
+                    'permisos',
+                    'roles',
+                    'expira_en',
+                    'expira_max_en',
+                    'alcance_global',
+                    'empresas',
+                    'empresa_activa_id',
+                ],
                 properties: {
                     id: { type: 'integer' },
                     nombre: { type: 'string' },
