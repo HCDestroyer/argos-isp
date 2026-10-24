@@ -132,6 +132,10 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'libro.registrar_diferimiento': 'Diferimiento registrado',
     'libro.amortizar_diferidos': 'Cuotas de diferidos registradas',
     'empresa.editar': 'Datos de la empresa editados',
+    'campos_personalizados.crear': 'Campo personalizado creado',
+    'campos_personalizados.editar': 'Campo personalizado editado',
+    'campos_personalizados.desactivar': 'Campo personalizado desactivado',
+    'campos_personalizados.activar': 'Campo personalizado activado',
     'empresas.crear': 'Empresa creada',
     'empresas.editar': 'Empresa editada',
     'empresas.desactivar': 'Empresa desactivada',
@@ -367,6 +371,7 @@ export const CANALES_ACCION = ['panel', 'portal', 'api', 'ia', 'cron', 'worker',
 
 /** Tipos de entidad que registran las acciones (`t.fijarEntidad`) y dónde se ven en el panel. */
 export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: number) => string }> = {
+    campo_personalizado: { etiqueta: 'Campo personalizado' },
     cliente: { etiqueta: 'Cliente', ruta: id => `/clientes/${id}` },
     servicio: { etiqueta: 'Servicio', ruta: id => `/servicios/${id}` },
     factura: { etiqueta: 'Factura', ruta: id => `/facturas/${id}` },

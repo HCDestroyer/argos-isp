@@ -2,6 +2,9 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { CredencialesInvalidas } from '#shared/errores'
 import Usuario from '#core/models/usuario'
 import { construirMe, type Me } from '#core/acl'
+
+/** `Me` de una sesión recién abierta: con su vencimiento, igual que `GET /me`. */
+export type MeSesion = Me & { expira_en: string | null; expira_max_en: string | null }
 import { NOMBRE_TOKEN_PANEL, configSesionPanel, topeDeSesion } from '#core/auth/sesion_deslizante'
 
 export interface EntradaIniciarSesion {
@@ -20,7 +23,7 @@ export interface SalidaIniciarSesion {
     expiraEn: Date | null
     /** tope absoluto: igual a `expiraEn` con Bearer; `login + PANEL_SESION_MAXIMA_H` con la cookie */
     expiraMaxEn: Date | null
-    usuario: Me
+    usuario: MeSesion
 }
 
 /**
@@ -39,19 +42,33 @@ export async function emitirSesion(
             name: NOMBRE_TOKEN_PANEL,
             expiresIn: Math.floor(cfg.inactividadMs / 1000),
         })
-        return {
-            token: token.value!.release(),
-            expiraEn: token.expiresAt ?? null,
-            expiraMaxEn: topeDeSesion(token.createdAt, cfg),
-            usuario: await construirMe(usuario),
-        }
+        return sesionEmitida(
+            token.value!.release(),
+            token.expiresAt ?? null,
+            topeDeSesion(token.createdAt, cfg),
+            usuario,
+        )
     }
     const token = await Usuario.accessTokens.create(usuario, ['*'], { name: `login ${canal}` })
+    return sesionEmitida(token.value!.release(), token.expiresAt ?? null, token.expiresAt ?? null, usuario)
+}
+
+async function sesionEmitida(
+    token: string,
+    expiraEn: Date | null,
+    expiraMaxEn: Date | null,
+    usuario: Usuario,
+): Promise<SalidaIniciarSesion> {
+    const me = await construirMe(usuario)
     return {
-        token: token.value!.release(),
-        expiraEn: token.expiresAt ?? null,
-        expiraMaxEn: token.expiresAt ?? null,
-        usuario: await construirMe(usuario),
+        token,
+        expiraEn,
+        expiraMaxEn,
+        usuario: {
+            ...me,
+            expira_en: expiraEn?.toISOString() ?? null,
+            expira_max_en: expiraMaxEn?.toISOString() ?? null,
+        },
     }
 }
 

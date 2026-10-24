@@ -55,6 +55,11 @@ import DesvincularTelegramCliente from '#core/actions/desvincular_telegram_clien
 import AsignarResponsablePago from '#core/actions/asignar_responsable_pago'
 import QuitarResponsablePago from '#core/actions/quitar_responsable_pago'
 import CrearZona from '#core/actions/crear_zona'
+import CrearCampoPersonalizado from '#core/actions/crear_campo_personalizado'
+import EditarCampoPersonalizado from '#core/actions/editar_campo_personalizado'
+import DesactivarCampoPersonalizado from '#core/actions/desactivar_campo_personalizado'
+import ActivarCampoPersonalizado from '#core/actions/activar_campo_personalizado'
+import { listarCamposPersonalizados } from '#core/campos_personalizados'
 import EditarZona from '#core/actions/editar_zona'
 import {
     buscarClientes,
@@ -123,6 +128,7 @@ import {
     TokenHorusCreado,
     Usuario,
     Zona,
+    CampoPersonalizado,
 } from '#core/esquemas'
 
 /** Pone la cookie del panel y arma `SesionPanel` (mismo cuerpo que `POST /auth/sesion`). */
@@ -695,6 +701,80 @@ const clientes: Ruta[] = [
         respuesta: { status: 200, descripcion: 'Zona actualizada', esquema: Zona },
         handler: (ctx, { cuerpo, params }) =>
             new EditarZona().execute({ ...cuerpo, id: Number(params.id) }, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/campos-personalizados',
+        operacion: 'camposPersonalizadosListar',
+        resumen: 'Catálogo de campos personalizados del cliente',
+        descripcion:
+            'Qué claves de `Cliente.campos_personalizados` existen, su etiqueta, tipo, opciones, si son ' +
+            'requeridas y su orden en la ficha. `?activo=true` para el formulario.',
+        etiqueta: 'clientes',
+        permiso: 'clientes.ver',
+        query: v.listarCamposPersonalizadosValidator,
+        respuesta: { status: 200, descripcion: 'Campos personalizados', esquema: lista(CampoPersonalizado) },
+        handler: (_ctx, { query }) => listarCamposPersonalizados(query),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/campos-personalizados',
+        operacion: 'camposPersonalizadosCrear',
+        resumen: 'Agregar un campo personalizado del cliente',
+        descripcion: '409 `campo_duplicado` si la clave ya existe. `clave` y `tipo` no cambian después.',
+        etiqueta: 'clientes',
+        permiso: 'campos_personalizados.crear',
+        cuerpo: v.crearCampoPersonalizadoValidator,
+        respuesta: { status: 201, descripcion: 'Campo creado', esquema: CampoPersonalizado },
+        handler: (ctx, { cuerpo }) => new CrearCampoPersonalizado().execute(cuerpo, ctx.contextoAccion()),
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/campos-personalizados/:id',
+        operacion: 'camposPersonalizadosEditar',
+        resumen: 'Editar etiqueta, opciones, obligatoriedad u orden de un campo personalizado',
+        etiqueta: 'clientes',
+        permiso: 'campos_personalizados.editar',
+        cuerpo: v.editarCampoPersonalizadoValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Campo actualizado', esquema: CampoPersonalizado },
+        handler: (ctx, { cuerpo, params }) =>
+            new EditarCampoPersonalizado().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/campos-personalizados/:id/desactivar',
+        operacion: 'camposPersonalizadosDesactivar',
+        resumen: 'Desactivar un campo personalizado (no se borra; los valores se conservan)',
+        etiqueta: 'clientes',
+        permiso: 'campos_personalizados.desactivar',
+        cuerpo: v.versionCampoPersonalizadoValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Campo desactivado', esquema: CampoPersonalizado },
+        handler: (ctx, { cuerpo, params }) =>
+            new DesactivarCampoPersonalizado().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            ),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/campos-personalizados/:id/activar',
+        operacion: 'camposPersonalizadosActivar',
+        resumen: 'Volver a activar un campo personalizado',
+        etiqueta: 'clientes',
+        permiso: 'campos_personalizados.activar',
+        cuerpo: v.versionCampoPersonalizadoValidator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Campo activado', esquema: CampoPersonalizado },
+        handler: (ctx, { cuerpo, params }) =>
+            new ActivarCampoPersonalizado().execute(
+                { ...cuerpo, id: Number(params.id) },
+                ctx.contextoAccion(),
+            ),
     }),
 ]
 

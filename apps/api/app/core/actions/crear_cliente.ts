@@ -4,6 +4,7 @@ import { limpiarDocumento, validarDocumentoFiscal, type TipoDocumentoFiscal } fr
 import { verCliente, type ClienteVista } from '#core/consultas/clientes'
 import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { resolverCodigoReferido } from '#core/referidos'
+import { exigeRequeridos, validarCamposPersonalizados } from '#core/campos_personalizados'
 
 export interface DatosCliente {
     nombre?: string
@@ -85,6 +86,12 @@ export async function columnasCliente(
     antes?: DocumentoAnterior,
 ): Promise<Record<string, unknown>> {
     const columnas: Record<string, unknown> = columnasDocumento(datos, antes)
+    // catálogo (`#core/campos_personalizados`): en el alta siempre; al editar, si llegan (se reemplazan)
+    if (datos.campos_personalizados !== undefined || !antes) {
+        await validarCamposPersonalizados(t.trx, datos.campos_personalizados ?? {}, {
+            exigirRequeridos: exigeRequeridos(t.ctx),
+        })
+    }
     for (const [clave, valor] of Object.entries(datos)) {
         if (valor === undefined || (CAMPOS_DOCUMENTO as readonly string[]).includes(clave)) continue
         if (clave === 'campos_personalizados') columnas.campos_personalizados = JSON.stringify(valor)
@@ -102,7 +109,8 @@ export async function columnasCliente(
 /**
  * Alta de cliente con datos fiscales (tipo de documento con NIT, CUI, pasaporte o CF validado,
  * nombre, dirección y país fiscal, agente de retención y sector público) y campos personalizados
- * libres (jsonb). El saldo no se guarda: es la suma de su auxiliar en el libro.
+ * (jsonb) validados contra su catálogo (`#core/campos_personalizados`: tipo y requeridos; las claves
+ * fuera del catálogo se guardan tal cual). El saldo no se guarda: es la suma de su auxiliar en el libro.
  *
  * `codigo` (`C-000455`) lo deriva la base del id al insertar y es inmutable; el código que traiga
  * el importador del sistema anterior va en `codigo_externo`.

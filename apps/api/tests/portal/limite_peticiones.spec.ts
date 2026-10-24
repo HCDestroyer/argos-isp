@@ -61,6 +61,24 @@ test.group('Portal: límite de peticiones por IP', (group) => {
         assert.isNull(auditada)
     })
 
+    test('con cuerpo: un cuerpo inválido (422) también consume el cupo, y uno válido cuenta una sola vez', async ({
+        client,
+        assert,
+    }) => {
+        const ip = '198.51.100.201'
+        const pedir = (cuerpo: Record<string, unknown>) =>
+            client.post('/api/v1/portal/codigo').header('X-Forwarded-For', ip).json(cuerpo)
+        // inválido: el límite corre antes de VineJS (gancho `antes`)
+        const invalido = await estado(pedir({ identificador: 42 }), 422)
+        assert.equal(invalido.header('ratelimit-remaining'), '2')
+        // válido (IP sin servicio): el handler no vuelve a contar lo que contó el gancho
+        const valido = await pedir({ por_ip: true })
+        assert.notEqual(valido.status(), 429)
+        assert.equal(valido.header('ratelimit-remaining'), '1')
+        await estado(pedir({ identificador: 42 }), 422)
+        await estado(pedir({ identificador: 42 }), 429)
+    })
+
     test('cada IPv4 cuenta aparte', async ({ client }) => {
         for (let i = 0; i < 3; i += 1) {
             await estado(client.get(RUTA).header('X-Forwarded-For', '198.51.100.201'), 200)

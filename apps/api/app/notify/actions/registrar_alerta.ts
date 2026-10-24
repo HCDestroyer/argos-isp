@@ -9,12 +9,24 @@ import {
     crearAlertas,
     duracion,
     instanteLocal,
+    type CanalAlerta,
     type Incidente,
 } from '#notify/alertas'
 import { quetzales } from '#notify/formato'
 import { numeroDeFactura } from '#notify/variables'
 import { variablesLimitePc, variablesVencimiento } from '#notify/calendario_fiscal'
 import { variablesCascada, variablesPagada, variablesPagoAnulado } from '#notify/declaraciones_fiscales'
+import {
+    TIPO_PROCESO_BLOQUEADO,
+    anomaliasDe,
+    variablesBloqueo,
+    variablesChecks,
+    variablesDeclaracion,
+    variablesEjercicio,
+    variablesLibroEmitido,
+    variablesProcesoBloqueado,
+    variablesSorteoInterno,
+} from '#notify/avisos_internos'
 
 /** Eventos del catálogo que generan alertas internas. */
 export const EVENTOS_ALERTA = [
@@ -35,6 +47,26 @@ export const EVENTOS_ALERTA = [
     'declaracion.revisada',
     'declaracion.pagada',
     'declaracion.pago_anulado',
+    // Declaraciones calculadas y presentadas: aviso a contabilidad (correo)
+    'declaracion.calculada',
+    'declaracion.presentada',
+    // Libro contable y cierres (fase 6): el bloqueo de un cron, al equipo y a contabilidad; los
+    // checks solo con anomalías; lo demás, aviso a contabilidad
+    'libro.proceso_bloqueado',
+    'libro.checks_verificados',
+    'libro.bloqueo_cambiado',
+    'libro.emitido',
+    'ejercicio.cerrado',
+    'ejercicio.reabierto',
+    // Sorteos (lealtad fase 3): al chat del equipo de la empresa. El ganador recibe su aviso por
+    // `sorteo.ganador_notificado` (`#notify/lealtad`)
+    'sorteo.bases_publicadas',
+    'sorteo.corte_cerrado',
+    'sorteo.ejecutado',
+    'sorteo.cancelado',
+    'sorteo.entrega_anulada',
+    'sorteo.premio_no_reclamado',
+    'sorteo.acta_cerrada',
     'horus.hallazgo_abierto',
     'horus.hallazgo_resuelto',
     'horus.router_estado_cambiado',
@@ -103,8 +135,18 @@ function texto(valor: unknown): string {
  * | `declaracion.pagada` | `declaracion-pago:<declaracion_id>`, puntual | cada pago |
  * | `declaracion.pago_anulado` | `declaracion-pago-anulado:<pago_id>`, puntual, una vez por pago | siempre |
  *
- * Los fiscales usan la configuración de canales de la empresa del evento (`empresa_id`): Telegram
- * al chat del equipo y correo a `correo.contabilidad`.
+ * | `declaracion.calculada` | `declaracion-calculada:<id>:<monto>`, puntual, una vez por versión y monto | correo a contabilidad |
+ * | `declaracion.presentada` | `declaracion-presentada:<id>`, puntual, una vez por versión | correo a contabilidad |
+ * | `libro.proceso_bloqueado` | `libro-proceso:<empresa_id>:<proceso>`, abierto hasta la primera corrida sin bloqueos de la empresa (`VigilarCrons`) | al abrir y al resolver (Telegram y correo) |
+ * | `libro.checks_verificados` con anomalías | `libro-checks:<empresa_id>:<tipo>:<periodo>:<anomalías>`, puntual, una vez por conjunto de anomalías | Telegram y correo (sin anomalías: nada) |
+ * | `libro.bloqueo_cambiado` | `libro-bloqueo:<empresa_id>:<tipo>`, puntual | correo a contabilidad |
+ * | `libro.emitido` | `libro-emitido:<emision_id>`, puntual, una vez por emisión | correo a contabilidad |
+ * | `ejercicio.cerrado` | `ejercicio-cerrado:<cierre_id>`, puntual, una vez | correo a contabilidad |
+ * | `ejercicio.reabierto` | `ejercicio-reabierto:<cierre_id>`, puntual, una vez | Telegram y correo |
+ * | `sorteo.*` (bases, corte, ejecutado, cancelado, entrega anulada, no reclamado, acta) | `sorteo-<fase>:<sorteo_id>[:<posicion>]`, puntual, una vez | Telegram al chat del equipo de la empresa |
+ *
+ * Los fiscales y contables usan la configuración de canales de la empresa del evento
+ * (`empresa_id`): Telegram al chat del equipo y correo a `correo.contabilidad`.
  * | `horus.hallazgo_abierto` (severidad high o critical) | `horus-hallazgo:<id>`, hasta `horus.hallazgo_resuelto` | al abrir y al resolver; con la configuración de la empresa del servicio |
  * | `horus.router_estado_cambiado` | `horus-router:<id>`, abierto mientras no esté `online` | al abrir y al recuperar |
  * | `horus.servicio_infra_cambiado` | `horus-infra:<id>`, abierto mientras no esté bien | al abrir y al recuperar |
@@ -191,6 +233,7 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             fase: 'abierto' | 'cerrado',
             evento: string,
             alerta: Record<string, unknown>,
+            canales: CanalAlerta[] = ['telegram', 'correo'],
         ): Promise<ResultadoAlerta> => {
             const envios = await crearAlertas(t.trx, {
                 incidente,
@@ -199,7 +242,7 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
                 alerta,
                 requestId: t.ctx.requestId,
                 empresaId,
-                canales: ['telegram', 'correo'],
+                canales,
             })
             return {
                 duplicado: false,
@@ -209,7 +252,165 @@ export default class RegistrarAlerta extends DomainAction<EntradaAlerta, Resulta
             }
         }
 
+        /** Hecho puntual que se avisa una sola vez por `clave` (una reemisión con otro id no repite). */
+        const unaVez = (clave: string, tipo: string, detalle: Record<string, unknown>) =>
+            abrirIncidente(t.trx, {
+                clave,
+                tipo,
+                detalle: { empresa_id: empresaId, ...detalle },
+                ahora,
+                puntual: true,
+                unico: true,
+            })
+        const SOLO_CORREO: CanalAlerta[] = ['correo']
+
         switch (input.evento) {
+            case 'declaracion.calculada':
+            case 'declaracion.presentada': {
+                const calculada = input.evento === 'declaracion.calculada'
+                // recalcular el mismo borrador con el mismo monto no repite el aviso
+                const clave = calculada
+                    ? `declaracion-calculada:${texto(p.declaracion_id)}:${texto(p.monto)}`
+                    : `declaracion-presentada:${texto(p.declaracion_id)}`
+                const { incidente, nuevo } = await unaVez(
+                    clave,
+                    `declaracion_${calculada ? 'calculada' : 'presentada'}`,
+                    {
+                        declaracion_id: p.declaracion_id ?? null,
+                        monto: p.monto ?? null,
+                    },
+                )
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    `alerta.${input.evento}`,
+                    await variablesDeclaracion(t.trx, input.evento, p),
+                    SOLO_CORREO,
+                )
+            }
+            case 'libro.proceso_bloqueado': {
+                // Un incidente por empresa y proceso: las corridas siguientes, aún bloqueadas, solo
+                // suman eventos. Lo cierra `VigilarCrons` con la primera corrida sin bloqueos.
+                const proceso = texto(p.proceso) || 'desconocido'
+                const { incidente, nuevo } = await abrirIncidente(t.trx, {
+                    clave: `libro-proceso:${empresaId ?? '-'}:${proceso}`,
+                    tipo: TIPO_PROCESO_BLOQUEADO,
+                    detalle: {
+                        empresa_id: empresaId,
+                        proceso,
+                        tipo: texto(p.tipo) || null,
+                        hasta: texto(p.hasta) || null,
+                        documentos: p.documentos ?? null,
+                    },
+                    ahora,
+                })
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    'alerta.libro.proceso_bloqueado',
+                    variablesProcesoBloqueado(p),
+                )
+            }
+            case 'libro.checks_verificados': {
+                const anomalias = anomaliasDe(p)
+                if (anomalias.length === 0) return sinAlerta(null)
+                const { incidente, nuevo } = await unaVez(
+                    `libro-checks:${empresaId ?? '-'}:${texto(p.tipo)}:${texto(p.periodo)}:${anomalias.join(',')}`,
+                    'libro_checks',
+                    { tipo: texto(p.tipo), periodo: texto(p.periodo), anomalias },
+                )
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(incidente, 'abierto', 'alerta.libro.checks_anomalias', variablesChecks(p))
+            }
+            case 'libro.bloqueo_cambiado': {
+                // cada cambio es un hecho; la reentrega la frena el origen
+                const { incidente } = await abrirIncidente(t.trx, {
+                    clave: `libro-bloqueo:${empresaId ?? '-'}:${texto(p.tipo)}`,
+                    tipo: 'libro_bloqueo',
+                    detalle: {
+                        empresa_id: empresaId,
+                        tipo: texto(p.tipo),
+                        hasta: p.hasta ?? null,
+                        anterior: p.anterior ?? null,
+                    },
+                    ahora,
+                    puntual: true,
+                })
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    'alerta.libro.bloqueo_cambiado',
+                    variablesBloqueo(p),
+                    SOLO_CORREO,
+                )
+            }
+            case 'libro.emitido': {
+                const { incidente, nuevo } = await unaVez(
+                    `libro-emitido:${texto(p.emision_id)}`,
+                    'libro_emitido',
+                    {
+                        emision_id: p.emision_id ?? null,
+                        libro: texto(p.libro),
+                    },
+                )
+                if (!nuevo) return sinAlerta(incidente)
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    'alerta.libro.emitido',
+                    variablesLibroEmitido(p),
+                    SOLO_CORREO,
+                )
+            }
+            case 'ejercicio.cerrado':
+            case 'ejercicio.reabierto': {
+                const cerrado = input.evento === 'ejercicio.cerrado'
+                const { incidente, nuevo } = await unaVez(
+                    `ejercicio-${cerrado ? 'cerrado' : 'reabierto'}:${texto(p.cierre_id)}`,
+                    cerrado ? 'ejercicio_cerrado' : 'ejercicio_reabierto',
+                    { cierre_id: p.cierre_id ?? null, anio: p.anio ?? null },
+                )
+                if (!nuevo) return sinAlerta(incidente)
+                // reabrir un ejercicio (solo admin) también avisa al equipo
+                return avisarFiscal(
+                    incidente,
+                    'abierto',
+                    `alerta.${input.evento}`,
+                    variablesEjercicio(p),
+                    cerrado ? SOLO_CORREO : ['telegram', 'correo'],
+                )
+            }
+            case 'sorteo.bases_publicadas':
+            case 'sorteo.corte_cerrado':
+            case 'sorteo.ejecutado':
+            case 'sorteo.cancelado':
+            case 'sorteo.entrega_anulada':
+            case 'sorteo.premio_no_reclamado':
+            case 'sorteo.acta_cerrada': {
+                const fase = input.evento.slice('sorteo.'.length)
+                // por ganador: la entrega anulada (posición) y el premio no reclamado (ganador)
+                const sufijo =
+                    input.evento === 'sorteo.entrega_anulada'
+                        ? `:${texto(p.posicion)}`
+                        : input.evento === 'sorteo.premio_no_reclamado'
+                          ? `:${texto(p.ganador_id)}`
+                          : ''
+                const { incidente, nuevo } = await unaVez(
+                    `sorteo-${fase}:${texto(p.sorteo_id)}${sufijo}`,
+                    'sorteo',
+                    { sorteo_id: p.sorteo_id ?? null, fase },
+                )
+                if (!nuevo) return sinAlerta(incidente)
+                return avisar(
+                    incidente,
+                    'abierto',
+                    `alerta.sorteo.${fase}`,
+                    await variablesSorteoInterno(t.trx, input.evento, p, instanteLocal),
+                    empresaId,
+                )
+            }
             case 'libro.integridad_rota': {
                 // Una vez por empresa y sello (A3 ya lo emite así; `unico` cubre una reemisión).
                 const { incidente, nuevo } = await abrirIncidente(t.trx, {

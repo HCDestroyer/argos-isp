@@ -18,33 +18,11 @@ import { crearClienteFila, crearServicioFila } from '#tests/core/fabricas'
 const USO_CRUDO = /(\w+_por|created_by|\bpor)\s*:[^\n]*ctx\.actor\.id\b|cajaDelCajero\(\s*t\.ctx\.actor\.id/
 
 /**
- * Archivos de otros módulos que todavía lo hacen (avisado a A3 en `.claude/integration/a1.md`,
- * 2026-10-17). Ninguno recibe hoy el actor `cliente`; cuando los corrijan, se quitan de aquí.
- * Un archivo nuevo con el uso crudo hace fallar la prueba.
+ * Archivos que todavía escriben `ctx.actor.id` crudo en una columna de usuario. Vacío desde que A3
+ * corrigió billing y ledger (fila 49 de `a1.md`, cerrada el 2026-10-24): cualquier archivo nuevo con
+ * el uso crudo hace fallar la prueba.
  */
-const PENDIENTES_OTROS_MODULOS = new Set([
-    'app/billing/actions/anular_factura.ts',
-    'app/billing/actions/anular_pago.ts',
-    'app/billing/actions/anular_saldo_inicial.ts',
-    'app/billing/actions/aprobar_comprobante.ts',
-    'app/billing/actions/aprobar_promesa.ts',
-    'app/billing/actions/conciliar_pasarela.ts',
-    'app/billing/actions/crear_cobro_pasarela.ts',
-    'app/billing/actions/crear_promesa_pago.ts',
-    'app/billing/actions/rechazar_comprobante.ts',
-    'app/billing/actions/registrar_comprobante.ts',
-    'app/billing/actions/registrar_pago.ts',
-    'app/billing/actions/registrar_pago_historico.ts',
-    'app/billing/actions/registrar_saldo_inicial.ts',
-    'app/billing/cierre_promesa_operador.ts',
-    'app/ledger/actions/abrir_caja.ts',
-    'app/ledger/actions/anular_egreso.ts',
-    'app/ledger/actions/cerrar_caja.ts',
-    'app/ledger/actions/cerrar_periodo.ts',
-    'app/ledger/actions/reabrir_periodo.ts',
-    'app/ledger/actions/registrar_asiento.ts',
-    'app/ledger/actions/registrar_egreso.ts',
-])
+const PENDIENTES_OTROS_MODULOS = new Set<string>()
 
 async function archivosTs(directorio: string): Promise<string[]> {
     const entradas = await readdir(directorio, { withFileTypes: true })
