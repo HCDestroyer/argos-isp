@@ -38,6 +38,7 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
         await limpiarHorus()
         return async () => {
             await limpiarHorus()
+            await soloEmpresaPrincipal()
             delete process.env.HORUS_PERMITIR_HTTP
         }
     })
@@ -379,6 +380,9 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
                 webhook_salida_secreto: SECRETO_SALIDA,
             })
             const servicioId = await crearServicio(await crearCliente())
+            // empresa destino propia: la FK de `horus_envios.empresa_id` exige que exista, y un id fijo
+            // (2) solo existía si otra prueba anterior de la corrida la había creado
+            const otraEmpresa = await crearEmpresaFila()
             // cambio de red (IP, MAC, router): llega por asignacion.cambiada o no le sirve a Horus
             await evento('servicio.config_cambiada', {
                 servicio_id: servicioId,
@@ -387,7 +391,7 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
             })
             await evento('servicio.config_cambiada', {
                 servicio_id: servicioId,
-                empresa_id: 2,
+                empresa_id: otraEmpresa,
                 campos: ['empresa'],
                 empresa_anterior_id: 1,
             })
@@ -404,7 +408,7 @@ test.group('integraciones · horus · webhooks Argos → Horus', (group) => {
                     evento: 'servicio.config_cambiada',
                     payload: {
                         servicio_id: servicioId,
-                        empresa_id: 2,
+                        empresa_id: otraEmpresa,
                         campos: ['empresa'],
                         empresa_anterior_id: 1,
                     },

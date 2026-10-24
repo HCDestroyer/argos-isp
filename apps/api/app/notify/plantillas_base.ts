@@ -57,6 +57,28 @@ function alertaFiscal(evento: string, asunto: string, cuerpo: string): Plantilla
     ]
 }
 
+/** Aviso informativo solo a contabilidad (correo), con la configuración de la empresa del evento. */
+function avisoContabilidad(evento: string, asunto: string, cuerpo: string): PlantillaBase[] {
+    return [
+        {
+            evento,
+            canal: 'correo',
+            asunto,
+            cuerpo: `Equipo de contabilidad:\n\n${cuerpo}\n\nAviso automático de ArgosIsp para {{empresa.nombre}}.`,
+        },
+    ]
+}
+
+/** Alerta de sorteos al chat del equipo de la empresa (Telegram). */
+function alertaSorteo(fase: string, cuerpo: string): PlantillaBase {
+    return {
+        evento: `alerta.sorteo.${fase}`,
+        canal: 'telegram',
+        asunto: null,
+        cuerpo: `SORTEO · {{empresa.nombre}} · ${cuerpo}`,
+    }
+}
+
 /**
  * Alertas internas al chat del equipo (`TELEGRAM_CHAT_EQUIPO`, tarea 7). Telegram; los avisos
  * fiscales (`alertaFiscal`) también por correo a contabilidad. Variables:
@@ -207,6 +229,99 @@ export const PLANTILLAS_ALERTA: PlantillaBase[] = [
             '{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
             '\nSu asiento se revirtió{{#alerta.asiento_id}} (asiento {{alerta.asiento_id}}){{/alerta.asiento_id}} y la declaración quedó sin pago registrado: si el pago se hizo, regístralo de nuevo con los datos correctos.',
     ),
+    // Declaraciones calculadas y presentadas: solo a contabilidad.
+    ...avisoContabilidad(
+        'alerta.declaracion.calculada',
+        'Declaración calculada: {{alerta.impuesto}}, {{alerta.periodo}} ({{empresa.nombre}})',
+        'Se calculó la declaración {{alerta.impuesto}} del periodo {{alerta.periodo}}{{#alerta.rectificativa}} (versión {{alerta.version}}){{/alerta.rectificativa}} de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}}.' +
+            '\nMonto a pagar según el borrador: {{alerta.monto_q}}.{{#alerta.vence}}\nVence el {{alerta.vence}}.{{/alerta.vence}}' +
+            '\nRevisa el borrador en el panel (Fiscal → Declaraciones) y márcalo como revisado para liquidar y bloquear los impuestos del periodo.',
+    ),
+    ...avisoContabilidad(
+        'alerta.declaracion.presentada',
+        'Declaración presentada: {{alerta.impuesto}}, {{alerta.periodo}} ({{empresa.nombre}})',
+        'Se registró la presentación de la declaración {{alerta.impuesto}} del periodo {{alerta.periodo}} (versión {{alerta.version}}) de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}}' +
+            '{{#alerta.formulario}}, formulario {{alerta.formulario}}{{/alerta.formulario}}{{#alerta.presentada_el}}, el {{alerta.presentada_el}}{{/alerta.presentada_el}}.' +
+            '\nMonto declarado: {{alerta.monto_q}}.{{#alerta.vence}} Vence el {{alerta.vence}}: registra el pago cuando se haga.{{/alerta.vence}}',
+    ),
+    // Libro contable y cierres (fase 6, A3).
+    ...alertaFiscal(
+        'alerta.libro.proceso_bloqueado',
+        '{{alerta.descripcion}} quedó detenida por un bloqueo del libro ({{empresa.nombre}})',
+        '{{alerta.descripcion}} de {{empresa.nombre}} no contabilizó {{alerta.documentos}} {{alerta.que_documentos}} porque la fecha contable {{alerta.fecha}} cae bajo el {{alerta.tipo_texto}}{{#alerta.hasta}} (hasta el {{alerta.hasta}}){{/alerta.hasta}}.' +
+            '{{#alerta.ejemplos}}\nEjemplos ({{alerta.que_documentos}}): {{alerta.ejemplos}}{{#alerta.mas_ejemplos}}…{{/alerta.mas_ejemplos}}{{/alerta.ejemplos}}' +
+            '\nNada se pierde: quedan pendientes y cada corrida los vuelve a intentar. Si el periodo debe seguir cerrado, contabilidad decide cómo registrar estos documentos (por ejemplo, una excepción del bloqueo); si no, ajusta el bloqueo en el panel. Las corridas siguientes con el mismo bloqueo no se repiten aquí; se avisa cuando una corrida termine sin bloqueos.',
+    ),
+    ...alertaFiscal(
+        'alerta.libro.proceso_desbloqueado',
+        'RESUELTO · {{alerta.descripcion}} ya no está bloqueada ({{empresa.nombre}})',
+        'La corrida del {{alerta.ultima}} de {{alerta.descripcion}} de {{empresa.nombre}} terminó sin documentos bloqueados por el libro.' +
+            '\nEstuvo detenida desde el {{alerta.desde}} ({{alerta.duracion}}, {{alerta.eventos}} corridas con bloqueo).',
+    ),
+    ...alertaFiscal(
+        'alerta.libro.checks_anomalias',
+        'Verificación del {{alerta.tipo_texto}} {{alerta.periodo}} con {{alerta.cantidad}} {{#alerta.varias}}anomalías{{/alerta.varias}}{{^alerta.varias}}anomalía{{/alerta.varias}} ({{empresa.nombre}})',
+        'La verificación del {{alerta.tipo_texto}} {{alerta.periodo}} de {{empresa.nombre}} encontró {{#alerta.varias}}controles{{/alerta.varias}}{{^alerta.varias}}un control{{/alerta.varias}} en anomalía sin supervisar: {{alerta.anomalias}}.' +
+            '\nRevísalos en el tablero de cierre del panel: corrige el origen o márcalos como supervisados con su justificación antes de cerrar el periodo. Si la misma lista vuelve a salir, no se repite este aviso.',
+    ),
+    ...avisoContabilidad(
+        'alerta.libro.bloqueo_cambiado',
+        '{{#alerta.quitado}}Se quitó el {{alerta.tipo_texto}}{{/alerta.quitado}}{{^alerta.quitado}}{{alerta.tipo_texto}} hasta el {{alerta.hasta}}{{/alerta.quitado}} ({{empresa.nombre}})',
+        '{{#alerta.quitado}}Se quitó el {{alerta.tipo_texto}} de {{empresa.nombre}}{{#alerta.anterior}} (estaba hasta el {{alerta.anterior}}){{/alerta.anterior}}.{{/alerta.quitado}}' +
+            '{{^alerta.quitado}}El {{alerta.tipo_texto}} de {{empresa.nombre}} quedó hasta el {{alerta.hasta}}{{#alerta.anterior}} (antes: {{alerta.anterior}}){{/alerta.anterior}}{{^alerta.anterior}} (antes no había){{/alerta.anterior}}.{{/alerta.quitado}}' +
+            '{{#alerta.es_duro}}\nEl cierre definitivo no admite excepciones: los periodos hasta esa fecha ya no se pueden modificar.{{/alerta.es_duro}}',
+    ),
+    ...avisoContabilidad(
+        'alerta.libro.emitido',
+        '{{#alerta.reimpresion}}Reimpresión: {{/alerta.reimpresion}}{{alerta.libro}} {{alerta.periodo}} ({{empresa.nombre}})',
+        'Se emitió el {{alerta.libro}} de {{alerta.periodo}} de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}} en {{alerta.formato}}, folios {{alerta.folio_inicial}} a {{alerta.folio_final}}.' +
+            '{{#alerta.reimpresion}}\nEs una reimpresión: reemplaza a la emisión {{alerta.reimpresion_de}} del mismo rango.{{/alerta.reimpresion}}' +
+            '\nHuella SHA-256 del archivo: {{alerta.sha256}}\nDescárgalo desde el historial de emisiones del tablero fiscal.',
+    ),
+    ...avisoContabilidad(
+        'alerta.ejercicio.cerrado',
+        'Ejercicio {{alerta.anio}} cerrado ({{empresa.nombre}})',
+        'Se cerró el ejercicio {{alerta.anio}} de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}}.' +
+            '\n{{#alerta.perdida}}Pérdida{{/alerta.perdida}}{{^alerta.perdida}}Resultado{{/alerta.perdida}} del ejercicio (después del ISR): {{alerta.resultado_q}}' +
+            '{{#alerta.isr_q}}\nISR: {{alerta.isr_q}}{{/alerta.isr_q}}{{#alerta.reserva_legal_q}}\nReserva legal: {{alerta.reserva_legal_q}}{{/alerta.reserva_legal_q}}' +
+            '\nLos asientos del ejercicio ya no se pueden modificar; una corrección va en el ejercicio siguiente.',
+    ),
+    ...alertaFiscal(
+        'alerta.ejercicio.reabierto',
+        'Ejercicio {{alerta.anio}} reabierto ({{empresa.nombre}})',
+        'Se reabrió el ejercicio {{alerta.anio}} de {{empresa.nombre}}{{#empresa.nit}} (NIT {{empresa.nit}}){{/empresa.nit}}.{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
+            '\nSu cierre se revirtió: revisa las correcciones y vuelve a cerrarlo desde el tablero de cierre.',
+    ),
+    // Sorteos (lealtad fase 3): al chat del equipo de la empresa. El ganador recibe su propio aviso.
+    alertaSorteo(
+        'bases_publicadas',
+        'Se publicaron las bases de {{alerta.nombre}}{{#alerta.fecha_sorteo}}; el sorteo es el {{alerta.fecha_sorteo}}{{/alerta.fecha_sorteo}}.\nHuella de las bases: {{alerta.bases_hash}}',
+    ),
+    alertaSorteo(
+        'corte_cerrado',
+        'Se cerró el corte de {{alerta.nombre}}: {{alerta.participantes}} participantes con {{alerta.boletos}} boletos.\nHuella de la lista: {{alerta.lista_hash}}',
+    ),
+    alertaSorteo(
+        'ejecutado',
+        'Se ejecutó {{alerta.nombre}}: {{alerta.titulares}} ganadores titulares y {{alerta.suplentes}} suplentes.\nSigue con «Notificar ganadores» en el panel: cada ganador recibe su código y su plazo para reclamar.',
+    ),
+    alertaSorteo(
+        'cancelado',
+        'Se canceló {{alerta.nombre}}.{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}',
+    ),
+    alertaSorteo(
+        'entrega_anulada',
+        'Se anuló la entrega del premio del puesto {{alerta.posicion}} de {{alerta.nombre}}{{#alerta.cliente}} (cliente {{alerta.cliente}}){{/alerta.cliente}}.{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}\nSu asiento se revirtió; el premio vuelve a quedar pendiente de entrega.',
+    ),
+    alertaSorteo(
+        'premio_no_reclamado',
+        'El ganador del puesto {{alerta.posicion}} de {{alerta.nombre}}{{#alerta.cliente}} ({{alerta.cliente}}){{/alerta.cliente}} no reclamó el premio {{alerta.premio_posicion}}.{{#alerta.motivo}}\nMotivo: {{alerta.motivo}}{{/alerta.motivo}}' +
+            '{{#alerta.hay_suplente}}\nEl premio pasó al siguiente suplente, que ya recibió su aviso.{{/alerta.hay_suplente}}{{^alerta.hay_suplente}}\nNo quedan suplentes: decide el destino del premio según las bases.{{/alerta.hay_suplente}}',
+    ),
+    alertaSorteo(
+        'acta_cerrada',
+        'Se cerró el acta de {{alerta.nombre}}.\nHuella del acta: {{alerta.acta_hash}}',
+    ),
     // Horus Flow (contratos/horus.md §3.4): avisos, nunca cortes.
     {
         evento: 'alerta.horus.hallazgo',
@@ -352,5 +467,58 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
             '{{#referido.puntos}} Ganaste {{referido.puntos_texto}}; tu saldo es de {{lealtad.saldo_texto}}.{{/referido.puntos}}' +
             ' ¡Gracias por recomendarnos!' +
             puntosEnPortal,
+    ),
+    // Canjes (lealtad fase 2): al cliente del canje. El reservado de un premio de sorteo no se avisa.
+    ...ambos(
+        'lealtad.canje_reservado',
+        'Canje registrado: {{canje.premio}}',
+        'Canjeaste {{#canje.puntos_texto}}{{canje.puntos_texto}} por {{/canje.puntos_texto}}{{canje.premio}}.' +
+            '{{#canje.es_descuento}} El descuento se aplicará en tu próxima factura.{{/canje.es_descuento}}' +
+            '{{^canje.es_descuento}} Te avisaremos cuando quede aplicado.{{/canje.es_descuento}}' +
+            ' Tu saldo es de {{lealtad.saldo_texto}}.' +
+            puntosEnPortal,
+    ),
+    ...ambos(
+        'lealtad.canje_aplicado',
+        'Aplicamos tu canje: {{canje.premio}}',
+        '{{#canje.descuento_q}}Aplicamos un descuento de {{canje.descuento_q}} por tu canje de {{canje.premio}}' +
+            '{{#factura.numero}} en tu factura {{factura.numero}}{{/factura.numero}}' +
+            '{{^factura.numero}}{{#canje.periodo}} en tu servicio de {{canje.periodo}}{{/canje.periodo}}{{/factura.numero}}.{{/canje.descuento_q}}' +
+            '{{^canje.descuento_q}}Tu canje de {{canje.premio}} ya quedó aplicado.' +
+            '{{#canje.es_mejora_plan}} Tu servicio tiene la mejora de plan por el tiempo del premio.{{/canje.es_mejora_plan}}' +
+            '{{#canje.es_boletos}} Tus boletos ya participan en el sorteo.{{/canje.es_boletos}}{{/canje.descuento_q}}' +
+            ' ¡Gracias por ser parte del programa!' +
+            puntosEnPortal,
+    ),
+    ...ambos(
+        'lealtad.canje_revertido',
+        'Canje revertido: {{canje.premio}}',
+        'Revertimos tu canje de {{canje.premio}}{{#canje.motivo}} (motivo: {{canje.motivo}}){{/canje.motivo}}.' +
+            '{{#canje.puntos_texto}} Devolvimos {{canje.puntos_texto}} a tu saldo, que ahora es de {{lealtad.saldo_texto}}.{{/canje.puntos_texto}}' +
+            ' Si tienes dudas, comunícate con nosotros.' +
+            puntosEnPortal,
+    ),
+    // Sorteos (lealtad fase 3): al ganador, con su código y su plazo; los demás sorteo.* son internos.
+    ...ambos(
+        'sorteo.ganador_notificado',
+        '¡Ganaste en {{sorteo.nombre}}!',
+        '¡Felicidades! Resultaste ganador{{#sorteo.sustituye}} como suplente: el premio no fue reclamado a tiempo y ahora es tuyo{{/sorteo.sustituye}} en el sorteo {{sorteo.nombre}}.' +
+            '\nPremio: {{sorteo.premio}}{{#sorteo.premio_valor_q}} (valor {{sorteo.premio_valor_q}}){{/sorteo.premio_valor_q}}' +
+            '\nTu código de ganador: {{sorteo.codigo}}' +
+            '\nReclámalo antes del {{sorteo.reclamar_antes}} con tu código y tu documento de identificación. Si no lo reclamas a tiempo, el premio pasa al siguiente suplente.' +
+            '{{#empresa.soporte.texto}}\nPara coordinar la entrega: {{empresa.soporte.texto}}{{/empresa.soporte.texto}}',
+    ),
+    ...ambos(
+        'sorteo.premio_entregado',
+        'Entregamos tu premio de {{sorteo.nombre}}',
+        'Registramos la entrega de tu premio{{#sorteo.premio}} {{sorteo.premio}}{{/sorteo.premio}} del sorteo {{sorteo.nombre}}. ¡Felicidades y gracias por participar!',
+    ),
+    // Bonificaciones (periodo o cargo en Q0): no hay factura, así que se avisa por qué.
+    ...ambos(
+        'bonificacion.registrada',
+        'Sin costo: {{bonificacion.concepto}}',
+        '{{#bonificacion.es_cargo}}El cargo {{bonificacion.concepto}} no tiene costo para ti{{/bonificacion.es_cargo}}' +
+            '{{^bonificacion.es_cargo}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}}{{#bonificacion.periodo}} de {{bonificacion.periodo}}{{/bonificacion.periodo}} no tiene costo ({{bonificacion.origen_texto}}){{/bonificacion.es_cargo}}' +
+            '{{#bonificacion.bruto_q}}: te bonificamos {{bonificacion.bruto_q}}{{/bonificacion.bruto_q}}. Por eso no recibirás factura por este concepto.',
     ),
 ]

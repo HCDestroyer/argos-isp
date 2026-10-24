@@ -5,6 +5,7 @@ import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacio
 import { filtrarPorAlcance, type Alcance } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { ControlVelocidad } from '#network/velocidad'
+import { sqlContactoRouter } from '#network/contacto_router'
 
 /**
  * Lecturas de routers y redes IPv4. Las credenciales nunca salen: solo `tiene_api_password` y
@@ -40,6 +41,10 @@ export interface RouterVista {
     /** empresa por defecto de los servicios nuevos (multiempresa) */
     empresa_sugerida_id: number | null
     activo: boolean
+    /** null = ninguna fuente periódica lo mide (`app/network/contacto_router.ts`) */
+    en_linea: boolean | null
+    /** última vez que respondió o mandó accounting; null = nunca */
+    ultimo_contacto: string | null
     version: number
     created_at: string
     updated_at: string
@@ -54,6 +59,15 @@ export interface RedIpv4Vista {
     version: number
     created_at: string
     updated_at: string
+}
+
+function columnasRouter() {
+    const contacto = sqlContactoRouter()
+    return [
+        ...COLUMNAS_ROUTER,
+        db.raw(`${contacto.enLinea} AS en_linea`),
+        db.raw(`${contacto.ultimoContacto} AS ultimo_contacto`),
+    ]
 }
 
 const COLUMNAS_ROUTER = [
@@ -91,7 +105,7 @@ export async function listarRouters(
     alcance?: Alcance,
     empresas: number[] | null = null,
 ): Promise<Pagina<RouterVista>> {
-    const consulta = db.from('network.routers').select(COLUMNAS_ROUTER)
+    const consulta = db.from('network.routers').select(columnasRouter())
     if (filtros.activo !== undefined) consulta.where('activo', filtros.activo)
     filtrarPorAlcance(consulta, alcance, { router: (q, ids) => q.whereIn('id', ids) })
     filtrarPorEmpresa(consulta, empresas, (q, ids) =>
@@ -117,7 +131,7 @@ export async function verRouter(
     const fila = (await cliente
         .from('network.routers')
         .where('id', id)
-        .select(COLUMNAS_ROUTER)
+        .select(columnasRouter())
         .first()) as RouterVista | null
     if (!fila) throw new NoEncontrado(`El router ${id} no existe`)
     return fila

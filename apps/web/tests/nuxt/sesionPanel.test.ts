@@ -65,7 +65,7 @@ describe('sesión del panel con cookie HttpOnly y CSRF', () => {
     })
 
     it('sin cookie (vencida o revocada) /me responde 401 y la sesión local queda vacía', async () => {
-        useUsuarioActual().value = { id: 1, nombre: 'x', email: 'x@x', roles: [], permisos: [] }
+        useUsuarioActual().value = { id: 1, nombre: 'x', email: 'x@x', roles: [], permisos: [], expira_en: null, expira_max_en: null, alcance_global: false, empresas: [], empresa_activa_id: null }
         useCsrf().value = 'algo'
         expect(await useAuth().cargarMe()).toBeNull()
         expect(useUsuarioActual().value).toBeNull()

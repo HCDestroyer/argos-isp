@@ -23,6 +23,18 @@ export const ESTADOS_FACTURA: Record<Schema<'PortalFactura'>['estado'], Presenta
     vencida: { etiqueta: 'Vencida', color: 'error', icono: 'i-lucide-calendar-x' },
     pagada: { etiqueta: 'Pagada', color: 'success', icono: 'i-lucide-circle-check' },
     anulada: { etiqueta: 'Anulada', color: 'neutral', icono: 'i-lucide-ban' },
+    // A3, fase 4: cubierta entera por notas de crédito (H16); nada que pagar
+    acreditada: { etiqueta: 'Cubierta por crédito', color: 'success', icono: 'i-lucide-file-minus' },
+    // A3, fase 4 (decisión g): el saldo se dio de baja como incobrable; ya no se cobra a la factura
+    castigada: { etiqueta: 'Dada de baja', color: 'neutral', icono: 'i-lucide-file-x' },
+}
+
+/** Estados con saldo por cobrar (`ESTADOS_PENDIENTES` de A3): los únicos que muestran «Saldo». */
+const ESTADOS_CON_SALDO: ReadonlySet<Schema<'PortalFactura'>['estado']> = new Set(['emitida', 'parcial', 'vencida'])
+
+/** ¿La factura tiene saldo por cobrar? Una castigada o acreditada nunca (la API da saldo 0.00). */
+export function facturaConSaldo(factura: Pick<Schema<'PortalFactura'>, 'estado'>): boolean {
+    return ESTADOS_CON_SALDO.has(factura.estado)
 }
 
 /** Una factura reemplazada por otra (sustitución) se muestra así, sea cual sea su estado. */

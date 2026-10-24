@@ -7,6 +7,8 @@ import Decimal from 'decimal.js'
  * - Un aviso de cobro se llama «Factura» (o «Nota de débito» en la mora) solo cuando su DTE está
  *   certificado: la API lo dice en `documento` y trae la autorización, serie y número en `dte`.
  * - Una factura sustituida dice «Sustituida» y a cuál la reemplaza; la nueva dice a cuál sustituye.
+ * - «Saldo» solo en las pendientes (emitida, parcial, vencida): una castigada («Dada de baja») o
+ *   acreditada («Cubierta por crédito») no es deuda, aunque su `pagado` no llegue al total.
  * - El PDF y el XML se abren directo de `/api/v1/portal/facturas/:id/pdf|xml` en este mismo origen
  *   (la cookie de la sesión viaja sola). El XML solo existe con el DTE certificado.
  * - Un periodo bonificado (mes gratis, canje, cargo sin costo; decisión del PM: nunca una factura de
@@ -121,7 +123,7 @@ function conCredito(factura: FacturaPortal): boolean {
                         </p>
                     </div>
                     <div
-                        v-if="factura.estado !== 'anulada' && factura.estado !== 'pagada'"
+                        v-if="facturaConSaldo(factura)"
                         class="text-right"
                     >
                         <p class="text-xs text-muted">
@@ -132,6 +134,14 @@ function conCredito(factura: FacturaPortal): boolean {
                         </p>
                     </div>
                 </div>
+
+                <p
+                    v-if="factura.estado === 'castigada'"
+                    class="mt-2 text-xs text-muted"
+                    data-testid="castigada"
+                >
+                    Esta factura ya no tiene saldo por cobrar.
+                </p>
 
                 <p
                     v-if="conCredito(factura)"

@@ -135,11 +135,6 @@ export default class ConfigurarNotificaciones extends DomainAction<EntradaConfig
 }
 
 async function validarEmpresa(trx: TransactionClientContract, empresaId: number, errores: ErrorCampo[]) {
-    // `core.empresas` llega con multiempresa (A1). Mientras no exista, se acepta el id.
-    const tabla = (await trx.rawQuery("SELECT to_regclass('core.empresas') AS tabla")) as {
-        rows: Array<{ tabla: string | null }>
-    }
-    if (!tabla.rows[0]?.tabla) return
     const existe = await trx.from('core.empresas').where('id', empresaId).select('id').first()
     if (!existe) {
         errores.push({ field: 'empresa_id', message: `La empresa ${empresaId} no existe`, rule: 'exists' })

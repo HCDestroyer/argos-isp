@@ -1,7 +1,9 @@
 import { test } from '@japa/runner'
 import { construirOpenApi } from '#shared/openapi/documento'
 import { estado, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, unico } from '#tests/ayudas'
 import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/core/fabricas'
+import CrearAdicional from '#core/actions/crear_adicional'
 
 /**
  * Semana 3, tarea 4: los esquemas de respuesta del núcleo declaran como obligatorio todo lo que la
@@ -26,30 +28,15 @@ function exigirCampos(assert: any, esquema: Esquema, valor: Record<string, unkno
 }
 
 /**
- * Campos nuevos que la API ya envía siempre pero quedan opcionales en el esquema mientras los
- * fixtures tipados del panel (A4) no los tengan (`a1.md`). Se vuelven obligatorios después.
+ * Propiedades opcionales de verdad (no siempre vienen). Todo lo demás que la API envía es
+ * obligatorio en el esquema; ya no quedan pendientes por fixtures del panel.
  */
-const OPCIONALES_PENDIENTES: Record<string, string[]> = {
-    Cliente: [
-        'codigo',
-        'codigo_externo',
-        // localización fiscal, fase 1
-        'tipo_documento_fiscal',
-        'nit_cui_invalido',
-        'pais_fiscal',
-        'agente_retencion_iva',
-        'sector_publico',
-        // lealtad (2026-10-18)
-        'referido_por_id',
-        'referido_empresa_id',
-        'codigos_referido',
-    ],
-    // lealtad (2026-10-18): plan temporal vigente; tipo de plan (2026-10-19): `plan_tipo`.
-    // `warnings` solo viene al crear o editar (no es pendiente: es opcional de verdad)
-    Servicio: ['plan_temporal', 'plan_tipo', 'warnings'],
-    // tipo de plan (2026-10-19)
-    Plan: ['tipo', 'warnings'],
-    PlanEfectivo: ['tipo'],
+const OPCIONALES: Record<string, string[]> = {
+    // `warnings` solo viene al crear o editar
+    Servicio: ['warnings'],
+    Plan: ['warnings'],
+    // `csrf` solo con la sesión del panel por cookie
+    Me: ['csrf'],
 }
 
 test.group('OpenAPI estricto · núcleo', () => {
@@ -64,9 +51,14 @@ test.group('OpenAPI estricto · núcleo', () => {
             'Cliente',
             'AccionAuditoria',
             'CambioAuditoria',
+            'AdicionalServicio',
+            'EmpresaGrupo',
+            'Me',
+            'SesionPanel',
+            'Usuario',
         ]) {
             const e = todos[nombre]!
-            const pendientes = OPCIONALES_PENDIENTES[nombre] ?? []
+            const pendientes = OPCIONALES[nombre] ?? []
             assert.sameMembers(
                 e.required!,
                 Object.keys(e.properties!).filter((p) => !pendientes.includes(p)),
@@ -159,5 +151,63 @@ test.group('OpenAPI estricto · núcleo', () => {
             200,
         )
         exigirCampos(assert, todos.CambioAuditoria!, cambios.body().data[0], 'CambioAuditoria')
+
+        const adicional = await new CrearAdicional().execute(
+            { codigo: unico('EST').toUpperCase(), nombre: unico('Adicional') },
+            contextoPrueba(),
+        )
+        const asignado = await estado(
+            client
+                .post(`/api/v1/servicios/${servicioId}/adicionales`)
+                .bearerToken(token)
+                .json({ adicional_id: adicional.id, modalidad: 'cobrado', precio: '25.00' }),
+            201,
+        )
+        exigirCampos(assert, todos.AdicionalServicio!, asignado.body(), 'AdicionalServicio')
+        const adicionales = await estado(
+            client.get(`/api/v1/servicios/${servicioId}/adicionales`).bearerToken(token),
+            200,
+        )
+        exigirCampos(
+            assert,
+            todos.AdicionalServicio!,
+            adicionales.body().data[0],
+            'AdicionalServicio (lista)',
+        )
+
+        const empresas = await estado(client.get('/api/v1/empresas').bearerToken(token), 200)
+        exigirCampos(assert, todos.EmpresaGrupo!, empresas.body()[0], 'EmpresaGrupo (lista)')
+        const empresa = await estado(client.get('/api/v1/empresas/1').bearerToken(token), 200)
+        exigirCampos(assert, todos.EmpresaGrupo!, empresa.body(), 'EmpresaGrupo')
+    })
+
+    test('Me, Usuario y las sesiones traen todos los campos obligatorios', async ({ client, assert }) => {
+        const todos = await esquemas()
+        const { usuario, token, password } = await usuarioConRoles(['admin'])
+        const me = await estado(client.get('/api/v1/me').bearerToken(token), 200)
+        exigirCampos(assert, todos.Me!, me.body(), 'Me')
+
+        const login = await estado(
+            client.post('/api/v1/auth/login').json({ email: usuario.email, password }),
+            200,
+        )
+        exigirCampos(assert, todos.Me!, login.body().usuario, 'SesionIniciada.usuario')
+        assert.isString(login.body().usuario.expira_max_en)
+
+        const panel = await estado(
+            client
+                .post('/api/v1/auth/sesion')
+                .header('Origin', 'http://localhost:3000')
+                .json({ email: usuario.email, password }),
+            200,
+        )
+        exigirCampos(assert, todos.SesionPanel!, panel.body(), 'SesionPanel')
+        exigirCampos(assert, todos.Me!, panel.body().usuario, 'SesionPanel.usuario')
+        assert.equal(panel.body().usuario.expira_max_en, panel.body().expira_max_en)
+
+        const visto = await estado(client.get(`/api/v1/usuarios/${usuario.id}`).bearerToken(token), 200)
+        exigirCampos(assert, todos.Usuario!, visto.body(), 'Usuario')
+        const lista = await estado(client.get('/api/v1/usuarios').bearerToken(token), 200)
+        exigirCampos(assert, todos.Usuario!, lista.body().data[0], 'Usuario (lista)')
     })
 })

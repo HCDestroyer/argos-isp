@@ -108,7 +108,7 @@ No llamar a `POST /aaa/authorize` con `curl` para diagnosticar: la respuesta tra
 
 `aaa` no necesita Redis lleno para autorizar (va a la API y cachea con `SET NX`, sin TTL), pero sin Redis lleno cada primera autorización cuesta una consulta a la API y el espejo del modo degradado no conoce a esos usuarios.
 
-- **Toda la base** (tras perder Redis o restaurar Postgres): `node ace aaa:repoblar` en el contenedor de la API (A1; escribe todos los `aaa:user:*` con el SET condicionado por `version`). Mientras ese comando no esté en `main`, no hay repoblado masivo: las claves se llenan solas al autorizar.
+- **Toda la base** (tras perder Redis o restaurar Postgres): `node ace aaa:repoblar` en el contenedor de la API (A1; escribe todos los `aaa:user:*` con el SET condicionado por `version`; `--forzar` solo tras restaurar Postgres). En producción: `sudo argosisp compose exec api node ace.js aaa:repoblar`. No filtra por router.
 - **Un usuario con datos viejos**: lo normal es que A1 lo corrija con el siguiente evento. Para forzarlo, borrar su clave; la siguiente autorización la vuelve a leer de la API:
 
     ```

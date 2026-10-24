@@ -117,6 +117,55 @@ test.group('notify · recordatorios de pago', (group) => {
         assert.lengthOf(await enviosDe(pagada.facturaId), 0)
     })
 
+    test('solo recuerda deuda cobrable: un caso por cada estado de la factura', async ({ assert }) => {
+        // Momento del recordatorio 2 (vence hoy) del 10/09/2027: 15:00 UTC.
+        const vence = '2027-09-10'
+        const casos: Array<{ estado: string; pagado?: string; recuerda: boolean }> = [
+            { estado: 'emitida', recuerda: true },
+            { estado: 'parcial', pagado: '50.00', recuerda: true },
+            { estado: 'vencida', recuerda: true },
+            // aún no es documento cobrable (espera certificación FEL)
+            { estado: 'por_certificar', recuerda: false },
+            { estado: 'pagada', pagado: '150.00', recuerda: false },
+            { estado: 'anulada', recuerda: false },
+            // castigo de cartera: `pagado` es solo lo cobrado, el resto se dio por incobrable
+            { estado: 'castigada', pagado: '20.00', recuerda: false },
+            // aviso de cobro cubierto por notas internas
+            { estado: 'acreditada', recuerda: false },
+            // estado pendiente pero sin saldo (total = pagado): no hay nada que cobrar
+            { estado: 'parcial', pagado: '150.00', recuerda: false },
+        ]
+        const facturas = []
+        for (const caso of casos) {
+            facturas.push({ caso, ...(await facturaPendiente(vence, caso)) })
+        }
+        // Sustituida: la original sigue "emitida" pero ya tiene una sustituta (billing.sustituciones).
+        const original = await facturaPendiente(vence)
+        const nueva = await facturaPendiente(vence)
+        await db.table('billing.sustituciones').insert({
+            empresa_id: 1,
+            original_id: original.facturaId,
+            nueva_id: nueva.facturaId,
+            tipo: 'anulacion',
+            motivo: 'prueba de recordatorios',
+        })
+
+        await programar('2027-09-10T15:00:00Z')
+
+        for (const { caso, facturaId } of facturas) {
+            const envios = await enviosDe(facturaId)
+            assert.lengthOf(
+                envios,
+                caso.recuerda ? 1 : 0,
+                `estado ${caso.estado} (pagado ${caso.pagado ?? '0.00'}) ${caso.recuerda ? 'debe' : 'no debe'} recordarse`,
+            )
+        }
+        assert.lengthOf(await enviosDe(original.facturaId), 0, 'la factura sustituida no se recuerda')
+        assert.lengthOf(await enviosDe(nueva.facturaId), 1, 'la sustituta sí')
+        const parcial = await enviosDe(facturas[1]!.facturaId)
+        assert.include(parcial[0].cuerpo, 'Saldo pendiente: Q 100.00')
+    })
+
     test('respeta recordatorios inactivos y plantillas inactivas', async ({ assert }) => {
         const r3 = await db.from('notify.recordatorios').where('orden', 3).firstOrFail()
         await db.from('notify.recordatorios').where('id', r3.id).update({ activo: false })
