@@ -226,6 +226,10 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 - Cola (`GET /comprobantes`): filtros `estado`, `cliente_id`, `metodo`, `cuenta_bancaria_id`, `desde`/`hasta` (fecha de depósito, inclusive) y `resumen { total, monto, pendientes, monto_pendiente }` con los mismos filtros y alcance (`pendientes` ignora `estado`: el contador del menú sale de `?limit=1`). Cada comprobante trae `verificado_por_nombre`.
 - Eventos: `comprobante.recibido`, `comprobante.aprobado`, `comprobante.rechazado` (`comprobante_id`, `cliente_id`, `pago_id`, `motivo`). notify ya tiene plantillas de aprobado y rechazado.
 
+## Retirar una plantilla (`plantillas.retirar`)
+
+`POST /plantillas-facturacion/:id/retirar { version, motivo }` (`actions/retirar_plantilla.ts`): la plantilla sigue facturando a los servicios que ya la tienen (nada cambia para ellos; se puede seguir editando) y no se asigna a servicios nuevos ni se cambia un servicio a ella: el trigger `core.servicios_plantilla_vigente` (migración `1792829345501`) lo impide por cualquier camino (422 `restriccion`). No se retira la de por defecto (409 `plantilla_por_defecto`); una retirada responde 409 `plantilla_retirada`. Campos `retirada_en`, `retirada_por`, `motivo_retiro`; diff en `audit.cambios`; sin evento. No vuelve atrás.
+
 ## Pasarela en línea (semana 2, `pasarelas/`)
 
 Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasarela.ts`). Proveedor activo: `PASARELA_PROVEEDOR`; sin ella, `falsa` fuera de producción y ninguno en producción (503 `pasarela_no_configurada`). Adaptadores: `falsa` (laboratorio) y `recurrente` (real, decisión del PM).

@@ -318,6 +318,22 @@ export interface CatalogoEventos {
         monto: Dinero
     }
     /**
+     * Contracargo abierto en la pasarela sobre un pago registrado (Recurrente `dispute.*`): sin acción
+     * automática; A6 avisa a contabilidad. Una vez por pago (los `dispute.update` no lo repiten)
+     */
+    'pago.disputa_abierta': {
+        pago_id: number
+        empresa_id: number
+        /** cobro en línea (`billing.pasarela_cobros.id`) */
+        cobro_id: number
+        /** pagador */
+        cliente_id: number
+        monto: Dinero
+        proveedor: string
+        /** razón del emisor o del tarjetahabiente (`fraudulent`, `duplicate`…); null si no viene */
+        motivo: string | null
+    }
+    /**
      * Decisión del PM (19 oct): lo que sería una factura de Q0 (mes gratis, descuento del 100 %, cargo
      * sin costo, canje) es una bonificación interna; sin CxC ni documento para el cliente
      */
@@ -953,6 +969,7 @@ export const EVENTOS = [
     'pago.registrado',
     'pago.anulado',
     'pago.diferencia_cerrada',
+    'pago.disputa_abierta',
     'bonificacion.registrada',
     'nota_credito.emitida',
     'nota_credito.anulada',

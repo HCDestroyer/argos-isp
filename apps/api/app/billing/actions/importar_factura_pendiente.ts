@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import { empresaDeImportacion } from '#billing/empresa'
+import { lineasSinIva, sinIvaPorRegimen } from '#billing/regimen'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ReglaNegocio, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
@@ -271,13 +272,16 @@ export default class ImportarFacturaPendiente extends DomainAction<
             (cargoUnico
                 ? `Cargo importado (${texto})`
                 : `Servicio de internet ${servicio!.plan_nombre} · periodo ${periodo} (importada)`)
-        const linea = lineaConIva({
+        const conIva = lineaConIva({
             concepto,
             tipo: cargoUnico ? 'otro' : 'servicio',
             cantidad: '1',
             gravable: true,
             total,
         })
+        // H62: en pequeño contribuyente (en la fecha del documento) no se separa IVA, como al facturar
+        const sinIva = await sinIvaPorRegimen(t.trx, empresaId, emitida ?? periodo)
+        const linea = sinIva ? lineasSinIva([conIva])[0]! : conIva
         const totales = totalesDe([linea])
         const snapshot = {
             ...(config ?? MORA_NINGUNA),

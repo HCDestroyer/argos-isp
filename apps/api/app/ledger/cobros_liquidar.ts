@@ -168,7 +168,7 @@ export async function pendientesDeProveedor(
     const filas = (await cliente.rawQuery(
         `SELECT p.id AS pago_id,
                 CASE WHEN p.estado = 'anulado' THEN 'contracargo' ELSE 'cobro' END AS tipo,
-                p.cliente_id, p.monto::text AS monto, p.referencia,
+                p.cliente_id, (p.monto - p.retenido)::text AS monto, p.referencia,
                 to_char((p.created_at AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') AS fecha,
                 (?::date - (p.created_at AT TIME ZONE 'America/Guatemala')::date) AS dias
            FROM billing.pagos p

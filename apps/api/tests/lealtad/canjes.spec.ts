@@ -696,4 +696,44 @@ test.group('Lealtad · canjes', (group) => {
         assert.include(dic, { pagado: '60.00' })
         await afirmarLibro(assert, [e.B, e.C])
     })
+
+    test('saldo canjeable por empresa: mínimo del programa, saldo y portal (pedido de A4)', async ({
+        assert,
+        client,
+    }) => {
+        const e = await prepararEmpresas()
+        const s = await conPuntos(e, 40)
+        const actual = await db
+            .from('lealtad.programas')
+            .where('id', s.programa.id)
+            .select('version')
+            .firstOrFail()
+        await new EditarPrograma().execute(
+            { id: s.programa.id, version: Number(actual.version), minimo_canje: 50 },
+            e.ctx,
+        )
+        const { token } = await usuarioConRoles(['cajero'])
+        const leer = () =>
+            estado(client.get(`/api/v1/clientes/${s.clienteId}/puntos/canjeables`).bearerToken(token), 200)
+        const primera = await leer()
+        const bajo = primera.body()
+        const deB = bajo.empresas.find((x: { empresa_id: number }) => x.empresa_id === e.B)
+        assert.deepInclude(deB, {
+            saldo: 40,
+            canjeable: 0,
+            minimo_canje: 50,
+            programa_activo: true,
+            canje_portal: false,
+            motivo: 'bajo_minimo',
+        })
+        assert.isUndefined(bajo.empresas.find((x: { empresa_id: number }) => x.empresa_id === e.C))
+        await new AjustarPuntos().execute(
+            { empresa_id: e.B, cliente_id: s.clienteId, puntos: 20, motivo: 'llega al mínimo' },
+            e.ctx,
+        )
+        const segunda = await leer()
+        const listo = segunda.body().empresas.find((x: { empresa_id: number }) => x.empresa_id === e.B)
+        assert.deepInclude(listo, { saldo: 60, canjeable: 60, motivo: null })
+        await estado(client.get('/api/v1/clientes/999999999/puntos/canjeables').bearerToken(token), 404)
+    })
 })

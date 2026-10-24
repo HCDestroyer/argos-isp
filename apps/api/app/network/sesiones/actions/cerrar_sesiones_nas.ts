@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { anotarAccounting } from '#network/sesiones/contacto'
 import type { RegistroAccounting } from '#network/sesiones/registro'
 import { cerrarSesiones, emitirTerminada } from '#network/sesiones/sesiones'
 
@@ -18,6 +19,8 @@ export default class CerrarSesionesNas extends DomainAction<RegistroAccounting, 
     readonly nombre = 'sesiones.cerrar_nas'
 
     protected async handle(r: RegistroAccounting, t: Transaccion): Promise<ResultadoCerrarNas> {
+        // El NAS mandó accounting: contacto del router (Router.en_linea), a lo sumo cada 60 s.
+        await anotarAccounting(t.trx, r)
         const cerradas = await cerrarSesiones(
             t,
             { sql: 'nas_ip = ?::inet AND inicio <= ?::timestamptz', valores: [r.nas_ip, r.evento_en] },

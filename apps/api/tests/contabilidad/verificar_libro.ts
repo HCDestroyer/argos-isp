@@ -495,7 +495,7 @@ async function verificarLibroCon(
           GROUP BY p.id HAVING sum(a.monto) > p.monto`,
     )
     await revisar(
-        '5.pago_vigente_mal_contabilizado (caja/banco = monto − comisión − retenido; 1.1.05 / 1.1.06 = sus constancias por impuesto; con proveedor de cobro, su 1.1.10.NN por el bruto y nada más)',
+        '5.pago_vigente_mal_contabilizado (caja/banco = monto − comisión − retenido; 1.1.05 / 1.1.06 = sus constancias por impuesto; con proveedor de cobro, su 1.1.10.NN por monto − retenido (H61: la retención de la emisora va a 1.1.05 en el pago) y nada más)',
         `WITH mov AS (
              SELECT a.origen_id AS pago_id,
                     sum(CASE WHEN ${CAJA_O_BANCO('c.codigo')} THEN m.debe - m.haber ELSE 0 END) AS dinero,
@@ -531,9 +531,10 @@ async function verificarLibroCon(
                  OR (p.historico AND (mov.apertura <> p.monto OR mov.dinero <> 0 OR mov.puente <> 0 OR p.retenido <> 0))
                  OR (NOT p.historico AND p.proveedor_cobro_id IS NULL
                      AND (mov.dinero <> p.monto - p.comision - p.retenido OR mov.comision <> p.comision OR mov.puente <> 0))
-                 -- fase 4 (§10.3): el bruto a la cuenta puente del proveedor del pago; sin comisión ni banco
+                 -- fase 4 (§10.3): a la cuenta puente del proveedor del pago lo que liquidará (monto − retenido,
+                 -- H61: sus constancias ya están en 1.1.05/1.1.06 arriba); sin comisión ni banco
                  OR (NOT p.historico AND p.proveedor_cobro_id IS NOT NULL
-                     AND (mov.puente <> p.monto OR mov.dinero <> 0 OR mov.comision <> 0 OR p.comision <> 0 OR p.retenido <> 0
+                     AND (mov.puente <> p.monto - p.retenido OR mov.dinero <> 0 OR mov.comision <> 0 OR p.comision <> 0
                           OR mov.puentes <> 1 OR mov.cuenta_puente <> pc.cuenta_id OR pc.empresa_id <> p.empresa_id
                           OR pc.metodo <> p.metodo
                           OR (p.created_at AT TIME ZONE 'America/Guatemala')::date < pc.desde)))`,
@@ -1542,17 +1543,17 @@ async function verificarLibroCon(
     |      (localización fiscal §10.3 y §10.9)
     */
     await revisar(
-        '13.cobros_por_liquidar_distinto (por proveedor: 1.1.10.NN = Σ pagos vigentes sin liquidar − contracargos pendientes)',
+        '13.cobros_por_liquidar_distinto (por proveedor: 1.1.10.NN = Σ (monto − retenido) de los pagos vigentes sin liquidar − contracargos pendientes; H61)',
         `WITH esperado AS (
              SELECT pc.id, pc.empresa_id, pc.cuenta_id,
                     coalesce(sum(CASE
                         WHEN p.estado = 'registrado'
                              AND NOT EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro')
-                             THEN p.monto
+                             THEN p.monto - p.retenido
                         WHEN p.estado = 'anulado'
                              AND EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro')
                              AND NOT EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'contracargo')
-                             THEN -p.monto
+                             THEN -(p.monto - p.retenido)
                         ELSE 0 END), 0) AS monto
                FROM ledger.proveedores_cobro pc LEFT JOIN billing.pagos p ON p.proveedor_cobro_id = pc.id
               WHERE ${E('pc.empresa_id')}
@@ -1571,14 +1572,14 @@ async function verificarLibroCon(
           WHERE coalesce(e.monto, 0) <> coalesce(l.monto, 0)`,
     )
     await revisar(
-        '13.liquidacion_de_pago_inconsistente (cada cobro por el monto del pago, del mismo proveedor y empresa; contracargo solo de un pago liquidado y anulado)',
+        '13.liquidacion_de_pago_inconsistente (cada cobro y contracargo por monto − retenido del pago (H61: la retención de la emisora ya está en 1.1.05), del mismo proveedor y empresa; contracargo solo de un pago liquidado y anulado)',
         `SELECT lp.id, lp.liquidacion_id, lp.pago_id, lp.tipo, lp.monto::text, p.monto::text AS monto_pago, p.estado,
                 p.proveedor_cobro_id, l.proveedor_cobro_id AS proveedor_liquidacion
            FROM ledger.liquidaciones_pagos lp
            JOIN ledger.liquidaciones_cobro l ON l.id = lp.liquidacion_id
            JOIN billing.pagos p ON p.id = lp.pago_id
           WHERE ${E('l.empresa_id')}
-            AND (lp.monto <> p.monto OR p.proveedor_cobro_id IS DISTINCT FROM l.proveedor_cobro_id
+            AND (lp.monto <> p.monto - p.retenido OR p.proveedor_cobro_id IS DISTINCT FROM l.proveedor_cobro_id
                  OR p.empresa_id <> l.empresa_id
                  OR (lp.tipo = 'contracargo' AND (p.estado <> 'anulado' OR NOT EXISTS (
                         SELECT 1 FROM ledger.liquidaciones_pagos c WHERE c.pago_id = p.id AND c.tipo = 'cobro'

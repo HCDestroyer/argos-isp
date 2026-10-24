@@ -59,3 +59,11 @@ export async function vincularExterno(
         entidad_id: entidadId,
     })
 }
+
+/**
+ * SQL de la subconsulta `externo` (`{ sistema, id }` o null) para las vistas de cliente y servicio:
+ * el primer id externo vinculado a la entidad (`columna` = su id en la consulta, p. ej. `c.id`).
+ */
+export function sqlExterno(tipo: 'cliente' | 'servicio', columna: string): string {
+    return `(SELECT jsonb_build_object('sistema', x.sistema, 'id', x.externo_id) FROM core.ids_externos x WHERE x.entidad_tipo = '${tipo}' AND x.entidad_id = ${columna} ORDER BY x.id LIMIT 1) AS externo`
+}

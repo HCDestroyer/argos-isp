@@ -50,6 +50,7 @@ import {
     PaginaReglasLealtad,
     ProgramaLealtad,
     ProgramaLealtadEmpresa,
+    PuntosCanjeables,
     PuntosCliente,
     ReferidoLealtad,
     ReglaLealtad,
@@ -85,7 +86,7 @@ import { etagCoincide, sinCambios } from '#shared/rutas'
 import { ValidacionFallida } from '#shared/errores'
 import { listarProgramas, programaDeEmpresa } from '#lealtad/programas'
 import { listarReglas, verRegla } from '#lealtad/reglas'
-import { listarMovimientos, puntosDelCliente } from '#lealtad/puntos'
+import { listarMovimientos, canjeablesDelCliente, puntosDelCliente } from '#lealtad/puntos'
 import { listarReferidos } from '#lealtad/referidos'
 import { reporteLealtad } from '#lealtad/reporte'
 import CrearPrograma from '#lealtad/actions/crear_programa'
@@ -262,6 +263,26 @@ const reglas: Ruta[] = [
 ]
 
 const puntos: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/clientes/:id/puntos/canjeables',
+        operacion: 'lealtadPuntosCanjeables',
+        resumen: 'Saldo de puntos canjeable del cliente por empresa',
+        descripcion:
+            'Una fila por empresa con programa activo o con puntos del cliente: saldo, canjeable (el saldo si el programa está activo y llega a minimo_canje; si no, 0, con su motivo) y si puede canjear desde el portal. Con empresa activa, solo esa.',
+        etiqueta: 'lealtad',
+        permiso: 'lealtad.ver',
+        respuesta: { status: 200, descripcion: 'Puntos canjeables', esquema: PuntosCanjeables },
+        handler: async (ctx, { params }) => {
+            const clienteId = Number(params.id)
+            const cliente = await db.from('core.clientes').where('id', clienteId).select('id').first()
+            if (!cliente) throw new NoEncontrado(`El cliente ${clienteId} no existe`)
+            return {
+                cliente_id: clienteId,
+                empresas: await canjeablesDelCliente(clienteId, empresasDeLaLista(ctx.empresa)),
+            }
+        },
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/clientes/:id/puntos',

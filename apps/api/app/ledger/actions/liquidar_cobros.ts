@@ -16,7 +16,8 @@ import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_a
  * - `pagos[]`: los pagos del proveedor que incluye (vigentes y sin liquidar). `contracargos[]`:
  *   pagos ya liquidados y después anulados que el proveedor descuenta (el reverso del pago dejó
  *   1.1.10.NN en negativo por ese monto).
- * - `bruto` = Σ pagos − Σ contracargos (422 `liquidacion_descuadrada`); `neto` = `bruto − comision`.
+ * - `bruto` = Σ pagos − Σ contracargos (422 `liquidacion_descuadrada`), cada pago por lo que entró al
+ *   puente: su monto menos lo retenido por la emisora (H61, que ya está en 1.1.05); `neto` = `bruto − comision`.
  *   Con solo contracargos (H14) el bruto es ≤ 0: el proveedor debita el banco y 1.1.10.NN vuelve a 0
  *   (si se manda, debe coincidir). La **comisión sale de la liquidación**, no se estima en el pago.
  * - Asiento `liquidacion_cobro`: `Banco (neto) + 5.1.02 Comisiones (comisión) / 1.1.10.NN (bruto)`
@@ -145,7 +146,8 @@ export default class LiquidarCobros extends DomainAction<EntradaLiquidarCobros, 
                 'p.empresa_id',
                 'p.proveedor_cobro_id',
                 'p.estado',
-                'p.monto',
+                // H61: lo que entra al puente es el pago menos la retención de IVA de la emisora (1.1.05)
+                t.trx.raw('(p.monto - p.retenido)::text as monto'),
                 t.trx.raw(
                     `EXISTS (SELECT 1 FROM ledger.liquidaciones_pagos l WHERE l.pago_id = p.id AND l.tipo = 'cobro') AS liquidado`,
                 ),
