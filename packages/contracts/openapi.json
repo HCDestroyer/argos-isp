@@ -43961,7 +43961,7 @@
       "post": {
         "operationId": "portalSubirComprobante",
         "summary": "El cliente sube el comprobante de un depósito, transferencia, ACH o remesa",
-        "description": "`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo `cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal`, actor `cliente` con la sesión o `sistema` por la IP: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo `cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -45132,7 +45132,7 @@
       "post": {
         "operationId": "portalIniciarPago",
         "summary": "Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor",
-        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 `pago_de_varias_empresas` (se paga un servicio o las facturas de una empresa a la vez). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
+        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal`, actor `cliente` con la sesión o `sistema` por la IP. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 `pago_de_varias_empresas` (se paga un servicio o las facturas de una empresa a la vez). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
         "tags": [
           "portal"
         ],
@@ -76534,9 +76534,11 @@
               "parcial",
               "pagada",
               "vencida",
-              "anulada"
+              "anulada",
+              "castigada",
+              "acreditada"
             ],
-            "description": "Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal"
+            "description": "Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal. acreditada: cubierta entera por notas de crédito internas. castigada: dada de baja como incobrable; ya no se cobra a la factura (saldo 0.00)"
           },
           "subtotal": {
             "$ref": "#/components/schemas/Dinero"
@@ -76557,7 +76559,7 @@
           },
           "saldo": {
             "$ref": "#/components/schemas/Dinero",
-            "description": "total - pagado (0.00 si está anulada)"
+            "description": "total - pagado solo si está emitida, parcial o vencida; 0.00 en cualquier otro estado"
           },
           "fel_uuid": {
             "type": [

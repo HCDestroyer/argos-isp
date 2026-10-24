@@ -181,6 +181,30 @@ test.group('Portal: puntos de lealtad', (group) => {
                 .json({ premio_id: s.oculto.id, servicio_id: s.servicioId }),
             404,
         )
+        // un tipo que no se canjea en el portal (bien físico) tampoco, aunque tenga en_portal
+        const bien = await new CrearPremio().execute(
+            {
+                programa_id: s.programa.id,
+                tipo: 'bien',
+                nombre: 'Router de regalo',
+                costo_puntos: 10,
+                existencias: 5,
+                en_portal: true,
+            },
+            e.ctx,
+        )
+        await estado(
+            client
+                .post('/api/v1/portal/canjes')
+                .header('Cookie', cookie)
+                .json({ premio_id: bien.id, servicio_id: s.servicioId }),
+            404,
+        )
+        const intentos = await db
+            .from('lealtad.canjes')
+            .whereIn('premio_id', [s.oculto.id, bien.id])
+            .count('* as n')
+        assert.equal(Number(intentos[0].n), 0, 'ni el oculto ni el bien llegan a lealtad.canjear')
 
         const clave = unico('canje')
         const pedir = () =>

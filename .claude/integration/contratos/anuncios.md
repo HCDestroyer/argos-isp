@@ -69,6 +69,6 @@ Permisos: `anuncios.ver` (admin y lectura) y `anuncios.administrar` (solo admin)
 - **Imagen:** con `width`/`height` fijos y `loading="lazy"`.
 - **Si la lectura falla:** aviso «No pudimos cargar las promociones» con «Reintentar». No muestra promociones inventadas.
 
-## 5. Pendiente (fase 3 de sorteos)
+## 5. Aviso de sorteo próximo (hecho en la fase 3 de sorteos: `GET /portal/avisos-sorteo`)
 
 El aviso de sorteo próximo no forma parte de este contrato. El componente del portal está pensado así: carrusel o lista de los premios del sorteo con la misma tarjeta, cuenta regresiva a la fecha y «tus boletos: N». Se construye cuando A3 exponga los sorteos.
