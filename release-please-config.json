@@ -5,7 +5,7 @@
     "include-v-in-tag": true,
     "bump-minor-pre-major": true,
     "pull-request-title-pattern": "chore: publicar versión ${version}",
-    "pull-request-header": "Versión de ArgosIsp lista para publicar. Al mergear esta PR se crean la etiqueta, la GitHub Release y las imágenes en GHCR (`.github/workflows/release.yml`). Antes de mergear: correr CI (cerrar y reabrir la PR) y revisar el CHANGELOG.",
+    "pull-request-header": "Versión de ArgosIsp lista para publicar. Al mergear esta PR se crean la etiqueta, la GitHub Release y las imágenes en GHCR (`.github/workflows/release.yml`). Antes de mergear: CI en verde y revisar el CHANGELOG.",
     "changelog-sections": [
         { "type": "feat", "section": "Funcionalidades" },
         { "type": "fix", "section": "Correcciones" },
@@ -23,8 +23,7 @@
     "packages": {
         ".": {
             "package-name": "argosisp",
-            "changelog-path": "CHANGELOG.md",
-            "release-as": "1.0.0"
+            "changelog-path": "CHANGELOG.md"
         }
     }
 }
