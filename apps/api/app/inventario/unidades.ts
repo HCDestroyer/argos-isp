@@ -298,6 +298,13 @@ export async function unidadesDeBodega(
     return ids.map((id) => filas.find((f) => f.id === id)!)
 }
 
+/** Producto de una unidad, sin bloquearla (para tomar antes el lock del producto); 404 si no existe. */
+export async function productoDeUnidad(t: Transaccion, unidadId: number): Promise<number> {
+    const fila = await t.trx.from('inventario.unidades').where('id', unidadId).select('producto_id').first()
+    if (!fila) throw new NoEncontrado(`La unidad ${unidadId} no existe`)
+    return Number(fila.producto_id)
+}
+
 /** Cambia una unidad (con `version + 1`); la llama solo una acción que deja su movimiento. */
 export async function actualizarUnidad(
     t: Transaccion,

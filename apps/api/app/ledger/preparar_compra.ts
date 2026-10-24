@@ -8,6 +8,7 @@ import { bloqueoDe } from '#ledger/bloqueos'
 import { impuesto as impuestoVigente } from '#fiscal/impuestos'
 import { valorParametro } from '#fiscal/parametros'
 import { sinIvaPorRegimen } from '#billing/regimen'
+import { exigirDevolucionDentroDeLaCompra } from '#inventario/compras'
 import { verProveedor, type ProveedorVista } from '#ledger/proveedores'
 import {
     DOCUMENTOS_PEQUENO,
@@ -350,6 +351,8 @@ export async function prepararCompra(
     }
 
     if (tipo === 'NCRE') {
+        // inventario: lo que pasa de lo que entró con la compra, antes que el saldo (observación del auditor)
+        await exigirDevolucionDentroDeLaCompra(t, referencia!.id, lineas)
         const saldo = await saldoCompra(t.trx, referencia!.id)
         if (referencia!.condicion !== 'credito' || totales.total.gt(saldo)) {
             throw new Problema(

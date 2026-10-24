@@ -14,6 +14,7 @@ import {
     saldoInventario,
 } from '#tests/inventario/ayudas_inventario'
 import { ConsumidorInventario } from '#inventario/consumidor'
+import { verificarLibro } from '#tests/contabilidad/verificar_libro'
 import RegistrarCompra from '#ledger/actions/registrar_compra'
 import AnularCompra from '#ledger/actions/anular_compra'
 import DepreciarActivos from '#ledger/actions/depreciar_activos'
@@ -23,6 +24,7 @@ import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comoda
 import TrasladarInventario from '#inventario/actions/trasladar_inventario'
 import DarDeBajaInventario from '#inventario/actions/dar_de_baja_inventario'
 import CargarSaldoInicial from '#inventario/actions/cargar_saldo_inicial'
+import DarDeBajaActivo from '#ledger/actions/dar_de_baja_activo'
 import type { ContextoAccion } from '#shared/contexto'
 
 /**
@@ -651,5 +653,78 @@ test.group('Inventario · fase B', (group) => {
             200,
         )
         await afirmarCuadre(assert, e.B)
+    })
+
+    test('equipo totalmente depreciado: vuelve a Q0, se presta otra vez con un activo en Q0 sin asientos; activos.dar_de_baja no toca un comodato (409)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const onu = await productoEn(e.B, e.ctx, { tipo: 'equipo', seguimiento: 'serie' })
+        const bodega = await bodegaEn(e.B, e.ctx)
+        const inicial = await new CargarSaldoInicial().execute(
+            {
+                producto_id: onu.id,
+                bodega_id: bodega.id,
+                unidad: { serie: unico('V') },
+                costo_total: '120.00',
+                fecha: '2014-02-05',
+            },
+            e.ctx,
+        )
+        const unidadId = inicial.unidad_id!
+        const { servicioId } = await servicioEn(e.B)
+        const prestada = await new AsignarComodato().execute(
+            { servicio_id: servicioId, unidad_id: unidadId, fecha: '2014-02-10' },
+            e.ctx,
+        )
+        const baja = await errorDe(
+            new DarDeBajaActivo().execute(
+                { activo_id: prestada.activo_id!, tipo: 'retiro', motivo: 'retiro' },
+                e.ctx,
+            ),
+        )
+        assert.equal(baja.status, 409)
+        assert.equal(baja.codigo, 'activo_en_comodato')
+        await new DepreciarActivos().execute({ activo_id: prestada.activo_id! }, e.ctx)
+        const devuelta = await new DevolverComodato().execute(
+            { servicio_id: servicioId, unidad_id: unidadId, bodega_id: bodega.id },
+            e.ctx,
+        )
+        assert.equal(devuelta.costo, '0.00')
+        const otraVez = await new AsignarComodato().execute(
+            { servicio_id: servicioId, unidad_id: unidadId },
+            e.ctx,
+        )
+        const activo = await db.from('ledger.activos').where('id', otraVez.activo_id!).first()
+        assert.equal(activo.costo, '0.00')
+        const asignacion = await db
+            .from('inventario.movimientos')
+            .where({ unidad_id: unidadId, tipo: 'asignacion_comodato' })
+            .orderBy('id', 'desc')
+            .first()
+        assert.isNull(asignacion.asiento_id)
+        await new DevolverComodato().execute(
+            { servicio_id: servicioId, unidad_id: unidadId, bodega_id: bodega.id },
+            e.ctx,
+        )
+        const bajaCero = await db.from('ledger.activos_bajas').where('activo_id', otraVez.activo_id!).first()
+        assert.equal(bajaCero.tipo, 'devolucion_comodato')
+        assert.isNull(bajaCero.asiento_id)
+        // el activo en Q0 (decisión del líder) no tiene asiento de alta ni de baja: el auditor lo suma a
+        // 15.alta_… y 15.baja_… (`a3.md`); mientras, solo esas filas de ese activo se descartan aquí
+        const todas = await verificarLibro(e.B)
+        const violaciones = todas
+            .map((v) =>
+                /^15\.(alta|baja)_de_activo_mal_contabilizada/.test(v.invariante)
+                    ? {
+                          ...v,
+                          detalle: (v.detalle as Array<{ id?: number; activo_id?: number }>).filter(
+                              (d) => Number(d.activo_id ?? d.id) !== Number(otraVez.activo_id),
+                          ),
+                      }
+                    : v,
+            )
+            .filter((v) => !Array.isArray(v.detalle) || v.detalle.length > 0)
+        assert.deepEqual(violaciones, [])
     })
 })

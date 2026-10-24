@@ -270,3 +270,9 @@ Rama `a3/inventario-b` (sale de `a3/inventario-a` 0506d58). Incluye las decision
 8. **Reparación**: una unidad devuelta `en_reparacion` está en su bodega (cuenta en sus existencias) y se puede trasladar o dar de baja, pero no prestar. La acción para marcarla reparada no está en el contrato: queda pendiente (pregunta).
 9. **Permisos**: `inventario.asignar_comodato`, `inventario.devolver_comodato` (`tecnico` y `admin`) e `inventario.declarar_perdida_comodato` (solo `admin`, como lo literal de §6).
 10. **Fechas de consumo y ajuste en la fase C** (pedido del líder): se evaluará aceptar una fecha pasada dentro de un periodo abierto si no deja existencia negativa en ninguna fecha posterior; el costo de esa salida seguiría siendo el promedio al momento de registrarla.
+11. **Hallazgos del auditor de la fase B (H42, H43 y observaciones):**
+    - Anular una compra solo es posible si cada unidad que entró sigue tal como entró: `disponible` en su bodega, a su costo de compra y sin más movimientos que traslados. Si no, 409 `unidades_en_uso`; un equipo que volvió de comodato se devuelve al proveedor con una NCRE por serie a su costo actual.
+    - El activo de un comodato (`ledger.activos.unidad_id`) no se da de baja con `activos.dar_de_baja`: 409 `activo_en_comodato`. Sale con devolver o declarar pérdida.
+    - Un equipo que vuelve totalmente depreciado vale Q0 y se puede volver a prestar: su activo nace en Q0, sin depreciación ni asientos de alta ni de baja. `ledger.activos.costo` admite 0 solo con `unidad_id`, y la baja de un activo en Q0 va sin asiento.
+    - Locks: todas las operaciones toman primero el lock del producto y después la fila de la unidad.
+    - En una NCRE, `devolucion_excede_compra` sale antes que `ncre_excede_saldo`.
