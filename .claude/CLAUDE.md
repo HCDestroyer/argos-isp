@@ -94,6 +94,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
 - Excepciones, declaradas con `auditarExito()` en la acción (los errores se auditan siempre):
     - Telemetría de alta frecuencia que no es una acción de nadie: el Interim-Update de accounting (`sesiones.actualizar`) cuando solo actualiza contadores.
     - Evaluaciones sin efecto: `servicios.evaluar_estado` solo deja fila cuando cambió el estado (decisión del PM, día 4). La acción que la llamó (pago, promesa, corte) queda auditada igual, y el corte deja su corrida en `registrar_corrida`.
+    - Barrido de sesiones colgadas: `sesiones.cerrar_colgadas` (cron cada 5 min) solo deja fila cuando cerró alguna sesión; cada sesión cerrada deja su diff (`fin`, `causa_fin`) en `audit.cambios`.
     - Estado deseado de RouterOS sin cambios: `routeros.aplicar_servicio` y `routeros.reconciliar` solo dejan fila si corrigieron algo, fallaron o la validación de velocidad rechazó la configuración. Cada comando que sí se envía queda igual en `audit.red`.
 - `audit.cambios`: diff por campo en clientes, servicios, planes, plantillas, reglas. Datos sensibles (contraseñas PPPoE, credenciales, tokens) se registran como `***`.
 - Actualizaciones masivas nunca usan `Model.query().update()`; pasan por una acción que registra cada fila.
