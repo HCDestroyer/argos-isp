@@ -36,7 +36,7 @@ import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
 import { horusInicial } from './horus/datos'
 import type { HorusFixtures } from './horus/datos'
 import { configuracionGlobal } from './notificaciones/datos'
-import { usuarios } from './usuarios/datos'
+import { roles, tokensApi, usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
 import { asientos, cuentas } from './libro/datos'
@@ -140,6 +140,10 @@ interface BaseFixtures {
     empresas: Schema<'EmpresaGrupo'>[]
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
     usuarios: Schema<'Usuario'>[]
+    /** Roles del ACL con sus permisos (`GET /roles`). */
+    roles: Schema<'Rol'>[]
+    /** Tokens de API (`GET /tokens`); el valor en claro solo sale en `POST /tokens`. */
+    tokensApi: Schema<'TokenApi'>[]
     /** Configuración de canales de notificación: la global y la de cada empresa con fila propia. */
     notificaciones: { global: Schema<'ConfiguracionNotificaciones'>, empresas: Record<number, Schema<'ConfiguracionNotificaciones'>> }
     /** Envíos de prueba hechos (para el `envio_id`). */
@@ -291,6 +295,8 @@ function inicial(): BaseFixtures {
         empresa,
         empresas,
         usuarios,
+        roles,
+        tokensApi,
         notificaciones: { global: configuracionGlobal, empresas: {} },
         enviosPrueba: 0,
         cobros: [],

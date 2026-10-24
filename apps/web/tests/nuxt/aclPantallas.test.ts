@@ -212,6 +212,12 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'DiferirLineaModal.vue': { permisos: ['libro.registrar_asiento'], desde: ['pages/compras/[id].vue'] },
     'ActivoAltaModal.vue': { permisos: ['activos.registrar'], desde: ['pages/activos/index.vue'] },
     'BajaActivoModal.vue': { permisos: ['activos.dar_de_baja'], desde: ['pages/activos/[id].vue'] },
+    // Tarea 8 y 9 (pantallas pendientes): plantillas, usuarios, roles y tokens de API. La página
+    // abre el formulario en solo lectura sin el permiso de editar (y lo dice el propio formulario).
+    'PlantillaFormulario.vue': { permisos: ['plantillas.crear', 'plantillas.editar', 'plantillas.ver'], desde: ['pages/plantillas/index.vue'] },
+    'UsuarioFormulario.vue': { permisos: ['usuarios.crear', 'usuarios.editar'], desde: ['pages/usuarios/index.vue'] },
+    'RolFormulario.vue': { permisos: ['roles.crear', 'roles.editar'], desde: ['pages/usuarios/roles.vue'] },
+    'TokenApiModal.vue': { permisos: ['tokens.crear'], desde: ['pages/usuarios/tokens.vue'] },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {
