@@ -301,10 +301,12 @@ onMounted(cargar)
                         etiqueta="Canal preferido"
                         :valor="CANALES[cliente.canal_preferido]"
                     />
-                    <DatoFicha
-                        etiqueta="Telegram vinculado"
-                        :valor="cliente.telegram_chat_id ? 'Sí' : 'No'"
-                    />
+                    <DatoFicha etiqueta="Telegram">
+                        <ClienteTelegram
+                            :cliente="cliente"
+                            @cambiado="c => cliente = c"
+                        />
+                    </DatoFicha>
                     <DatoFicha
                         etiqueta="Zona"
                         :valor="zona ?? (cliente.zona_id ? `Zona #${cliente.zona_id}` : null)"

@@ -2,6 +2,8 @@ import type { Schema, paths } from '@argosisp/contracts'
 
 export type SolicitudCertificacion = Schema<'SolicitudCertificacion'>
 export type DteIntento = Schema<'DteIntento'>
+export type LoteCertificacion = Schema<'LoteCertificacion'>
+export type DatosLoteCertificacion = paths['/api/v1/fel/lotes']['post']['requestBody']['content']['application/json']
 export type FiltrosDte = Omit<NonNullable<paths['/api/v1/dte']['get']['parameters']['query']>, 'cursor'>
 
 export const LIMITE_DTE = 25
@@ -68,5 +70,13 @@ export function useDte() {
         return resolver(api.POST('/api/v1/facturas/{id}/certificar', { params: { path: { id: facturaId }, header: { 'Idempotency-Key': clave } } }))
     }
 
-    return { listar, ver, intentos, deDocumento, xml, pdf, reintentar, certificarFactura }
+    /**
+     * `POST /fel/lotes` (`fel.certificar`): pide la certificación de varias facturas (lista o rango de
+     * emisión). Cada una se procesa como `certificarFactura`; las que no se pudieron van en `errores`.
+     */
+    function certificarLote(datos: DatosLoteCertificacion, clave: string): Promise<Resultado<LoteCertificacion>> {
+        return resolver(api.POST('/api/v1/fel/lotes', { params: { header: { 'Idempotency-Key': clave } }, body: datos }))
+    }
+
+    return { listar, ver, intentos, deDocumento, xml, pdf, reintentar, certificarFactura, certificarLote }
 }

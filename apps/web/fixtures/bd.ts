@@ -43,6 +43,8 @@ import { asientos, cuentas } from './libro/datos'
 import { promesas } from './promesas/datos'
 import { planes, planesPorRouter } from './planes/datos'
 import { implementacionesPlan } from './planes/implementaciones'
+import { nodosPortal } from './nodosPortal/datos'
+import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, ipv6Pools, redesIpv4, routers } from './routers/datos'
 import { servicios } from './servicios/datos'
@@ -142,6 +144,10 @@ interface BaseFixtures {
     empresa: Schema<'Empresa'>
     /** Multiempresa: las empresas (NIT) de la instalación. */
     empresas: Schema<'EmpresaGrupo'>[]
+    /** Corridas de la conciliación de la pasarela (A3). */
+    conciliacionesPasarela: Schema<'ConciliacionPasarela'>[]
+    /** Nodos portal remotos (A5). */
+    nodosPortal: Schema<'NodoPortal'>[]
     /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
     planesTemporales: Schema<'PlanTemporal'>[]
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
@@ -236,6 +242,8 @@ interface BaseFixtures {
     referidosLealtad: Schema<'ReferidoLealtad'>[]
     /* Lealtad, fases 2 y 3: catálogo de premios y sorteos (A3, `contratos/lealtad.md` §7 y §15.3). */
     premiosLealtad: Schema<'PremioLealtad'>[]
+    /** Canjes de puntos (A3, fase 2). */
+    canjesLealtad: Schema<'CanjeLealtad'>[]
     sorteos: Schema<'SorteoDetalle'>[]
     sorteosPrivados: SorteoPrivado[]
     /** Imágenes de premios subidas en la sesión (`imagen_archivo_id` → bytes); las sembradas, en `sorteos/imagenes.ts`. */
@@ -308,6 +316,8 @@ function inicial(): BaseFixtures {
         empresas,
         usuarios,
         planesTemporales: [],
+        nodosPortal,
+        conciliacionesPasarela,
         roles,
         tokensApi,
         notificaciones: { global: configuracionGlobal, empresas: {} },
@@ -365,6 +375,7 @@ function inicial(): BaseFixtures {
         referidosLealtad,
         pasivoLibroLealtad: {},
         premiosLealtad,
+        canjesLealtad: [],
         sorteos,
         sorteosPrivados,
         imagenesSorteos: {},

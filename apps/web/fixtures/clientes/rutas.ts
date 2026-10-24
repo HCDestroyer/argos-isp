@@ -235,6 +235,35 @@ export const rutasClientes: RutasFixture = {
         return cliente ? { status: 200, cuerpo: cliente } : noEncontrado('el cliente')
     }),
 
+    /** Como `VincularTelegramCliente` (A1): chat id con signo y hasta 20 dígitos; repetir no cambia nada. */
+    'POST /api/v1/clientes/:id/vincular-telegram': conPermiso('clientes.vincular_telegram', (solicitud) => {
+        const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
+        if (!cliente) {
+            return noEncontrado('el cliente')
+        }
+        const chat = String(cuerpoObjeto(solicitud).chat_id ?? '')
+        if (!/^-?\d{1,20}$/.test(chat)) {
+            return datosInvalidos([{ field: 'chat_id', message: 'El chat id no es válido', rule: 'regex' }])
+        }
+        cliente.telegram_chat_id = chat
+        cliente.version += 1
+        registrarAccion(solicitud, 'clientes.vincular_telegram', { tipo: 'cliente', id: cliente.id }, { chat_id: '***' })
+        return { status: 200, cuerpo: cliente }
+    }),
+
+    'POST /api/v1/clientes/:id/desvincular-telegram': conPermiso('clientes.desvincular_telegram', (solicitud) => {
+        const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
+        if (!cliente) {
+            return noEncontrado('el cliente')
+        }
+        if (cliente.telegram_chat_id) {
+            cliente.telegram_chat_id = null
+            cliente.version += 1
+            registrarAccion(solicitud, 'clientes.desvincular_telegram', { tipo: 'cliente', id: cliente.id }, {})
+        }
+        return { status: 200, cuerpo: cliente }
+    }),
+
     'GET /api/v1/clientes/:id/dependientes': conPermiso('clientes.ver', (solicitud) => {
         const id = idDe(solicitud)
         if (!bd.clientes.some(c => c.id === id)) {

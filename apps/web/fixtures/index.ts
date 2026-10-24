@@ -21,6 +21,7 @@ import { rutasCartera } from './cartera/rutas'
 import { rutasCobros } from './cobros/rutas'
 import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasLealtad } from './lealtad/rutas'
+import { rutasCanjesLealtad } from './lealtad/canjes'
 import { rutasSorteos } from './sorteos/rutas'
 import { rutasCompras } from './compras/rutas'
 import { rutasBonificaciones } from './bonificaciones/rutas'
@@ -50,6 +51,8 @@ import { TICKET_SIN_VINCULAR, TICKET_VINCULADO, TOKEN_VINCULACION } from './horu
 import { rutasHorus } from './horus/rutas'
 import { rutasImplementacionesPlan } from './planes/implementaciones'
 import { rutasPlanes } from './planes/rutas'
+import { rutasNodosPortal } from './nodosPortal/rutas'
+import { rutasProcesosFacturacion } from './facturacion/procesos'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
 import { rutasRed } from './red/rutas'
@@ -539,6 +542,9 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasUsuarios,
     ...rutasPlanesTemporales,
     ...rutasImplementacionesPlan,
+    ...rutasNodosPortal,
+    ...rutasProcesosFacturacion,
+    ...rutasCanjesLealtad,
     ...rutasBancos,
     ...rutasDocumentos,
     ...rutasReportes,

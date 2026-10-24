@@ -1,5 +1,7 @@
 import type { Schema, paths } from '@argosisp/contracts'
 
+export type ResultadoCorte = Schema<'ResultadoCorte'>
+
 export type Factura = Schema<'Factura'>
 export type FacturaDetalle = Schema<'FacturaDetalle'>
 export type FacturaLinea = Schema<'FacturaLinea'>
@@ -94,5 +96,16 @@ export function useFacturas() {
         return resolver(api.GET('/api/v1/facturas/corridas'))
     }
 
-    return { listar, ver, anular, notaCredito, sustituir, generar, vencer, corridas }
+    /**
+     * `POST /facturas/corte` (`facturas.generar`): corre el corte ahora: vence lo pendiente y evalúa
+     * el estado de los servicios cuya hora de corte ya pasó hoy (o solo `servicio_id`).
+     */
+    function corte(claveIdempotencia: string, servicioId?: number): Promise<Resultado<ResultadoCorte>> {
+        return resolver(api.POST('/api/v1/facturas/corte', {
+            params: { header: { 'Idempotency-Key': claveIdempotencia } },
+            body: servicioId ? { servicio_id: servicioId } : {},
+        }))
+    }
+
+    return { listar, ver, anular, notaCredito, sustituir, generar, vencer, corridas, corte }
 }

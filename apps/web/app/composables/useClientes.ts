@@ -74,5 +74,23 @@ export function useClientes() {
         }))
     }
 
-    return { listar, ver, crear, editar, estadoCuenta, dependientes, asignarResponsable, quitarResponsable }
+    /**
+     * `POST /clientes/:id/vincular-telegram` (`clientes.vincular_telegram`): el chat id que el cliente
+     * obtiene al escribirle al bot; 422 si no es un número entero.
+     */
+    function vincularTelegram(id: number, chatId: string, claveIdempotencia: string): Promise<Resultado<Cliente>> {
+        return resolver(api.POST('/api/v1/clientes/{id}/vincular-telegram', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: { chat_id: chatId },
+        }))
+    }
+
+    /** `POST /clientes/:id/desvincular-telegram` (`clientes.desvincular_telegram`). */
+    function desvincularTelegram(id: number, claveIdempotencia: string): Promise<Resultado<Cliente>> {
+        return resolver(api.POST('/api/v1/clientes/{id}/desvincular-telegram', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    return { listar, ver, crear, editar, estadoCuenta, dependientes, asignarResponsable, quitarResponsable, vincularTelegram, desvincularTelegram }
 }

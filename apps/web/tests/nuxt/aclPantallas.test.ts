@@ -226,6 +226,10 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'PlanRouters.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
     'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'CorteAhoraBoton.vue': { permisos: ['facturas.generar'], desde: ['pages/facturas/index.vue'] },
+    'CertificarLoteModal.vue': { permisos: ['fel.certificar'], desde: ['pages/dte/index.vue'] },
+    'PremioLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/premios.vue'] },
+    'CanjeLealtadModal.vue': { permisos: ['lealtad.canjear', 'lealtad.ver'], desde: ['pages/lealtad/canjes.vue'] },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {
