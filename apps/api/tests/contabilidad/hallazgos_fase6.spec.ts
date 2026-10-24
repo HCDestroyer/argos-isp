@@ -33,7 +33,7 @@ import { crearClienteFila } from '#tests/core/fabricas'
  * H27 (lo destapó el generativo en fase 6 PR B; arreglado por A3 en b4ffb08, decisión del líder): una
  * factura importada guarda su IVA desglosado (`iva` > 0) pero su asiento es CxC / 2.9.01 sin IVA; la
  * nota de crédito por su total se guardaba con IVA 0. Ahora lleva el IVA proporcional (`2.1.02` al
- * debe) y la base va contra 2.9.01 o, cerrada la apertura, contra su cuenta de patrimonio. Queda como
+ * debe) y la base va a la cuenta de ingreso de la línea (H50, decisión del líder: rebaja de ventas). Queda como
  * prueba normal; el inv. 9.nota_sobre_importada_con_iva_residual ya lo revisan todas.
  *
  * H28–H30 (fase 6 PR D, libros con folio): el libro de ventas de un mes cerrado, bloqueado y ya
@@ -55,7 +55,7 @@ import { crearClienteFila } from '#tests/core/fabricas'
 test.group('Auditor contable · hallazgos de la fase 6', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    test('H27 (arreglado en b4ffb08): la nota de crédito por el total de una factura importada con IVA lleva el IVA de la factura y debita 2.1.02', async ({
+    test('H27 (arreglado en b4ffb08, base a ingresos por H50 en 28ee679): la nota de crédito por el total de una factura importada con IVA lleva el IVA de la factura, debita 2.1.02 y la base al ingreso de la línea', async ({
         assert,
     }) => {
         const e = await prepararEmpresas()
@@ -83,7 +83,7 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
             { iva: fila.iva, subtotal: fila.subtotal },
             { iva: factura.iva, subtotal: aTexto(dec(factura.total).minus(factura.iva)) },
         )
-        // asiento: 2.1.02 al debe por el IVA, la base contra 2.9.01 (apertura abierta), CxC al haber
+        // asiento: 2.1.02 al debe por el IVA, la base al ingreso de la línea (H50), CxC al haber; 2.9.01 no se toca
         const movimientos = (await db
             .from('ledger.movimientos as m')
             .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
@@ -91,17 +91,22 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
             .where('a.origen_tipo', 'nota_credito')
             .where('a.origen_id', nota.id)
             .orderBy('c.codigo')
-            .select('c.codigo', 'm.debe', 'm.haber')) as Array<{
+            .select('c.codigo', 'c.tipo', 'm.debe', 'm.haber')) as Array<{
+            tipo: string
             codigo: string
             debe: string
             haber: string
         }>
         assert.deepEqual(
-            movimientos.map((m) => [m.codigo, m.debe, m.haber]),
+            movimientos.map((m) => [
+                m.codigo === '1.1.03' || m.codigo === '2.1.02' ? m.codigo : m.tipo,
+                m.debe,
+                m.haber,
+            ]),
             [
                 ['1.1.03', '0.00', '43.98'],
                 ['2.1.02', factura.iva, '0.00'],
-                ['2.9.01', aTexto(dec(factura.total).minus(factura.iva)), '0.00'],
+                ['ingreso', aTexto(dec(factura.total).minus(factura.iva)), '0.00'],
             ],
         )
         const violaciones = await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true })
