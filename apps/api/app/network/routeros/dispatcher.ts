@@ -11,6 +11,7 @@ import type {
     ObjetoRouterOS,
 } from '#network/routeros/cliente'
 import { clienteDeRouter, type RouterApi } from '#network/routeros/router'
+import { contactoRouterOS } from '#network/sesiones/contacto'
 import { diferencias } from '#network/routeros/normalizar'
 import type { PredeterminadosRed } from '#network/routeros/consultas'
 import type { EstadoDeseado, PerfilSuspendidoRed, RutaServicio } from '#network/routeros/estado_deseado'
@@ -81,7 +82,11 @@ export async function registrarFallo(datos: {
     })
 }
 
-export type FabricaClientes = (router: RouterApi) => ClienteRouterOS
+/**
+ * `opciones.sinContacto`: el llamador anota el contacto él mismo (el sondeo, con fuente `sondeo`).
+ * Las fábricas de prueba pueden ignorarlo.
+ */
+export type FabricaClientes = (router: RouterApi, opciones?: { sinContacto?: boolean }) => ClienteRouterOS
 
 /** Lo que se puede inyectar en las acciones del dispatcher (pruebas, laboratorio). */
 export interface OpcionesDispatcher {
@@ -89,10 +94,11 @@ export interface OpcionesDispatcher {
     red?: PredeterminadosRed
 }
 
-export const fabricaPorDefecto: FabricaClientes = (router) =>
+export const fabricaPorDefecto: FabricaClientes = (router, opciones = {}) =>
     clienteDeRouter(router, {
         clave: claveDesdeTexto(env.get('AAA_PPP_KEY')),
         bitacora: bitacoraRed,
+        contacto: opciones.sinContacto ? null : contactoRouterOS,
         timeoutMs: env.get('ROUTEROS_TIMEOUT_MS'),
         reintentos: env.get('ROUTEROS_REINTENTOS'),
         esperaMs: env.get('ROUTEROS_ESPERA_MS'),

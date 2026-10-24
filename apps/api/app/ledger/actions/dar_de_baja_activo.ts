@@ -34,6 +34,10 @@ import DepreciarActivos from '#ledger/actions/depreciar_activos'
  *   (si el precio pasa del valor en libros)`. La venta se cobra en una cuenta bancaria de la empresa;
  *   el IVA de la venta no se calcula aquí (factúrese aparte; confirmar con contador).
  * - 409 `activo_dado_de_baja`. Evento `activo.dado_de_baja` con el valor en libros.
+ * - H43: el activo de un equipo en comodato (`unidad_id`) no se da de baja aquí (409
+ *   `activo_en_comodato`): sale con `inventario.devolver_comodato` o `inventario.declarar_perdida_comodato`.
+ * - Un activo de costo Q0 (un equipo totalmente depreciado que se volvió a prestar) se da de baja sin
+ *   asiento.
  */
 
 export interface EntradaBajaActivo extends PedidoCuentaBanco {
@@ -42,6 +46,11 @@ export interface EntradaBajaActivo extends PedidoCuentaBanco {
     motivo: string
     fecha?: string | null
     precio_venta?: string | null
+    /**
+     * Interno (H43): solo `inventario.declarar_perdida_comodato` da de baja el activo de un equipo en
+     * comodato; por la ruta, 409 `activo_en_comodato`.
+     */
+    desde_comodato?: boolean
 }
 
 export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, ActivoVista> {
@@ -52,7 +61,15 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
         const activo = (await t.trx
             .from('ledger.activos')
             .where('id', input.activo_id)
-            .select('id', 'empresa_id', 'descripcion', 'costo', 'cuenta_activo_id', 'cuenta_depreciacion_id')
+            .select(
+                'id',
+                'empresa_id',
+                'descripcion',
+                'costo',
+                'cuenta_activo_id',
+                'cuenta_depreciacion_id',
+                'unidad_id',
+            )
             .first()) as {
             id: number
             empresa_id: number
@@ -60,8 +77,16 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
             costo: string
             cuenta_activo_id: number
             cuenta_depreciacion_id: number
+            unidad_id: number | null
         } | null
         if (!activo) throw new NoEncontrado(`El activo ${input.activo_id} no existe`)
+        if (activo.unidad_id !== null && !input.desde_comodato) {
+            throw new Conflicto(
+                `El activo ${activo.id} es el equipo en comodato de la unidad ${activo.unidad_id}: devuélvelo (inventario.devolver_comodato) o declara su pérdida (inventario.declarar_perdida_comodato)`,
+                'activo_en_comodato',
+                'Activo en comodato',
+            )
+        }
         const empresaId = Number(activo.empresa_id)
         exigirAccesoEmpresa(t.ctx, empresaId)
         t.fijarEmpresa(empresaId)
@@ -126,18 +151,21 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
         if (resultado.gt(CERO)) {
             movimientos.push({ cuenta: CUENTAS_GT.GANANCIA_VENTA_ACTIVOS, haber: aTexto(resultado) })
         }
-        const asiento = await new RegistrarAsiento().execute(
-            {
-                empresa_id: empresaId,
-                fecha,
-                descripcion: `Baja (${input.tipo}) del activo ${activo.id} · ${activo.descripcion} · ${motivo}`,
-                origen_tipo: 'baja_activo',
-                origen_id: activo.id,
-                movimientos,
-            },
-            t.ctx,
-            { trx: t.trx },
-        )
+        // un activo de costo Q0 (equipo depreciado prestado otra vez) no mueve el libro
+        const asiento = costo.isZero()
+            ? null
+            : await new RegistrarAsiento().execute(
+                  {
+                      empresa_id: empresaId,
+                      fecha,
+                      descripcion: `Baja (${input.tipo}) del activo ${activo.id} · ${activo.descripcion} · ${motivo}`,
+                      origen_tipo: 'baja_activo',
+                      origen_id: activo.id,
+                      movimientos,
+                  },
+                  t.ctx,
+                  { trx: t.trx },
+              )
         await t.trx
             .insertQuery()
             .table('ledger.activos_bajas')
@@ -151,7 +179,7 @@ export default class DarDeBajaActivo extends DomainAction<EntradaBajaActivo, Act
                 costo: aTexto(costo),
                 depreciacion_acumulada: aTexto(acumulada),
                 valor_libros: aTexto(libros),
-                asiento_id: asiento.id,
+                asiento_id: asiento?.id ?? null,
                 registrado_por: usuarioDelActor(t.ctx.actor),
             })
         await t.emit('activo.dado_de_baja', {

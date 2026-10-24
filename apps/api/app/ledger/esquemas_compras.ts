@@ -64,8 +64,10 @@ const LineaCompra = definirEsquema(
                 description:
                     'Unidades de la línea (1 por defecto); un bien para premios se reparte por unidad',
             },
+            producto_id: { ...nulable(id), description: 'Inventario: producto que entró al kardex' },
+            bodega_id: { ...nulable(id), description: 'Inventario: bodega donde entró' },
         },
-        ['cantidad'],
+        ['cantidad', 'producto_id', 'bodega_id'],
     ),
 )
 

@@ -75,6 +75,9 @@ export const ORIGENES_ASIENTO = [
     // fase 7 PR B (§10.6): liquidación de una declaración y su pago; origen_id = `fiscal.declaraciones.id`
     'liquidacion_impuesto',
     'pago_impuesto',
+    // inventario fase A (`contratos/inventario.md` §5): consumo, ajuste, baja y saldo inicial;
+    // origen_id = `inventario.movimientos.id`
+    'inventario',
 ] as const
 
 /**

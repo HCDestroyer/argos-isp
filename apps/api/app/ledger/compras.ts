@@ -5,7 +5,7 @@ import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, aTexto, dec, redondear, type Dec } from '#ledger/dinero'
 import { CUENTAS, PAIS_PLAN } from '#ledger/plan_cuentas'
-import { CLASES_ACTIVO, CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { CLASES_ACTIVO, CUENTAS_GT, esCuentaDelKardex } from '#fiscal/l10n/gt/cuentas'
 import type { LineaAsiento } from '#ledger/actions/registrar_asiento'
 
 /**
@@ -83,6 +83,16 @@ export interface LineaCompraEntrada {
     activo_ubicacion?: string | null
     activo_tasa_anual?: string | null
     activo_valor_residual?: string | null
+    /**
+     * inventario (`contratos/inventario.md` §5): una línea `bien` con producto entra al kardex en
+     * `bodega_id` por `cantidad` unidades y va a `1.1.14 Inventarios` en lugar de a un gasto
+     */
+    producto_id?: number | null
+    bodega_id?: number | null
+    /** inventario fase B: unidades nuevas (serie o MAC) de un producto de serie, una por `cantidad` */
+    unidades?: Array<{ serie?: string | null; mac?: string | null }> | null
+    /** inventario fase B: en una NCRE del proveedor, las unidades que se le devuelven */
+    unidad_ids?: number[] | null
 }
 
 export interface CuentaLinea {
@@ -103,6 +113,10 @@ export interface LineaCompraCalculada {
     clase_activo: ClaseActivo | null
     diferir_meses: number | null
     cantidad: number
+    producto_id: number | null
+    bodega_id: number | null
+    unidades: Array<{ serie?: string | null; mac?: string | null }>
+    unidad_ids: number[]
 }
 
 export interface TotalesCompra {
@@ -199,6 +213,10 @@ export function calcularLineas(
             clase_activo: entrada.clase_activo ?? null,
             diferir_meses: entrada.diferir_meses ?? null,
             cantidad: entrada.cantidad ?? 1,
+            producto_id: entrada.producto_id ?? null,
+            bodega_id: entrada.producto_id ? (entrada.bodega_id ?? null) : null,
+            unidades: entrada.unidades ?? [],
+            unidad_ids: entrada.unidad_ids ?? [],
         }
     })
     if (errores.length > 0) throw new ValidacionFallida(errores)
@@ -301,7 +319,48 @@ export async function resolverCuentasLineas(
         const campo = `lineas.${i}`
         const tipo = entrada.tipo ?? 'servicio'
         let fila: (CuentaLinea & Record<string, unknown>) | null = null
-        if (tipo === 'activo_fijo') {
+        if (entrada.producto_id || entrada.bodega_id) {
+            // inventario §5: la línea bien con producto va a 1.1.14 (la única cuenta del kardex)
+            const problema =
+                tipo !== 'bien'
+                    ? { campo: 'tipo', mensaje: 'Solo una línea bien entra al inventario' }
+                    : !entrada.producto_id || !entrada.bodega_id
+                      ? {
+                            campo: entrada.producto_id ? 'bodega_id' : 'producto_id',
+                            mensaje: 'Una línea que entra al inventario lleva producto_id y bodega_id',
+                        }
+                      : entrada.cuenta || entrada.categoria || entrada.clase_activo || entrada.diferir_meses
+                        ? {
+                              campo: 'cuenta',
+                              mensaje:
+                                  'Una línea de inventario va a 1.1.14: sin cuenta, categoría, clase de activo ni diferimiento',
+                          }
+                        : null
+            if (problema) {
+                errores.push({
+                    field: `${campo}.${problema.campo}`,
+                    message: problema.mensaje,
+                    rule: 'linea_inventario',
+                })
+                continue
+            }
+            fila = await cuentaPorCodigo(trx, CUENTAS_GT.INVENTARIOS)
+            if (!fila) {
+                errores.push({
+                    field: `${campo}.producto_id`,
+                    message: `La cuenta ${CUENTAS_GT.INVENTARIOS} no está instalada: actualiza la localización`,
+                    rule: 'cuenta_compra',
+                })
+                continue
+            }
+            salida.push({
+                id: Number(fila.id),
+                codigo: String(fila.codigo),
+                nombre: String(fila.nombre),
+                tipo: String(fila.tipo),
+            })
+            continue
+        } else if (tipo === 'activo_fijo') {
             const clase = CLASES_ACTIVO.find((c) => c.clave === entrada.clase_activo)
             if (!clase) {
                 errores.push({
@@ -357,6 +416,15 @@ export async function resolverCuentasLineas(
         const problema = problemaDeCuentaLinea(fila!, empresaId)
         if (problema) {
             errores.push({ field: `${campo}.cuenta`, message: problema, rule: 'cuenta_compra' })
+            continue
+        }
+        // inventario §3: 1.1.14 solo la mueve el kardex (una línea con producto_id)
+        if (esCuentaDelKardex(String(fila!.codigo))) {
+            errores.push({
+                field: `${campo}.cuenta`,
+                message: `La cuenta ${CUENTAS_GT.INVENTARIOS} es del kardex: usa producto_id y bodega_id en una línea bien`,
+                rule: 'cuenta_inventario',
+            })
             continue
         }
         // observación del auditor (sorteos): propiedad, planta y equipo solo con una línea activo_fijo,
@@ -482,6 +550,9 @@ export interface CompraVista {
         clase_activo: string | null
         diferir_meses: number | null
         cantidad: number
+        /** inventario: la línea entró al kardex de este producto y bodega */
+        producto_id: number | null
+        bodega_id: number | null
     }>
     retenciones: Array<{
         impuesto_codigo: string
@@ -588,6 +659,8 @@ async function completar(cliente: QueryClientContract, filas: FilaCompra[]): Pro
             'l.clase_activo',
             'l.diferir_meses',
             'l.cantidad',
+            'l.producto_id',
+            'l.bodega_id',
         )) as Array<CompraVista['lineas'][number] & { compra_id: number }>
     const retenciones = (await cliente
         .from('ledger.compras_retenciones')
@@ -614,6 +687,8 @@ async function completar(cliente: QueryClientContract, filas: FilaCompra[]): Pro
                 id: Number(l.id),
                 cuenta_id: Number(l.cuenta_id),
                 diferir_meses: n(l.diferir_meses),
+                producto_id: n(l.producto_id),
+                bodega_id: n(l.bodega_id),
             })),
         retenciones: retenciones
             .filter((r) => Number(r.compra_id) === Number(f.id))

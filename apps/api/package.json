@@ -32,6 +32,7 @@
     "#ledger/*": "./app/ledger/*.js",
     "#fiscal/*": "./app/fiscal/*.js",
     "#lealtad/*": "./app/lealtad/*.js",
+    "#inventario/*": "./app/inventario/*.js",
     "#portal/*": "./app/portal/*.js",
     "#notify/*": "./app/notify/*.js",
     "#importacion/*": "./app/importacion/*.js",

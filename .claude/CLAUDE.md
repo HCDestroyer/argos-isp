@@ -95,6 +95,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
     - Telemetría de alta frecuencia que no es una acción de nadie: el Interim-Update de accounting (`sesiones.actualizar`) cuando solo actualiza contadores.
     - Evaluaciones sin efecto: `servicios.evaluar_estado` solo deja fila cuando cambió el estado (decisión del PM, día 4). La acción que la llamó (pago, promesa, corte) queda auditada igual, y el corte deja su corrida en `registrar_corrida`.
     - Barrido de sesiones colgadas: `sesiones.cerrar_colgadas` (cron cada 5 min) solo deja fila cuando cerró alguna sesión; cada sesión cerrada deja su diff (`fin`, `causa_fin`) en `audit.cambios`.
+    - Sondeo de contacto de los routers: `routeros.sondear` (cron cada 5 min) solo deja fila si algún router no respondió o falló; cada GET enviado queda igual en `audit.red`.
     - Proyecciones derivadas que se refrescan por evento (el refresco del dashboard): no dejan fila; son una caché del dato, no una acción de nadie.
     - Estado deseado de RouterOS sin cambios: `routeros.aplicar_servicio` y `routeros.reconciliar` solo dejan fila si corrigieron algo, fallaron o la validación de velocidad rechazó la configuración. Cada comando que sí se envía queda igual en `audit.red`.
 - `audit.cambios`: diff por campo en clientes, servicios, planes, plantillas, reglas. Datos sensibles (contraseñas PPPoE, credenciales, tokens) se registran como `***`.
@@ -210,6 +211,11 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sorteo.ganador_notificado` | lealtad (sorteos) | sorteo_id, empresa_id, ganador_id, cliente_id, posicion, tipo, codigo, premio, reclamar_antes, sustituye_a |
 | `sorteo.premio_no_reclamado` | lealtad (sorteos) | sorteo_id, empresa_id, ganador_id, cliente_id, posicion, premio_posicion, suplente_id, motivo |
 | `sorteo.acta_cerrada` | lealtad (sorteos) | sorteo_id, empresa_id, acta_hash |
+| `inventario.movimiento_registrado` | inventario | movimiento_id, empresa_id, tipo, producto_id, bodega_id, cantidad, costo_total, unidad_id, servicio_id, origen_tipo, origen_id (`contratos/inventario.md`) |
+| `inventario.comodato_asignado` / `inventario.comodato_devuelto` | inventario | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac; devuelto: condicion, bodega_id |
+| `inventario.equipo_por_recuperar` | inventario | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac |
+| `inventario.existencia_minima` | inventario | empresa_id, producto_id, bodega_id (o null), cantidad, minimo |
+| `inventario.conteo_cerrado` | inventario | conteo_id, empresa_id, bodega_id, faltante, sobrante, lineas |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |
