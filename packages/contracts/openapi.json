@@ -6690,6 +6690,562 @@
         "x-implementado": true
       }
     },
+    "/api/v1/campos-personalizados": {
+      "get": {
+        "operationId": "camposPersonalizadosListar",
+        "summary": "Catálogo de campos personalizados del cliente",
+        "description": "Qué claves de `Cliente.campos_personalizados` existen, su etiqueta, tipo, opciones, si son requeridas y su orden en la ficha. `?activo=true` para el formulario.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Campos personalizados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CampoPersonalizado"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "camposPersonalizadosCrear",
+        "summary": "Agregar un campo personalizado del cliente",
+        "description": "409 `campo_duplicado` si la clave ya existe. `clave` y `tipo` no cambian después.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clave": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,39}$",
+                    "description": "Clave en `campos_personalizados` (snake_case, hasta 40); no cambia después"
+                  },
+                  "etiqueta": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "texto",
+                      "numero",
+                      "fecha",
+                      "booleano",
+                      "opcion"
+                    ],
+                    "description": "texto (hasta 500), numero, fecha (AAAA-MM-DD), booleano u opcion; no cambia después"
+                  },
+                  "opciones": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "maxItems": 50,
+                    "description": "Valores permitidos: obligatorio (al menos uno) con opcion, prohibido en los demás"
+                  },
+                  "requerido": {
+                    "type": "boolean"
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Orden en la ficha (menor primero)"
+                  }
+                },
+                "required": [
+                  "clave",
+                  "etiqueta",
+                  "tipo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Campo creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/campos-personalizados/{id}": {
+      "put": {
+        "operationId": "camposPersonalizadosEditar",
+        "summary": "Editar etiqueta, opciones, obligatoriedad u orden de un campo personalizado",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "etiqueta": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "opciones": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "maxItems": 50,
+                    "description": "Valores permitidos: obligatorio (al menos uno) con opcion, prohibido en los demás"
+                  },
+                  "requerido": {
+                    "type": "boolean"
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Orden en la ficha (menor primero)"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Campo actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/campos-personalizados/{id}/activar": {
+      "post": {
+        "operationId": "camposPersonalizadosActivar",
+        "summary": "Volver a activar un campo personalizado",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Campo activado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.activar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.activar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/campos-personalizados/{id}/desactivar": {
+      "post": {
+        "operationId": "camposPersonalizadosDesactivar",
+        "summary": "Desactivar un campo personalizado (no se borra; los valores se conservan)",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Campo desactivado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.desactivar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cartera/castigos": {
       "get": {
         "operationId": "carteraCastigos",
@@ -7516,9 +8072,13 @@
                         },
                         {
                           "type": "object"
+                        },
+                        {
+                          "type": "null"
                         }
                       ]
-                    }
+                    },
+                    "description": "Valores por clave del catálogo (GET /campos-personalizados): cada uno de su tipo; null = vacío. Al editar se reemplaza completo. Claves fuera del catálogo se guardan tal cual"
                   },
                   "canal_preferido": {
                     "type": "string",
@@ -7830,9 +8390,13 @@
                         },
                         {
                           "type": "object"
+                        },
+                        {
+                          "type": "null"
                         }
                       ]
-                    }
+                    },
+                    "description": "Valores por clave del catálogo (GET /campos-personalizados): cada uno de su tipo; null = vacío. Al editar se reemplaza completo. Claves fuera del catálogo se guardan tal cual"
                   },
                   "canal_preferido": {
                     "type": "string",
@@ -49184,6 +49748,10 @@
                         "cajas.crear",
                         "cajas.depositar",
                         "cajas.ver",
+                        "campos_personalizados.activar",
+                        "campos_personalizados.crear",
+                        "campos_personalizados.desactivar",
+                        "campos_personalizados.editar",
                         "cartera.castigar",
                         "cartera.provisionar",
                         "cierres.revisar_check",
@@ -49480,6 +50048,10 @@
                         "cajas.crear",
                         "cajas.depositar",
                         "cajas.ver",
+                        "campos_personalizados.activar",
+                        "campos_personalizados.crear",
+                        "campos_personalizados.desactivar",
+                        "campos_personalizados.editar",
                         "cartera.castigar",
                         "cartera.provisionar",
                         "cierres.revisar_check",
@@ -55549,6 +56121,10 @@
                             "cajas.crear",
                             "cajas.depositar",
                             "cajas.ver",
+                            "campos_personalizados.activar",
+                            "campos_personalizados.crear",
+                            "campos_personalizados.desactivar",
+                            "campos_personalizados.editar",
                             "cartera.castigar",
                             "cartera.provisionar",
                             "cierres.revisar_check",
@@ -57545,6 +58121,10 @@
           "motivo_detalle",
           "plan_id",
           "estado",
+          "bloqueo",
+          "bloqueado_en",
+          "primer_periodo",
+          "cobrado_desde",
           "alta_en",
           "baja_en",
           "motivo_baja",
@@ -61666,6 +62246,80 @@
           }
         }
       },
+      "CampoPersonalizado": {
+        "type": "object",
+        "required": [
+          "id",
+          "clave",
+          "etiqueta",
+          "tipo",
+          "opciones",
+          "requerido",
+          "orden",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "clave": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
+            "description": "Clave en `Cliente.campos_personalizados`; no cambia"
+          },
+          "etiqueta": {
+            "type": "string",
+            "description": "Nombre que ve el operador en la ficha y el formulario"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "texto",
+              "numero",
+              "fecha",
+              "booleano",
+              "opcion"
+            ],
+            "description": "texto (string, hasta 500), numero (number), fecha (string AAAA-MM-DD), booleano, opcion (string de `opciones`); no cambia"
+          },
+          "opciones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Valores permitidos (solo opcion; vacía en los demás)"
+          },
+          "requerido": {
+            "type": "boolean",
+            "description": "Se exige con valor al crear un cliente y al guardar sus campos personalizados"
+          },
+          "orden": {
+            "type": "integer",
+            "description": "Orden en la ficha (menor primero)"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Inactivo: no se muestra ni se valida; los valores guardados se conservan"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CanjeConexionHorus": {
         "type": "object",
         "required": [
@@ -62605,11 +63259,18 @@
         "type": "object",
         "required": [
           "id",
+          "codigo",
+          "codigo_externo",
           "nombre",
           "tipo",
+          "tipo_documento_fiscal",
           "nit_cui",
+          "nit_cui_invalido",
           "nombre_fiscal",
           "direccion_fiscal",
+          "pais_fiscal",
+          "agente_retencion_iva",
+          "sector_publico",
           "email",
           "telefono",
           "movil",
@@ -62621,6 +63282,9 @@
           "telegram_chat_id",
           "responsable_pago_id",
           "responsable_pago_nombre",
+          "referido_por_id",
+          "referido_empresa_id",
+          "codigos_referido",
           "version",
           "created_at",
           "updated_at"
@@ -62633,7 +63297,7 @@
           "codigo": {
             "type": "string",
             "pattern": "^C-\\d{6,}$",
-            "description": "Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan"
+            "description": "Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable"
           },
           "codigo_externo": {
             "type": [
@@ -62737,7 +63401,8 @@
           },
           "campos_personalizados": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Valores por clave del catálogo (GET /campos-personalizados); puede traer claves fuera del catálogo (importador, campos desactivados)"
           },
           "canal_preferido": {
             "type": "string",
@@ -68028,6 +68693,7 @@
           "horario",
           "instrucciones_pago",
           "color_marca",
+          "pais",
           "regimen_isr",
           "codigo_establecimiento",
           "logo_url",
@@ -68128,7 +68794,7 @@
           "pais": {
             "type": "string",
             "pattern": "^[A-Z]{2}$",
-            "description": "País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan"
+            "description": "País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais"
           },
           "regimen_isr": {
             "type": [
@@ -72005,7 +72671,12 @@
           "nombre",
           "email",
           "permisos",
-          "roles"
+          "roles",
+          "expira_en",
+          "expira_max_en",
+          "alcance_global",
+          "empresas",
+          "empresa_activa_id"
         ],
         "properties": {
           "id": {
@@ -72040,7 +72711,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Solo en `GET /me`: cuándo vence la credencial actual. Con la cookie del panel se renueva sola mientras se usa (`ahora + PANEL_SESION_INACTIVIDAD_H`); con Bearer de login es fijo; null con tokens de API (no vencen)"
+            "description": "Cuándo vence la credencial actual. Con la cookie del panel se renueva sola mientras se usa (`ahora + PANEL_SESION_INACTIVIDAD_H`); con Bearer de login es fijo; null con tokens de API (no vencen)"
           },
           "expira_max_en": {
             "type": [
@@ -72048,7 +72719,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; igual a `expira_en` con Bearer de login; null con tokens de API)"
+            "description": "Tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; igual a `expira_en` con Bearer de login; null con tokens de API)"
           },
           "alcance_global": {
             "type": "boolean",
@@ -74183,6 +74854,7 @@
           "prioridad",
           "dual_stack",
           "tamano_prefijo_delegado",
+          "tipo",
           "global",
           "activo",
           "version",
@@ -74339,7 +75011,8 @@
           "pool_ipv6_enlace",
           "pool_ipv6_delegacion",
           "local_address",
-          "no_crear_reglas"
+          "no_crear_reglas",
+          "tipo"
         ],
         "properties": {
           "id": {
@@ -84288,6 +84961,8 @@
           "modo_velocidad",
           "empresa_sugerida_id",
           "activo",
+          "en_linea",
+          "ultimo_contacto",
           "version",
           "created_at",
           "updated_at"
@@ -84398,6 +85073,21 @@
           },
           "activo": {
             "type": "boolean"
+          },
+          "en_linea": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)"
+          },
+          "ultimo_contacto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca"
           },
           "version": {
             "type": "integer",
@@ -84640,9 +85330,11 @@
           "ipv6_duid",
           "cliente_nombre",
           "plan_nombre",
+          "plan_tipo",
           "router_nombre",
           "zona_nombre",
           "excepciones",
+          "plan_temporal",
           "version",
           "created_at",
           "updated_at"
@@ -85102,7 +85794,8 @@
         "required": [
           "usuario",
           "csrf",
-          "expira_en"
+          "expira_en",
+          "expira_max_en"
         ],
         "properties": {
           "usuario": {
@@ -85126,7 +85819,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use. La API siempre lo manda; opcional en el esquema para no romper clientes ya generados"
+            "description": "Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use"
           }
         }
       },
@@ -86703,6 +87396,8 @@
           "email",
           "activo",
           "roles",
+          "alcance_global",
+          "empresas",
           "version",
           "created_at",
           "updated_at"

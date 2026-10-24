@@ -82,6 +82,8 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         zona_nombre: zonas.find(z => z.id === cliente.zona_id)?.nombre ?? null,
         // Como la API (A1, día 4): siempre trae las excepciones a la plantilla (vacío si no hay).
         excepciones: cliente.id === 11 && sucursal ? { dias_gracia: 10 } : {},
+        // Como la API (lealtad): siempre viene; null sin plan temporal programado ni activo.
+        plan_temporal: null,
         version: 1,
         created_at: instalado.toISOString(),
         updated_at: instalado.toISOString(),

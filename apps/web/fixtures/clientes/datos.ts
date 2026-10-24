@@ -85,6 +85,11 @@ function datosFiscales(nit: string | undefined, indice: number): Pick<Cliente, '
     }
 }
 
+/** Código estable del cliente como lo deriva la API del id (`core.codigo_cliente`): `C-000455`. */
+export function codigoCliente(id: number): string {
+    return `C-${String(id).padStart(6, '0')}`
+}
+
 /** Cliente importado de Mikrowisp (con un pago histórico en `facturacion/datos.ts`). */
 export const CLIENTE_IMPORTADO = 8
 
@@ -93,6 +98,9 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
     const creado = new Date(Date.UTC(2026, 8, 1 + indice, 16, 30)).toISOString()
     return {
         id,
+        // Como la API: `C-` + id con seis dígitos (lo pone la base al insertar)
+        codigo: codigoCliente(id),
+        codigo_externo: null,
         nombre: semilla.nombre,
         tipo: semilla.tipo ?? 'persona',
         nit_cui: semilla.nit ?? null,
@@ -112,6 +120,10 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
         // Como la API: siempre vienen; null si paga él mismo.
         responsable_pago_id: RESPONSABLES[id] ?? null,
         responsable_pago_nombre: RESPONSABLES[id] ? (semillas[(RESPONSABLES[id] ?? 0) - 1]?.nombre ?? null) : null,
+        // Lealtad: sin referidor y sin códigos propios (los crea la API con el primer servicio)
+        referido_por_id: null,
+        referido_empresa_id: null,
+        codigos_referido: [],
         version: 1,
         created_at: creado,
         updated_at: creado,

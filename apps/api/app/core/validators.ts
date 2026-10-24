@@ -22,6 +22,7 @@ import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
 import { MODALIDADES_ADICIONAL, PRIMEROS_PERIODOS_ADICIONAL } from '#shared/eventos'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
 
 const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
@@ -97,7 +98,14 @@ const camposCliente = {
     direccion: vine.string().trim().maxLength(300).nullable().optional(),
     coordenadas: coordenadas().nullable().optional(),
     zona_id: idEntidad().nullable().optional(),
-    campos_personalizados: vine.record(vine.any()).optional(),
+    campos_personalizados: vine
+        .record(vine.any().nullable())
+        .optional()
+        .meta({
+            description:
+                'Valores por clave del catálogo (GET /campos-personalizados): cada uno de su tipo; null = vacío. ' +
+                'Al editar se reemplaza completo. Claves fuera del catálogo se guardan tal cual',
+        }),
     canal_preferido: vine.enum(['correo', 'telegram', 'whatsapp'] as const).optional(),
     codigo_externo: vine.string().trim().maxLength(50).nullable().optional().meta({
         description: 'Código del cliente en el sistema anterior (importador); no reemplaza a `codigo`',
@@ -207,6 +215,62 @@ export const editarZonaValidator = vine.compile(
         version: versionEsperada(),
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Catálogo de campos personalizados del cliente
+|--------------------------------------------------------------------------
+*/
+
+const etiquetaCampo = () => vine.string().trim().minLength(1).maxLength(80)
+const opcionesCampo = () =>
+    vine.array(vine.string().trim().minLength(1).maxLength(80)).maxLength(50).optional().meta({
+        description: 'Valores permitidos: obligatorio (al menos uno) con opcion, prohibido en los demás',
+    })
+const ordenCampo = () =>
+    vine
+        .number()
+        .withoutDecimals()
+        .min(0)
+        .max(10000)
+        .optional()
+        .meta({ description: 'Orden en la ficha (menor primero)' })
+
+export const listarCamposPersonalizadosValidator = vine.compile(
+    vine.object({ activo: vine.boolean().optional() }),
+)
+
+export const crearCampoPersonalizadoValidator = vine.compile(
+    vine.object({
+        clave: vine
+            .string()
+            .trim()
+            .regex(/^[a-z][a-z0-9_]{0,39}$/)
+            .meta({
+                description: 'Clave en `campos_personalizados` (snake_case, hasta 40); no cambia después',
+            }),
+        etiqueta: etiquetaCampo(),
+        tipo: vine.enum(TIPOS_CAMPO_PERSONALIZADO).meta({
+            description:
+                'texto (hasta 500), numero, fecha (AAAA-MM-DD), booleano u opcion; no cambia después',
+        }),
+        opciones: opcionesCampo(),
+        requerido: vine.boolean().optional(),
+        orden: ordenCampo(),
+    }),
+)
+
+export const editarCampoPersonalizadoValidator = vine.compile(
+    vine.object({
+        etiqueta: etiquetaCampo().optional(),
+        opciones: opcionesCampo(),
+        requerido: vine.boolean().optional(),
+        orden: ordenCampo(),
+        version: versionEsperada(),
+    }),
+)
+
+export const versionCampoPersonalizadoValidator = vine.compile(vine.object({ version: versionEsperada() }))
 
 /**
  * Excepciones a la plantilla de facturación del servicio: `{ campo: valor }`. Los campos y sus

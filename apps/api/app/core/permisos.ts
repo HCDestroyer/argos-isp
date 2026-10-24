@@ -17,6 +17,12 @@ export const PERMISOS = {
     'zonas.ver': 'Ver zonas',
     'zonas.crear': 'Crear zonas',
     'zonas.editar': 'Editar zonas',
+    'campos_personalizados.crear': 'Agregar campos al catálogo de campos personalizados del cliente',
+    'campos_personalizados.editar':
+        'Editar etiqueta, opciones, orden u obligatoriedad de un campo personalizado',
+    'campos_personalizados.desactivar':
+        'Desactivar un campo personalizado (no se borra; los valores se conservan)',
+    'campos_personalizados.activar': 'Volver a activar un campo personalizado',
 
     'servicios.ver': 'Ver servicios',
     'servicios.crear': 'Crear servicios',
