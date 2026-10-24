@@ -20,7 +20,7 @@ panel en modo fixtures en el puerto 3150 (`PW_PUERTO`), o usa `PW_BASE_URL` para
 Las 5 obligatorias, a 1280 y 390 px: 1 `permisos.spec.ts` (el cajero no ve Routers y `/routers` lo manda a `/sin-permiso`), 2 `alta-cliente-servicio.spec.ts`, 3 `cobro-reactivacion.spec.ts`, 4 `promesa.spec.ts` (resultado de la evaluación) y 5 `cierre-caja.spec.ts` (faltante con motivo). Navegan por el menú (`tests/e2e/ayudas.ts`), sin `page.goto` después de entrar. Además: `menu.spec.ts` (grupos, barra compacta, Ctrl+K) y `accesibilidad.spec.ts` (axe en claro y oscuro y foco visible; `@axe-core/playwright`).
 
 Variables en `.env.example`. En modo fixtures: `admin@argos.test` (todos los permisos del contrato:
-`build/permisosContrato.ts` los lee del enum de `packages/contracts` al compilar, así un permiso
+`herramientas/permisosContrato.ts` los lee del enum de `packages/contracts` al compilar, así un permiso
 nuevo del backend llega con `pnpm contracts:build`, sin copiar nada) o `cajero@argos.test`
 (los permisos de `ROLES_BASE.cajero` de `apps/api/app/core/permisos.ts`: sin routers, plantillas,
 bitácora, libro ni usuarios), cualquier contraseña.

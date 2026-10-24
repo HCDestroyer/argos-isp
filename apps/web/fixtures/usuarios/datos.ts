@@ -17,7 +17,7 @@ export const usuarios: Schema<'Usuario'>[] = [
 
 /**
  * Catálogo de `GET /permisos`, derivado del enum del OpenAPI (`virtual:permisos-contrato`, ver
- * `build/permisosContrato.ts`): nunca se desfasa del backend. La descripción es el resumen del
+ * `herramientas/permisosContrato.ts`): nunca se desfasa del backend. La descripción es el resumen del
  * endpoint que lo pide (la API real usa la de `PERMISOS`).
  */
 export const catalogoPermisos: Schema<'Permiso'>[] = PERMISOS_CONTRATO.map((permiso, indice) => ({ id: indice + 1, ...permiso }))

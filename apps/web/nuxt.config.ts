@@ -1,4 +1,4 @@
-import { permisosContrato } from './build/permisosContrato'
+import { permisosContrato } from './herramientas/permisosContrato'
 
 // Panel de administración de ArgosIsp.
 // SPA (ssr: false): el panel no necesita SEO y así el navegador habla directo con la API
@@ -48,7 +48,7 @@ export default defineNuxtConfig({
     // `tests/e2e/calentar.ts`). Declaradas aquí, se empaquetan al arrancar.
     // `openapi-fetch` llega por `@argosisp/contracts` (paquete del workspace, que Vite no recorre).
     vite: {
-        // Catálogo de permisos de los fixtures, derivado del OpenAPI (`build/permisosContrato.ts`).
+        // Catálogo de permisos de los fixtures, derivado del OpenAPI (`herramientas/permisosContrato.ts`).
         plugins: [permisosContrato()],
         optimizeDeps: {
             include: ['decimal.js', 'zod', '@argosisp/contracts > openapi-fetch'],
