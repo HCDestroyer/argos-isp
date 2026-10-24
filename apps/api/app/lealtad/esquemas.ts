@@ -178,6 +178,34 @@ export const LotePuntos = definirEsquema(
     }),
 )
 
+export const PuntosCanjeables = definirEsquema(
+    'PuntosCanjeables',
+    objeto({
+        cliente_id: id,
+        empresas: lista(
+            objeto({
+                empresa_id: id,
+                saldo: { ...entero, description: 'Σ movimientos (puede ser negativo tras un reverso)' },
+                canjeable: {
+                    ...entero,
+                    description:
+                        'Lo que se puede canjear hoy: el saldo si el programa está activo y llega al mínimo; si no, 0',
+                },
+                minimo_canje: {
+                    ...nulable(entero),
+                    description: 'Mínimo del programa activo; null sin programa',
+                },
+                programa_activo: booleano,
+                canje_portal: { ...booleano, description: 'El cliente puede canjear desde el portal' },
+                motivo: {
+                    ...nulable(enumerado(['sin_programa', 'saldo_negativo', 'bajo_minimo', 'sin_puntos'])),
+                    description: 'Por qué no hay nada canjeable; null si sí',
+                },
+            }),
+        ),
+    }),
+)
+
 export const PuntosCliente = definirEsquema(
     'PuntosCliente',
     objeto({

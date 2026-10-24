@@ -8352,6 +8352,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/clientes/{id}/puntos/canjeables": {
+      "get": {
+        "operationId": "lealtadPuntosCanjeables",
+        "summary": "Saldo de puntos canjeable del cliente por empresa",
+        "description": "Una fila por empresa con programa activo o con puntos del cliente: saldo, canjeable (el saldo si el programa está activo y llega a minimo_canje; si no, 0, con su motivo) y si puede canjear desde el portal. Con empresa activa, solo esa.",
+        "tags": [
+          "lealtad"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Puntos canjeables",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosCanjeables"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso lealtad.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "lealtad.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/clientes/{id}/quitar-responsable-pago": {
       "post": {
         "operationId": "clientesQuitarResponsablePago",
@@ -42830,6 +42903,136 @@
         "x-implementado": true
       }
     },
+    "/api/v1/plantillas-facturacion/{id}/retirar": {
+      "post": {
+        "operationId": "plantillasRetirar",
+        "summary": "Retirar una plantilla de facturación (con motivo)",
+        "description": "La plantilla sigue facturando a los servicios que ya la tienen y no se asigna a servicios nuevos (422 restriccion al crear o cambiar un servicio a ella). 409 plantilla_por_defecto (marca otra primero), 409 plantilla_retirada, 409 por version.",
+        "tags": [
+          "facturacion"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "version",
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plantilla retirada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlantillaFacturacion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso plantillas.retirar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "plantillas.retirar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/portal/anuncios": {
       "get": {
         "operationId": "portalAnuncios",
@@ -46450,7 +46653,7 @@
       "post": {
         "operationId": "promesasSimular",
         "summary": "Simular una promesa: evalúa todas las reglas sin crear nada",
-        "description": "Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.",
+        "description": "Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.",
         "tags": [
           "promesas"
         ],
@@ -46500,6 +46703,246 @@
                     "type": "string",
                     "format": "date-time",
                     "description": "Simular como si fuera este instante (por defecto ahora)"
+                  },
+                  "reglas_promesa": {
+                    "type": "object",
+                    "properties": {
+                      "habilitadas": {
+                        "type": "boolean"
+                      },
+                      "max_por_periodo": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 12
+                      },
+                      "max_por_periodo_buen_historial": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 12
+                      },
+                      "buen_historial_pct": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "historial_ventana": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50
+                      },
+                      "plazo_max_dias": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60
+                      },
+                      "no_exceder_siguiente_facturacion": {
+                        "type": "boolean"
+                      },
+                      "deuda_maxima": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                        "description": "Monto con hasta 2 decimales, como string",
+                        "examples": [
+                          "150.00"
+                        ]
+                      },
+                      "abono_inicial_pct": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "antiguedad_minima_dias": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3650
+                      },
+                      "cumplimiento_minimo_pct": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "bloqueo_tras_incumplida_dias": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 365
+                      },
+                      "canales": {
+                        "type": "object",
+                        "properties": {
+                          "portal": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "ia": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "operador": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "supervisor": {
+                            "type": "object",
+                            "properties": {
+                              "permitido": {
+                                "type": "boolean"
+                              },
+                              "requiere_aprobacion": {
+                                "type": "boolean"
+                              },
+                              "plazo_max_dias": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 1,
+                                "maximum": 60
+                              },
+                              "max_por_periodo": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 12
+                              },
+                              "deuda_maxima": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                                "description": "Monto con hasta 2 decimales, como string",
+                                "examples": [
+                                  "150.00"
+                                ]
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Reglas a probar sin guardarlas (simulador de la plantilla): se aplican sobre las efectivas del servicio; las claves que falten quedan como están"
                   }
                 },
                 "required": [
@@ -49503,6 +49946,7 @@
                         "planes.ver",
                         "plantillas.crear",
                         "plantillas.editar",
+                        "plantillas.retirar",
                         "plantillas.ver",
                         "promesas.aprobar",
                         "promesas.cancelar",
@@ -49801,6 +50245,7 @@
                         "planes.ver",
                         "plantillas.crear",
                         "plantillas.editar",
+                        "plantillas.retirar",
                         "plantillas.ver",
                         "promesas.aprobar",
                         "promesas.cancelar",
@@ -55872,6 +56317,7 @@
                             "planes.ver",
                             "plantillas.crear",
                             "plantillas.editar",
+                            "plantillas.retirar",
                             "plantillas.ver",
                             "promesas.aprobar",
                             "promesas.cancelar",
@@ -75366,6 +75812,9 @@
           "hora_corte",
           "certificar_al",
           "reglas_promesa",
+          "retirada_en",
+          "retirada_por",
+          "motivo_retiro",
           "version",
           "created_at",
           "updated_at"
@@ -75436,6 +75885,27 @@
           "por_defecto": {
             "type": "boolean",
             "description": "Plantilla de los servicios creados sin plantilla_facturacion_id (a lo sumo una)"
+          },
+          "retirada_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Retirada (POST /plantillas-facturacion/:id/retirar): sigue facturando a sus servicios y no se asigna a nuevos; null si vigente"
+          },
+          "retirada_por": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "motivo_retiro": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "version": {
             "type": "integer",
@@ -78634,6 +79104,75 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PuntosCanjeables": {
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "empresas"
+        ],
+        "properties": {
+          "cliente_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "empresa_id",
+                "saldo",
+                "canjeable",
+                "minimo_canje",
+                "programa_activo",
+                "canje_portal",
+                "motivo"
+              ],
+              "properties": {
+                "empresa_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "saldo": {
+                  "type": "integer",
+                  "description": "Σ movimientos (puede ser negativo tras un reverso)"
+                },
+                "canjeable": {
+                  "type": "integer",
+                  "description": "Lo que se puede canjear hoy: el saldo si el programa está activo y llega al mínimo; si no, 0"
+                },
+                "minimo_canje": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Mínimo del programa activo; null sin programa"
+                },
+                "programa_activo": {
+                  "type": "boolean"
+                },
+                "canje_portal": {
+                  "type": "boolean",
+                  "description": "El cliente puede canjear desde el portal"
+                },
+                "motivo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "sin_programa",
+                    "saldo_negativo",
+                    "bajo_minimo",
+                    "sin_puntos"
+                  ],
+                  "description": "Por qué no hay nada canjeable; null si sí"
+                }
+              }
+            }
           }
         }
       },

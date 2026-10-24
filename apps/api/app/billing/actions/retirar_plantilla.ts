@@ -2,7 +2,12 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion } from '#shared/errores'
 import { usuarioDelActor } from '#shared/contexto'
 import { actualizarConVersion } from '#shared/version'
-import { obtenerPlantilla, paraAuditoria, serializarPlantilla, type PlantillaPublica } from '#billing/plantillas'
+import {
+    obtenerPlantilla,
+    paraAuditoria,
+    serializarPlantilla,
+    type PlantillaPublica,
+} from '#billing/plantillas'
 
 /**
  * `plantillas.retirar` (`POST /plantillas-facturacion/:id/retirar { version, motivo }`, pedido de A4).
@@ -32,7 +37,11 @@ export default class RetirarPlantilla extends DomainAction<EntradaRetirarPlantil
         const antes = await obtenerPlantilla(input.id, t.trx)
         if (antes.version !== input.version) throw new ConflictoVersion('plantilla_facturacion', input.id)
         if (antes.retirada_en !== null) {
-            throw new Conflicto(`La plantilla ${antes.nombre} ya está retirada`, 'plantilla_retirada', 'Plantilla retirada')
+            throw new Conflicto(
+                `La plantilla ${antes.nombre} ya está retirada`,
+                'plantilla_retirada',
+                'Plantilla retirada',
+            )
         }
         if (antes.por_defecto) {
             throw new Conflicto(
