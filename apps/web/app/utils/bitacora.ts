@@ -215,6 +215,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'libro.excepcion_bloqueo': 'Excepción de bloqueo creada o revocada',
     'libro.cerrar_periodo': 'Periodo contable cerrado',
     'libro.cerrar_ejercicio': 'Ejercicio anual cerrado',
+    'libro.cerrar_apertura': 'Saldos de apertura cerrados',
     'libro.reabrir_ejercicio': 'Ejercicio anual reabierto',
     'cierres.verificar': 'Lista de verificación de cierre corrida',
     'cierres.revisar_check': 'Check de cierre supervisado o reabierto',

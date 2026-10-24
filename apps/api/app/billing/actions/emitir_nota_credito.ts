@@ -35,6 +35,59 @@ import type { ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_ser
 import { diferimientoDeFactura } from '#ledger/diferidos'
 
 /**
+ * H27 / H50 (decisión del líder): lo que el asiento de una importada acreditó en 2.9.01 (`haber`) se
+ * acredita como una factura del periodo: el IVA de la factura (hasta `haber`) a `2.1.02` y la base a
+ * la cuenta de ingreso de cada línea (rebaja de ventas de hoy, también para el ISR). 2.9.01 no se
+ * toca: conserva el saldo importado hasta su cierre de apertura.
+ */
+async function partesImportada(t: Transaccion, factura: FacturaNota, haber: Dec) {
+    const fila = (await t.trx
+        .from('billing.facturas')
+        .where('id', factura.id)
+        .select('iva')
+        .firstOrFail()) as { iva: string }
+    const iva = Decimal.min(Decimal.max(dec(fila.iva), CERO), haber)
+    const base = haber.minus(iva)
+    const lineas = (await t.trx
+        .from('billing.facturas_lineas')
+        .where('factura_id', factura.id)
+        .whereNot('tipo', 'descuento')
+        .orderBy('id', 'asc')
+        .select('tipo', 'cuenta_codigo', t.trx.raw('(total - descuento - iva)::text as neto'))) as Array<{
+        tipo: string
+        cuenta_codigo: string | null
+        neto: string
+    }>
+    // la base por cuenta de ingreso, en proporción al neto sin IVA de sus líneas (sin líneas: la del tipo)
+    const porCuenta = new Map<string, Dec>()
+    for (const l of lineas) {
+        const cuenta = cuentaIngresoDeLinea(l)
+        porCuenta.set(cuenta, (porCuenta.get(cuenta) ?? CERO).plus(Decimal.max(dec(l.neto), CERO)))
+    }
+    if (porCuenta.size === 0) porCuenta.set(cuentaIngresoDeLinea({ tipo: factura.tipo }), base)
+    const partes = await Promise.all(
+        [...porCuenta.entries()].map(async ([codigo, neto]) => ({
+            cuenta_id: await idCuenta(t, codigo),
+            cuenta_codigo: codigo,
+            haber: aTexto(neto),
+        })),
+    )
+    const bases = repartirProporcional(partes, base).map((p) => ({
+        cuenta_id: Number(p.cuenta_id),
+        codigo: p.cuenta_codigo,
+        monto: p.debe,
+    }))
+    return {
+        iva: {
+            cuenta_id: await idCuenta(t, CUENTAS.IVA_DEBITO),
+            codigo: CUENTAS.IVA_DEBITO as string,
+            monto: iva,
+        },
+        bases,
+    }
+}
+
+/**
  * `facturas.nota_credito` (`POST /facturas/:id/notas-credito { monto, motivo }`): nota de crédito
  * interna (sin FEL; semana 5) por una parte o todo el saldo de una factura viva.
  *
@@ -551,6 +604,19 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         for (const d of descuentos) {
             const cuenta = lineas.find((l) => l.cuenta_codigo === cuentaIngresoDeLinea(d))
             if (cuenta) cuenta.haber = aTexto(dec(cuenta.haber).minus(d.monto))
+        }
+        // H27 / H50: una importada (asiento CxC / 2.9.01) se acredita como una factura del periodo: su
+        // IVA contra 2.1.02 y la base contra la cuenta de ingreso de sus líneas (2.9.01 no se toca)
+        const iApertura = lineas.findIndex((l) => l.cuenta_codigo === CUENTAS.SALDOS_APERTURA)
+        if (iApertura >= 0) {
+            const apertura = lineas[iApertura]!
+            const partes = await partesImportada(t, factura, dec(apertura.haber))
+            const nuevas = [...partes.bases, ...(partes.iva.monto.gt(0) ? [partes.iva] : [])].map((p) => ({
+                cuenta_id: p.cuenta_id,
+                cuenta_codigo: p.codigo,
+                haber: aTexto(p.monto),
+            }))
+            lineas.splice(iApertura, 1, ...nuevas)
         }
         if (certificada) {
             // aviso certificado: su IVA ya se reclasificó a 2.1.02; lo que las notas internas

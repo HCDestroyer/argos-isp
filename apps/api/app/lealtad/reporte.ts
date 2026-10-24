@@ -105,9 +105,16 @@ export async function reporteLealtad(
         .groupBy('m.empresa_id')
         .select(
             'm.empresa_id',
-            db.raw('coalesce(sum(m.puntos) filter (where m.puntos > 0), 0)::int as emitidos'),
-            db.raw('coalesce(sum(m.valor) filter (where m.puntos > 0), 0)::text as valor_emitido'),
-            db.raw(`coalesce(-sum(m.puntos) filter (where m.tipo = 'canje'), 0)::int as canjeados`),
+            // el reverso positivo de un canje (canje revertido) no es emisión: descuenta lo canjeado
+            db.raw(
+                `coalesce(sum(m.puntos) filter (where m.puntos > 0 and m.tipo <> 'reverso'), 0)::int as emitidos`,
+            ),
+            db.raw(
+                `coalesce(sum(m.valor) filter (where m.puntos > 0 and m.tipo <> 'reverso'), 0)::text as valor_emitido`,
+            ),
+            db.raw(
+                `coalesce(-sum(m.puntos) filter (where m.tipo = 'canje' or (m.tipo = 'reverso' and m.puntos > 0 and m.origen_tipo = 'canje')), 0)::int as canjeados`,
+            ),
             db.raw(`coalesce(-sum(m.puntos) filter (where m.tipo = 'vencimiento'), 0)::int as vencidos`),
             db.raw(
                 `coalesce(-sum(m.puntos) filter (where m.tipo = 'reverso' and m.puntos < 0), 0)::int as revertidos`,
@@ -115,7 +122,9 @@ export async function reporteLealtad(
             db.raw(
                 `coalesce(-sum(m.puntos) filter (where m.tipo = 'ajuste' and m.puntos < 0), 0)::int as ajustes_negativos`,
             ),
-            db.raw('coalesce(sum(m.valor) filter (where m.puntos < 0), 0)::text as valor_liberado'),
+            db.raw(
+                `(coalesce(sum(m.valor) filter (where m.puntos < 0), 0) - coalesce(sum(m.valor) filter (where m.tipo = 'reverso' and m.puntos > 0 and m.origen_tipo = 'canje'), 0))::text as valor_liberado`,
+            ),
         )) as Array<Record<string, any>>
     const saldos = (await db
         .from('lealtad.movimientos')

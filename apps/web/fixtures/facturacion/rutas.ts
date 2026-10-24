@@ -24,6 +24,7 @@ import { asientoPago, asientoReverso } from '../libro/datos'
 import { nuevaSesion } from '../sesiones/datos'
 import { dinero, estadoFactura } from './datos'
 import { notasDeFactura, rutasNotasCredito } from './notasCredito'
+import { extrasDetalle } from './detalle'
 import { anularConFel, rutasFel } from '../fel/rutas'
 
 type Factura = Schema<'Factura'>
@@ -89,6 +90,7 @@ function detalle(factura: Factura): FacturaDetalle {
             ...factura,
             acreditado: factura.acreditado ?? '0.00',
             notas_credito: notasDeFactura(factura.id),
+            ...extrasDetalle(factura.id),
             lineas: structuredClone(lineasCargo),
             reglas_snapshot: { plantilla_facturacion_id: servicio?.plantilla_facturacion_id ?? null, dias_gracia: 0 },
         }
@@ -97,6 +99,7 @@ function detalle(factura: Factura): FacturaDetalle {
         ...factura,
         acreditado: factura.acreditado ?? '0.00',
         notas_credito: notasDeFactura(factura.id),
+        ...extrasDetalle(factura.id),
         lineas: [{
             id: factura.id * 10 + 1,
             concepto: mora

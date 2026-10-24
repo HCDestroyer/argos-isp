@@ -770,6 +770,25 @@ export async function imagenPremioDelPortal(clienteId: number, sorteoId: number,
     return { sorteo, archivoId: premio.imagen_archivo_id }
 }
 
+/**
+ * Imagen de un premio para un visitante sin sesión (página pública del sorteo, pedido de A5): solo de
+ * sorteos con las bases publicadas (`bases_hash`), con `aviso_portal` y no cancelados; 404 si no.
+ * Solo la imagen: nada del cliente ni de la empresa.
+ */
+export async function imagenPremioPublica(sorteoId: number, posicion: number) {
+    const sorteo = await verSorteo(sorteoId)
+    const premio = sorteo.premios.find((p) => p.posicion === posicion)
+    if (
+        !sorteo.bases_hash ||
+        !sorteo.aviso_portal ||
+        ['borrador', 'cancelado'].includes(sorteo.estado) ||
+        !premio?.imagen_archivo_id
+    ) {
+        throw new NoEncontrado('La imagen no existe')
+    }
+    return { sorteo, archivoId: premio.imagen_archivo_id }
+}
+
 /** Imagen de un premio para el panel (404 si no tiene). */
 export async function imagenPremio(sorteoId: number, posicion: number) {
     const sorteo = await verSorteo(sorteoId)

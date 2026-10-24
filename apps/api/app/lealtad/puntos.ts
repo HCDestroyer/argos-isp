@@ -657,8 +657,9 @@ export async function salidaCanje(
 /**
  * Devuelve los puntos de un canje revertido (§5): un lote nuevo por cada lote que pagó el canje, con
  * sus puntos, su valor y su **vencimiento original**. Nunca se toca el movimiento del canje. Cada
- * devolución es un movimiento `ajuste` positivo con origen `canje` (no `reverso`: el auditor exige que
- * un reverso nunca sea lote, invariante 14) y su asiento `4.1.05 / 2.1.10`, como todo lote. Idempotente
+ * devolución es un **reverso positivo** de la salida del canje (`reversa_de` = el movimiento `canje`,
+ * origen `canje`), uno por lote consumido con su vencimiento y su valor: es un lote nuevo. Asiento
+ * espejo de la salida, `4.1.06 / 2.1.10` (contrato §15.2; `a3.md` fila 136). Idempotente
  * por `reverso:canje:<canje>:lote:<lote>`.
  */
 export async function devolverCanje(
@@ -698,7 +699,7 @@ export async function devolverCanje(
                 programa: { id: salida.programa_id, empresa_id: salida.empresa_id },
                 cliente_id: salida.cliente_id,
                 servicio_id: salida.servicio_id,
-                tipo: 'ajuste',
+                tipo: 'reverso',
                 puntos: Number(c.puntos),
                 regla_id: null,
                 origen_tipo: 'canje',
@@ -706,10 +707,12 @@ export async function devolverCanje(
                 clave,
                 vence_en: c.vence_en,
                 valor: dec(c.valor),
+                reversa_de: salida.id,
                 motivo: `Canje ${canjeId} revertido: ${motivo}`,
                 fecha,
+                // espejo de la salida del canje (2.1.10 / 4.1.06), como dice el contrato (§15.2)
                 asiento: {
-                    debe: CUENTAS_GT.INGRESOS_DIFERIDOS_LEALTAD,
+                    debe: CUENTAS_GT.INGRESOS_PUNTOS,
                     haber: CUENTAS_GT.PASIVO_LEALTAD,
                     descripcion: `Lealtad · canje ${canjeId} revertido: vuelven ${c.puntos} puntos del cliente ${salida.cliente_id}`,
                 },

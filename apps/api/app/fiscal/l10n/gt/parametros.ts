@@ -731,3 +731,25 @@ export const PARAMETROS_GT: readonly DefinicionParametro[] = [
         valores: v(false),
     },
 ]
+
+/**
+ * `gt-2026.3` (decisión del PM, `a3.md` fila 47): tope por egreso que un cajero registra de su caja
+ * abierta. Sobre el tope lo registra contabilidad (`egresos.registrar_sin_limite`).
+ */
+export const PARAMETRO_EGRESO_CAJERO_MAXIMO: DefinicionParametro = {
+    clave: 'egreso_cajero_maximo',
+    tipo: 'monto',
+    alcance: 'E',
+    minimo: '0',
+    descripcion:
+        'Monto máximo de un egreso que el cajero registra desde su caja abierta; sobre él lo registra contabilidad',
+    fuente: 'decisión del PM (a3.md, egresos de caja del cajero)',
+    confianza: 'diseno',
+    confirmar_contador: false,
+    valores: v('500.00'),
+}
+
+export const PARAMETROS_GT_2026_3: readonly DefinicionParametro[] = [
+    ...PARAMETROS_GT,
+    PARAMETRO_EGRESO_CAJERO_MAXIMO,
+]

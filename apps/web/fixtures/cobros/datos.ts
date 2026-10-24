@@ -385,6 +385,8 @@ export function asientosFase4(): Asiento[] {
             descripcion: `Pago ${pago.id} · ${pago.metodo}${pago.referencia ? ` · ref. ${pago.referencia}` : ''} · anticipo`,
             origen_tipo: 'pago',
             origen_id: pago.id,
+            // al puente de cobros (sin caja ni banco): diario de cobros
+            diario: 'COB',
             reversa_de: null,
             created_by: null,
             created_at: pago.created_at,
@@ -401,6 +403,8 @@ export function asientosFase4(): Asiento[] {
         descripcion: 'Liquidación 1 (LIQ-2026-10-10) de Pasarela en línea: 2 pago(s)',
         origen_tipo: 'liquidacion_cobro',
         origen_id: 1,
+        // toca la subcuenta de Banco Industrial (cuenta bancaria 2)
+        diario: 'BAN-2',
         reversa_de: null,
         created_by: 1,
         created_at: '2026-10-10T18:00:00.000Z',

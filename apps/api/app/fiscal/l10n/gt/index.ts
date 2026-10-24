@@ -1,6 +1,6 @@
 import type { DefinicionFrase, DefinicionTipoDte, PaqueteLocalizacion } from '#fiscal/localizacion'
 import { CUENTAS_PAQUETE_GT, CUENTAS_PAQUETE_GT_2026_2 } from '#fiscal/l10n/gt/cuentas'
-import { PARAMETROS_GT, REGIMENES_GT, type RegimenGt } from '#fiscal/l10n/gt/parametros'
+import { PARAMETROS_GT, PARAMETROS_GT_2026_3, REGIMENES_GT, type RegimenGt } from '#fiscal/l10n/gt/parametros'
 import { CUADRICULAS_GT, IMPUESTOS_GT } from '#fiscal/l10n/gt/impuestos'
 
 /**
@@ -129,4 +129,17 @@ export const PAQUETE_GT_2026_2: PaqueteLocalizacion = {
     version: '2026.2.0',
     publicada_en: '2026-10-18',
     cuentas: CUENTAS_PAQUETE_GT_2026_2,
+}
+
+/**
+ * `gt-2026.3` (decisión del PM, egresos de caja del cajero): igual que 2026.2 más el parámetro
+ * `egreso_cajero_maximo` (Q500.00 por defecto, editable por empresa). Instalarla sobre 2026.2 solo
+ * agrega ese parámetro y su valor.
+ */
+export const PAQUETE_GT_2026_3: PaqueteLocalizacion = {
+    ...PAQUETE_GT_2026_2,
+    codigo: 'gt-2026.3',
+    version: '2026.3.0',
+    publicada_en: '2026-10-24',
+    parametros: PARAMETROS_GT_2026_3,
 }

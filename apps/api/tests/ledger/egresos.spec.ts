@@ -159,8 +159,9 @@ test.group('ledger · egresos', () => {
             ['energia', 'transito', 'nomina', 'vehiculos', 'alquileres', 'otros'],
         )
 
-        // cajero sin egresos.registrar → 403; sin egresos.ver solo lee los de su caja (pedido de A4):
-        // la lista completa le pide caja_id o turno_id (422)
+        // cajero (decisión del PM): registra de su caja con motivo (sin él, 422; reglas en
+        // egresos_cajero.spec.ts); sin egresos.ver solo lee los de su caja (pedido de A4): la lista
+        // completa le pide caja_id o turno_id (422)
         const cajaId = await nuevaCaja()
         const cajero = await cajeroDe(cajaId)
         await estado(
@@ -168,7 +169,7 @@ test.group('ledger · egresos', () => {
                 .post('/api/v1/egresos')
                 .bearerToken(cajero.token)
                 .json({ categoria: 'otros', monto: '1.00', metodo: 'caja', caja_id: cajaId }),
-            403,
+            422,
         )
         await estado(client.get('/api/v1/egresos').bearerToken(cajero.token), 422)
         await afirmarLibroCuadrado(assert)

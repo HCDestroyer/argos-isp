@@ -11,13 +11,14 @@ import db from '@adonisjs/lucid/services/db'
 import type { HttpContext } from '@adonisjs/core/http'
 import { ipOrigenDelCliente } from '#portal/ip_origen'
 import { limitarPorIp } from '#portal/limite_peticiones'
-import { clienteDeLaSesion } from '#portal/acceso/sesion'
+import { clienteDeLaSesion, clienteDeLaSesionSiHay } from '#portal/acceso/sesion'
 import {
     REQUISITOS_SORTEO,
     basesPublicas,
     detalleSorteo,
     imagenPremio,
     imagenPremioDelPortal,
+    imagenPremioPublica,
     listarSorteos,
     reporteParticipantes,
     sorteosDelPortal,
@@ -948,19 +949,18 @@ const sorteos: Ruta[] = [
         operacion: 'portalImagenPremioSorteo',
         resumen: 'Imagen de un premio de un sorteo anunciado en el portal',
         descripcion:
-            'Sesión del portal (401 sin ella). Solo de sorteos con aviso_portal, publicados y no cancelados, de una empresa del cliente (404 si no). Mismo origen, ETag y Cache-Control: private, max-age=300.',
+            'Sin sesión (página pública del sorteo): solo de sorteos con las bases publicadas, aviso_portal y no cancelados (404 si no). Con sesión del portal, además de una empresa del cliente (404 si no). Solo la imagen. Mismo origen, ETag y Cache-Control: private, max-age=300.',
         etiqueta: 'portal',
-        seguridad: 'portal',
+        seguridad: 'publico',
         permiso: null,
         limitada: true,
         respuesta: { status: 200, descripcion: 'Imagen', contenido: 'image/*', etag: true },
         handler: async (ctx, { params }) => {
-            const clienteId = await clienteDeLaSesion(ctx)
-            const { sorteo, archivoId } = await imagenPremioDelPortal(
-                clienteId,
-                Number(params.id),
-                Number(params.posicion),
-            )
+            const clienteId = await clienteDeLaSesionSiHay(ctx)
+            const { sorteo, archivoId } =
+                clienteId === null
+                    ? await imagenPremioPublica(Number(params.id), Number(params.posicion))
+                    : await imagenPremioDelPortal(clienteId, Number(params.id), Number(params.posicion))
             ctx.response.header('Cache-Control', 'private, max-age=300')
             return enviarArchivo(ctx, sorteo.id, archivoId, 'inline')
         },

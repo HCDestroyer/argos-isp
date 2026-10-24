@@ -46,6 +46,7 @@ import compras from '#start/routes/compras'
 import activos from '#start/routes/activos'
 import cierres from '#start/routes/cierres'
 import ejercicios from '#start/routes/ejercicios'
+import apertura from '#start/routes/apertura'
 import libros from '#start/routes/libros'
 
 const cajas: Ruta[] = [
@@ -436,6 +437,7 @@ export default [
     ...periodos,
     ...cierres,
     ...ejercicios,
+    ...apertura,
     ...bancos,
     ...compras,
     ...libros,

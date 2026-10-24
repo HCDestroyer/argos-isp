@@ -43,6 +43,7 @@ export function asientoBonificacion(id: number, b: Pick<Bonificacion, 'id' | 'em
         descripcion: `Bonificación ${b.id} · ${b.concepto}`,
         origen_tipo: 'bonificacion',
         origen_id: b.id,
+        diario: 'VAR',
         reversa_de: null,
         created_by: null,
         created_at: b.created_at,

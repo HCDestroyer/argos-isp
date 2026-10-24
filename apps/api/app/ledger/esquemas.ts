@@ -101,8 +101,7 @@ export const Asiento = definirEsquema(
         {
             empresa_id: {
                 ...id,
-                description:
-                    'Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+                description: 'Empresa (NIT) (multiempresa)',
             },
             id,
             fecha,
@@ -179,8 +178,6 @@ export const Asiento = definirEsquema(
             'revertido_por',
             'revertible',
             'motivo_no_revertible',
-            'empresa_id',
-            'diario',
             'numero',
             'partida',
             'fecha_documento',

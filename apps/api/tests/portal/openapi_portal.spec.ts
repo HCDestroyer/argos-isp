@@ -31,7 +31,6 @@ const SOLO_SESION = [
     'portalPremios',
     'portalCanjes',
     'portalCanjear',
-    'portalImagenPremioSorteo',
     'portalBonificaciones',
 ]
 
