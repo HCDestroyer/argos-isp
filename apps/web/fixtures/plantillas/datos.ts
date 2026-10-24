@@ -34,6 +34,7 @@ const reglasPromesa: Schema<'PlantillaFacturacion'>['reglas_promesa'] = {
     },
 }
 
+// `hora_corte` en HH:MM (`to_char(hora_corte, 'HH24:MI')`) y `por_defecto` siempre presente, como la API.
 export const plantillas: Schema<'PlantillaFacturacion'>[] = [
     {
         id: 1,
@@ -47,7 +48,8 @@ export const plantillas: Schema<'PlantillaFacturacion'>[] = [
         mora_tipo: 'fija',
         mora_valor: '25.00',
         mora_recurrente: false,
-        hora_corte: '08:00:00',
+        hora_corte: '08:00',
+        por_defecto: true,
         certificar_al: 'pagar',
         reglas_promesa: structuredClone(reglasPromesa),
         ...meta,
@@ -64,7 +66,8 @@ export const plantillas: Schema<'PlantillaFacturacion'>[] = [
         mora_tipo: 'ninguna',
         mora_valor: '0.00',
         mora_recurrente: false,
-        hora_corte: '09:00:00',
+        hora_corte: '09:00',
+        por_defecto: false,
         certificar_al: 'emitir',
         // Empresas: la promesa que pide un operador queda pendiente de aprobación.
         reglas_promesa: {
