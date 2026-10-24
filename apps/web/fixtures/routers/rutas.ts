@@ -137,7 +137,6 @@ export const rutasRouters: RutasFixture = {
             api_tls_verificar: conexion('api_tls_verificar'),
             // Como la API (fila 57 de a4.md): el PEM nunca sale; solo si hay CA cargada.
             tiene_api_ca: 'api_ca' in cuerpo ? typeof cuerpo.api_ca === 'string' : router.tiene_api_ca,
-            api_ca: ('api_ca' in cuerpo ? typeof cuerpo.api_ca === 'string' : router.tiene_api_ca) ? '***' : null,
             dhcp_servidor: conexion('dhcp_servidor'),
             interfaz_clientes: conexion('interfaz_clientes'),
             // Multiempresa (A1): `empresa_sugerida_id` (null la quita); sin el campo, se conserva.
@@ -244,7 +243,6 @@ export const rutasRouters: RutasFixture = {
             api_tls_verificar: cuerpo.api_tls_verificar !== false,
             // Como la API: el PEM nunca sale; `***` solo si se cargó una CA.
             tiene_api_ca: typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.length > 0,
-            api_ca: typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.length > 0 ? '***' : null,
             dhcp_servidor: null,
             interfaz_clientes: null,
             empresa_sugerida_id: null,

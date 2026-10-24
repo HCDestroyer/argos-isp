@@ -32,8 +32,6 @@ export interface RouterVista {
     api_tls_verificar: boolean
     /** hay una CA propia cargada (el PEM nunca sale por la API) */
     tiene_api_ca: boolean
-    /** @deprecated `***` si hay CA cargada, null si no; usar `tiene_api_ca` */
-    api_ca: '***' | null
     /** `server` del lease DHCP de `dhcp_fija`; null = `ROUTEROS_DHCP_SERVIDOR` (o `all`) */
     dhcp_servidor: string | null
     /** interfaz del ARP estático del amarre IP-MAC; null = `ROUTEROS_INTERFAZ_CLIENTES` */
@@ -87,7 +85,6 @@ const COLUMNAS_ROUTER = [
     'api_url',
     'api_tls_verificar',
     db.raw('(api_ca IS NOT NULL) AS tiene_api_ca'),
-    db.raw(`CASE WHEN api_ca IS NULL THEN NULL ELSE '***' END AS api_ca`),
     'dhcp_servidor',
     'interfaz_clientes',
     db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),

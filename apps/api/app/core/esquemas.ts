@@ -23,6 +23,7 @@ import { TIPOS_ACTOR } from '#shared/contexto'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
+import { NOMBRES_PERMISOS, PERMISOS, ROLES_BASE, type Permiso as NombreDePermiso } from '#core/permisos'
 
 /**
  * Schemas de respuesta del módulo core (usuarios, ACL, clientes, servicios, bitácora).
@@ -160,7 +161,43 @@ export const Rol = definirEsquema(
     }),
 )
 
-export const Permiso = definirEsquema('Permiso', objeto({ id, nombre: texto, descripcion: nulable(texto) }))
+/**
+ * Catálogo de permisos (`app/core/permisos.ts`) en el OpenAPI: el panel tipa y describe los
+ * permisos desde aquí (`x-enum-descriptions`, alineado con `enum`), sin copiarlos a mano.
+ */
+export const NombrePermiso = definirEsquema('NombrePermiso', {
+    type: 'string',
+    description: 'Nombre de un permiso del ACL (= nombre de la acción)',
+    enum: [...NOMBRES_PERMISOS],
+    'x-enum-descriptions': NOMBRES_PERMISOS.map((p) => PERMISOS[p]),
+})
+
+export const Permiso = definirEsquema(
+    'Permiso',
+    objeto({ id, nombre: NombrePermiso, descripcion: nulable(texto) }),
+)
+
+/** Rol base del seed (`ROLES_BASE`); `x-roles-base` trae los seis con sus permisos. */
+export const RolBase = definirEsquema('RolBase', {
+    ...objeto({
+        nombre: texto,
+        descripcion: texto,
+        permisos: lista(NombrePermiso),
+    }),
+    description:
+        'Rol base del seed: sus permisos se definen en código (`GET /roles/base`). `x-roles-base` los trae ' +
+        'en el propio esquema para derivar fixtures sin la API',
+    'x-roles-base': rolesBase(),
+})
+
+/** Los roles base de `ROLES_BASE`, en orden, con sus permisos ordenados. */
+export function rolesBase(): Array<{ nombre: string; descripcion: string; permisos: NombreDePermiso[] }> {
+    return Object.entries(ROLES_BASE).map(([nombre, rol]) => ({
+        nombre,
+        descripcion: rol.descripcion,
+        permisos: [...rol.permisos].sort(),
+    }))
+}
 
 /** Alcances de un token de API: cada clave ausente es "sin recorte" en esa dimensión. */
 export const AlcancesToken = definirEsquema('AlcancesToken', {
@@ -171,7 +208,7 @@ export const AlcancesToken = definirEsquema('AlcancesToken', {
         'recorta esa dimensión; `{}` = mismos permisos y alcance que el usuario',
     properties: {
         permisos: {
-            ...lista(texto),
+            ...lista(NombrePermiso),
             description: 'Solo estos permisos (nombres de `GET /permisos`), y solo si el usuario los tiene',
         },
         routers: { ...lista(id), description: 'Solo recursos de estos routers' },
