@@ -48,14 +48,9 @@ export const Router = definirEsquema(
         api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
         tiene_api_ca: {
             ...booleano,
-            description: 'Hay una CA propia cargada (PEM); el PEM nunca sale por la API, como api_password',
-        },
-        api_ca: {
-            ...nulable(enumerado(['***'])),
-            deprecated: true,
             description:
-                'Obsoleto: `***` si hay CA cargada, null si no (nunca el PEM); usar tiene_api_ca. Para cambiarla, ' +
-                'PUT /routers/:id con el PEM nuevo o null',
+                'Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con ' +
+                'PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla)',
         },
         dhcp_servidor: {
             ...nulable(texto),

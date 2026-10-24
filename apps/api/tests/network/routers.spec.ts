@@ -105,7 +105,6 @@ test.group('Routers', () => {
             api_url: null,
             api_tls_verificar: true,
             tiene_api_ca: false,
-            api_ca: null,
             dhcp_servidor: null,
             interfaz_clientes: null,
         })
@@ -129,13 +128,13 @@ test.group('Routers', () => {
             201,
         )
         const router = creado.body()
+        assert.notProperty(router, 'api_ca')
         // el PEM nunca sale por la API (fila 57 de a4.md): solo si está cargada
         assert.isFalse(JSON.stringify(router).includes('MIIBprueba'))
         assert.containsSubset(router, {
             api_url: 'https://10.0.0.1:8443',
             api_tls_verificar: false,
             tiene_api_ca: true,
-            api_ca: '***',
             dhcp_servidor: 'dhcp-clientes',
             interfaz_clientes: 'bridge-clientes',
         })
@@ -177,7 +176,6 @@ test.group('Routers', () => {
         assert.isFalse(JSON.stringify(editado.body()).includes('MIIBotra'))
         assert.containsSubset(editado.body(), {
             tiene_api_ca: true,
-            api_ca: '***',
             api_url: null,
             api_tls_verificar: true,
             dhcp_servidor: null,

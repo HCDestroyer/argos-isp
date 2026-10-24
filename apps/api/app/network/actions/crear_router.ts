@@ -58,13 +58,12 @@ export function auditableRouter(router: RouterVista) {
         tiene_api_password: api,
         tiene_radius_secret: secreto,
         tiene_api_ca: ca,
-        api_ca: mascara,
         modo_velocidad: derivado,
         en_linea: enLinea,
         ultimo_contacto: contacto,
         ...resto
     } = router
-    void [mascara, derivado, enLinea, contacto]
+    void [derivado, enLinea, contacto]
     return {
         ...resto,
         api_password: api ? 'definida' : null,

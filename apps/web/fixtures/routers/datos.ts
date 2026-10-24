@@ -3,7 +3,7 @@ import type { Schema } from '@argosisp/contracts'
 const creado = '2026-09-01T15:00:00.000Z'
 const meta = { version: 1, created_at: creado, updated_at: creado }
 // Conexión de la API REST de RouterOS (semana 3): los valores por defecto de la API.
-const conexion = { api_url: null, api_tls_verificar: true, tiene_api_ca: false, api_ca: null, dhcp_servidor: null, interfaz_clientes: null }
+const conexion = { api_url: null, api_tls_verificar: true, tiene_api_ca: false, dhcp_servidor: null, interfaz_clientes: null }
 // Multiempresa (A1): sin empresa sugerida, como devuelve la API por defecto.
 const empresa = { empresa_sugerida_id: null }
 // Contacto (A1): sin fuente periódica que lo mida, como devuelve la API por defecto.

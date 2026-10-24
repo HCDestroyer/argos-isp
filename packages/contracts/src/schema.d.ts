@@ -5731,7 +5731,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Catálogo de permisos */
+        /**
+         * Catálogo de permisos
+         * @description Todos los permisos de `app/core/permisos.ts` con su descripción, también los que ninguna ruta pide (acciones del sistema o anidadas). El mismo catálogo está en el esquema `NombrePermiso` (`enum` y `x-enum-descriptions`).
+         */
         get: operations["permisosListar"];
         put?: never;
         post?: never;
@@ -7155,6 +7158,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/roles/base": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Roles base del seed con sus permisos (definidos en código)
+         * @description Los seis roles de `ROLES_BASE` (`app/core/permisos.ts`), tal como los sincroniza el seed. Los mismos datos van en `x-roles-base` del esquema `RolBase`.
+         */
+        get: operations["rolesBase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routers": {
         parameters: {
             query?: never;
@@ -8226,7 +8249,7 @@ export interface components {
         /** @description Recortes del token sobre los permisos y alcances de su usuario (Y lógico). Una clave ausente no recorta esa dimensión; `{}` = mismos permisos y alcance que el usuario */
         AlcancesToken: {
             /** @description Solo estos permisos (nombres de `GET /permisos`), y solo si el usuario los tiene */
-            permisos?: string[];
+            permisos?: components["schemas"]["NombrePermiso"][];
             /** @description Solo recursos de estos routers */
             routers?: number[];
             /** @description Solo recursos de estas zonas */
@@ -12228,6 +12251,11 @@ export interface components {
             /** Format: date-time */
             revocado_en: string;
         };
+        /**
+         * @description Nombre de un permiso del ACL (= nombre de la acción)
+         * @enum {string}
+         */
+        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -12578,7 +12606,7 @@ export interface components {
         };
         Permiso: {
             id: number;
-            nombre: string;
+            nombre: components["schemas"]["NombrePermiso"];
             descripcion: string | null;
         };
         Plan: {
@@ -15041,6 +15069,12 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description Rol base del seed: sus permisos se definen en código (`GET /roles/base`). `x-roles-base` los trae en el propio esquema para derivar fixtures sin la API */
+        RolBase: {
+            nombre: string;
+            descripcion: string;
+            permisos: components["schemas"]["NombrePermiso"][];
+        };
         Router: {
             id: number;
             nombre: string;
@@ -15064,14 +15098,8 @@ export interface components {
             api_url: string | null;
             /** @description Verificar el certificado TLS del router */
             api_tls_verificar: boolean;
-            /** @description Hay una CA propia cargada (PEM); el PEM nunca sale por la API, como api_password */
+            /** @description Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla) */
             tiene_api_ca: boolean;
-            /**
-             * @deprecated
-             * @description Obsoleto: `***` si hay CA cargada, null si no (nunca el PEM); usar tiene_api_ca. Para cambiarla, PUT /routers/:id con el PEM nuevo o null
-             * @enum {string|null}
-             */
-            api_ca: "***" | null;
             /** @description server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all */
             dhcp_servidor: string | null;
             /** @description Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES */
@@ -43356,6 +43384,44 @@ export interface operations {
             };
             /** @description Datos inválidos */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    rolesBase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Roles base */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolBase"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso roles.ver */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
