@@ -9,7 +9,7 @@
     "preview": "nuxt preview --port 3000",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
-    "typecheck": "nuxt typecheck",
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=6144 nuxt typecheck",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },

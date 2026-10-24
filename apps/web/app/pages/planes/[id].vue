@@ -3,7 +3,8 @@ import type { Problem } from '@argosisp/contracts'
 
 /**
  * Ficha de un plan (A1): tipo (residencial, empresarial o dedicado), velocidad y precio, edición
- * (`planes.editar`) y los adicionales que trae (`GET/PUT /planes/:id/adicionales`).
+ * (`planes.editar`), los adicionales que trae (`GET/PUT /planes/:id/adicionales`) y su
+ * implementación en cada router (`GET/PUT /planes/:id/routers`).
  */
 definePageMeta({ permiso: 'planes.ver' })
 
@@ -147,6 +148,8 @@ onMounted(cargar)
                     :plan="plan"
                     @actualizado="cargar"
                 />
+
+                <PlanRouters :plan="plan" />
             </template>
         </div>
 

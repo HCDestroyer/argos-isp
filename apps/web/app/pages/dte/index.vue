@@ -13,6 +13,8 @@ useHead({ title: 'Cola de DTE · ArgosIsp' })
 const route = useRoute()
 const router = useRouter()
 const { empresas, empresaId } = useEmpresaActiva()
+const { puede } = usePermisos()
+const loteAbierto = ref(false)
 
 const TODOS = 'todos'
 
@@ -124,6 +126,21 @@ onMounted(() => void lista.recargar())
         titulo="Cola de DTE"
         icono="i-lucide-badge-check"
     >
+        <template #acciones>
+            <UButton
+                v-if="puede('fel.certificar')"
+                label="Certificar en lote"
+                icon="i-lucide-badge-check"
+                color="neutral"
+                variant="outline"
+                data-prueba="certificar-lote"
+                @click="loteAbierto = true"
+            />
+        </template>
+        <CertificarLoteModal
+            v-model:open="loteAbierto"
+            @hecho="lista.recargar()"
+        />
         <div class="flex flex-col gap-4">
             <p class="text-sm text-muted">
                 Documentos tributarios electrónicos de cada factura, mora (NDEB) y nota de crédito (NCRE). Un rechazado se corrige y se reintenta; uno con error temporal se reintenta solo.

@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import MarkdownSeguro from '~/components/MarkdownSeguro.vue'

@@ -80,11 +80,45 @@ const mapa = computed(() => {
 })
 
 /** Cliente importado (Mikrowisp): se muestra discreto junto al número, no como campo. */
-const origen = computed(() => (cliente.value ? origenCliente(cliente.value) : null))
+const origen = computed(() => (cliente.value ? origenExterno(cliente.value) : null))
 
-const camposPersonalizados = computed(() => Object.entries(cliente.value?.campos_personalizados ?? {})
-    .filter(([clave]) => !CAMPOS_DE_IMPORTACION.has(clave))
-    .map(([clave, valor]) => ({ clave, valor: typeof valor === 'string' ? valor : JSON.stringify(valor) })))
+/** Catálogo de campos personalizados (A1): etiqueta, tipo y orden de cada dato extra. */
+const catalogoCampos = shallowRef<CampoPersonalizado[] | null>(null)
+const problemaCatalogo = ref<Problem | null>(null)
+const cargandoCatalogo = ref(false)
+
+async function cargarCatalogo() {
+    cargandoCatalogo.value = true
+    problemaCatalogo.value = null
+    const resultado = await useCamposPersonalizados().listar()
+    cargandoCatalogo.value = false
+    catalogoCampos.value = resultado.ok ? resultado.data : null
+    problemaCatalogo.value = resultado.ok ? null : resultado.problema
+}
+
+/**
+ * Los campos activos del catálogo en su orden, con su etiqueta (vacíos con «—»); después los
+ * valores guardados que el catálogo no tiene activos (campo desactivado: su etiqueta; clave
+ * desconocida: la clave), sin repetir los del importador. Sin catálogo, solo los guardados por clave.
+ */
+const camposPersonalizados = computed(() => {
+    if (!catalogoCampos.value && !problemaCatalogo.value) {
+        // mientras carga el catálogo: sin etiquetas todavía, no se pintan claves técnicas
+        return []
+    }
+    const valores = cliente.value?.campos_personalizados ?? {}
+    const catalogo = catalogoCampos.value ?? []
+    const activos = catalogo.filter(campo => campo.activo)
+    const lista = activos.map(campo => ({ clave: campo.clave, etiqueta: campo.etiqueta, valor: valorCampoLegible(campo, valores[campo.clave]) }))
+    for (const [clave, valor] of Object.entries(valores)) {
+        if (CAMPOS_DE_IMPORTACION.has(clave) || activos.some(campo => campo.clave === clave)) {
+            continue
+        }
+        const campo = catalogo.find(c => c.clave === clave) ?? null
+        lista.push({ clave, etiqueta: campo?.etiqueta ?? clave, valor: valorCampoLegible(campo, valor) })
+    }
+    return lista
+})
 
 /**
  * La API junta el cliente y sus servicios, facturas, pagos y promesas (`cliente_id`); las
@@ -128,6 +162,7 @@ async function cargar() {
         return
     }
     cliente.value = resultado.data
+    void cargarCatalogo()
     void cargarZona(resultado.data.zona_id)
     void cargarServicios()
 }
@@ -228,7 +263,7 @@ onMounted(cargar)
                             name="i-lucide-import"
                             class="size-3.5 shrink-0"
                         />
-                        Importado de {{ origen.sistema }} · id externo <span class="font-mono">{{ origen.idExterno }}</span>
+                        {{ textoImportado(origen) }}
                     </p>
                 </div>
 
@@ -301,10 +336,12 @@ onMounted(cargar)
                         etiqueta="Canal preferido"
                         :valor="CANALES[cliente.canal_preferido]"
                     />
-                    <DatoFicha
-                        etiqueta="Telegram vinculado"
-                        :valor="cliente.telegram_chat_id ? 'Sí' : 'No'"
-                    />
+                    <DatoFicha etiqueta="Telegram">
+                        <ClienteTelegram
+                            :cliente="cliente"
+                            @cambiado="c => cliente = c"
+                        />
+                    </DatoFicha>
                     <DatoFicha
                         etiqueta="Zona"
                         :valor="zona ?? (cliente.zona_id ? `Zona #${cliente.zona_id}` : null)"
@@ -335,14 +372,21 @@ onMounted(cargar)
                     <DatoFicha
                         v-for="campo in camposPersonalizados"
                         :key="campo.clave"
-                        :etiqueta="campo.clave"
+                        :etiqueta="campo.etiqueta"
                         :valor="campo.valor"
+                        :data-prueba="`dato-campo-${campo.clave}`"
                     />
                     <DatoFicha
                         etiqueta="Última edición"
                         :valor="`${formatearFechaHora(cliente.updated_at)} · versión ${cliente.version}`"
                     />
                 </dl>
+                <ProblemaAlerta
+                    v-if="problemaCatalogo"
+                    :problema="problemaCatalogo"
+                    :reintentar="cargarCatalogo"
+                    :reintentando="cargandoCatalogo"
+                />
 
                 <ClienteResponsablePago
                     :cliente="cliente"

@@ -191,6 +191,27 @@ async function enviar(evento: FormSubmitEvent<SalidaPrograma>) {
                             class="w-full"
                         />
                     </UFormField>
+                    <div
+                        v-if="programa"
+                        class="flex flex-col gap-3 sm:col-span-2"
+                        data-prueba="programa-portal"
+                    >
+                        <USwitch
+                            v-model="estado.visible_portal"
+                            label="Mostrar los puntos en el portal del cliente"
+                            description="El cliente ve su saldo, movimientos y los premios del catálogo."
+                            data-prueba="programa-visible-portal"
+                        />
+                        <UFormField name="canje_portal">
+                            <USwitch
+                                v-model="estado.canje_portal"
+                                :disabled="!estado.visible_portal"
+                                label="Permitir canjear desde el portal"
+                                description="Solo los premios marcados «en el portal»."
+                                data-prueba="programa-canje-portal"
+                            />
+                        </UFormField>
+                    </div>
                     <UFormField
                         label="Términos"
                         name="terminos"

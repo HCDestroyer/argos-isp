@@ -46,11 +46,6 @@ export function entradaConexionRouter(router: Pick<RouterApi, 'api_url' | 'api_t
     }
 }
 
-/** Si el router tiene una CA cargada (sin leer ni mostrar su contenido). */
-export function tieneCa(router: Pick<RouterApi, 'api_ca'>): boolean {
-    return typeof router.api_ca === 'string' && router.api_ca.trim() !== ''
-}
-
 /** Cuerpo de `PUT /routers/:id` con la `version` leída: vacío → `null`; la CA solo si cambia. */
 export function cambiosConexionRouter(datos: SalidaConexionRouter, version: number): CambiosRouterApi {
     const cambios: CambiosRouterApi = {

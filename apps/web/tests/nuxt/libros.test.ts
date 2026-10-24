@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, romperCadenaFixture, sesionFixture, simularFalla } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { alterarArchivoLibroFixture } from '~~/fixtures/libros/rutas'
 import PaginaLibros from '~/pages/libros/index.vue'
