@@ -17,6 +17,7 @@ import {
     Bodega,
     ConteoInventario,
     ConteoInventarioDetalle,
+    InventarioValorizado,
     EquipoServicio,
     Existencia,
     MovimientoInventario,
@@ -53,6 +54,7 @@ import CerrarConteo from '#inventario/actions/cerrar_conteo'
 import CancelarConteo from '#inventario/actions/cancelar_conteo'
 import MarcarReparada from '#inventario/actions/marcar_reparada'
 import { empresaDeConteo, listarConteos, verConteo } from '#inventario/conteos'
+import { inventarioValorizado } from '#inventario/reportes'
 
 const acceso = accesoBodegas
 
@@ -389,6 +391,20 @@ const unidades: Ruta[] = [
             await exigirUnidad(ctx, id)
             return new MarcarReparada().execute({ ...cuerpo, unidad_id: id }, ctx.contextoAccion())
         },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/reportes/inventario-valorizado',
+        operacion: 'reportesInventarioValorizado',
+        resumen: 'Existencias y valor del inventario a una fecha, con el cuadre contra 1.1.14',
+        etiqueta: 'inventario',
+        permiso: 'inventario.ver',
+        query: v.valorizadoValidator,
+        descripcion:
+            'Por producto y bodega, reconstruido del kardex (movimientos con fecha ≤ la pedida; por defecto hoy). cuadre: por empresa, el kardex completo contra el saldo de 1.1.14 del libro a la misma fecha (no se filtra por bodega ni producto).',
+        respuesta: { status: 200, descripcion: 'Inventario valorizado', esquema: InventarioValorizado },
+        handler: (ctx, { query }) =>
+            inventarioValorizado(query, empresasDeLaLista(ctx.empresa, query.empresas), acceso(ctx)),
     }),
     definirRuta({
         metodo: 'get',

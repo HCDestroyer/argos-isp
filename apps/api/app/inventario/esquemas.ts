@@ -239,3 +239,34 @@ export const ConteoInventarioDetalle = definirEsquema(
         ),
     }),
 )
+
+export const InventarioValorizado = definirEsquema(
+    'InventarioValorizado',
+    objeto({
+        fecha,
+        data: lista(
+            objeto({
+                empresa_id: id,
+                producto_id: id,
+                producto_sku: texto,
+                producto_nombre: texto,
+                unidad: texto,
+                seguimiento: enumerado(SEGUIMIENTOS),
+                bodega_id: id,
+                bodega_nombre: texto,
+                cantidad: Cantidad,
+                valor: Dinero,
+                costo_promedio: nulable(CostoUnitario),
+            }),
+        ),
+        total: { ...Dinero, description: 'Valor de las filas' },
+        cuadre: lista(
+            objeto({
+                empresa_id: id,
+                valor_kardex: { ...Dinero, description: 'Kardex completo de la empresa a la fecha' },
+                saldo_libro: { ...Dinero, description: 'Saldo de 1.1.14 a la fecha' },
+                diferencia: { ...Dinero, description: 'saldo_libro − valor_kardex (0 si cuadra)' },
+            }),
+        ),
+    }),
+)

@@ -374,3 +374,13 @@ export const listarConteosValidator = vine.compile(
 )
 
 export const marcarReparadaValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+export const valorizadoValidator = vine.compile(
+    vine.object({
+        empresas: empresasConsulta(),
+        fecha: fechaIso().optional().meta({ description: 'Fecha de corte (por defecto hoy)' }),
+        bodega_id: idEntidad().optional(),
+        producto_id: idEntidad().optional(),
+        con_ceros: vine.boolean().optional().meta({ description: 'Incluir filas sin existencia ni valor' }),
+    }),
+)
