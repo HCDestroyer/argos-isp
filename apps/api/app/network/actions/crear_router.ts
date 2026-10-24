@@ -49,19 +49,28 @@ export function columnasRouter(datos: DatosRouter): Record<string, unknown> {
 }
 
 /**
- * Instantánea auditable: las credenciales se registran solo como "definida" o null; `api_ca` sale
- * en claro aquí y `registrarCambios` la guarda como `***` (`esCampoSensible`).
+ * Instantánea auditable: las credenciales y la CA se registran solo como "definida" o null (y
+ * `registrarCambios` las guarda como `***`, `esCampoSensible`). Telemetría (`en_linea`,
+ * `ultimo_contacto`) y derivados no se auditan.
  */
 export function auditableRouter(router: RouterVista) {
-    // modo_velocidad es derivado de control_velocidad: no se audita dos veces
     const {
         tiene_api_password: api,
         tiene_radius_secret: secreto,
+        tiene_api_ca: ca,
+        api_ca: mascara,
         modo_velocidad: derivado,
+        en_linea: enLinea,
+        ultimo_contacto: contacto,
         ...resto
     } = router
-    void derivado
-    return { ...resto, api_password: api ? 'definida' : null, radius_secret: secreto ? 'definido' : null }
+    void [mascara, derivado, enLinea, contacto]
+    return {
+        ...resto,
+        api_password: api ? 'definida' : null,
+        radius_secret: secreto ? 'definido' : null,
+        api_ca: ca ? 'definida' : null,
+    }
 }
 
 /** Alta de un router MikroTik (NAS RADIUS y API REST). */

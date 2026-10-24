@@ -124,6 +124,8 @@ export const clientes: Cliente[] = semillas.map((semilla, indice) => {
         referido_por_id: null,
         referido_empresa_id: null,
         codigos_referido: [],
+        // Como la API (`core.ids_externos`): el 8 vino de Mikrowisp; los demás se crearon en Argos.
+        externo: id === CLIENTE_IMPORTADO ? { sistema: 'mikrowisp', id: '1042' } : null,
         version: 1,
         created_at: creado,
         updated_at: creado,

@@ -3,6 +3,8 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
 import { empresasAsignadas } from '#core/alcance_empresas'
+import { ROLES_BASE } from '#core/permisos'
+import type { AlcancesToken } from '#core/acl'
 
 /**
  * Lecturas del ACL: usuarios con sus roles, roles con sus permisos, catálogo y tokens de API.
@@ -35,6 +37,8 @@ export interface RolVista {
     id: number
     nombre: string
     descripcion: string | null
+    /** rol base del seed (`ROLES_BASE`): sus permisos se definen en código y no se editan */
+    base: boolean
     permisos: string[]
     version: number
     created_at: string
@@ -45,7 +49,7 @@ export interface TokenApiVista {
     id: number
     usuario_id: number
     nombre: string
-    alcances: Record<string, unknown>
+    alcances: AlcancesToken
     ultimo_uso: string | null
     revocado_en: string | null
     created_at: string
@@ -124,7 +128,7 @@ export async function listarRoles(cliente: QueryClientContract = db.connection()
         .from('core.roles')
         .orderBy('nombre')
         .select('id', 'nombre', 'descripcion', 'version', 'created_at', 'updated_at')) as Array<
-        Omit<RolVista, 'permisos'>
+        Omit<RolVista, 'permisos' | 'base'>
     >
     const permisos = (await cliente
         .from('core.roles_permisos as rp')
@@ -133,6 +137,7 @@ export async function listarRoles(cliente: QueryClientContract = db.connection()
         .select('rp.role_id', 'p.nombre')) as Array<{ role_id: number; nombre: string }>
     return roles.map((rol) => ({
         ...rol,
+        base: Object.hasOwn(ROLES_BASE, rol.nombre),
         permisos: permisos.filter((p) => p.role_id === rol.id).map((p) => p.nombre),
     }))
 }

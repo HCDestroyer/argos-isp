@@ -1,4 +1,5 @@
 import { isIP } from 'node:net'
+import { sqlExterno, type IdExterno } from '#core/ids_externos'
 import type { TipoPlan } from '#network/tipos_plan'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
@@ -64,6 +65,8 @@ export interface ServicioVista {
      * Activo: `plan_id` ya es el temporal y `plan_original_id` es el plan base al que vuelve.
      */
     plan_temporal: PlanTemporalResumen | null
+    /** id en el sistema de origen (`core.ids_externos`, importador) o null */
+    externo: IdExterno | null
     version: number
     created_at: string
     updated_at: string
@@ -133,6 +136,7 @@ function columnas(cliente: QueryClientContract) {
         cliente.raw(
             `(SELECT jsonb_build_object('id', pt.id, 'plan_id', pt.plan_id, 'plan_original_id', pt.plan_original_id, 'inicio', pt.inicio, 'fin', pt.fin, 'estado', pt.estado, 'origen', pt.origen, 'origen_id', pt.origen_id, 'version', pt.version) FROM core.servicios_planes_temporales pt WHERE pt.servicio_id = s.id AND pt.estado IN ('programado', 'activo') LIMIT 1) AS plan_temporal`,
         ),
+        cliente.raw(sqlExterno('servicio', 's.id')),
         's.version',
         's.created_at',
         's.updated_at',
