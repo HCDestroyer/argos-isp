@@ -79,6 +79,16 @@ const datosProducto = {
         .nullable()
         .optional()
         .meta({ description: 'Existencia total bajo la cual se avisa (inventario.existencia_minima)' }),
+    precio_venta: vine
+        .string()
+        .trim()
+        .regex(/^\d{1,12}(\.\d{1,2})?$/)
+        .nullable()
+        .optional()
+        .meta({
+            description: 'Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)',
+            examples: ['450.00'],
+        }),
 }
 
 export const crearProductoValidator = vine.compile(
