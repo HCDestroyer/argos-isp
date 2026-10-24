@@ -52,6 +52,7 @@ import { rutasImplementacionesPlan } from './planes/implementaciones'
 import { rutasPlanes } from './planes/rutas'
 import { rutasNodosPortal } from './nodosPortal/rutas'
 import { rutasCamposPersonalizados } from './camposPersonalizados/rutas'
+import { rutasInventario } from './inventario/rutas'
 import { rutasProcesosFacturacion } from './facturacion/procesos'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
@@ -544,6 +545,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasImplementacionesPlan,
     ...rutasNodosPortal,
     ...rutasCamposPersonalizados,
+    ...rutasInventario,
     ...rutasProcesosFacturacion,
     ...rutasCanjesLealtad,
     ...rutasBancos,

@@ -87,6 +87,21 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         ],
     },
     {
+        id: 'inventario',
+        etiqueta: 'Inventario',
+        icono: 'i-lucide-package',
+        secciones: [
+            { id: 'existencias', etiqueta: 'Existencias', descripcion: 'Qué hay en cada bodega, con su costo promedio y valor; saldo inicial, consumo, traslado, ajuste y baja.', icono: 'i-lucide-package', ruta: '/inventario', permiso: 'inventario.ver' },
+            { id: 'kardex', etiqueta: 'Kardex', descripcion: 'Entradas y salidas de cada producto con su saldo corrido.', icono: 'i-lucide-list-ordered', ruta: '/inventario/kardex', permiso: 'inventario.ver' },
+            { id: 'productos', etiqueta: 'Productos', descripcion: 'Catálogo con SKU, seguimiento por cantidad o por serie y existencia mínima.', icono: 'i-lucide-box', ruta: '/inventario/productos', permiso: 'inventario.ver' },
+            { id: 'bodegas', etiqueta: 'Bodegas', descripcion: 'Bodegas y vehículos de técnico, con su tope.', icono: 'i-lucide-warehouse', ruta: '/inventario/bodegas', permiso: 'inventario.ver' },
+            { id: 'unidades', etiqueta: 'Equipos por serie', descripcion: 'Routers, ONU y antenas por serie o MAC: estado, dónde están e historial.', icono: 'i-lucide-barcode', ruta: '/inventario/unidades', permiso: 'inventario.ver' },
+            { id: 'por-recuperar', etiqueta: 'Por recuperar', descripcion: 'Equipos en comodato de servicios retirados.', icono: 'i-lucide-undo-2', ruta: '/inventario/por-recuperar', permiso: 'inventario.ver' },
+            { id: 'conteos', etiqueta: 'Conteos físicos', descripcion: 'Contar una bodega contra el kardex y ajustar faltantes y sobrantes.', icono: 'i-lucide-clipboard-list', ruta: '/inventario/conteos', permiso: 'inventario.ver' },
+            { id: 'valorizado', etiqueta: 'Inventario valorizado', descripcion: 'Existencias y valor a una fecha, con el cuadre contra 1.1.14.', icono: 'i-lucide-scale', ruta: '/inventario/valorizado', permiso: 'inventario.ver' },
+        ],
+    },
+    {
         id: 'bancos',
         etiqueta: 'Bancos',
         icono: 'i-lucide-landmark',

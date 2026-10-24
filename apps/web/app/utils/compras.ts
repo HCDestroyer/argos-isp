@@ -266,10 +266,20 @@ export interface LineaFormulario {
     diferir_meses: number | null
     clase_activo: ClaseActivo | null
     activo_tasa_anual: string
+    /** Inventario (A3): una línea `bien` con producto entra al kardex en su bodega. */
+    producto_id: number | null
+    bodega_id: number | null
+    cantidad: number | null
+    /** Seguimiento del producto elegido (`serie` pide las series o MAC). */
+    seguimiento: 'cantidad' | 'serie' | null
+    /** Series o MAC pegadas o escaneadas, una por línea (compra de equipos por serie). */
+    series: string
+    /** Equipos que se devuelven al proveedor (NCRE de equipos por serie). */
+    unidad_ids: number[]
 }
 
 export function lineaVacia(): LineaFormulario {
-    return { descripcion: '', tipo: 'servicio', cuenta: '', total: '', exento: false, diferir: false, diferir_meses: null, clase_activo: null, activo_tasa_anual: '' }
+    return { descripcion: '', tipo: 'servicio', cuenta: '', total: '', exento: false, diferir: false, diferir_meses: null, clase_activo: null, activo_tasa_anual: '', producto_id: null, bodega_id: null, cantidad: null, seguimiento: null, series: '', unidad_ids: [] }
 }
 
 export interface RetencionFormulario {
@@ -311,6 +321,12 @@ export function esquemaCompra(hoy: string, desdeEgreso: boolean) {
             diferir_meses: z.number().int().min(2, 'De 2 a 120 meses').max(120, 'De 2 a 120 meses').nullable(),
             clase_activo: z.enum(['equipo_red', 'computacion', 'mobiliario', 'vehiculos', 'herramientas', 'edificios', 'otros']).nullable(),
             activo_tasa_anual: z.string().trim().refine(v => v === '' || TASA.test(v), 'Por ciento con hasta 2 decimales'),
+            producto_id: z.number().int().positive().nullable(),
+            bodega_id: z.number().int().positive().nullable(),
+            cantidad: z.number().int('Solo enteros').min(1, 'Al menos 1').max(100000).nullable(),
+            seguimiento: z.enum(['cantidad', 'serie']).nullable(),
+            series: z.string(),
+            unidad_ids: z.array(z.number().int().positive()),
         })).min(1, 'Agrega al menos una línea'),
     }).superRefine((d, ctx) => {
         if (d.tipo_documento === 'NCRE' && d.compra_referencia_id === null) {
@@ -333,6 +349,21 @@ export function esquemaCompra(hoy: string, desdeEgreso: boolean) {
             }
             if (l.diferir && l.diferir_meses === null) {
                 ctx.addIssue({ code: 'custom', path: ['lineas', i, 'diferir_meses'], message: 'De 2 a 120 meses' })
+            }
+            if (l.producto_id !== null) {
+                if (l.tipo !== 'bien') {
+                    ctx.addIssue({ code: 'custom', path: ['lineas', i, 'tipo'], message: 'Una línea con producto del inventario es un bien' })
+                }
+                if (l.bodega_id === null) {
+                    ctx.addIssue({ code: 'custom', path: ['lineas', i, 'bodega_id'], message: 'Elige la bodega que recibe' })
+                }
+                const series = l.series.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean)
+                if (l.seguimiento === 'serie' && d.tipo_documento !== 'NCRE' && series.length !== (l.cantidad ?? 1)) {
+                    ctx.addIssue({ code: 'custom', path: ['lineas', i, 'series'], message: `Escribe ${l.cantidad ?? 1} series o MAC (una por equipo); van ${series.length}` })
+                }
+                if (l.seguimiento === 'serie' && d.tipo_documento === 'NCRE' && !l.unidad_ids.length) {
+                    ctx.addIssue({ code: 'custom', path: ['lineas', i, 'unidad_ids'], message: 'Elige los equipos que se devuelven' })
+                }
             }
         })
     })
@@ -373,7 +404,23 @@ function lineasCuerpo(e: EntradaCompra): CuerpoCompra['lineas'] {
         ...(l.diferir && l.diferir_meses !== null ? { diferir_meses: l.diferir_meses } : {}),
         ...(l.tipo === 'activo_fijo' && l.clase_activo ? { clase_activo: l.clase_activo } : {}),
         ...(l.tipo === 'activo_fijo' && l.activo_tasa_anual.trim() ? { activo_tasa_anual: l.activo_tasa_anual.trim() } : {}),
+        ...lineaInventario(l, e.tipo_documento),
     }))
+}
+
+/** Campos de inventario de una línea `bien` con producto (vacío sin producto: la compra de siempre). */
+function lineaInventario(l: EntradaCompra['lineas'][number], tipoDocumento: EntradaCompra['tipo_documento']) {
+    if (l.producto_id === null || l.tipo !== 'bien') {
+        return {}
+    }
+    const base = { producto_id: l.producto_id, bodega_id: l.bodega_id, cantidad: l.cantidad ?? 1 }
+    if (l.seguimiento !== 'serie') {
+        return base
+    }
+    if (tipoDocumento === 'NCRE') {
+        return { ...base, cantidad: l.unidad_ids.length, unidad_ids: l.unidad_ids }
+    }
+    return { ...base, unidades: l.series.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean).map(serieOMac) }
 }
 
 function comunCuerpo(e: EntradaCompra) {

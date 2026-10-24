@@ -10,6 +10,7 @@ import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, empresasDeLista, idDe, noEncontrado, numeroQuery, paginar, problema, problemaTipado, registrarAccion, usuariosPorToken } from '../comun'
+import { ventaDeCargo } from '../inventario/rutas'
 import { asientoFactura, fechaGuatemala } from '../libro/datos'
 import { COLUMNAS_EMPRESA, csv, totales } from '../reportes/rutas'
 import { asientoBonificacion, baseSinIva } from './datos'
@@ -196,6 +197,11 @@ function emitirCargoUnico(solicitud: SolicitudFixture): RespuestaFixture {
             created_at: momento,
             updated_at: momento,
         }
+        // Inventario (A3): lo vendido sale de su bodega con su costo, en la misma factura
+        const venta = ventaDeCargo(factura, cuerpo.lineas, false)
+        if (venta) {
+            return venta
+        }
         bd.facturas.push(factura)
         bd.lineasCargoUnico[id] = filas
         bd.asientos.push(asientoFactura(siguienteId(bd.asientos), factura))
@@ -205,6 +211,10 @@ function emitirCargoUnico(solicitud: SolicitudFixture): RespuestaFixture {
     }
 
     // Total Q0: nunca una factura de Q0, sino una bonificación (decisión del PM).
+    const regalo = ventaDeCargo({ id: 0, empresa_id: empresaFinal }, cuerpo.lineas, true)
+    if (regalo) {
+        return regalo
+    }
     if (!usuario?.permisos.includes('facturas.cargo_sin_costo')) {
         return problema(403, 'Sin permiso', 'Falta el permiso facturas.cargo_sin_costo.')
     }

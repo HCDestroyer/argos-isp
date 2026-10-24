@@ -9,6 +9,9 @@ import type Decimal from 'decimal.js'
  * con IVA y un descuento opcional por línea. Si todo queda descontado (Q 0.00) no hay factura sino
  * una **bonificación** (decisión del PM): pide motivo del catálogo, explicación y el permiso
  * `facturas.cargo_sin_costo`; sin él la API responde 403 y aquí se avisa antes.
+ * Venta de inventario (A3, fase C; con `inventario.ver`): elegir un producto llena el concepto (el
+ * suyo, si lo tiene) y la descripción, pide la bodega de donde sale y, por serie, el equipo; la API
+ * asienta el costo de ventas en la misma factura.
  */
 const props = defineProps<{
     /** Del servicio (su empresa, cliente y días de gracia) o de un cliente sin servicio. */
@@ -50,7 +53,55 @@ const itemsMotivo = computed<SelectItem[]>(() => motivos.value
 const total = computed(() => totalCargoUnico(estado.lineas))
 const sinCosto = computed(() => total.value?.isZero() ?? false)
 
+/* Inventario: productos, bodegas y equipos disponibles para vender. */
+const productos = shallowRef<Producto[]>([])
+const bodegas = shallowRef<Bodega[]>([])
+const equiposPorLinea = ref<Record<number, SelectItem[]>>({})
+const itemsProducto = computed<SelectItem[]>(() => [
+    { label: 'Sin producto', value: 0 },
+    ...productos.value.filter(p => empresaId.value === null || p.empresa_id === empresaId.value).map(p => ({ label: `${p.nombre} · ${p.sku}`, value: p.id, description: `${formatearCantidad(p.existencia, p.unidad)} en existencia` })),
+])
+const itemsBodega = computed<SelectItem[]>(() => bodegas.value.filter(b => empresaId.value === null || b.empresa_id === empresaId.value).map(b => ({ label: b.nombre, value: b.id })))
+
+async function cargarInventario() {
+    if (!puede('inventario.ver')) {
+        return
+    }
+    const [p, b] = await Promise.all([useProductos().activos(), useBodegas().activas()])
+    productos.value = p.ok ? p.data : []
+    bodegas.value = b.ok ? b.data : []
+}
+
+function elegirProducto(indice: number, valor: unknown) {
+    const linea = estado.lineas[indice]
+    if (!linea) {
+        return
+    }
+    const producto = productos.value.find(p => p.id === valor) ?? null
+    linea.producto_id = producto?.id ?? null
+    linea.seguimiento = producto?.seguimiento ?? null
+    linea.unidad_id = null
+    if (producto) {
+        linea.concepto_id = producto.concepto_cargo_id ?? linea.concepto_id
+        linea.descripcion = linea.descripcion || producto.nombre
+        if (producto.seguimiento === 'serie') {
+            linea.cantidad = '1'
+        }
+    }
+    void cargarEquipos(indice)
+}
+
+async function cargarEquipos(indice: number) {
+    const linea = estado.lineas[indice]
+    if (!linea?.producto_id || linea.seguimiento !== 'serie' || !linea.bodega_id) {
+        return
+    }
+    const resultado = await useUnidadesInventario().listar({ producto_id: linea.producto_id, bodega_id: linea.bodega_id, estado: 'disponible', limit: 200 })
+    equiposPorLinea.value = { ...equiposPorLinea.value, [indice]: resultado.ok ? resultado.data.data.map(u => ({ label: identificacionUnidad(u), value: u.id, description: CONDICIONES_UNIDAD[u.condicion] })) : [] }
+}
+
 async function cargarListas() {
+    void cargarInventario()
     cargandoListas.value = true
     problemaListas.value = null
     const todas = usuario.value?.alcance_global === true
@@ -179,6 +230,56 @@ async function enviar(evento: FormSubmitEvent<EntradaCargoUnico>) {
                                 @update:model-value="linea.concepto_id = typeof $event === 'number' ? $event : null"
                             />
                         </UFormField>
+                        <template v-if="productos.length">
+                            <UFormField
+                                label="Producto del inventario"
+                                :name="`lineas.${indice}.producto_id`"
+                                help="Opcional: sale de la bodega con su costo."
+                                class="sm:col-span-6"
+                            >
+                                <USelectMenu
+                                    :model-value="linea.producto_id ?? 0"
+                                    :items="itemsProducto"
+                                    value-key="value"
+                                    class="w-full"
+                                    :data-prueba="`cargo-producto-${indice + 1}`"
+                                    @update:model-value="elegirProducto(indice, $event)"
+                                />
+                            </UFormField>
+                            <UFormField
+                                v-if="linea.producto_id"
+                                label="Bodega"
+                                :name="`lineas.${indice}.bodega_id`"
+                                required
+                                class="sm:col-span-3"
+                            >
+                                <USelect
+                                    :model-value="linea.bodega_id ?? undefined"
+                                    :items="itemsBodega"
+                                    placeholder="De dónde sale"
+                                    class="w-full"
+                                    :data-prueba="`cargo-bodega-${indice + 1}`"
+                                    @update:model-value="linea.bodega_id = typeof $event === 'number' ? $event : null; cargarEquipos(indice)"
+                                />
+                            </UFormField>
+                            <UFormField
+                                v-if="linea.producto_id && linea.seguimiento === 'serie'"
+                                label="Equipo"
+                                :name="`lineas.${indice}.unidad_id`"
+                                required
+                                class="sm:col-span-3"
+                            >
+                                <USelectMenu
+                                    :model-value="linea.unidad_id ?? undefined"
+                                    :items="equiposPorLinea[indice] ?? []"
+                                    value-key="value"
+                                    placeholder="Serie o MAC"
+                                    class="w-full"
+                                    :data-prueba="`cargo-unidad-${indice + 1}`"
+                                    @update:model-value="linea.unidad_id = typeof $event === 'number' ? $event : null"
+                                />
+                            </UFormField>
+                        </template>
                         <UFormField
                             label="Descripción"
                             :name="`lineas.${indice}.descripcion`"

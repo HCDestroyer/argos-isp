@@ -13,6 +13,8 @@ export const usuarios: Schema<'Usuario'>[] = [
     { id: meAdmin.id, nombre: meAdmin.nombre, email: meAdmin.email, activo: true, roles: [{ role_id: 1, rol: 'admin', alcance_tipo: null, alcance_id: null }], alcance_global: true, empresas: [], version: 1, created_at: creado, updated_at: creado },
     { id: meCajero.id, nombre: meCajero.nombre, email: meCajero.email, activo: true, roles: [{ role_id: 2, rol: 'cajero', alcance_tipo: 'caja', alcance_id: 1 }], alcance_global: false, empresas: [1], version: 1, created_at: creado, updated_at: creado },
     { id: 3, nombre: 'Sofía Soporte', email: 'soporte@fibradelsur.gt', activo: true, roles: [{ role_id: 3, rol: 'soporte', alcance_tipo: null, alcance_id: null }], alcance_global: false, empresas: [2], version: 1, created_at: creado, updated_at: creado },
+    // Técnico con su bodega en el vehículo (inventario, `fixtures/inventario/datos.ts`)
+    { id: 4, nombre: 'Pedro Técnico', email: 'pedro.tecnico@argos.test', activo: true, roles: [{ role_id: 4, rol: 'tecnico', alcance_tipo: null, alcance_id: null }], alcance_global: false, empresas: [1], version: 1, created_at: creado, updated_at: creado },
 ]
 
 /**

@@ -45,6 +45,7 @@ import { planes, planesPorRouter } from './planes/datos'
 import { implementacionesPlan } from './planes/implementaciones'
 import { nodosPortal } from './nodosPortal/datos'
 import { camposPersonalizados } from './camposPersonalizados/datos'
+import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales } from './inventario/datos'
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, ipv6Pools, redesIpv4, routers } from './routers/datos'
@@ -151,6 +152,12 @@ interface BaseFixtures {
     nodosPortal: Schema<'NodoPortal'>[]
     /** Catálogo de campos personalizados del cliente (A1). */
     camposPersonalizados: Schema<'CampoPersonalizado'>[]
+    /** Inventario interno (A3, `contratos/inventario.md`): productos, bodegas, kardex, unidades y conteos. */
+    productos: Schema<'Producto'>[]
+    bodegas: Schema<'Bodega'>[]
+    movimientosInventario: Schema<'MovimientoInventario'>[]
+    unidadesInventario: Schema<'UnidadInventario'>[]
+    conteosInventario: Schema<'ConteoInventarioDetalle'>[]
     /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
     planesTemporales: Schema<'PlanTemporal'>[]
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
@@ -323,6 +330,11 @@ function inicial(): BaseFixtures {
         planesTemporales: [],
         nodosPortal,
         camposPersonalizados,
+        productos: productosIniciales,
+        bodegas: bodegasIniciales,
+        movimientosInventario: movimientosIniciales(),
+        unidadesInventario: unidadesIniciales(),
+        conteosInventario: conteosIniciales(),
         conciliacionesPasarela,
         roles,
         tokensApi,

@@ -657,6 +657,12 @@ onMounted(cargar)
                 @cambiado="lineaTiempo?.recargar()"
             />
 
+            <ServicioEquipos
+                v-if="puede('inventario.ver')"
+                :servicio="servicio"
+                @cambiado="lineaTiempo?.recargar()"
+            />
+
             <section
                 class="flex flex-col gap-3"
                 aria-label="Historial de asignaciones"
