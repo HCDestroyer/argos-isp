@@ -12,6 +12,37 @@ import { hoyGuatemala } from '#ledger/fechas'
 import { ERROR_DOCUMENTO_ANULADO, dteVigente, finPlazoAnulacion, type DteFila } from '#fiscal/fel/dte'
 import { AnulacionFueraDePlazo, DteEnProceso } from '#fiscal/fel/errores'
 import { diferimientoDeFactura } from '#ledger/diferidos'
+import { CUENTAS } from '#ledger/plan_cuentas'
+import { cierresApertura } from '#ledger/apertura'
+
+/**
+ * H50 (decisión del líder): con la apertura ya cerrada, anular una importada (`CxC / 2.9.01`) la
+ * devolvería a 2.9.01 y reabriría el saldo trasladado a patrimonio. Lo correcto es una rebaja de
+ * ventas del periodo: se acredita con una nota de crédito (IVA a 2.1.02, base a ingresos). 409
+ * `importada_con_apertura_cerrada`. Con la apertura abierta, anularla corrige la importación (vuelve
+ * a 2.9.01, que todavía no se trasladó).
+ */
+async function exigirAnulableImportada(t: Transaccion, facturaId: number, empresaId: number) {
+    const importada = await t.trx
+        .from('ledger.asientos as a')
+        .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
+        .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        .whereIn('a.origen_tipo', ['factura', 'mora'])
+        .where('a.origen_id', facturaId)
+        .whereNull('a.reversa_de')
+        .where('c.codigo', CUENTAS.SALDOS_APERTURA)
+        .where('m.haber', '>', 0)
+        .select('a.id')
+        .first()
+    if (!importada) return
+    const cierres = await cierresApertura(t.trx, empresaId)
+    if (cierres.length === 0) return
+    throw new Conflicto(
+        `La factura ${facturaId} es importada y la apertura ya se cerró: acredítala con una nota de crédito (rebaja de ventas del periodo)`,
+        'importada_con_apertura_cerrada',
+        'Importada con la apertura cerrada',
+    )
+}
 
 /** Bloquea el DTE sin esperar: si el worker lo está enviando, 409 `dte_en_proceso`. */
 async function bloquearDte(t: Transaccion, dteId: number): Promise<void> {
@@ -274,6 +305,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 { trx: t.trx },
             )
         }
+        for (const f of anular) await exigirAnulableImportada(t, f.id, Number(f.empresa_id))
         for (const f of anular) {
             const asientos = (await t.trx
                 .from('ledger.asientos as a')

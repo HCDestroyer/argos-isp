@@ -17,14 +17,14 @@ import { hoyGuatemala } from '#ledger/fechas'
  * registra contabilidad (`egresos.registrar_sin_limite`).
  */
 
-async function cajeroConCaja(empresaId: number, admin: ReturnType<typeof contextoPrueba>) {
+async function cajeroConCaja(empresaId: number, admin: ReturnType<typeof contextoPrueba>, fondo = '3000.00') {
     const cajero = await usuarioConRoles(['cajero'])
     const ctx = contextoPrueba(cajero.usuario.id)
     const caja = await new CrearCaja().execute(
         { nombre: unico('Caja'), cajero_id: cajero.usuario.id, empresa_id: empresaId },
         admin,
     )
-    await new AbrirCaja().execute({ caja_id: caja.id, fondo_inicial: '3000.00' }, ctx)
+    await new AbrirCaja().execute({ caja_id: caja.id, fondo_inicial: fondo }, ctx)
     return { ...cajero, ctx, cajaId: caja.id }
 }
 
@@ -93,6 +93,26 @@ test.group('Libro · egresos de caja del cajero (decisión del PM)', (group) => 
         // el cierre de caja los descuenta del esperado (contabilidad los revisa ahí)
         const cerrada = await new CerrarCaja().execute({ caja_id: uno.cajaId, contado: '800.00' }, uno.ctx)
         assert.equal(cerrada.esperado, '800.00')
+        await afirmarLibro(assert, [e.B, e.C])
+    })
+
+    test('H52 y H53: ni fecha anterior a la apertura del turno ni más efectivo del que tiene', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const uno = await cajeroConCaja(e.B, e.ctx, '100.00')
+        const ayer = await errorDe(
+            new RegistrarEgreso().execute({ ...egreso(uno.cajaId, '10.00'), fecha: '2026-01-02' }, uno.ctx),
+        )
+        assert.deepEqual([ayer.status, ayer.reglas], [422, ['anterior_al_turno']])
+        await new RegistrarEgreso().execute(egreso(uno.cajaId, '60.00'), uno.ctx)
+        const sinEfectivo = await errorDe(new RegistrarEgreso().execute(egreso(uno.cajaId, '40.01'), uno.ctx))
+        assert.deepInclude(sinEfectivo, { status: 422, codigo: 'efectivo_insuficiente' })
+        assert.include(sinEfectivo.detalle, 'Q40.00')
+        // justo lo que queda sí
+        await new RegistrarEgreso().execute(egreso(uno.cajaId, '40.00'), uno.ctx)
+        const cerrada = await new CerrarCaja().execute({ caja_id: uno.cajaId, contado: '0.00' }, uno.ctx)
+        assert.equal(cerrada.esperado, '0.00')
         await afirmarLibro(assert, [e.B, e.C])
     })
 

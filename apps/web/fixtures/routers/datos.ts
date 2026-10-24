@@ -6,6 +6,8 @@ const meta = { version: 1, created_at: creado, updated_at: creado }
 const conexion = { api_url: null, api_tls_verificar: true, api_ca: null, dhcp_servidor: null, interfaz_clientes: null }
 // Multiempresa (A1): sin empresa sugerida, como devuelve la API por defecto.
 const empresa = { empresa_sugerida_id: null }
+// Contacto (A1): sin fuente periódica que lo mida, como devuelve la API por defecto.
+export const SIN_CONTACTO = { en_linea: null, ultimo_contacto: null }
 
 export const routers: Schema<'Router'>[] = [
     {
@@ -23,6 +25,7 @@ export const routers: Schema<'Router'>[] = [
         modo_velocidad: 'simple',
         activo: true,
         ...conexion,
+        ...SIN_CONTACTO,
         ...empresa,
         ...meta,
     },
@@ -41,6 +44,7 @@ export const routers: Schema<'Router'>[] = [
         modo_velocidad: 'pcq',
         activo: true,
         ...conexion,
+        ...SIN_CONTACTO,
         // Multiempresa: los servicios nuevos de este router se sugieren a Fibra del Sur.
         empresa_sugerida_id: 2,
         ...meta,
@@ -60,6 +64,7 @@ export const routers: Schema<'Router'>[] = [
         modo_velocidad: 'simple',
         activo: false,
         ...conexion,
+        ...SIN_CONTACTO,
         ...empresa,
         ...meta,
     },

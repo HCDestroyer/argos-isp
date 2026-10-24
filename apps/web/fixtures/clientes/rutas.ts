@@ -18,9 +18,10 @@ import {
     versionCambiada,
 } from '../comun'
 import { estadoCuentaDe } from './estado-cuenta'
+import { codigoCliente } from './datos'
 
 type Cliente = Schema<'Cliente'>
-type CamposCliente = Omit<Cliente, 'id' | 'version' | 'created_at' | 'updated_at' | 'telegram_chat_id'>
+type CamposCliente = Omit<Cliente, 'id' | 'codigo' | 'version' | 'created_at' | 'updated_at' | 'telegram_chat_id'>
 
 const TIPOS_DOCUMENTO: readonly TipoDocumentoFiscal[] = ['nit', 'cui', 'pasaporte', 'cf']
 const CAMPOS_TEXTO = ['nit_cui', 'nombre_fiscal', 'direccion_fiscal', 'email', 'telefono', 'movil', 'direccion', 'coordenadas'] as const
@@ -125,6 +126,10 @@ const VACIO: CamposCliente = {
     pais_fiscal: 'GT',
     agente_retencion_iva: false,
     sector_publico: false,
+    codigo_externo: null,
+    referido_por_id: null,
+    referido_empresa_id: null,
+    codigos_referido: [],
 }
 
 const GRAVEDAD: Record<Schema<'Servicio'>['estado'], number> = { suspendido: 3, limitado: 2, activo: 1, retirado: 0 }
@@ -315,9 +320,11 @@ export const rutasClientes: RutasFixture = {
             return datosInvalidos(errores)
         }
         const momento = ahora()
+        const id = siguienteId(bd.clientes)
         const cliente: Cliente = {
             ...aplicar(VACIO, cuerpo),
-            id: siguienteId(bd.clientes),
+            id,
+            codigo: codigoCliente(id),
             telegram_chat_id: null,
             version: 1,
             created_at: momento,

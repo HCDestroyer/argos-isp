@@ -62,10 +62,7 @@ export interface OpcionesVerificacion {
  * aquí (y la prueba deja de ser `.fails`): desde ese día los revisa toda prueba que llame
  * `verificarLibro`.
  */
-export const HALLAZGOS_ABIERTOS: Record<string, string> = {
-    '9.nota_sobre_importada_con_iva_residual':
-        'H27: una nota de crédito por el total de una factura importada con IVA se guarda con IVA 0 (el asiento de la importada es CxC / 2.9.01 sin IVA); decisión pendiente del PM',
-}
+export const HALLAZGOS_ABIERTOS: Record<string, string> = {}
 
 type Fila = Record<string, unknown>
 
@@ -809,7 +806,7 @@ async function verificarLibroCon(
           GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
     )
     await revisar(
-        '9.nota_sobre_importada_con_iva_residual (H27: el mismo criterio sobre una factura importada; su asiento es CxC / 2.9.01 sin IVA y la nota se guarda con IVA 0, pendiente de la decisión del PM)',
+        '9.nota_sobre_importada_con_iva_residual (H27, arreglado: el mismo criterio sobre una factura importada; sus notas llevan el IVA proporcional de la factura contra 2.1.02)',
         `SELECT f.id, f.total::text, f.iva::text, sum(n.monto)::text AS notas, sum(n.iva)::text AS iva_notas,
                 count(n.id)::int AS cantidad_notas
            FROM billing.facturas f JOIN billing.notas_credito n ON n.factura_id = f.id AND NOT ${anulada('n')}
@@ -2700,13 +2697,14 @@ async function verificarLibroCon(
           WHERE coalesce(e.monto, 0) <> coalesce(l.monto, 0)`,
     )
     await revisar(
-        '14.movimiento_de_lealtad_mal_contabilizado (con valor: un asiento lealtad de su empresa por el valor; acumulación y ajuste+ 4.1.05 / 2.1.10, vencimiento (y canje, fase 2) 2.1.10 / 4.1.06, reverso y ajuste− 2.1.10 / 4.1.05; sin valor, sin asiento)',
+        '14.movimiento_de_lealtad_mal_contabilizado (con valor: un asiento lealtad de su empresa por el valor; acumulación y ajuste+ 4.1.05 / 2.1.10, vencimiento (y canje, fase 2) 2.1.10 / 4.1.06, reverso y ajuste− 2.1.10 / 4.1.05, reverso+ de un canje (espejo de su salida, lealtad §15.2) 4.1.06 / 2.1.10; sin valor, sin asiento)',
         `WITH x AS (
              SELECT lm.id, lm.empresa_id, lm.tipo, lm.puntos, lm.valor, lm.asiento_id, a.empresa_id AS empresa_asiento,
                     a.origen_tipo, a.origen_id,
                     (SELECT count(*) FROM ledger.movimientos m WHERE m.asiento_id = a.id) AS n,
                     (SELECT coalesce(sum(m.debe), 0) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                      WHERE m.asiento_id = a.id AND c.codigo = CASE WHEN lm.puntos > 0 THEN '${DIFERIDOS_LEALTAD}' ELSE '${PASIVO_LEALTAD}' END) AS debe,
+                      WHERE m.asiento_id = a.id AND c.codigo = CASE WHEN lm.puntos > 0 AND lm.tipo = 'reverso' THEN '${INGRESOS_PUNTOS}'
+                                                                     WHEN lm.puntos > 0 THEN '${DIFERIDOS_LEALTAD}' ELSE '${PASIVO_LEALTAD}' END) AS debe,
                     (SELECT coalesce(sum(m.haber), 0) FROM ledger.movimientos m JOIN ledger.cuentas c ON c.id = m.cuenta_id
                       WHERE m.asiento_id = a.id AND c.codigo = CASE WHEN lm.puntos > 0 THEN '${PASIVO_LEALTAD}'
                                                                      WHEN lm.tipo IN ('vencimiento', 'canje') THEN '${INGRESOS_PUNTOS}'
@@ -2764,10 +2762,38 @@ async function verificarLibroCon(
                              WHERE c.movimiento_id = lm.id AND (l.empresa_id <> lm.empresa_id OR l.cliente_id <> lm.cliente_id)))`,
     )
     await revisar(
-        '14.lote_revertido_dos_veces (a lo sumo un reverso por lote; el reverso nunca es lote)',
+        '14.lote_revertido_dos_veces (a lo sumo un reverso por lote; el reverso de un lote nunca es lote; los reversos+ de un canje se validan en 14.canje_revertido_mal)',
         `SELECT reversa_de, count(*)::int AS reversos FROM lealtad.movimientos
           WHERE reversa_de IS NOT NULL AND ${E('empresa_id')}
+            AND NOT (tipo = 'reverso' AND puntos > 0 AND origen_tipo = 'canje')
           GROUP BY reversa_de HAVING count(*) > 1 OR bool_or(puntos > 0)`,
+    )
+    await revisar(
+        '14.canje_revertido_mal (reverso+ de un canje, lealtad §15.2: reversa_de = la salida canje de ese canje, de su empresa y cliente, con el canje revertido; uno por lote consumido (clave reverso:canje:<canje>:lote:<lote>) con los puntos, el valor y el vencimiento de ese consumo; Σ = la salida)',
+        `WITH r AS (
+             SELECT r.id, r.empresa_id, r.cliente_id, r.origen_id, r.reversa_de, r.puntos, r.valor, r.vence_en,
+                    nullif(split_part(r.clave_unica, ':lote:', 2), '')::bigint AS lote_id
+               FROM lealtad.movimientos r
+              WHERE r.tipo = 'reverso' AND r.puntos > 0 AND ${E('r.empresa_id')}
+         )
+         SELECT 'reverso' AS que, r.id, r.reversa_de, r.origen_id AS canje_id, r.lote_id, r.puntos, r.valor::text,
+                s.tipo AS tipo_salida, cj.estado AS estado_canje, c.puntos AS puntos_consumo, c.valor::text AS valor_consumo
+           FROM r
+           LEFT JOIN lealtad.movimientos s ON s.id = r.reversa_de
+           LEFT JOIN lealtad.canjes cj ON cj.id = r.origen_id
+           LEFT JOIN lealtad.consumos c ON c.movimiento_id = r.reversa_de AND c.lote_id = r.lote_id
+           LEFT JOIN lealtad.movimientos l ON l.id = r.lote_id
+          WHERE (SELECT origen_tipo FROM lealtad.movimientos WHERE id = r.id) <> 'canje'
+             OR s.id IS NULL OR s.tipo <> 'canje' OR s.origen_tipo <> 'canje' OR s.origen_id <> r.origen_id
+             OR s.empresa_id <> r.empresa_id OR s.cliente_id <> r.cliente_id
+             OR cj.id IS NULL OR cj.estado <> 'revertido' OR cj.movimiento_id IS DISTINCT FROM s.id
+             OR c.id IS NULL OR c.puntos <> r.puntos OR c.valor <> r.valor OR l.vence_en IS DISTINCT FROM r.vence_en
+         UNION ALL
+         SELECT 'salida', s.id, NULL, s.origen_id, NULL, sum(r.puntos)::int, sum(r.valor)::text, s.tipo, NULL,
+                s.puntos, s.valor::text
+           FROM r JOIN lealtad.movimientos s ON s.id = r.reversa_de
+          GROUP BY s.id, s.origen_id, s.tipo, s.puntos, s.valor
+         HAVING sum(r.puntos) <> -s.puntos OR sum(r.valor) <> s.valor OR count(*) <> count(DISTINCT r.lote_id)`,
     )
 
     /*

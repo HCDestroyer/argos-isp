@@ -7342,6 +7342,562 @@
         "x-implementado": true
       }
     },
+    "/api/v1/campos-personalizados": {
+      "get": {
+        "operationId": "camposPersonalizadosListar",
+        "summary": "Catálogo de campos personalizados del cliente",
+        "description": "Qué claves de `Cliente.campos_personalizados` existen, su etiqueta, tipo, opciones, si son requeridas y su orden en la ficha. `?activo=true` para el formulario.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Campos personalizados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CampoPersonalizado"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso clientes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "clientes.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "camposPersonalizadosCrear",
+        "summary": "Agregar un campo personalizado del cliente",
+        "description": "409 `campo_duplicado` si la clave ya existe. `clave` y `tipo` no cambian después.",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clave": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,39}$",
+                    "description": "Clave en `campos_personalizados` (snake_case, hasta 40); no cambia después"
+                  },
+                  "etiqueta": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "texto",
+                      "numero",
+                      "fecha",
+                      "booleano",
+                      "opcion"
+                    ],
+                    "description": "texto (hasta 500), numero, fecha (AAAA-MM-DD), booleano u opcion; no cambia después"
+                  },
+                  "opciones": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "maxItems": 50,
+                    "description": "Valores permitidos: obligatorio (al menos uno) con opcion, prohibido en los demás"
+                  },
+                  "requerido": {
+                    "type": "boolean"
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Orden en la ficha (menor primero)"
+                  }
+                },
+                "required": [
+                  "clave",
+                  "etiqueta",
+                  "tipo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Campo creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.crear; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/campos-personalizados/{id}": {
+      "put": {
+        "operationId": "camposPersonalizadosEditar",
+        "summary": "Editar etiqueta, opciones, obligatoriedad u orden de un campo personalizado",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "etiqueta": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "opciones": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "maxItems": 50,
+                    "description": "Valores permitidos: obligatorio (al menos uno) con opcion, prohibido en los demás"
+                  },
+                  "requerido": {
+                    "type": "boolean"
+                  },
+                  "orden": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Orden en la ficha (menor primero)"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Campo actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/campos-personalizados/{id}/activar": {
+      "post": {
+        "operationId": "camposPersonalizadosActivar",
+        "summary": "Volver a activar un campo personalizado",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Campo activado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.activar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.activar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/campos-personalizados/{id}/desactivar": {
+      "post": {
+        "operationId": "camposPersonalizadosDesactivar",
+        "summary": "Desactivar un campo personalizado (no se borra; los valores se conservan)",
+        "tags": [
+          "clientes"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Campo desactivado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampoPersonalizado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso campos_personalizados.desactivar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "campos_personalizados.desactivar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/cartera/castigos": {
       "get": {
         "operationId": "carteraCastigos",
@@ -8168,9 +8724,13 @@
                         },
                         {
                           "type": "object"
+                        },
+                        {
+                          "type": "null"
                         }
                       ]
-                    }
+                    },
+                    "description": "Valores por clave del catálogo (GET /campos-personalizados): cada uno de su tipo; null = vacío. Al editar se reemplaza completo. Claves fuera del catálogo se guardan tal cual"
                   },
                   "canal_preferido": {
                     "type": "string",
@@ -8482,9 +9042,13 @@
                         },
                         {
                           "type": "object"
+                        },
+                        {
+                          "type": "null"
                         }
                       ]
-                    }
+                    },
+                    "description": "Valores por clave del catálogo (GET /campos-personalizados): cada uno de su tipo; null = vacío. Al editar se reemplaza completo. Claves fuera del catálogo se guardan tal cual"
                   },
                   "canal_preferido": {
                     "type": "string",
@@ -41078,6 +41642,61 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notificaciones/eventos": {
+      "get": {
+        "operationId": "notificacionesEventosListar",
+        "summary": "Eventos con plantilla y sus variables Mustache (con ejemplos)",
+        "description": "Avisos al cliente, recordatorios y alertas al equipo. Las variables son las que arma el aviso real para ese evento; la empresa es la activa (o la principal), con sus datos reales.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventoNotificacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/notificaciones/plantillas": {
       "get": {
         "operationId": "notificacionesPlantillasListar",
@@ -41260,6 +41879,114 @@
           }
         },
         "x-permiso": "notificaciones.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/plantillas/vista-previa": {
+      "post": {
+        "operationId": "notificacionesPlantillasVistaPrevia",
+        "summary": "Vista previa de una plantilla con datos de ejemplo del evento (no guarda)",
+        "description": "Renderiza asunto y cuerpo como el envío real, con el ejemplo de `GET /notificaciones/eventos` y la empresa activa. 422 si el evento no tiene plantilla o el Mustache no es válido. `variables_desconocidas` lista lo que la plantilla usa y el evento no trae.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Evento de la plantilla (`GET /notificaciones/eventos`)"
+                  },
+                  "canal": {
+                    "type": "string",
+                    "enum": [
+                      "correo",
+                      "telegram",
+                      "whatsapp"
+                    ]
+                  },
+                  "asunto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Asunto Mustache (en Telegram va como primera línea del mensaje)"
+                  },
+                  "cuerpo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "description": "Cuerpo Mustache sin guardar"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "canal",
+                  "cuerpo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaPlantilla"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
         "x-implementado": true
       }
     },
@@ -46656,7 +47383,7 @@
       "post": {
         "operationId": "portalSubirComprobante",
         "summary": "El cliente sube el comprobante de un depósito, transferencia, ACH o remesa",
-        "description": "`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo `cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` (`RegistrarComprobante` de A3) con canal `portal`, actor `cliente` con la sesión o `sistema` por la IP: queda `pendiente` hasta que el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente (`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo `cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -47827,7 +48554,7 @@
       "post": {
         "operationId": "portalIniciarPago",
         "summary": "Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor",
-        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 `pago_de_varias_empresas` (se paga un servicio o las facturas de una empresa a la vez). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
+        "description": "Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal`, actor `cliente` con la sesión o `sistema` por la IP. Sin `facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 `pago_de_varias_empresas` (se paga un servicio o las facturas de una empresa a la vez). 503 `pasarela_no_configurada` sin pasarela. La pasarela devuelve al cliente a `<PORTAL_URL_PUBLICA>/corte?pago=<id>&estado=<pagado|fallido>` (`url_retorno`). Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`. Contrato en `.claude/integration/contratos/pago-en-linea.md`. El pago lo registra el webhook firmado de la pasarela (A3), que reactiva el servicio: la página de corte lo ve con `GET /portal/estado`.",
         "tags": [
           "portal"
         ],
@@ -53469,6 +54196,10 @@
                         "cajas.crear",
                         "cajas.depositar",
                         "cajas.ver",
+                        "campos_personalizados.activar",
+                        "campos_personalizados.crear",
+                        "campos_personalizados.desactivar",
+                        "campos_personalizados.editar",
                         "cartera.castigar",
                         "cartera.provisionar",
                         "cierres.revisar_check",
@@ -53787,6 +54518,10 @@
                         "cajas.crear",
                         "cajas.depositar",
                         "cajas.ver",
+                        "campos_personalizados.activar",
+                        "campos_personalizados.crear",
+                        "campos_personalizados.desactivar",
+                        "campos_personalizados.editar",
                         "cartera.castigar",
                         "cartera.provisionar",
                         "cierres.revisar_check",
@@ -60399,6 +61134,10 @@
                             "cajas.crear",
                             "cajas.depositar",
                             "cajas.ver",
+                            "campos_personalizados.activar",
+                            "campos_personalizados.crear",
+                            "campos_personalizados.desactivar",
+                            "campos_personalizados.editar",
                             "cartera.castigar",
                             "cartera.provisionar",
                             "cierres.revisar_check",
@@ -62414,6 +63153,10 @@
           "motivo_detalle",
           "plan_id",
           "estado",
+          "bloqueo",
+          "bloqueado_en",
+          "primer_periodo",
+          "cobrado_desde",
           "alta_en",
           "baja_en",
           "motivo_baja",
@@ -66636,6 +67379,80 @@
           }
         }
       },
+      "CampoPersonalizado": {
+        "type": "object",
+        "required": [
+          "id",
+          "clave",
+          "etiqueta",
+          "tipo",
+          "opciones",
+          "requerido",
+          "orden",
+          "activo",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "clave": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
+            "description": "Clave en `Cliente.campos_personalizados`; no cambia"
+          },
+          "etiqueta": {
+            "type": "string",
+            "description": "Nombre que ve el operador en la ficha y el formulario"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "texto",
+              "numero",
+              "fecha",
+              "booleano",
+              "opcion"
+            ],
+            "description": "texto (string, hasta 500), numero (number), fecha (string AAAA-MM-DD), booleano, opcion (string de `opciones`); no cambia"
+          },
+          "opciones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Valores permitidos (solo opcion; vacía en los demás)"
+          },
+          "requerido": {
+            "type": "boolean",
+            "description": "Se exige con valor al crear un cliente y al guardar sus campos personalizados"
+          },
+          "orden": {
+            "type": "integer",
+            "description": "Orden en la ficha (menor primero)"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Inactivo: no se muestra ni se valida; los valores guardados se conservan"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Control optimista: envíala al editar"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CanjeConexionHorus": {
         "type": "object",
         "required": [
@@ -67673,11 +68490,18 @@
         "type": "object",
         "required": [
           "id",
+          "codigo",
+          "codigo_externo",
           "nombre",
           "tipo",
+          "tipo_documento_fiscal",
           "nit_cui",
+          "nit_cui_invalido",
           "nombre_fiscal",
           "direccion_fiscal",
+          "pais_fiscal",
+          "agente_retencion_iva",
+          "sector_publico",
           "email",
           "telefono",
           "movil",
@@ -67689,6 +68513,9 @@
           "telegram_chat_id",
           "responsable_pago_id",
           "responsable_pago_nombre",
+          "referido_por_id",
+          "referido_empresa_id",
+          "codigos_referido",
           "version",
           "created_at",
           "updated_at"
@@ -67701,7 +68528,7 @@
           "codigo": {
             "type": "string",
             "pattern": "^C-\\d{6,}$",
-            "description": "Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan"
+            "description": "Código estable del cliente (`C-000455`): derivado del id al crear, único e inmutable"
           },
           "codigo_externo": {
             "type": [
@@ -67805,7 +68632,8 @@
           },
           "campos_personalizados": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Valores por clave del catálogo (GET /campos-personalizados); puede traer claves fuera del catálogo (importador, campos desactivados)"
           },
           "canal_preferido": {
             "type": "string",
@@ -69647,7 +70475,8 @@
               "usuario",
               "password",
               "remitente",
-              "nombre_visible"
+              "nombre_visible",
+              "contabilidad"
             ],
             "properties": {
               "activo": {
@@ -69708,7 +70537,7 @@
                   "string",
                   "null"
                 ],
-                "description": "Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada); direcciones separadas por coma. La API siempre lo devuelve"
+                "description": "Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada, libro y cierres); direcciones separadas por coma"
               }
             }
           },
@@ -73361,6 +74190,7 @@
           "horario",
           "instrucciones_pago",
           "color_marca",
+          "pais",
           "regimen_isr",
           "codigo_establecimiento",
           "logo_url",
@@ -73461,7 +74291,7 @@
           "pais": {
             "type": "string",
             "pattern": "^[A-Z]{2}$",
-            "description": "País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais. La API siempre lo envía; opcional en el esquema hasta que los fixtures del panel lo tengan"
+            "description": "País de la localización fiscal (ISO 3166-1 alfa-2). Cambia con POST /empresas/:id/cambiar-pais"
           },
           "regimen_isr": {
             "type": [
@@ -74811,6 +75641,104 @@
           "cierre": {
             "$ref": "#/components/schemas/CierrePromesa",
             "description": "Al cumplirse, incumplirse, rechazarse o cancelarse"
+          }
+        }
+      },
+      "EventoNotificacion": {
+        "type": "object",
+        "required": [
+          "evento",
+          "nombre",
+          "grupo",
+          "tipo_aviso",
+          "canales",
+          "variables"
+        ],
+        "properties": {
+          "evento": {
+            "type": "string",
+            "description": "Evento de la plantilla (`factura.emitida`, `recordatorio.1`, `alerta.…`)"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre legible en español"
+          },
+          "grupo": {
+            "type": "string",
+            "enum": [
+              "cliente",
+              "recordatorio",
+              "alerta"
+            ]
+          },
+          "tipo_aviso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Interruptor de `avisos` de la configuración que lo apaga; null = no se apaga por tipo"
+          },
+          "canales": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "correo",
+                "telegram",
+                "whatsapp"
+              ]
+            },
+            "description": "Canales con plantilla de fábrica"
+          },
+          "variables": {
+            "type": "array",
+            "description": "Variables Mustache por grupo, las mismas que arma el aviso real. En las alertas, `alerta.*` sale de sus plantillas de fábrica y el ejemplo es el nombre",
+            "items": {
+              "type": "object",
+              "required": [
+                "grupo",
+                "etiqueta",
+                "variables"
+              ],
+              "properties": {
+                "grupo": {
+                  "type": "string",
+                  "description": "Primer nivel: `empresa`, `factura`, `alerta`…"
+                },
+                "etiqueta": {
+                  "type": "string"
+                },
+                "variables": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "nombre",
+                      "tipo",
+                      "ejemplo"
+                    ],
+                    "properties": {
+                      "nombre": {
+                        "type": "string",
+                        "description": "Nombre completo para Mustache: `factura.total_q`"
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "texto",
+                          "numero",
+                          "booleano"
+                        ]
+                      },
+                      "ejemplo": {
+                        "type": "string",
+                        "description": "Valor de ejemplo (el de la vista previa), como texto"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -77906,7 +78834,12 @@
           "nombre",
           "email",
           "permisos",
-          "roles"
+          "roles",
+          "expira_en",
+          "expira_max_en",
+          "alcance_global",
+          "empresas",
+          "empresa_activa_id"
         ],
         "properties": {
           "id": {
@@ -77941,7 +78874,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Solo en `GET /me`: cuándo vence la credencial actual. Con la cookie del panel se renueva sola mientras se usa (`ahora + PANEL_SESION_INACTIVIDAD_H`); con Bearer de login es fijo; null con tokens de API (no vencen)"
+            "description": "Cuándo vence la credencial actual. Con la cookie del panel se renueva sola mientras se usa (`ahora + PANEL_SESION_INACTIVIDAD_H`); con Bearer de login es fijo; null con tokens de API (no vencen)"
           },
           "expira_max_en": {
             "type": [
@@ -77949,7 +78882,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Solo en `GET /me`: tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; igual a `expira_en` con Bearer de login; null con tokens de API)"
+            "description": "Tope absoluto de la sesión (login + `PANEL_SESION_MAXIMA_H` con la cookie; igual a `expira_en` con Bearer de login; null con tokens de API)"
           },
           "alcance_global": {
             "type": "boolean",
@@ -80271,6 +81204,7 @@
           "prioridad",
           "dual_stack",
           "tamano_prefijo_delegado",
+          "tipo",
           "global",
           "activo",
           "version",
@@ -80427,7 +81361,8 @@
           "pool_ipv6_enlace",
           "pool_ipv6_delegacion",
           "local_address",
-          "no_crear_reglas"
+          "no_crear_reglas",
+          "tipo"
         ],
         "properties": {
           "id": {
@@ -81949,9 +82884,11 @@
               "parcial",
               "pagada",
               "vencida",
-              "anulada"
+              "anulada",
+              "castigada",
+              "acreditada"
             ],
-            "description": "Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal"
+            "description": "Las facturas por_certificar (FEL obligatoria con emitir) no salen en el portal. acreditada: cubierta entera por notas de crédito internas. castigada: dada de baja como incobrable; ya no se cobra a la factura (saldo 0.00)"
           },
           "subtotal": {
             "$ref": "#/components/schemas/Dinero"
@@ -81972,7 +82909,7 @@
           },
           "saldo": {
             "$ref": "#/components/schemas/Dinero",
-            "description": "total - pagado (0.00 si está anulada)"
+            "description": "total - pagado solo si está emitida, parcial o vencida; 0.00 en cualquier otro estado"
           },
           "fel_uuid": {
             "type": [
@@ -90494,6 +91431,8 @@
           "modo_velocidad",
           "empresa_sugerida_id",
           "activo",
+          "en_linea",
+          "ultimo_contacto",
           "version",
           "created_at",
           "updated_at"
@@ -90604,6 +91543,21 @@
           },
           "activo": {
             "type": "boolean"
+          },
+          "en_linea": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)"
+          },
+          "ultimo_contacto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca"
           },
           "version": {
             "type": "integer",
@@ -90846,9 +91800,11 @@
           "ipv6_duid",
           "cliente_nombre",
           "plan_nombre",
+          "plan_tipo",
           "router_nombre",
           "zona_nombre",
           "excepciones",
+          "plan_temporal",
           "version",
           "created_at",
           "updated_at"
@@ -91308,7 +92264,8 @@
         "required": [
           "usuario",
           "csrf",
-          "expira_en"
+          "expira_en",
+          "expira_max_en"
         ],
         "properties": {
           "usuario": {
@@ -91332,7 +92289,7 @@
               "null"
             ],
             "format": "date-time",
-            "description": "Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use. La API siempre lo manda; opcional en el esquema para no romper clientes ya generados"
+            "description": "Tope absoluto: login + `PANEL_SESION_MAXIMA_H`; ahí la sesión vence aunque se use"
           }
         }
       },
@@ -93325,6 +94282,8 @@
           "email",
           "activo",
           "roles",
+          "alcance_global",
+          "empresas",
           "version",
           "created_at",
           "updated_at"
@@ -93958,6 +94917,50 @@
                 }
               }
             }
+          }
+        }
+      },
+      "VistaPreviaPlantilla": {
+        "type": "object",
+        "required": [
+          "evento",
+          "canal",
+          "asunto",
+          "cuerpo",
+          "mensaje",
+          "variables_desconocidas"
+        ],
+        "properties": {
+          "evento": {
+            "type": "string"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "correo",
+              "telegram",
+              "whatsapp"
+            ]
+          },
+          "asunto": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuerpo": {
+            "type": "string"
+          },
+          "mensaje": {
+            "type": "string",
+            "description": "Lo que recibe el destinatario: en Telegram, asunto y cuerpo en un solo texto (máx. 4096)"
+          },
+          "variables_desconocidas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Variables que la plantilla usa y el evento no trae: se renderizan vacías"
           }
         }
       },

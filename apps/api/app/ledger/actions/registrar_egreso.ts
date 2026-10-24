@@ -7,7 +7,15 @@ import { valorParametro } from '#fiscal/parametros'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import type { ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
-import { resolverOrigenEgreso, verEgreso, type EgresoVista, type MetodoEgreso } from '#ledger/egresos'
+import {
+    egresosDelTurno,
+    resolverOrigenEgreso,
+    verEgreso,
+    type EgresoVista,
+    type MetodoEgreso,
+} from '#ledger/egresos'
+import { depositosDelTurno } from '#ledger/transitos'
+import { pagosProveedoresDelTurno } from '#ledger/pagos_proveedores'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 
 /**
@@ -26,7 +34,8 @@ import RegistrarAsiento from '#ledger/actions/registrar_asiento'
  * (el rol `cajero`) solo saca efectivo de **su** caja abierta (de la que es cajero o cuyo turno
  * abrió), con motivo (`descripcion`) y hasta `egreso_cajero_maximo` de la empresa (parámetro
  * fiscal, gt-2026.3). Errores: 403 `egreso_solo_caja` (otro método), 422 `caja_no_abierta`, 403
- * `caja_ajena`, 422 en `descripcion` (`required`), 403 `egreso_sobre_limite` (sobre el tope: lo
+ * `caja_ajena`, 422 en `fecha` (`anterior_al_turno`, H52), 422 `efectivo_insuficiente` (más que el
+ * efectivo del turno, H53), 422 en `descripcion` (`required`), 403 `egreso_sobre_limite` (sobre el tope: lo
  * registra contabilidad) y 403 `egreso_sin_limite_configurado` (la empresa no tiene el parámetro).
  * Contabilidad los revisa en el cierre de caja: bajan el esperado del turno.
  */
@@ -123,7 +132,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
         // el egreso es de la empresa de su caja, banco o cuenta bancaria
         exigirAccesoEmpresa(t.ctx, origen.empresa_id)
         t.fijarEmpresa(origen.empresa_id)
-        if (conLimite) await this.exigirLimiteCajero(t, input, monto, origen, usuarioId!)
+        if (conLimite) await this.exigirLimiteCajero(t, input, monto, fecha, origen, usuarioId!)
 
         const [fila] = (await t.trx
             .insertQuery()
@@ -173,6 +182,7 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
         t: Transaccion,
         input: EntradaRegistrarEgreso,
         monto: ReturnType<typeof dec>,
+        fecha: string,
         origen: { empresa_id: number; caja_id: number | null; turno_id: number | null; nombre: string },
         usuarioId: number,
     ) {
@@ -188,14 +198,58 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
             .from('ledger.cajas_turnos as tu')
             .join('ledger.cajas as c', 'c.id', 'tu.caja_id')
             .where('tu.id', origen.turno_id)
-            .select('tu.abierto_por', 'c.cajero_id')
-            .firstOrFail()) as { abierto_por: number | null; cajero_id: number | null }
+            // H53: un egreso a la vez por turno, así dos no sacan el mismo efectivo
+            .forUpdate()
+            .select(
+                'tu.abierto_por',
+                'c.cajero_id',
+                'tu.fondo_inicial',
+                t.trx.raw(
+                    `to_char((tu.abierto_en AT TIME ZONE 'America/Guatemala')::date, 'YYYY-MM-DD') as abierto`,
+                ),
+            )
+            .firstOrFail()) as {
+            abierto_por: number | null
+            cajero_id: number | null
+            fondo_inicial: string
+            abierto: string
+        }
         if (Number(turno.abierto_por) !== usuarioId && Number(turno.cajero_id) !== usuarioId) {
             throw new Problema(
                 403,
                 'caja_ajena',
                 'Caja ajena',
                 `La caja ${origen.nombre} no es tuya: un cajero solo registra egresos de su caja abierta`,
+            )
+        }
+        // H52: el efectivo sale del turno abierto: su fecha no es anterior a la apertura del turno
+        if (fecha < turno.abierto) {
+            throw new ValidacionFallida([
+                {
+                    field: 'fecha',
+                    message: `La fecha del egreso no puede ser anterior a la apertura del turno (${turno.abierto})`,
+                    rule: 'anterior_al_turno',
+                },
+            ])
+        }
+        // H53: no se saca más efectivo del que tiene el turno (lo mismo que espera su cierre)
+        const cobrado = (await t.trx
+            .from('billing.pagos')
+            .where('turno_id', origen.turno_id)
+            .whereNot('estado', 'anulado')
+            .select(t.trx.raw('coalesce(sum(monto - retenido), 0)::text as total'))
+            .first()) as { total: string }
+        const disponible = dec(turno.fondo_inicial)
+            .plus(cobrado.total)
+            .minus(await egresosDelTurno(t.trx, origen.turno_id))
+            .minus(await depositosDelTurno(t.trx, origen.turno_id))
+            .minus(await pagosProveedoresDelTurno(t.trx, origen.turno_id))
+        if (monto.gt(disponible)) {
+            throw new Problema(
+                422,
+                'efectivo_insuficiente',
+                'Efectivo insuficiente en la caja',
+                `La caja ${origen.nombre} tiene Q${aTexto(disponible)} en efectivo en este turno: no alcanza para un egreso de Q${aTexto(monto)}`,
             )
         }
         if (!input.descripcion?.trim()) {

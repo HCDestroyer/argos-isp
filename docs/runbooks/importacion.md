@@ -203,6 +203,6 @@ No sirve para **actualizar** lo ya importado (un cambio de plan o de IP en el or
 - [ ] Migrar los routers al nuevo RADIUS por grupos (`infra/mikrotik/README.md`).
 - [ ] Borrar el volcado, los CSV y los reportes con datos personales cuando ya no se necesiten.
 
-## Pendiente
+## Dudas del origen
 
-- Confirmar con datos reales los valores supuestos de cada sistema (estados, seguridad del router en Mikrowisp, tipo de control y estados de factura en SmartISP): preguntas en `docs/importacion/mapeo-mikrowisp.md` y `docs/importacion/mapeo-smartisp.md`.
+Resueltas con los volcados reales de los dos sistemas: estados, seguridad del router y periodo en Mikrowisp; tablas, tipo de control y estados de factura en SmartISP. Las respuestas, con los conteos que las respaldan, están en "Dudas resueltas con los datos reales" de `docs/importacion/mapeo-mikrowisp.md` y `docs/importacion/mapeo-smartisp.md`, y el adaptador ya las aplica. Un volcado de otra instalación puede traer valores que estos no tenían: el adaptador no los adivina, omite la fila con el valor en el mensaje y el reporte lo lista.

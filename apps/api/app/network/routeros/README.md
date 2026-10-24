@@ -112,7 +112,7 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 
 ## Pendiente (tanda 2)
 
-- Verificar en el equipo físico los dos modos y el cambio entre ellos (filas en `.claude/integration/a2.md`).
+- Verificar en el equipo físico los dos modos y el cambio entre ellos: pasos en `docs/laboratorio/validacion-fisica.md`, sección 4.
 - IPv6 en la address-list de corte (`/ipv6/firewall/address-list`): fuera de los menús administrados de la tarea 1.
 
 ## Pruebas

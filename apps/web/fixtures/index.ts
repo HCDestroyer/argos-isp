@@ -283,7 +283,7 @@ function abrirSesion(respuesta: RespuestaLogin): Schema<'SesionPanel'> {
     bd.sesion = { token: respuesta.token, csrf, expiraEn, expiraMaxEn }
     guardarCookieSimulada()
     return {
-        usuario: { ...respuesta.usuario, csrf },
+        usuario: { ...respuesta.usuario, csrf, expira_en: expiraEn, expira_max_en: expiraMaxEn },
         csrf,
         expira_en: expiraEn,
         expira_max_en: expiraMaxEn,

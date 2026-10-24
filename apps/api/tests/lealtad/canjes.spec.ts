@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
+import { reporteLealtad } from '#lealtad/reporte'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { generar } from '#tests/billing/ayudas_billing'
 import { crearPlanFila } from '#tests/core/fabricas'
@@ -227,6 +228,32 @@ test.group('Lealtad · canjes', (group) => {
             ],
         )
         assert.equal(await saldoPuntos(db.connection(), e.B, s.clienteId), 70)
+        // a3.md:136: reverso positivo de la salida del canje, con asiento espejo 4.1.06 / 2.1.10
+        const reversos = (await db
+            .from('lealtad.movimientos as m')
+            .leftJoin('ledger.movimientos as lm', 'lm.asiento_id', 'm.asiento_id')
+            .leftJoin('ledger.cuentas as c', 'c.id', 'lm.cuenta_id')
+            .where('m.origen_tipo', 'canje')
+            .where('m.origen_id', canje.id)
+            .where('m.puntos', '>', 0)
+            .select('m.tipo', 'm.reversa_de', 'm.valor', 'c.codigo', 'lm.debe', 'lm.haber')) as Array<{
+            tipo: string
+            reversa_de: number
+            valor: string
+            codigo: string | null
+            debe: string | null
+        }>
+        assert.isTrue(
+            reversos.every((r) => r.tipo === 'reverso' && Number(r.reversa_de) === canje.movimiento_id),
+        )
+        for (const r of reversos.filter((x) => x.codigo !== null)) {
+            assert.include(['4.1.06', '2.1.10'], r.codigo!)
+            assert.equal(r.codigo === '4.1.06' ? r.debe : '0.00', r.codigo === '4.1.06' ? r.valor : r.debe)
+        }
+        // el reverso positivo no es emisión: lo canjeado vuelve a 0 y lo emitido no cambia (40 + 30)
+        const reporte = await reporteLealtad([e.B], null, null)
+        const deB = reporte.empresas.find((x) => x.empresa_id === e.B)!
+        assert.deepEqual([deB.emitidos, deB.canjeados], [70, 0])
         const otraVez = await errorDe(
             new RevertirCanje().execute({ id: canje.id, motivo: 'otra vez' }, e.ctx),
         )

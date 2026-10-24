@@ -295,6 +295,32 @@ test.group('Portal: pago en línea', (group) => {
         assert.equal(Number(cobros[0].n), 1)
     })
 
+    test('con la sesión: el cobro se audita con actor cliente y sin creado_por', async ({
+        client,
+        assert,
+    }) => {
+        const s = await cortado()
+        const { cookie } = await sesionDirecta(s.clienteId)
+        const { vencidas } = await pendientes(s.servicioId)
+        const cobro = await estado(
+            client
+                .post('/api/v1/portal/pagos/iniciar')
+                .header('X-Forwarded-For', ipNueva())
+                .header('Cookie', cookie)
+                .json({ facturas: vencidas.map((f) => Number(f.id)) }),
+            201,
+        )
+        const auditoria = await db
+            .from('audit.acciones')
+            .where('accion', 'pasarela.crear_cobro')
+            .where('entidad_id', cobro.body().id)
+            .firstOrFail()
+        assert.include(auditoria, { actor_tipo: 'cliente', canal: 'portal' })
+        assert.equal(Number(auditoria.actor_id), s.clienteId)
+        const fila = await db.from('billing.pasarela_cobros').where('id', cobro.body().id).firstOrFail()
+        assert.isNull(fila.creado_por)
+    })
+
     test('otro cliente: servicio, facturas o cobro ajenos responden 404', async ({ client, assert }) => {
         const propio = await cortado()
         const ajeno = await cortado()

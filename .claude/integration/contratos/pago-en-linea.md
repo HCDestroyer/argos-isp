@@ -33,4 +33,37 @@ Dueños: A5 (portal) consume; A3 (billing) es dueño del cobro, el webhook y el 
 ## Walled garden (A6)
 
 - Con la pasarela falsa no hace falta nada: su página sale de la API (`PASARELA_URL_PUBLICA`).
-- Con el proveedor real: su dominio de pago y los de sus recursos (se anotan en `a5.md` cuando A3 lo elija).
+- Con Recurrente (proveedor real, decisión del PM): el cliente cortado debe poder abrir **`app.recurrente.com`** (la página de pago es `https://app.recurrente.com/checkout-session/<ch_…>` y la API es la misma; https://docs.recurrente.com/referencia-api/api-reference/checkouts/create-checkout.md). Pendiente de confirmar en el laboratorio con un checkout del Sandbox: los dominios de recursos que cargue esa página (CDN, analítica) y el 3-D Secure del banco emisor de la tarjeta, que no se pueden listar de antemano. El webhook llega del lado del servidor (Svix), no del cliente: no va en el walled garden, pero el firewall de la API debe aceptar las IP de Svix (https://docs.svix.com/webhook-ips).
+
+## Recurrente (A3, adaptador real)
+
+Decisión del PM (2026-10-24). Adaptador `app/billing/pasarelas/recurrente.ts` (`PASARELA_PROVEEDOR=recurrente`); el resto del flujo (cobro, webhook idempotente, pago, asiento `Bancos (neto) + 5.1.02 Comisiones / CxC`, reactivación, conciliación) es el mismo de la pasarela falsa.
+
+Fuentes (documentación oficial, consultada el 2026-10-24):
+- Índice: https://docs.recurrente.com/llms.txt
+- Autenticación: https://docs.recurrente.com/guias-espanol/comenzar/autenticacion.md (cabecera `X-SECRET-KEY`; `sk_live_…` producción, `sk_test_…` solo en un Sandbox; URL base `https://app.recurrente.com/api` para los dos; `GET /test` dice el ambiente).
+- Crear checkout: https://docs.recurrente.com/referencia-api/api-reference/checkouts/create-checkout.md
+- Ver checkout: https://docs.recurrente.com/referencia-api/api-reference/checkouts/get-checkout.md
+- Intents (formato unificado): https://docs.recurrente.com/referencia-api/api-reference/intents/get-intent.md y https://docs.recurrente.com/referencia-api/api-reference/intents/list-intents.md
+- Webhooks y firma: https://docs.recurrente.com/guias-espanol/comenzar/webhooks.md; eventos legacy: https://docs.recurrente.com/webhooks-legacy-en.md
+- Registrar el endpoint de webhooks: https://docs.recurrente.com/referencia-api/api-reference/webhook-endpoints/create-webhook-endpoint.md
+
+Correspondencia:
+- **Cobro** → `POST /checkouts` con un ítem en línea (`name`, `currency: GTQ`, `amount_in_cents`, `quantity: 1`, `charge_type: one_time`, `tax_category: service`), `success_url` = `url_retorno` + `estado=pagado`, `cancel_url` = `url_retorno` + `estado=pendiente`, `metadata` `{ referencia: <cobro_id>, cliente_id }`, `expires_at` (ahora + `RECURRENTE_EXPIRA_HORAS`, 24 por defecto). `id_proveedor` = `id` (`ch_…`), `url_pago` = `checkout_url`. Mínimo de Recurrente: Q5.00 (500 centavos): menos → 422 `monto` (`rule: minimo_pasarela`). Error del proveedor → 502 `pasarela_error`; sin respuesta → 503.
+- **Webhook** `POST /api/v1/pasarela/webhook/recurrente`: firma Svix. Cabeceras `svix-id`, `svix-timestamp`, `svix-signature` (`v1,<base64>`, varias separadas por espacio); firma = base64(HMAC-SHA256(base64decode(secreto sin `whsec_`), `<svix-id>.<svix-timestamp>.<cuerpo crudo>`)), comparación en tiempo constante, ventana ± 5 min → si no, 401 `firma_invalida`. `id_evento` = `svix-id` (el mismo en los reintentos: idempotencia). `intent.succeeded` / `payment_intent.succeeded` → pagado; `intent.failed`, `intent.canceled`, `payment_intent.failed` → fallido; los demás → pendiente (no cambian el cobro). Cobro = `checkout.id`; monto = `amount_in_cents` / 100; comisión = `details.fee` (unificado) o `fee` (legacy), en centavos.
+- **Monto distinto** del cobro: no se registra el pago (`ignorado: monto_distinto`, aviso en el log); la conciliación lo reporta como `pago_sin_registrar`.
+- **Retención de IVA de la emisora** (`details.vat_withheld` o `vat_withheld`, centavos; H51): el pago entra por `monto − retención` con una constancia `RET_IVA_TAR` (número `recurrente:<checkout>`) a `1.1.05 IVA retenido por clientes`; aplica el bruto a la deuda y el banco queda por el neto real (bruto − comisión − retención).
+- **Reembolso** (`refund.*` con `refund.status = succeeded`; el cobro sale de `intentable`): `AnularPago` anidada (la deuda vuelve, el servicio se re-evalúa); otro aviso del mismo reembolso → `pago_ya_anulado`. La conciliación da por cuadrado el cobro reembolsado aunque el checkout siga `paid`.
+- **Contracargo** (`dispute.*`): sin acción automática; queda en `billing.pasarela_eventos` (estado `disputa`), aviso en el log y la conciliación del día lo lista como diferencia `disputa` para contabilidad. Un aviso por notificación (evento del catálogo) queda para cuando el líder lo agregue a `CLAUDE.md`.
+- **Factura de comisiones de Recurrente**: no se registra como compra (la comisión ya entró por pago a `5.1.02`); runbook `docs/runbooks/pago-en-linea-recurrente.md`, IVA de esa factura en `localizacion-fiscal.md` §15 #102.
+- **Conciliación** (`pasarela.conciliar`) → `GET /checkouts/{id}`: `paid` → pagado, `expired` → expirado, `unpaid`/`payment_in_progress` → pendiente; monto = `total_in_cents`. La comisión del pagado sale de `GET /intents/{payment.id}` (`details.fee`); si no responde queda 0.00 (la conciliación compara estado y monto).
+
+Variables de entorno (`apps/api/.env.example`, nunca en el repo): `RECURRENTE_SECRET_KEY`, `RECURRENTE_WEBHOOK_SECRETO` (`whsec_…`), `RECURRENTE_API_URL` (opcional), `RECURRENTE_EXPIRA_HORAS` (opcional).
+
+Pendiente del PM (sin esto no se activa en producción):
+1. Cuenta de Recurrente de la empresa y un **Sandbox** con su `sk_test_…` (para la prueba real `tests/billing/pasarela_recurrente.spec.ts`, que se salta sola sin ella) y después la `sk_live_…`.
+2. **URL pública de la API** para registrar el webhook (`<API>/api/v1/pasarela/webhook/recurrente`, eventos `intent.succeeded`, `intent.failed`, `intent.canceled`) y el `whsec_…` que devuelve Recurrente.
+3. **Facturación electrónica de Recurrente apagada** en la cuenta: Recurrente puede emitir su propio DTE por cada pago (ver `details.tax_invoicing_fee` y «Corregir y reemitir el DTE de un intent» en la referencia). ArgosIsp certifica con INFILE; dos DTE por el mismo cobro serían un error fiscal.
+4. Confirmar con el contador si `details.fee` trae el IVA de la comisión (hoy todo `fee` va a `5.1.02`) y si la retención de la emisora es `RET_IVA_TAR` (hoy así, a `1.1.05`).
+5. Multiempresa: una llave por instalación. Si cada empresa (NIT) tiene su cuenta de Recurrente, hace falta la llave por empresa (o `X-ACCOUNT-ID` de cuentas conectadas); hoy el adaptador usa una sola cuenta.
+

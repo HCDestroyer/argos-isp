@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import ProgramarNotificacion from '#notify/actions/programar_notificacion'
 import { ZONA } from '#notify/formato'
+import { ESTADOS_PENDIENTES } from '#billing/facturas'
 
 export interface EntradaRecordatorios {
     /** instante ISO de referencia (por defecto, ahora) */
@@ -39,8 +40,14 @@ export const VENTANA_DIAS = 7
 /**
  * Programa los recordatorios de pago pendientes hasta `ahora` (no "los de hoy").
  *
- * Para cada factura con saldo (no pagada ni anulada) toma el recordatorio activo más reciente
- * cuyo momento ya pasó: `(vence_en + dias) a la hora del recordatorio` en America/Guatemala.
+ * Solo recuerda deuda cobrable, con la misma regla que el saldo pendiente de A3
+ * (`ESTADOS_PENDIENTES` y `pendienteDe` de `#billing/facturas`): estado `emitida`, `parcial` o
+ * `vencida` y `total > pagado` (`pagado` ya incluye lo acreditado por notas). Quedan fuera
+ * `por_certificar` (aún no es un documento cobrable), `pagada`, `anulada`, `castigada` (su `pagado`
+ * es solo lo cobrado: el resto se dio por incobrable), `acreditada` (cubierta por notas internas) y
+ * cualquier factura sustituida (`billing.sustituciones`), aunque su fila siguiera viva.
+ *
+ * Para cada factura así toma el recordatorio activo más reciente cuyo momento ya pasó: `(vence_en + dias) a la hora del recordatorio` en America/Guatemala.
  * Así, si el cron se detuvo, al volver no manda tres avisos atrasados: manda el último que toca.
  * Solo cuentan momentos posteriores a la emisión de la factura y dentro de `ventanaDias` (evita
  * avisar facturas viejas importadas o después de una caída larga).
@@ -77,8 +84,11 @@ export default class ProgramarRecordatorios extends DomainAction<
                 CROSS JOIN LATERAL (
                     SELECT (((f.vence_en + r.dias) + r.hora) AT TIME ZONE '${ZONA}') AS momento
                 ) m
-                WHERE f.estado NOT IN ('pagada', 'anulada')
+                WHERE f.estado IN (${ESTADOS_PENDIENTES.map(() => '?').join(', ')})
                     AND f.total > f.pagado
+                    AND NOT EXISTS (
+                        SELECT 1 FROM billing.sustituciones su WHERE su.original_id = f.id
+                    )
                     AND m.momento <= ?::timestamptz
                     AND m.momento >= f.emitida_en
                     AND m.momento >= ?::timestamptz - make_interval(days => ?)
@@ -97,7 +107,7 @@ export default class ProgramarRecordatorios extends DomainAction<
             ORDER BY c.factura_id
             LIMIT ?
             `,
-            [ahoraIso, ahoraIso, ventana, limite],
+            [...ESTADOS_PENDIENTES, ahoraIso, ahoraIso, ventana, limite],
         )) as { rows: Candidato[] }
 
         const resultado: ResultadoRecordatorios = {

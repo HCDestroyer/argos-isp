@@ -124,7 +124,6 @@ Pruebas: `apps/portal/tests/nuxt/seguridad.test.ts` (reglas) y `apps/portal/test
 
 | Qué | Quién |
 | --- | --- |
-| Límite antes de la validación del cuerpo (gancho en `despachar`) | A1 |
-| `Idempotency-Key` acotada en rutas públicas; huella multipart con archivos | A1 (próxima tanda) |
-| HTTPS del portal en producción: certificado, walled garden de 443 al portal, `PORTAL_COOKIE_SEGURA=siempre`, HSTS | A6 + A5 |
-| Probar en el laboratorio que la IP real llega al portal (dst-nat, Docker sin `userland-proxy`) | A6 |
+| Probar en el laboratorio que la IP real llega al portal (dst-nat, Docker sin `userland-proxy`) | A6 (necesita el MikroTik del laboratorio) |
+
+Hechos (ya no pendientes): el límite por IP corre antes de validar el cuerpo (gancho `antes` de `despachar`, `app/shared/rutas.ts`: un cuerpo inválido también consume el cupo); `Idempotency-Key` acotada al cliente en rutas públicas (cookie de sesión o IP) y con la huella de los archivos en multipart (`app/middleware/idempotencia_middleware.ts`); HTTPS del portal en producción con certificado de Caddy, `PORTAL_COOKIE_SEGURA=siempre` y HSTS (`infra/produccion/config/Caddyfile`, `PORTAL_HSTS_MAX_AGE`).

@@ -288,6 +288,25 @@ export const FACTURAS_FIXTURE: Schema<'PortalFactura'>[] = [
         sustituida: true,
         sustituida_por: { id: 1021, numero: `${DTE_1021.serie}-${DTE_1021.numero}` },
     }),
+    // Cubierta entera por notas de crédito internas (A3, H16): sin saldo, como la devuelve la API.
+    factura({
+        id: 990,
+        periodo: '2026-05-01',
+        vence_en: '2026-05-10',
+        estado: 'acreditada',
+        pagado: '175.00',
+        acreditado: '175.00',
+        saldo: '0.00',
+    }),
+    // Castigada (A3, decisión g): `pagado` es solo lo cobrado; el resto se dio de baja y la API da saldo 0.00.
+    factura({
+        id: 950,
+        periodo: '2026-04-01',
+        vence_en: '2026-04-10',
+        estado: 'castigada',
+        pagado: '50.00',
+        saldo: '0.00',
+    }),
 ]
 
 /**

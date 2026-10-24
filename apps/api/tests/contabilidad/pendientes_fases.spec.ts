@@ -29,12 +29,8 @@ const PENDIENTES: Pendiente[] = [
     // 409 bloqueo_duro según la tabla de errores §11 (desvío (c) de §20), no 422 periodo_cerrado
     // «libros emitidos solo bajo bloqueo, con folios correlativos»: activado en `libros_legales.spec.ts` (fase 6 PR D,
     // inv. 20 de `verificarLibro`)
-    {
-        titulo: '2.9.01 Saldos de apertura queda en 0 después de la importación y el cierre',
-        fase: 'localización fiscal, fase 5 (cierre; estudio Odoo n.º 39)',
-        criterio:
-            'Contrato de importación + estudio Odoo n.º 39: terminada la importación de una empresa, la acción de cierre de apertura traslada el saldo de 2.9.01 a patrimonio (3.x) y, después del cierre, 2.9.01 = 0 en la empresa; total de facturas abiertas importadas = CxC inicial.',
-    },
+    // «2.9.01 Saldos de apertura queda en 0 después de la importación y el cierre»: activado en
+    // `apertura_h27_canje.spec.ts` (libro.cerrar_apertura, §23)
     // Fase 6 (declaraciones)
     {
         titulo: 'IVA del borrador = libro de ventas − libro de compras − retenciones',

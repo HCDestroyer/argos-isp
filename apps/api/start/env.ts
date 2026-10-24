@@ -194,4 +194,12 @@ export default await Env.create(new URL('../', import.meta.url), {
     /** URL pública de la API para armar `url_pago` de la pasarela falsa (p. ej. https://api.lab.local). */
     PASARELA_URL_PUBLICA: Env.schema.string.optional(),
     PASARELA_RETORNO_ORIGENES: Env.schema.string.optional(),
+    /** Recurrente (`PASARELA_PROVEEDOR=recurrente`): llave secreta `sk_live_…` o `sk_test_…` (Sandbox). */
+    RECURRENTE_SECRET_KEY: Env.schema.string.optional(),
+    /** Secreto de firma del endpoint de webhooks (`whsec_…`, Svix). */
+    RECURRENTE_WEBHOOK_SECRETO: Env.schema.string.optional(),
+    /** URL base de la API (por defecto https://app.recurrente.com/api; la misma para Sandbox). */
+    RECURRENTE_API_URL: Env.schema.string.optional(),
+    /** Horas de vigencia del checkout (por defecto 24). */
+    RECURRENTE_EXPIRA_HORAS: Env.schema.number.optional(),
 })

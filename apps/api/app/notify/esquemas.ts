@@ -92,25 +92,21 @@ export const ConfiguracionNotificaciones = definirEsquema(
                 '`guardada`: fila del panel. `entorno`: global sin guardar, rigen las variables de entorno. `sin_configurar`: empresa sin fila (hereda la global)',
         },
         sembrada_desde_entorno: booleano,
-        correo: objeto(
-            {
-                activo: booleano,
-                host: nulable(texto),
-                puerto: nulable(entero),
-                tls: enumerado(['auto', 'starttls', 'tls', 'ninguno']),
-                usuario: nulable(texto),
-                password: secreto,
-                remitente: nulable(texto),
-                nombre_visible: nulable(texto),
-                contabilidad: {
-                    ...nulable(texto),
-                    description:
-                        'Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada); direcciones separadas por coma. La API siempre lo devuelve',
-                },
+        correo: objeto({
+            activo: booleano,
+            host: nulable(texto),
+            puerto: nulable(entero),
+            tls: enumerado(['auto', 'starttls', 'tls', 'ninguno']),
+            usuario: nulable(texto),
+            password: secreto,
+            remitente: nulable(texto),
+            nombre_visible: nulable(texto),
+            contabilidad: {
+                ...nulable(texto),
+                description:
+                    'Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada, libro y cierres); direcciones separadas por coma',
             },
-            // Opcional en el contrato solo para no romper fixtures existentes; la API siempre lo trae.
-            ['contabilidad'],
-        ),
+        }),
         telegram: objeto({
             clientes_activo: booleano,
             alertas_activo: booleano,
@@ -155,5 +151,59 @@ export const ResultadoPruebaCanal = definirEsquema(
             description: 'Configuración con la que se probó',
         },
         envio_id: id,
+    }),
+)
+
+const variableCatalogo = objeto({
+    nombre: { type: 'string', description: 'Nombre completo para Mustache: `factura.total_q`' },
+    tipo: enumerado(['texto', 'numero', 'booleano']),
+    ejemplo: { type: 'string', description: 'Valor de ejemplo (el de la vista previa), como texto' },
+})
+
+export const EventoNotificacion = definirEsquema(
+    'EventoNotificacion',
+    objeto({
+        evento: {
+            type: 'string',
+            description: 'Evento de la plantilla (`factura.emitida`, `recordatorio.1`, `alerta.…`)',
+        },
+        nombre: { type: 'string', description: 'Nombre legible en español' },
+        grupo: enumerado(['cliente', 'recordatorio', 'alerta']),
+        tipo_aviso: {
+            ...nulable(texto),
+            description:
+                'Interruptor de `avisos` de la configuración que lo apaga; null = no se apaga por tipo',
+        },
+        canales: { type: 'array', items: canal, description: 'Canales con plantilla de fábrica' },
+        variables: {
+            type: 'array',
+            description:
+                'Variables Mustache por grupo, las mismas que arma el aviso real. En las alertas, `alerta.*` sale de sus plantillas de fábrica y el ejemplo es el nombre',
+            items: objeto({
+                grupo: { type: 'string', description: 'Primer nivel: `empresa`, `factura`, `alerta`…' },
+                etiqueta: texto,
+                variables: { type: 'array', items: variableCatalogo },
+            }),
+        },
+    }),
+)
+
+export const VistaPreviaPlantilla = definirEsquema(
+    'VistaPreviaPlantilla',
+    objeto({
+        evento: texto,
+        canal,
+        asunto: nulable(texto),
+        cuerpo: texto,
+        mensaje: {
+            type: 'string',
+            description:
+                'Lo que recibe el destinatario: en Telegram, asunto y cuerpo en un solo texto (máx. 4096)',
+        },
+        variables_desconocidas: {
+            type: 'array',
+            items: texto,
+            description: 'Variables que la plantilla usa y el evento no trae: se renderizan vacías',
+        },
     }),
 )

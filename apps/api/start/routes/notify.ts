@@ -8,12 +8,16 @@ import { lista, pagina } from '#shared/openapi/esquemas'
 import {
     ConfiguracionNotificaciones,
     EnvioNotificacion,
+    EventoNotificacion,
+    VistaPreviaPlantilla,
     PlantillaNotificacion,
     RecordatorioPago,
     ResultadoPruebaCanal,
     TelegramWebhookRespuesta,
 } from '#notify/esquemas'
 import { listarEnvios, listarPlantillas, listarRecordatorios } from '#notify/consultas'
+import { catalogoEventos, vistaPrevia } from '#notify/catalogo'
+import db from '@adonisjs/lucid/services/db'
 import EditarPlantillaNotificacion from '#notify/actions/editar_plantilla_notificacion'
 import EditarRecordatorio from '#notify/actions/editar_recordatorio'
 import * as v from '#notify/validators'
@@ -45,6 +49,34 @@ const notify: Ruta[] = [
         permiso: 'notificaciones.ver',
         respuesta: { status: 200, descripcion: 'Plantillas', esquema: lista(PlantillaNotificacion) },
         handler: () => listarPlantillas(),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/notificaciones/eventos',
+        operacion: 'notificacionesEventosListar',
+        resumen: 'Eventos con plantilla y sus variables Mustache (con ejemplos)',
+        descripcion:
+            'Avisos al cliente, recordatorios y alertas al equipo. Las variables son las que arma el aviso ' +
+            'real para ese evento; la empresa es la activa (o la principal), con sus datos reales.',
+        etiqueta: 'notificaciones',
+        permiso: 'notificaciones.ver',
+        respuesta: { status: 200, descripcion: 'Eventos', esquema: lista(EventoNotificacion) },
+        handler: (ctx) => catalogoEventos(db.connection(), ctx.empresa?.activa ?? null),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/notificaciones/plantillas/vista-previa',
+        operacion: 'notificacionesPlantillasVistaPrevia',
+        resumen: 'Vista previa de una plantilla con datos de ejemplo del evento (no guarda)',
+        descripcion:
+            'Renderiza asunto y cuerpo como el envío real, con el ejemplo de `GET /notificaciones/eventos` ' +
+            'y la empresa activa. 422 si el evento no tiene plantilla o el Mustache no es válido. ' +
+            '`variables_desconocidas` lista lo que la plantilla usa y el evento no trae.',
+        etiqueta: 'notificaciones',
+        permiso: 'notificaciones.ver',
+        cuerpo: v.vistaPreviaPlantillaValidator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaPlantilla },
+        handler: (ctx, { cuerpo }) => vistaPrevia(db.connection(), cuerpo, ctx.empresa?.activa ?? null),
     }),
     definirRuta({
         metodo: 'put',
