@@ -13,6 +13,7 @@ import * as v from '#ledger/validators_apertura'
 import { CierreApertura, EstadoApertura } from '#ledger/esquemas_apertura'
 import { estadoApertura } from '#ledger/apertura'
 import CerrarApertura from '#ledger/actions/cerrar_apertura'
+import { verAsiento } from '#ledger/consultas'
 
 const apertura: Ruta[] = [
     definirRuta({
@@ -44,7 +45,11 @@ const apertura: Ruta[] = [
         descripcion:
             'Terminada la importación, traslada el saldo neto de 2.9.01 con fecha hasta fecha a la cuenta de patrimonio elegida (3.3.01 por defecto, o 3.1.01): asiento ajuste del diario VAR. Con el saldo en 0.00 no escribe nada (asiento: null). Respeta cierres y bloqueos: 422 periodo_cerrado, 409 bloqueo_duro, 422 periodo_bloqueado. Se corrige revirtiendo su asiento (POST /libro/asientos/:id/revertir).',
         respuesta: { status: 200, descripcion: 'Saldos de apertura cerrados', esquema: CierreApertura },
-        handler: (ctx, { cuerpo }) => new CerrarApertura().execute(cuerpo, ctx.contextoAccion()),
+        handler: async (ctx, { cuerpo }) => {
+            const cierre = await new CerrarApertura().execute(cuerpo, ctx.contextoAccion())
+            // el asiento con la forma de GET /libro/asientos/:id (partida, revertible…)
+            return { ...cierre, asiento: cierre.asiento ? await verAsiento(cierre.asiento.id) : null }
+        },
     }),
 ]
 

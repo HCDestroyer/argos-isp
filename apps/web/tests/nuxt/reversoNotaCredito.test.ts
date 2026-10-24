@@ -20,6 +20,7 @@ function ajusteManual(): Asiento {
         descripcion: 'Ajuste manual: redondeo de caja',
         origen_tipo: 'ajuste',
         origen_id: null,
+        diario: 'VAR',
         reversa_de: null,
         created_by: 1,
         created_at: '2026-10-15T20:00:00.000Z',

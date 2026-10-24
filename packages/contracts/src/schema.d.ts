@@ -8143,8 +8143,8 @@ export interface components {
             created_at: string;
         };
         Asiento: {
-            /** @description Empresa (NIT) (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
-            empresa_id?: number;
+            /** @description Empresa (NIT) (multiempresa) */
+            empresa_id: number;
             id: number;
             /** Format: date */
             fecha: string;
@@ -8164,7 +8164,7 @@ export interface components {
             /** @description Excepción de bloqueo por la que entró el asiento (§10.4); null si no hizo falta */
             excepcion_id?: number | null;
             /** @description Código del diario (VEN, COB, COM, IMP, CIE, VAR, CAJ-<caja>, BAN-<cuenta>) */
-            diario?: string | null;
+            diario: string | null;
             /** @description Número del asiento en su diario y año, guardado al registrar; nunca cambia */
             numero?: number | null;
             /** @description Partida del Libro Diario (correlativo por empresa y año), asignada al cerrar el mes; null mientras el mes esté abierto */
@@ -11108,8 +11108,8 @@ export interface components {
         };
         Factura: {
             id: number;
-            /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
-            empresa_id?: number;
+            /** @description Empresa (NIT) del documento (multiempresa) */
+            empresa_id: number;
             /** @description Nombre comercial de la empresa que emite */
             empresa_nombre?: string;
             cliente_id: number;
@@ -11186,6 +11186,24 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        FacturaAsiento: {
+            id: number;
+            /** Format: date */
+            fecha: string;
+            /** @enum {string} */
+            origen_tipo: "factura" | "mora";
+            descripcion: string;
+            /** @description Código del diario (VEN…) */
+            diario: string | null;
+            /** @description Número en su diario y año */
+            numero: number | null;
+            /** @description Σ debe del asiento */
+            total: components["schemas"]["Dinero"];
+            /** @description Asiento que este revierte */
+            reversa_de: number | null;
+            /** @description Reverso de este asiento, si lo hay */
+            revertido_por: number | null;
+        };
         FacturaDetalle: components["schemas"]["Factura"] & {
             lineas: components["schemas"]["FacturaLinea"][];
             reglas_snapshot: {
@@ -11195,6 +11213,12 @@ export interface components {
             notas_credito?: components["schemas"]["NotaCredito"][];
             /** @description Empresa que emite la factura con sus datos fiscales (FEL) */
             emisor?: components["schemas"]["EmisorFactura"];
+            /** @description Pagos aplicados a la factura, en orden (también los de pagos anulados) */
+            pagos: components["schemas"]["FacturaPagoAplicado"][];
+            /** @description Asientos de la factura (origen factura o mora), los reversos incluidos; vacío en una importada sin asiento o por certificar */
+            asientos: components["schemas"]["FacturaAsiento"][];
+            /** @description Tope vigente de la empresa para POST /pagos/:id/cerrar-diferencia (diferencia_cobro_tope); null sin localización */
+            diferencia_cobro_tope: components["schemas"]["Dinero"] | null;
         };
         FacturaLinea: {
             id: number;
@@ -11215,6 +11239,24 @@ export interface components {
             descuento?: components["schemas"]["Dinero"];
             /** @description Cuenta de ingreso de la línea (concepto de un cargo único); null = la de su tipo */
             cuenta_codigo?: string | null;
+        };
+        FacturaPagoAplicado: {
+            aplicacion_id: number;
+            pago_id: number;
+            /** @description Cobro repartido del pago (multiempresa); null si no */
+            cobro_id: number | null;
+            /** @description Lo aplicado de ese pago a esta factura */
+            monto: components["schemas"]["Dinero"];
+            /** @description Monto total del pago */
+            pago_monto: components["schemas"]["Dinero"];
+            metodo: string;
+            referencia: string | null;
+            /** @description Estado del pago (registrado, anulado…): una aplicación de un pago anulado ya no cuenta */
+            estado: string;
+            /** @description Pago histórico importado (sin caja ni banco) */
+            historico: boolean;
+            /** Format: date-time */
+            aplicado_en: string;
         };
         FacturasVencidasResumen: {
             /** @description Número de facturas vencidas con saldo */
@@ -12094,10 +12136,10 @@ export interface components {
         };
         Pago: {
             id: number;
-            /** @description Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados */
-            empresa_id?: number;
+            /** @description Empresa (NIT) del documento (multiempresa) */
+            empresa_id: number;
             /** @description Cobro de caja repartido por empresa (GET /cobros/:id); null si no vino de un cobro */
-            cobro_id?: number | null;
+            cobro_id: number | null;
             /** @description Solo al registrar (POST /pagos): todos los pagos del cobro, uno por empresa; la raíz es el primero */
             pagos?: components["schemas"]["Pago"][];
             cliente_id: number;
@@ -13261,10 +13303,8 @@ export interface components {
             /** @enum {string} */
             canal: "portal" | "ia" | "operador" | "supervisor";
             aprobada_por: number | null;
-            /** @description Forma estable: components.schemas.EvaluacionPromesa (Schema<"EvaluacionPromesa">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md */
-            resultado_evaluacion: {
-                [key: string]: unknown;
-            } | null;
+            /** @description Por qué se aprobó, rechazó o quedó pendiente (aprobacion y cierre se agregan después); ver contratos/promesas.md */
+            resultado_evaluacion: components["schemas"]["EvaluacionPromesa"] | null;
             /** @description Solo al crear o aprobar una promesa activa: cómo quedó el servicio (reactivación) */
             servicio?: components["schemas"]["ServicioEvaluado"];
             /** @description Control optimista: envíala al editar */

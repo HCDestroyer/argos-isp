@@ -500,7 +500,15 @@ test.group('Lealtad · canjes', (group) => {
         const otro = await servicioEn(e.B)
         const ajeno = await errorDe(new Canjear().execute(cuerpo, contextoCliente(otro.clienteId)))
         assert.equal(ajeno.status, 403)
-        const canje = await new Canjear().execute(cuerpo, portal)
+        // a5.md:64 (1): un premio sin en_portal no se canjea desde el portal (sí desde el panel)
+        const fueraDelPortal = await errorDe(new Canjear().execute(cuerpo, portal))
+        assert.deepInclude(fueraDelPortal, { status: 404, codigo: 'no_encontrado' })
+        const enPortal = await premio(e, s.programa.id, {
+            tipo: 'mes_gratis',
+            costo_puntos: 30,
+            en_portal: true,
+        })
+        const canje = await new Canjear().execute({ ...cuerpo, premio_id: enPortal.id }, portal)
         assert.equal(canje.canal, 'portal')
         const auditoria = await db
             .from('audit.acciones')

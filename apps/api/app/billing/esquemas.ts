@@ -140,8 +140,7 @@ export const Factura = definirEsquema(
             id,
             empresa_id: {
                 ...id,
-                description:
-                    'Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+                description: 'Empresa (NIT) del documento (multiempresa)',
             },
             empresa_nombre: { ...texto, description: 'Nombre comercial de la empresa que emite' },
             cliente_id: id,
@@ -231,7 +230,6 @@ export const Factura = definirEsquema(
             'acreditado',
             'origen',
             'id_externo',
-            'empresa_id',
             'empresa_nombre',
             'dte_id',
             'fel_error',
@@ -345,6 +343,41 @@ export const EmisorFactura = definirEsquema(
     }),
 )
 
+export const FacturaPagoAplicado = definirEsquema(
+    'FacturaPagoAplicado',
+    objeto({
+        aplicacion_id: id,
+        pago_id: id,
+        cobro_id: { ...nulable(id), description: 'Cobro repartido del pago (multiempresa); null si no' },
+        monto: { ...Dinero, description: 'Lo aplicado de ese pago a esta factura' },
+        pago_monto: { ...Dinero, description: 'Monto total del pago' },
+        metodo: texto,
+        referencia: nulable(texto),
+        estado: {
+            ...texto,
+            description:
+                'Estado del pago (registrado, anulado…): una aplicación de un pago anulado ya no cuenta',
+        },
+        historico: { ...booleano, description: 'Pago histórico importado (sin caja ni banco)' },
+        aplicado_en: instante,
+    }),
+)
+
+export const FacturaAsiento = definirEsquema(
+    'FacturaAsiento',
+    objeto({
+        id,
+        fecha,
+        origen_tipo: enumerado(['factura', 'mora']),
+        descripcion: texto,
+        diario: { ...nulable(texto), description: 'Código del diario (VEN…)' },
+        numero: { ...nulable(entero), description: 'Número en su diario y año' },
+        total: { ...Dinero, description: 'Σ debe del asiento' },
+        reversa_de: { ...nulable(id), description: 'Asiento que este revierte' },
+        revertido_por: { ...nulable(id), description: 'Reverso de este asiento, si lo hay' },
+    }),
+)
+
 export const FacturaDetalle = definirEsquema('FacturaDetalle', {
     allOf: [
         Factura,
@@ -356,6 +389,20 @@ export const FacturaDetalle = definirEsquema('FacturaDetalle', {
                 emisor: {
                     ...EmisorFactura,
                     description: 'Empresa que emite la factura con sus datos fiscales (FEL)',
+                },
+                pagos: {
+                    ...lista(FacturaPagoAplicado),
+                    description: 'Pagos aplicados a la factura, en orden (también los de pagos anulados)',
+                },
+                asientos: {
+                    ...lista(FacturaAsiento),
+                    description:
+                        'Asientos de la factura (origen factura o mora), los reversos incluidos; vacío en una importada sin asiento o por certificar',
+                },
+                diferencia_cobro_tope: {
+                    ...nulable(Dinero),
+                    description:
+                        'Tope vigente de la empresa para POST /pagos/:id/cerrar-diferencia (diferencia_cobro_tope); null sin localización',
                 },
             },
             ['notas_credito', 'emisor'],
@@ -568,8 +615,7 @@ export const Pago = definirEsquema(
             id,
             empresa_id: {
                 ...id,
-                description:
-                    'Empresa (NIT) del documento (multiempresa). Siempre viene; opcional en el esquema para no romper clientes tipados',
+                description: 'Empresa (NIT) del documento (multiempresa)',
             },
             cobro_id: {
                 ...nulable(id),
@@ -675,8 +721,6 @@ export const Pago = definirEsquema(
             'banco_origen_nombre',
             'cuenta_bancaria_id',
             'cuenta_bancaria_nombre',
-            'empresa_id',
-            'cobro_id',
             'pagos',
         ],
     ),
@@ -803,12 +847,10 @@ export const Promesa = definirEsquema(
             ]),
             canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
             aprobada_por: nulable(id),
-            // la API ya responde siempre con la forma de EvaluacionPromesa; el campo sigue abierto
-            // hasta que el panel migre sus fixtures (a3.md) y entonces pasa a nulable(EvaluacionPromesa)
             resultado_evaluacion: {
-                ...nulable(jsonLibre),
+                ...nulable(EvaluacionPromesa),
                 description:
-                    'Forma estable: components.schemas.EvaluacionPromesa (Schema<"EvaluacionPromesa">). Por qué se aprobó, rechazó o quedó pendiente; ver contratos/promesas.md',
+                    'Por qué se aprobó, rechazó o quedó pendiente (aprobacion y cierre se agregan después); ver contratos/promesas.md',
             },
             servicio: {
                 ...ServicioEvaluado,

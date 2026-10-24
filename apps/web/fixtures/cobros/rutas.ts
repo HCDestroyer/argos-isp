@@ -389,6 +389,9 @@ function liquidar(solicitud: SolicitudFixture): RespuestaFixture {
         descripcion,
         origen_tipo: 'liquidacion_cobro',
         origen_id: id,
+        // el de la cuenta bancaria propia donde liquida (Banco Industrial = cuenta bancaria 2, la
+        // del proveedor por defecto); una cuenta de banco sin cuenta bancaria propia cae en COB
+        diario: banco.cuenta ? (banco.cuenta.cuenta_bancaria_id ? `BAN-${banco.cuenta.cuenta_bancaria_id}` : 'COB') : 'BAN-2',
         reversa_de: null,
         created_by: liquidacion.registrado_por,
         created_at: momento,
