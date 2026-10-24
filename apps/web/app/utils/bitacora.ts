@@ -447,14 +447,14 @@ export const ENTIDADES_BITACORA: Record<string, { etiqueta: string, ruta?: (id: 
     pago_proveedor: { etiqueta: 'Pago a proveedor', ruta: () => '/pagos-proveedores' },
     activo: { etiqueta: 'Activo fijo', ruta: id => `/activos/${id}` },
     diferimiento: { etiqueta: 'Diferido', ruta: id => `/diferimientos/${id}` },
-    // Inventario (A3): sin `ruta` hasta que existan sus pantallas
-    bodega: { etiqueta: 'Bodega' },
-    producto: { etiqueta: 'Producto' },
+    // Inventario (A3)
+    bodega: { etiqueta: 'Bodega', ruta: id => `/inventario?bodega=${id}` },
+    producto: { etiqueta: 'Producto', ruta: id => `/inventario/kardex?producto=${id}` },
     movimiento_inventario: { etiqueta: 'Movimiento de inventario' },
     traslado_inventario: { etiqueta: 'Traslado de inventario' },
-    conteo_inventario: { etiqueta: 'Conteo de inventario' },
-    unidad: { etiqueta: 'Equipo (unidad)' },
-    unidad_inventario: { etiqueta: 'Equipo (unidad)' },
+    conteo_inventario: { etiqueta: 'Conteo de inventario', ruta: id => `/inventario/conteos/${id}` },
+    unidad: { etiqueta: 'Equipo (unidad)', ruta: id => `/inventario/unidades?unidad=${id}` },
+    unidad_inventario: { etiqueta: 'Equipo (unidad)', ruta: id => `/inventario/unidades?unidad=${id}` },
 }
 
 /** Enlace del panel a una entidad de la bitácora, o `null`. */

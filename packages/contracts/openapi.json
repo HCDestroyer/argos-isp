@@ -50048,6 +50048,17 @@
                     ],
                     "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
                     "description": "Existencia total bajo la cual se avisa (inventario.existencia_minima)"
+                  },
+                  "precio_venta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)",
+                    "examples": [
+                      "450.00"
+                    ]
                   }
                 },
                 "required": [
@@ -50478,6 +50489,17 @@
                     ],
                     "pattern": "^\\d{1,11}(\\.\\d{1,3})?$",
                     "description": "Existencia total bajo la cual se avisa (inventario.existencia_minima)"
+                  },
+                  "precio_venta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
+                    "description": "Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)",
+                    "examples": [
+                      "450.00"
+                    ]
                   }
                 },
                 "required": [
@@ -85634,6 +85656,7 @@
           "cuenta_costo",
           "cuenta_consumo",
           "existencia_minima",
+          "precio_venta",
           "activo",
           "existencia",
           "valor",
@@ -85708,6 +85731,17 @@
             ],
             "pattern": "^-?\\d+\\.\\d{3}$",
             "description": "Cantidad con 3 decimales"
+          },
+          "precio_venta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dinero"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Precio de venta sugerido para el cargo único (IVA incluido); null = sin precio"
           },
           "activo": {
             "type": "boolean"

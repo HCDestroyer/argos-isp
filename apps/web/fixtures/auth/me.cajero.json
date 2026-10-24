@@ -31,7 +31,8 @@
     "lealtad.canjear",
     "adicionales.ver",
     "facturas.emitir_cargo_unico",
-    "egresos.registrar"
+    "egresos.registrar",
+    "inventario.ver"
   ],
   "alcance_global": false,
   "empresas": [

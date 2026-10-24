@@ -5,6 +5,7 @@ import { hoyGuatemala } from '~/utils/cobro'
 import { fechaGuatemala } from '~/utils/libro'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, problemaTipado, registrarAccion, usuariosPorToken } from '../comun'
+import { inventarioDeCompra } from '../inventario/rutas'
 import { resolverValor } from '../fiscal/rutas'
 import { bancosLibro } from '../libro/datos'
 import { CUENTAS_CLASE } from './fase5'
@@ -545,6 +546,11 @@ function registrarCompra(solicitud: SolicitudFixture, egresoOrigen: Schema<'Egre
         created_at: ahora(),
         lineas: lineas.map(l => l.linea),
         retenciones,
+    }
+    // Inventario (A3): las líneas `bien` con `producto_id` entran (o salen, en una NCRE) del kardex
+    const inventario = inventarioDeCompra(compra, cuerpo.lineas, creditoFiscal)
+    if (inventario) {
+        return inventario
     }
     if (tipoDocumento === 'NCRE' && referencia) {
         referencia.saldo = texto(new Decimal(referencia.saldo).minus(total))

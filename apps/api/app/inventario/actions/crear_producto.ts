@@ -3,7 +3,7 @@ import { Conflicto, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { exigirEmpresaActiva, resolverEmpresaActiva } from '#core/empresas'
 import { CLAVES_CLASE_ACTIVO } from '#ledger/compras'
-import { dec } from '#ledger/dinero'
+import { aTexto, dec } from '#ledger/dinero'
 import {
     CLASE_ACTIVO_POR_DEFECTO,
     problemaCuentaProducto,
@@ -21,6 +21,7 @@ import {
  *   `equipo_red`). Los de serie se crean ya, pero no se mueven hasta la fase B (`unidades`).
  * - `cuenta_costo` y `cuenta_consumo`: códigos de gasto (por defecto `5.6.01` y `5.2.07`).
  * - `concepto_cargo_id`: concepto de cargo único de la misma empresa.
+ * - `precio_venta`: precio sugerido del cargo único, IVA incluido (opcional, pedido de A4).
  */
 
 export interface DatosProducto {
@@ -34,6 +35,8 @@ export interface DatosProducto {
     cuenta_costo?: string | null
     cuenta_consumo?: string | null
     existencia_minima?: string | null
+    /** precio de venta sugerido para el cargo único, IVA incluido (2 decimales) */
+    precio_venta?: string | null
 }
 
 export interface EntradaCrearProducto extends DatosProducto {
@@ -93,6 +96,16 @@ export async function validarDatosProducto(
                 field: 'existencia_minima',
                 message: 'La existencia mínima es >= 0 con hasta 3 decimales',
                 rule: 'cantidad',
+            })
+        }
+    }
+    if (datos.precio_venta !== undefined && datos.precio_venta !== null) {
+        const precio = dec(datos.precio_venta)
+        if (precio.isNegative() || precio.decimalPlaces() > 2) {
+            errores.push({
+                field: 'precio_venta',
+                message: 'El precio de venta es >= 0 con hasta 2 decimales',
+                rule: 'monto',
             })
         }
     }
@@ -158,6 +171,7 @@ export default class CrearProducto extends DomainAction<EntradaCrearProducto, Pr
                 cuenta_costo: input.cuenta_costo?.trim() || null,
                 cuenta_consumo: input.cuenta_consumo?.trim() || null,
                 existencia_minima: input.existencia_minima ?? null,
+                precio_venta: input.precio_venta ? aTexto(dec(input.precio_venta)) : null,
             })
             .returning('id')) as Array<{ id: number }>
         const id = Number(fila!.id)
@@ -174,6 +188,7 @@ export default class CrearProducto extends DomainAction<EntradaCrearProducto, Pr
             cuenta_costo: producto.cuenta_costo,
             cuenta_consumo: producto.cuenta_consumo,
             existencia_minima: producto.existencia_minima,
+            precio_venta: producto.precio_venta,
             activo: producto.activo,
         })
         return producto

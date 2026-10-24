@@ -8,6 +8,8 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
  * (un activo fijo da de alta el activo; un gasto anticipado se difiere en N meses), retenciones sugeridas,
  * ninguna o a mano, y la condición (al contado sale de caja, banco o cuenta; al crédito queda en el
  * auxiliar del proveedor). Las cifras finales las calcula la API; aquí se muestran como referencia.
+ * Con `inventario.ver`, una línea `bien` puede llevar un producto del inventario: entra a su bodega
+ * (por serie, con sus series o MAC pegadas o escaneadas) y, en una NCRE, sale lo devuelto al proveedor.
  */
 definePageMeta({ permiso: 'compras.registrar' })
 
@@ -35,7 +37,59 @@ const cuentas = shallowRef<Cuenta[]>([])
 const egreso = shallowRef<Egreso | null>(null)
 const problemaCatalogos = ref<Problem | null>(null)
 
+/* Inventario (A3): productos y bodegas para las líneas `bien`. */
+const productosInventario = shallowRef<Producto[]>([])
+const bodegasInventario = shallowRef<Bodega[]>([])
+const itemsProductoInventario = computed(() => [
+    { label: 'Sin producto (gasto o costo)', value: 0 },
+    ...productosInventario.value.map(p => ({ label: `${p.nombre} · ${p.sku}`, value: p.id, description: SEGUIMIENTOS[p.seguimiento].etiqueta })),
+])
+const itemsBodegaInventario = computed(() => bodegasInventario.value.map(b => ({ label: b.nombre, value: b.id, icon: TIPOS_BODEGA[b.tipo].icono })))
+/** Equipos de la compra que corrige la NCRE, por línea (para devolverlos al proveedor). */
+const unidadesDevolubles = ref<Record<number, { label: string, value: number }[]>>({})
+
+async function cargarInventario() {
+    if (!puede('inventario.ver')) {
+        return
+    }
+    const [p, b] = await Promise.all([useProductos().activos(), useBodegas().activas()])
+    productosInventario.value = p.ok ? p.data : []
+    bodegasInventario.value = b.ok ? b.data : []
+}
+
+async function elegirProducto(indice: number, valor: unknown) {
+    const linea = estado.lineas[indice]
+    if (!linea) {
+        return
+    }
+    const producto = productosInventario.value.find(p => p.id === valor) ?? null
+    linea.producto_id = producto?.id ?? null
+    linea.seguimiento = producto?.seguimiento ?? null
+    linea.unidad_ids = []
+    if (producto) {
+        linea.tipo = 'bien'
+        linea.cantidad ??= 1
+        linea.descripcion ||= producto.nombre
+    }
+    await cargarDevolubles(indice)
+}
+
+async function cargarDevolubles(indice: number) {
+    const linea = estado.lineas[indice]
+    if (!linea || estado.tipo_documento !== 'NCRE' || linea.seguimiento !== 'serie' || !linea.producto_id) {
+        return
+    }
+    const resultado = await useUnidadesInventario().listar({ producto_id: linea.producto_id, estado: 'disponible', limit: 200 })
+    const propias = resultado.ok ? resultado.data.data.filter(u => u.compra_id === estado.compra_referencia_id) : []
+    unidadesDevolubles.value = { ...unidadesDevolubles.value, [indice]: propias.map(u => ({ label: `${identificacionUnidad(u)} · ${u.bodega_nombre ?? ''}`, value: u.id })) }
+}
+
+watch(() => estado.compra_referencia_id, () => {
+    estado.lineas.forEach((_, i) => void cargarDevolubles(i))
+})
+
 async function cargarCatalogos() {
+    void cargarInventario()
     const [rProveedores, rCuentas, rEgreso] = await Promise.all([
         puede('proveedores.ver') ? useProveedores().listar({ activo: true, limit: 200 }) : null,
         puede('libro.ver') ? useLibro().cuentas() : null,
@@ -386,6 +440,83 @@ onMounted(cargarCatalogos)
                                         </template>
                                     </UInput>
                                 </UFormField>
+                            </template>
+                            <template v-if="linea.tipo === 'bien' && productosInventario.length">
+                                <UFormField
+                                    label="Producto del inventario"
+                                    :name="`lineas.${i}.producto_id`"
+                                    help="Opcional: con producto, entra a la bodega."
+                                    class="sm:col-span-2"
+                                >
+                                    <USelectMenu
+                                        :model-value="linea.producto_id ?? 0"
+                                        :items="itemsProductoInventario"
+                                        value-key="value"
+                                        class="w-full"
+                                        data-prueba="linea-producto"
+                                        @update:model-value="v => elegirProducto(i, v)"
+                                    />
+                                </UFormField>
+                                <template v-if="linea.producto_id">
+                                    <UFormField
+                                        :label="estado.tipo_documento === 'NCRE' ? 'Bodega de la que sale' : 'Bodega que recibe'"
+                                        :name="`lineas.${i}.bodega_id`"
+                                        required
+                                    >
+                                        <USelect
+                                            :model-value="linea.bodega_id ?? undefined"
+                                            :items="itemsBodegaInventario"
+                                            placeholder="Elige la bodega"
+                                            class="w-full"
+                                            data-prueba="linea-bodega"
+                                            @update:model-value="v => linea.bodega_id = typeof v === 'number' ? v : null"
+                                        />
+                                    </UFormField>
+                                    <UFormField
+                                        v-if="!(estado.tipo_documento === 'NCRE' && linea.seguimiento === 'serie')"
+                                        label="Cantidad"
+                                        :name="`lineas.${i}.cantidad`"
+                                    >
+                                        <UInputNumber
+                                            v-model="linea.cantidad"
+                                            :min="1"
+                                            :format-options="{ useGrouping: false }"
+                                            class="w-full"
+                                            data-prueba="linea-cantidad"
+                                        />
+                                    </UFormField>
+                                    <UFormField
+                                        v-if="linea.seguimiento === 'serie' && estado.tipo_documento !== 'NCRE'"
+                                        label="Series o MAC"
+                                        :name="`lineas.${i}.series`"
+                                        help="Una por línea: pega la lista o escanéalas."
+                                        class="sm:col-span-2 lg:col-span-4"
+                                    >
+                                        <UTextarea
+                                            v-model="linea.series"
+                                            :rows="3"
+                                            autoresize
+                                            class="w-full font-mono"
+                                            data-prueba="linea-series"
+                                        />
+                                    </UFormField>
+                                    <UFormField
+                                        v-if="linea.seguimiento === 'serie' && estado.tipo_documento === 'NCRE'"
+                                        label="Equipos que se devuelven"
+                                        :name="`lineas.${i}.unidad_ids`"
+                                        :help="unidadesDevolubles[i]?.length ? 'De la compra que corrige esta NCRE, disponibles.' : 'Elige la compra que se corrige para ver sus equipos.'"
+                                        class="sm:col-span-2"
+                                    >
+                                        <USelectMenu
+                                            v-model="linea.unidad_ids"
+                                            :items="unidadesDevolubles[i] ?? []"
+                                            value-key="value"
+                                            multiple
+                                            class="w-full"
+                                            data-prueba="linea-unidades"
+                                        />
+                                    </UFormField>
+                                </template>
                             </template>
                             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:col-span-2 lg:col-span-4">
                                 <UCheckbox

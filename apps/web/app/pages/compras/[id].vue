@@ -13,7 +13,7 @@ definePageMeta({ permiso: 'compras.ver' })
 
 const route = useRoute()
 const toast = useToast()
-const { puede } = usePermisos()
+const { puede, enlace } = usePermisos()
 
 const id = computed(() => Number(route.params.id))
 const compra = shallowRef<Compra | null>(null)
@@ -289,6 +289,12 @@ onMounted(cargar)
                             <div class="flex flex-col">
                                 <span class="text-sm font-medium text-highlighted">{{ row.original.descripcion }}</span>
                                 <span class="text-xs text-muted">{{ TIPOS_LINEA_COMPRA[row.original.tipo] }}<template v-if="row.original.exento"> · exenta</template><template v-if="row.original.clase_activo"> · {{ etiquetaClaseActivo(row.original.clase_activo) }}</template><template v-if="row.original.diferir_meses"> · diferida en {{ row.original.diferir_meses }} meses</template></span>
+                                <ULink
+                                    v-if="row.original.producto_id"
+                                    :to="enlace(`/inventario/kardex?producto=${row.original.producto_id}`)"
+                                    class="text-xs text-primary"
+                                    :data-prueba="`linea-inventario-${row.original.id}`"
+                                >Inventario: {{ row.original.cantidad ?? 1 }} al kardex del producto #{{ row.original.producto_id }}</ULink>
                             </div>
                         </template>
                         <template #cuenta_codigo-cell="{ row }">

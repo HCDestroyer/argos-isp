@@ -40,6 +40,10 @@ export const Producto = definirEsquema(
         cuenta_costo: { ...nulable(texto), description: 'null = 5.6.01' },
         cuenta_consumo: { ...nulable(texto), description: 'null = 5.2.07' },
         existencia_minima: nulable(Cantidad),
+        precio_venta: {
+            ...nulable(Dinero),
+            description: 'Precio de venta sugerido para el cargo único (IVA incluido); null = sin precio',
+        },
         activo: booleano,
         existencia: { ...Cantidad, description: 'Existencia total en todas las bodegas' },
         valor: { ...Dinero, description: 'Valor del kardex del producto' },
