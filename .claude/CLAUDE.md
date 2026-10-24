@@ -207,6 +207,11 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `sorteo.ganador_notificado` | lealtad (sorteos) | sorteo_id, empresa_id, ganador_id, cliente_id, posicion, tipo, codigo, premio, reclamar_antes, sustituye_a |
 | `sorteo.premio_no_reclamado` | lealtad (sorteos) | sorteo_id, empresa_id, ganador_id, cliente_id, posicion, premio_posicion, suplente_id, motivo |
 | `sorteo.acta_cerrada` | lealtad (sorteos) | sorteo_id, empresa_id, acta_hash |
+| `inventario.movimiento_registrado` | inventario | movimiento_id, empresa_id, tipo, producto_id, bodega_id, cantidad, costo_total, unidad_id, servicio_id, origen_tipo, origen_id (`contratos/inventario.md`) |
+| `inventario.comodato_asignado` / `inventario.comodato_devuelto` | inventario | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac; devuelto: condicion, bodega_id |
+| `inventario.equipo_por_recuperar` | inventario | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac |
+| `inventario.existencia_minima` | inventario | empresa_id, producto_id, bodega_id (o null), cantidad, minimo |
+| `inventario.conteo_cerrado` | inventario | conteo_id, empresa_id, bodega_id, faltante, sobrante, lineas |
 | `cliente.actualizado` | núcleo | cliente_id, campos[] (nombre, tipo, codigo) |
 | `horus.config_cambiada` | integraciones (Horus) | activo, campos[] (nunca valores ni secretos) |
 | `horus.hallazgo_abierto` / `horus.hallazgo_resuelto` | integraciones (Horus) | webhook_id, servicio_id, cliente_id, empresa_id, ip, hallazgo |

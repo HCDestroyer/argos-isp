@@ -157,6 +157,19 @@ Decisión del PM (17 oct): programa por empresa en el que los clientes ganan pun
 
 Depende de las fases 2 (cuentas) y 3 (NCRE en FEL) de la localización fiscal.
 
+## Inventario interno
+
+Decisión del PM (24 oct): alcance completo. Productos y bodegas (también por técnico); kardex solo de inserción a costo promedio, o costo específico para lo de serie; compras que entran a inventario; ventas y consumos con su costo; equipos por serie o MAC en comodato, como activo fijo ligado al servicio, y «por recuperar» al retirarlo; traslados, conteos, ajustes y bajas, todo con su asiento. Contrato en `.claude/integration/contratos/inventario.md`.
+
+| Fase      | PR                                                                                                       | Dueño | Criterio                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------ |
+| A         | Modelo, cuentas, productos, bodegas, saldo inicial, compras a inventario, consumo, traslado, ajuste, baja | A3    | `1.1.14` = kardex valorizado; sin productos, compras igual que hoy                          |
+| B         | Unidades por serie, comodato (asignar, devolver, perder), consumidor de retiro, por recuperar            | A3    | Comodato = activo vigente con el costo de la unidad; el evento repetido no cambia nada      |
+| C         | Venta con costo de ventas, conteos, reporte valorizado, costo de ventas en ISO y comparador             | A3    | Anular la factura reingresa al mismo costo; el conteo asienta faltante y sobrante           |
+| Pantallas | Menú Inventario, pestaña Equipos del servicio, compras y cargo único con producto                        | A4    | 390 y 1280 px, claro y oscuro, errores con «Reintentar»                                     |
+
+Cada fase pasa por el auditor (checks del contrato §8) antes de fusionar.
+
 ## Distribución e instalación (al cerrar los sprints)
 
 Decisión del PM (17 oct): al terminar la fase 1, ArgosIsp se entrega como producto instalable, no como repositorio que se compila en cada servidor.
