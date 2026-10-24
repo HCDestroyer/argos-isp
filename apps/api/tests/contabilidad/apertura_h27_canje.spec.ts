@@ -9,13 +9,13 @@ import {
     lineas,
     saldoCuenta,
     servicioEn,
+    servicioFacturado,
     type Empresas,
 } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { empresasSinFel, neto } from '#tests/contabilidad/ayudas_libros'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { programaConReglas } from '#tests/lealtad/ayudas_lealtad'
-import { servicioCortado } from '#tests/billing/ayudas_billing'
 import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
 import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import RegistrarPagoHistorico from '#billing/actions/registrar_pago_historico'
@@ -28,6 +28,13 @@ import VerificarCierre from '#ledger/actions/verificar_cierre'
 import CrearCaja from '#ledger/actions/crear_caja'
 import AbrirCaja from '#ledger/actions/abrir_caja'
 import RegistrarEgreso from '#ledger/actions/registrar_egreso'
+import CerrarCaja from '#ledger/actions/cerrar_caja'
+import CrearProveedorCobro from '#ledger/actions/crear_proveedor_cobro'
+import EditarProveedorCobro from '#ledger/actions/editar_proveedor_cobro'
+import AnularFactura from '#billing/actions/anular_factura'
+import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
+import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
+import { cuentaBancariaPrueba, servicioCortado } from '#tests/billing/ayudas_billing'
 import AjustarPuntos from '#lealtad/actions/ajustar_puntos'
 import CrearPremio from '#lealtad/actions/crear_premio'
 import Canjear from '#lealtad/actions/canjear'
@@ -35,6 +42,7 @@ import RevertirCanje from '#lealtad/actions/revertir_canje'
 import VencerPuntos from '#lealtad/actions/vencer_puntos'
 import { saldoPuntos } from '#lealtad/puntos'
 import { construirLibro, finDeMes } from '#fiscal/libros_legales'
+import { calcularDatos } from '#fiscal/declaraciones'
 import { CERO, aTexto, dec } from '#ledger/dinero'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import type { ContextoAccion } from '#shared/contexto'
@@ -52,7 +60,8 @@ import type { ContextoAccion } from '#shared/contexto'
  * - Pasarela Recurrente: dos eventos de pago del mismo checkout, IVA retenido por la emisora.
  * - Egresos del cajero.
  *
- * Hallazgos de esta revisión: H48 a H53 (`.fails`, fila en `a3.md`).
+ * Hallazgos de la primera revisión: H48 a H53 (arreglados por A3 en 28ee679; H49 desapareció con H50).
+ * Verificación final de 28ee679: H60 a H64 (`.fails`, fila en `a3.md`).
  */
 
 async function importar(
@@ -109,7 +118,7 @@ async function movimientosDeNota(notaId: number) {
             debe: string
             haber: string
         }>
-    ).map((m) => [m.codigo, m.tipo, m.debe, m.haber])
+    ).map((m) => [m.codigo, m.tipo, m.debe, m.haber] as [string, string, string, string])
 }
 
 async function sinViolaciones(
@@ -218,31 +227,36 @@ test.group('Auditor contable · cierre de los saldos de apertura (§23)', (group
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H49: una importada que entra después del cierre de apertura (y antes de su fecha) manda la base de su NCRE a patrimonio aunque su saldo nunca se cerró', async ({
+    test('H49 (desaparece con H50, 28ee679): la NCRE de una importada tardía (después del cierre, con fecha anterior) va a ingresos y 2.9.01 conserva su total hasta el próximo cierre', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
         await importar(e.ctx, e.B, '50.00', '2026-09-05')
         await new CerrarApertura().execute({ empresa_id: e.B, fecha: hoyGuatemala() }, e.ctx)
-        // importación tardía con fecha anterior al cierre: su 2.9.01 no está en el cierre
         const tardia = await importar(e.ctx, e.B, '112.00', '2026-09-20')
         assert.equal(await apertura(e.B), '-112.00')
-        await new EmitirNotaCredito().execute(
+        const nota = await new EmitirNotaCredito().execute(
             { factura_id: tardia.id, monto: '112.00', motivo: 'auditoría: acredita la tardía' },
             e.ctx,
         )
-        // lo correcto: la base vuelve contra 2.9.01 (que conserva solo el IVA, como cualquier importada
-        // aún sin cerrar); hoy va a 3.3.01 y 2.9.01 queda con los 112.00 completos
-        assert.equal(await apertura(e.B), '-12.00')
-    }).fails(
-        'H49: cuentaBaseApertura decide por la fecha del asiento importado, no por si entró en el cierre',
-    )
+        const movimientos = await movimientosDeNota(nota.id)
+        assert.deepEqual(movimientos.map((m) => [m[1], m[2], m[3]]).sort(), [
+            ['activo', '0.00', '112.00'],
+            ['ingreso', '100.00', '0.00'],
+            ['pasivo', '12.00', '0.00'],
+        ])
+        assert.equal(await apertura(e.B), '-112.00')
+        // el segundo cierre traslada la tardía completa y 2.9.01 vuelve a 0
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: hoyGuatemala() }, e.ctx)
+        assert.equal(await apertura(e.B), '0.00')
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 })
 
 test.group('Auditor contable · H27 en el libro de ventas y la declaración', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    test('H48: la nota de crédito sin FEL sobre una importada rebaja 2.1.02 del mes pero no sale en el libro de ventas (la declaración de IVA no la ve)', async ({
+    test('H48 (arreglado en 28ee679): la nota de crédito sin FEL sobre una importada sale en el libro de ventas del mes y la declaración de IVA rebaja su débito', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -266,8 +280,21 @@ test.group('Auditor contable · H27 en el libro de ventas y la declaración', (g
             e.ctx,
         )
         assert.notEqual(v.checks.find((c) => c.clave === 'iva_cuadrado')?.estado, 'anomalia')
+        // la declaración de IVA del mes sale del libro: débito −12.00 (la base −100.00 en ventas)
+        const datos = await calcularDatos(db.connection(), e.B, 'iva_mensual', mes.desde)
+        assert.equal((datos.totales as Record<string, string>).debito, '-12.00')
+        assert.equal((datos.totales as Record<string, string>).base_ventas, '-100.00')
+        // y la base rebaja los ingresos del mes por lo mismo que el libro
+        const ingresos = await db.rawQuery(
+            `SELECT coalesce(sum(m.debe - m.haber), 0)::numeric(14,2)::text AS s
+               FROM ledger.movimientos m JOIN ledger.asientos a ON a.id = m.asiento_id
+               JOIN ledger.cuentas c ON c.id = m.cuenta_id
+              WHERE a.empresa_id = ? AND c.tipo = 'ingreso' AND a.fecha BETWEEN ? AND ?`,
+            [e.B, mes.desde, mes.hasta],
+        )
+        assert.equal(ingresos.rows[0].s, '100.00')
         await sinViolaciones(assert, [e.B, e.C])
-    }).fails('H48: libroVentasLegal excluye las notas de facturas con clave_externa (importadas)')
+    })
 
     test('cuatro NCRE parciales con redondeo sobre una importada: Σ IVA = IVA de la factura y Σ base = su base', async ({
         assert,
@@ -286,12 +313,19 @@ test.group('Auditor contable · H27 en el libro de ventas y la declaración', (g
         const iva = notas.reduce((s, n) => s.plus(n.iva), CERO)
         assert.equal(aTexto(iva), f.iva)
         assert.equal(await saldoCuenta(e.B, '1.1.03'), '0.00')
-        // 2.9.01 conserva exactamente el IVA de la importada
-        assert.equal(await apertura(e.B), aTexto(CERO.minus(f.iva)))
+        // H50: 2.9.01 conserva el total importado y la base va a ingresos
+        assert.equal(await apertura(e.B), aTexto(CERO.minus(f.total)))
+        let base = CERO
+        for (const n of notas) {
+            for (const m of await movimientosDeNota(n.id)) {
+                if (m[1] === 'ingreso') base = base.plus(m[2]).minus(m[3])
+            }
+        }
+        assert.equal(aTexto(base), aTexto(dec(f.total).minus(f.iva)))
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H50: la base de la NCRE sobre una importada no rebaja los ingresos del periodo (va a 2.9.01 o a patrimonio) aunque su IVA sí rebaja el débito del mes', async ({
+    test('H50 (decisión del líder, 28ee679): la base de la NCRE sobre una importada rebaja los ingresos del periodo en la cuenta de su línea; 2.9.01 y patrimonio no se tocan', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -306,9 +340,11 @@ test.group('Auditor contable · H27 en el libro de ventas y la declaración', (g
         const movimientos = await movimientosDeNota(nota.id)
         const aIngreso = movimientos.filter((m) => m[1] === 'ingreso' && m[2] === '100.00')
         assert.lengthOf(aIngreso, 1, JSON.stringify(movimientos))
-    }).fails(
-        'H50: la base de la NCRE de una importada va contra 2.9.01/3.3.01, no contra ingresos del periodo',
-    )
+        assert.isUndefined(movimientos.find((m) => m[1] === 'patrimonio' || m[0] === '2.9.01'))
+        assert.equal(await apertura(e.B), '0.00')
+        assert.equal(await saldoCuenta(e.B, '3.3.01'), '-112.00')
+        await sinViolaciones(assert, [e.B, e.C])
+    })
 })
 
 test.group('Auditor contable · canje revertido como reverso espejo', (group) => {
@@ -498,7 +534,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
         })
     })
 
-    test('H51: el IVA que retiene la emisora de la tarjeta (`vat_withheld` del webhook) no se registra: el banco recibe de más y falta la retención en 1.1.05', async ({
+    test('H51 (arreglado en 28ee679): el IVA que retiene la emisora (`vat_withheld`) va a 1.1.05 como RET_IVA_TAR y el banco queda en bruto − comisión − retención', async ({
         assert,
     }) => {
         const datos = await servicioCortado()
@@ -530,9 +566,25 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
             const asiento = await lineas('pago', r.pago_id!)
             const banco = asiento.find((l) => String(l[0]).startsWith('1.1.02'))
             assert.equal(banco?.[1], aTexto(dec(cobro.monto).minus('10.50').minus(retenido)))
-            assert.isDefined(asiento.find((l) => l[0] === '1.1.05'))
+            assert.deepEqual(
+                asiento.find((l) => l[0] === '1.1.05'),
+                ['1.1.05', aTexto(retenido), '0.00'],
+            )
+            assert.deepEqual(
+                asiento.find((l) => l[0] === '1.1.03'),
+                ['1.1.03', '0.00', cobro.monto],
+            )
+            const pago = await db.from('billing.pagos').where('id', r.pago_id!).firstOrFail()
+            assert.include(pago, { monto: cobro.monto, retenido: aTexto(retenido), comision: '10.50' })
+            const constancia = await db
+                .from('ledger.constancias_retencion')
+                .where('pago_id', r.pago_id!)
+                .select('monto', 'impuesto', 'direccion')
+            assert.deepEqual(constancia, [
+                { monto: aTexto(retenido), impuesto: 'iva', direccion: 'recibida' },
+            ])
         })
-    }).fails('H51: vat_withheld de Recurrente se ignora')
+    })
 })
 
 test.group('Auditor contable · egresos del cajero', (group) => {
@@ -566,7 +618,7 @@ test.group('Auditor contable · egresos del cajero', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H52: el cajero registra un egreso con fecha anterior a la apertura de su turno', async ({
+    test('H52 (arreglado en 28ee679): el cajero no registra un egreso con fecha anterior a la apertura de su turno', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -586,10 +638,10 @@ test.group('Auditor contable · egresos del cajero', (group) => {
                 c.ctx,
             ),
         )
-        assert.equal(error.status, 422)
-    }).fails('H52: el egreso del cajero acepta una fecha anterior a su turno')
+        assert.deepEqual([error.status, error.reglas], [422, ['anterior_al_turno']])
+    })
 
-    test('H53: el cajero saca de su caja más efectivo del que tiene (esperado negativo)', async ({
+    test('H53 (arreglado en 28ee679): el cajero no saca más efectivo del que tiene su turno; hasta lo que tiene, sí', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -606,6 +658,306 @@ test.group('Auditor contable · egresos del cajero', (group) => {
                 c.ctx,
             ),
         )
-        assert.equal(error.status, 422)
-    }).fails('H53: el egreso del cajero no se limita al efectivo de su turno')
+        assert.deepEqual([error.status, error.codigo], [422, 'efectivo_insuficiente'])
+        // dos egresos simultáneos que juntos pasan el efectivo: solo uno entra
+        const dos = await Promise.allSettled(
+            ['60.00', '60.00'].map((monto) =>
+                new RegistrarEgreso().execute(
+                    { categoria: 'otros', metodo: 'caja', caja_id: c.cajaId, monto, descripcion: 'a la vez' },
+                    c.ctx,
+                ),
+            ),
+        )
+        assert.lengthOf(
+            dos.filter((r) => r.status === 'fulfilled'),
+            1,
+        )
+        // el resto exacto sí sale y el turno cierra en cero
+        await new RegistrarEgreso().execute(
+            {
+                categoria: 'otros',
+                metodo: 'caja',
+                caja_id: c.cajaId,
+                monto: '40.00',
+                descripcion: 'el resto',
+            },
+            c.ctx,
+        )
+        const cerrada = await new CerrarCaja().execute({ caja_id: c.cajaId, contado: '0.00' }, c.ctx)
+        assert.equal(cerrada.esperado, '0.00')
+        await afirmarLibro(assert, [e.B, e.C])
+    })
 })
+
+/** Cobro en línea de Recurrente de un servicio facturado en la empresa B, ya pagado por webhook. */
+async function cobroPagado(e: Empresas, checkout: string, extra: Record<string, unknown> = {}) {
+    const s = await servicioFacturado(e.B, '2026-10-01', { precio: '300.00', instalacion: '2026-09-01' })
+    const cobro = await new CrearCobroPasarela().execute(
+        { cliente_id: s.clienteId },
+        contextoSistema('portal'),
+    )
+    const centavos = Number(dec(cobro.monto).times(100).toFixed(0))
+    const pago = await new ProcesarWebhookPasarela().execute(
+        {
+            proveedor: 'recurrente',
+            ...webhook(
+                {
+                    event_type: 'payment_intent.succeeded',
+                    checkout: { id: checkout },
+                    amount_in_cents: centavos,
+                    fee: 1050,
+                    ...extra,
+                },
+                `msg_${unico('p')}`,
+            ),
+        },
+        contextoSistema('webhook'),
+    )
+    return { s, cobro, pago, centavos }
+}
+
+async function deudaDe(empresaId: number, clienteId: number) {
+    return saldoCuenta(empresaId, '1.1.03', clienteId)
+}
+
+test.group('Auditor contable · verificación final de 28ee679', (group) => {
+    group.each.teardown(() => soloEmpresaPrincipal())
+
+    test('anular una importada: con la apertura abierta corrige la importación (2.9.01); con la apertura cerrada es 409 y se acredita con NCRE a ingresos', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const abierta = await importar(e.ctx, e.B, '112.00', '2026-09-05')
+        await new AnularFactura().execute(
+            { factura_id: abierta.id, motivo: 'auditoría: importación errónea' },
+            e.ctx,
+        )
+        assert.equal(await apertura(e.B), '0.00')
+        const cerrada = await importar(e.ctx, e.B, '224.00', '2026-09-06')
+        // el reverso de la anulada es de hoy: el cierre con fecha de hoy lo incluye
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: hoyGuatemala() }, e.ctx)
+        const error = await errorDe(
+            new AnularFactura().execute(
+                { factura_id: cerrada.id, motivo: 'auditoría: tras el cierre' },
+                e.ctx,
+            ),
+        )
+        assert.deepEqual([error.status, error.codigo], [409, 'importada_con_apertura_cerrada'])
+        assert.equal(await apertura(e.B), '0.00')
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: cerrada.id, monto: '224.00', motivo: 'auditoría: se acredita' },
+            e.ctx,
+        )
+        assert.equal(nota.iva, '24.00')
+        assert.equal(await deudaDe(e.B, cerrada.clienteId), '0.00')
+        assert.equal(await apertura(e.B), '0.00')
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H60: un reembolso parcial de Recurrente anula el pago completo y la deuda vuelve entera', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('r')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, centavos } = await cobroPagado(e, checkout)
+            assert.equal(await deudaDe(e.B, s.clienteId), '0.00')
+            // devuelve un tercio
+            const parcial = Math.floor(centavos / 3)
+            await new ProcesarWebhookPasarela().execute(
+                {
+                    proveedor: 'recurrente',
+                    ...webhook(
+                        {
+                            event_type: 'refund.update',
+                            refund: {
+                                id: 're_parcial',
+                                status: 'succeeded',
+                                customer_refunded_amount_in_cents: parcial,
+                            },
+                            intentable: { checkout: { id: checkout } },
+                        },
+                        `msg_${unico('rp')}`,
+                    ),
+                },
+                contextoSistema('webhook'),
+            )
+            // lo devuelto vuelve a deberse, no el cobro completo
+            assert.equal(await deudaDe(e.B, s.clienteId), deCentavosTexto(parcial))
+            assert.notEqual(await deudaDe(e.B, s.clienteId), cobro.monto)
+        })
+    }).fails('H60: refund.* anula el pago entero sin mirar customer_refunded_amount_in_cents')
+
+    test('reembolso total: anula el pago, la deuda vuelve y el libro cuadra', async ({ assert }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('t')}`
+        await conRecurrente(checkout, 0, async () => {
+            const { s, cobro, centavos, pago } = await cobroPagado(e, checkout)
+            const r = await new ProcesarWebhookPasarela().execute(
+                {
+                    proveedor: 'recurrente',
+                    ...webhook(
+                        {
+                            event_type: 'refund.update',
+                            refund: {
+                                id: 're_total',
+                                status: 'succeeded',
+                                customer_refunded_amount_in_cents: centavos,
+                            },
+                            intentable: { checkout: { id: checkout } },
+                        },
+                        `msg_${unico('rt')}`,
+                    ),
+                },
+                contextoSistema('webhook'),
+            )
+            assert.equal(r.pago_id, pago.pago_id)
+            const fila = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+            assert.equal(fila.estado, 'anulado')
+            assert.equal(await deudaDe(e.B, s.clienteId), cobro.monto)
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('monto distinto del cobro: no registra el pago ni toca el libro', async ({ assert }) => {
+        const e = await prepararEmpresasGt()
+        const checkout = `ch_${unico('m')}`
+        await conRecurrente(checkout, 0, async () => {
+            const s = await servicioFacturado(e.B, '2026-10-01', {
+                precio: '300.00',
+                instalacion: '2026-09-01',
+            })
+            const cobro = await new CrearCobroPasarela().execute(
+                { cliente_id: s.clienteId },
+                contextoSistema('portal'),
+            )
+            const antes = await deudaDe(e.B, s.clienteId)
+            const r = await new ProcesarWebhookPasarela().execute(
+                {
+                    proveedor: 'recurrente',
+                    ...webhook(
+                        {
+                            event_type: 'payment_intent.succeeded',
+                            checkout: { id: checkout },
+                            amount_in_cents: Number(dec(cobro.monto).times(100).toFixed(0)) - 1,
+                            fee: 100,
+                        },
+                        `msg_${unico('md')}`,
+                    ),
+                },
+                contextoSistema('webhook'),
+            )
+            assert.deepEqual([r.pago_id, r.ignorado], [null, 'monto_distinto'])
+            assert.equal(await deudaDe(e.B, s.clienteId), antes)
+        })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H61: con Recurrente configurado como proveedor de cobro, un pago con `vat_withheld` no se registra (el webhook falla y Recurrente reintenta sin fin)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const banco = await cuentaBancariaPrueba('Banrural', e.B)
+        const proveedor = await new CrearProveedorCobro().execute(
+            {
+                empresa_id: e.B,
+                metodo: 'pasarela',
+                pasarela: 'recurrente',
+                nombre: 'Recurrente',
+                cuenta_bancaria_id: banco.id,
+            },
+            e.ctx,
+        )
+        const checkout = `ch_${unico('pc')}`
+        try {
+            await conRecurrente(checkout, 0, async () => {
+                const { pago } = await cobroPagado(e, checkout, { vat_withheld: 482 })
+                assert.isNotNull(pago.pago_id)
+            })
+        } finally {
+            await new EditarProveedorCobro().execute(
+                { id: proveedor.id, version: proveedor.version, activo: false },
+                e.ctx,
+            )
+        }
+    }).fails('H61: RegistrarPago rechaza retenciones con proveedor de cobro (retencion_con_proveedor_cobro)')
+
+    test('H62: en pequeño contribuyente la importada desglosa IVA 12 % y su nota de crédito debita 2.1.02; y una nota de importada sin IVA no sale en el libro de ventas', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        await new CambiarRegimen().execute(
+            {
+                empresa_id: e.B,
+                regimen: 'pequeno_contribuyente',
+                vigente_desde: '2014-01-01',
+                motivo: 'Inscripción',
+            },
+            e.ctx,
+        )
+        const f = await importar(e.ctx, e.B, '200.00', '2026-08-10')
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '50.00', motivo: 'auditoría: rebaja PC' },
+            e.ctx,
+        )
+        const hoy = hoyGuatemala()
+        const ventas = await construirLibro('ventas', e.B, { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) })
+        // PC: sin IVA desglosado ni 2.1.02; la nota rebaja el total del libro (base del 5 %) por su monto
+        assert.deepEqual(
+            {
+                iva_importada: f.iva,
+                iva_nota: nota.iva,
+                debito: await saldoCuenta(e.B, '2.1.02'),
+                total_libro: ventas.reporte.totales.total,
+            },
+            { iva_importada: '0.00', iva_nota: '0.00', debito: '0.00', total_libro: '-50.00' },
+        )
+    }).fails(
+        'H62: importar_factura_pendiente calcula IVA 12 % sin mirar el régimen y libroVentasLegal pide n.iva > 0',
+    )
+
+    test('H63: anular un saldo inicial con la apertura ya cerrada reabre 2.9.01 (la factura importada responde 409)', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const cliente = await crearClienteFila()
+        const saldo = await new RegistrarSaldoInicial().execute(
+            {
+                origen: 'auditoria',
+                id_externo: unico('s'),
+                cliente_id: cliente,
+                empresa_id: e.B,
+                monto: '80.00',
+                fecha: '2026-09-07',
+            },
+            e.ctx,
+        )
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: '2026-09-30' }, e.ctx)
+        const r = await errorDe(
+            new AnularSaldoInicial().execute(
+                { saldo_inicial_id: saldo.saldo_inicial_id, motivo: 'auditoría: tras el cierre' },
+                e.ctx,
+            ),
+        ).catch(() => null)
+        // o lo rechaza como la importada, o no reabre 2.9.01
+        if (r === null || r.status !== 409) assert.equal(await apertura(e.B), '0.00')
+    }).fails('H63: anular_saldo_inicial revierte a 2.9.01 aunque la apertura ya se cerró')
+
+    test('H64: una importada tardía (entra después del cierre, nunca trasladada) tampoco se puede anular: un error de importación termina como rebaja de ventas', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        await importar(e.ctx, e.B, '50.00', '2026-09-05')
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: '2026-09-30' }, e.ctx)
+        const tardia = await importar(e.ctx, e.B, '112.00', '2026-10-01')
+        await new AnularFactura().execute(
+            { factura_id: tardia.id, motivo: 'auditoría: importación errónea' },
+            e.ctx,
+        )
+        assert.equal(await apertura(e.B), '0.00')
+    }).fails('H64: exigirAnulableImportada mira si existe algún cierre, no si incluyó esa importada')
+})
+
+function deCentavosTexto(centavos: number) {
+    return aTexto(dec(String(centavos)).div(100))
+}
