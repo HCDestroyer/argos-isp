@@ -9,8 +9,8 @@ import type { UltimoConocido } from './ultimo_conocido.ts'
 /**
  * De dónde sale el servicio de un `user_ppp`:
  *   1. Redis `aaa:user:<user_ppp>` (lo mantiene A1 por evento, sin TTL).
- *   2. Si no está o Redis no responde: la fuente de respaldo (API de A1, o fixtures mientras A1 no
- *      publique el endpoint) y se cachea con `SET NX` para no pisar una escritura más nueva de A1.
+ *   2. Si no está o Redis no responde: la fuente de respaldo (la API de A1; fixtures solo en pruebas
+ *      y desarrollo sin API) y se cachea con `SET NX` para no pisar una escritura más nueva de A1.
  */
 
 /** Datos de la petición que viajan al respaldo (hoy, el `request_id` para correlacionar logs). */
@@ -26,6 +26,16 @@ export interface FuenteRespaldo {
 
 export class ErrorFuente extends Error {}
 
+/** Máximo de `user_ppp` por consulta a `POST /internal/aaa/servicios` (límite del contrato). */
+export const MAXIMO_POR_LOTE = 100
+
+interface Pendiente {
+    userPpp: string
+    requestId: string | undefined
+    resolver: (registro: RegistroAaa | null) => void
+    rechazar: (e: unknown) => void
+}
+
 /**
  * `GET <API_INTERNAL_URL>internal/aaa/servicio?user_ppp=` con `Authorization: Bearer`; la base termina en `/api/v1/`.
  *
@@ -33,6 +43,14 @@ export class ErrorFuente extends Error {}
  * Redis vacío llegan cientos de consultas a la vez; abrir un socket por consulta (como hacía `fetch`)
  * saturaba la API con handshakes y la hacía pasar del timeout (prueba de carga, semana 2). Las que
  * esperan socket cuentan dentro del mismo `timeoutMs`.
+ *
+ * Lotes (`lotes`, por defecto sí; `AAA_API_LOTES=0` los apaga): las consultas que llegan en el mismo
+ * turno del bucle de eventos se agrupan en un `POST <API_INTERNAL_URL>internal/aaa/servicios
+ * { user_ppp: [...] }` de hasta 100 (`contratos/aaa.md`, "Carga por lotes"). Una consulta sola sigue
+ * por el GET (sin espera añadida). Con Redis vacío, 200 reconexiones simultáneas eran 200 GET en
+ * serie sobre 16 sockets (p95 ~200 ms en la prueba de carga); con lotes son unas pocas consultas
+ * SQL. Los ausentes del lote son inexistentes (como el 404 del GET). Si la API no tiene la ruta
+ * (404/405: versión anterior), se apagan los lotes y se vuelve al GET.
  */
 export class FuenteApi implements FuenteRespaldo {
     readonly nombre = 'api' as const
@@ -40,13 +58,22 @@ export class FuenteApi implements FuenteRespaldo {
     private readonly token: string
     private readonly timeoutMs: number
     private readonly agente: AgenteHttp | AgenteHttps
+    private lotes: boolean
+    private pendientes: Pendiente[] = []
 
-    constructor(opciones: { url: string; token: string; timeoutMs: number; conexiones?: number }) {
+    constructor(opciones: {
+        url: string
+        token: string
+        timeoutMs: number
+        conexiones?: number
+        lotes?: boolean
+    }) {
         // Ruta relativa: la base incluye el prefijo de la API (`…/api/v1/`). Con una ruta absoluta
         // `new URL` descartaba `/api/v1` y cada consulta daba 404 (= usuario inexistente → Reject).
         this.base = opciones.url.endsWith('/') ? opciones.url : `${opciones.url}/`
         this.token = opciones.token
         this.timeoutMs = opciones.timeoutMs
+        this.lotes = opciones.lotes ?? true
         const conexiones = {
             keepAlive: true,
             maxSockets: opciones.conexiones ?? 16,
@@ -57,20 +84,17 @@ export class FuenteApi implements FuenteRespaldo {
             : new AgenteHttp(conexiones)
     }
 
-    async obtener(userPpp: string, contexto: ContextoConsulta = {}): Promise<RegistroAaa | null> {
-        const url = new URL('internal/aaa/servicio', this.base)
-        url.searchParams.set('user_ppp', userPpp)
-        // La API usa el mismo `request_id` en su log de acceso (`request_id_middleware.ts`).
-        const { status, cuerpo } = await this.get(url, contexto.requestId)
-        if (status === 404) return null
-        if (status !== 200) throw new ErrorFuente(`API interna respondió ${status}`)
-        let datos: unknown
-        try {
-            datos = JSON.parse(cuerpo)
-        } catch {
-            throw new ErrorFuente('API interna respondió JSON inválido')
-        }
-        return parsearRegistro(datos)
+    /** true mientras se agrupan consultas (se apaga solo si la API no tiene la ruta de lotes). */
+    get usaLotes(): boolean {
+        return this.lotes
+    }
+
+    obtener(userPpp: string, contexto: ContextoConsulta = {}): Promise<RegistroAaa | null> {
+        if (!this.lotes) return this.obtenerUno(userPpp, contexto.requestId)
+        return new Promise((resolver, rechazar) => {
+            if (this.pendientes.length === 0) setImmediate(() => this.despachar())
+            this.pendientes.push({ userPpp, requestId: contexto.requestId, resolver, rechazar })
+        })
     }
 
     /**
@@ -78,11 +102,12 @@ export class FuenteApi implements FuenteRespaldo {
      * usuario que no existe: así la primera ráfaga de autorizaciones no paga los handshakes.
      */
     async calentar(): Promise<void> {
-        const url = new URL('internal/aaa/servicio', this.base)
-        url.searchParams.set('user_ppp', '__argosisp_calentamiento__')
+        const url = this.urlServicio('__argosisp_calentamiento__')
         const conexiones = this.agente.maxSockets
         await Promise.allSettled(
-            Array.from({ length: Number.isFinite(conexiones) ? conexiones : 4 }, () => this.get(url)),
+            Array.from({ length: Number.isFinite(conexiones) ? conexiones : 4 }, () =>
+                this.peticion('GET', url),
+            ),
         )
     }
 
@@ -90,17 +115,109 @@ export class FuenteApi implements FuenteRespaldo {
         this.agente.destroy()
     }
 
-    private get(url: URL, requestId?: string): Promise<{ status: number; cuerpo: string }> {
+    private urlServicio(userPpp: string): URL {
+        const url = new URL('internal/aaa/servicio', this.base)
+        url.searchParams.set('user_ppp', userPpp)
+        return url
+    }
+
+    private async obtenerUno(userPpp: string, requestId?: string): Promise<RegistroAaa | null> {
+        // La API usa el mismo `request_id` en su log de acceso (`request_id_middleware.ts`).
+        const { status, cuerpo } = await this.peticion('GET', this.urlServicio(userPpp), undefined, requestId)
+        if (status === 404) return null
+        if (status !== 200) throw new ErrorFuente(`API interna respondió ${status}`)
+        return parsearRegistro(leerJson(cuerpo))
+    }
+
+    /** Vacía la cola del turno: una consulta sola por GET; varias, por lotes de hasta 100. */
+    private despachar(): void {
+        const pendientes = this.pendientes
+        this.pendientes = []
+        if (pendientes.length === 1 || !this.lotes) {
+            for (const p of pendientes) this.obtenerUno(p.userPpp, p.requestId).then(p.resolver, p.rechazar)
+            return
+        }
+        // Un usuario repetido en el mismo turno (reintento del NAS) viaja una sola vez.
+        const porUsuario = new Map<string, Pendiente[]>()
+        for (const p of pendientes) porUsuario.set(p.userPpp, [...(porUsuario.get(p.userPpp) ?? []), p])
+        const grupos = [...porUsuario.values()]
+        for (let i = 0; i < grupos.length; i += MAXIMO_POR_LOTE) {
+            void this.obtenerLote(grupos.slice(i, i + MAXIMO_POR_LOTE).flat())
+        }
+    }
+
+    private async obtenerLote(lote: Pendiente[]): Promise<void> {
+        const usuarios = [...new Set(lote.map((p) => p.userPpp))]
+        let respuesta: { status: number; cuerpo: string }
+        try {
+            respuesta = await this.peticion(
+                'POST',
+                new URL('internal/aaa/servicios', this.base),
+                JSON.stringify({ user_ppp: usuarios }),
+                // Un id para todo el lote (el del primero): la API registra una sola petición.
+                lote[0]!.requestId,
+            )
+        } catch (e) {
+            for (const p of lote) p.rechazar(e)
+            return
+        }
+        if (respuesta.status === 404 || respuesta.status === 405) {
+            // API sin la ruta de lotes (anterior a la semana 3): GET de uno en uno desde ahora.
+            this.lotes = false
+            for (const p of lote) this.obtenerUno(p.userPpp, p.requestId).then(p.resolver, p.rechazar)
+            return
+        }
+        let porUsuario: Map<string, unknown>
+        try {
+            if (respuesta.status !== 200) throw new ErrorFuente(`API interna respondió ${respuesta.status}`)
+            const datos = leerJson(respuesta.cuerpo) as { data?: unknown }
+            if (!Array.isArray(datos?.data)) throw new ErrorFuente('API interna respondió un lote sin data')
+            porUsuario = new Map(
+                datos.data.map((d: unknown) => [
+                    typeof d === 'object' && d !== null ? (d as { user_ppp?: unknown }).user_ppp : undefined,
+                    d,
+                ]) as Array<[string, unknown]>,
+            )
+        } catch (e) {
+            for (const p of lote) p.rechazar(e)
+            return
+        }
+        for (const p of lote) {
+            const crudo = porUsuario.get(p.userPpp)
+            if (crudo === undefined) {
+                p.resolver(null)
+                continue
+            }
+            // Un registro fuera de contrato afecta solo a su usuario (igual que en el GET).
+            try {
+                p.resolver(parsearRegistro(crudo))
+            } catch (e) {
+                p.rechazar(e)
+            }
+        }
+    }
+
+    private peticion(
+        metodo: 'GET' | 'POST',
+        url: URL,
+        cuerpo?: string,
+        requestId?: string,
+    ): Promise<{ status: number; cuerpo: string }> {
         const solicitar = url.protocol === 'https:' ? solicitudHttps : solicitudHttp
         const headers: Record<string, string> = {
             authorization: `Bearer ${this.token}`,
             accept: 'application/json',
+        }
+        if (cuerpo !== undefined) {
+            headers['content-type'] = 'application/json'
+            headers['content-length'] = String(Buffer.byteLength(cuerpo))
         }
         if (requestId) headers['x-request-id'] = requestId
         return new Promise((resolver, rechazar) => {
             const req = solicitar(
                 url,
                 {
+                    method: metodo,
                     agent: this.agente,
                     headers,
                 },
@@ -129,14 +246,23 @@ export class FuenteApi implements FuenteRespaldo {
                 clearTimeout(reloj)
                 rechazar(new ErrorFuente(`API interna no responde: ${e.name}`))
             })
-            req.end()
+            req.end(cuerpo)
         })
     }
 }
 
+function leerJson(cuerpo: string): unknown {
+    try {
+        return JSON.parse(cuerpo)
+    } catch {
+        throw new ErrorFuente('API interna respondió JSON inválido')
+    }
+}
+
 /**
- * Fixtures en `services/aaa/fixtures/servicios.json` mientras A1 no publique
- * `GET /internal/aaa/servicio` (contrato en `.claude/integration/contratos/aaa.md`). Mismo JSON que el contrato,
+ * Fixtures en `services/aaa/fixtures/servicios.json` (`AAA_RESPALDO=fixtures`): para pruebas y desarrollo sin
+ * la API. En el compose y en producción el respaldo es la API (`GET /internal/aaa/servicio`, contrato en
+ * `.claude/integration/contratos/aaa.md`). Mismo JSON que el contrato,
  * salvo que la contraseña viene en claro en `pass_ppp_claro` y se cifra al cargar con la clave del
  * entorno: así el resto del flujo (Redis, descifrado) es idéntico al real y no hay claves en el repo.
  */
