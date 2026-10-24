@@ -46,7 +46,17 @@ export const Router = definirEsquema(
             description: 'https://host:puerto de la API REST; null = https://<host>',
         },
         api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
-        api_ca: { ...nulable(texto), description: 'CA en PEM para routers con certificado propio' },
+        tiene_api_ca: {
+            ...booleano,
+            description: 'Hay una CA propia cargada (PEM); el PEM nunca sale por la API, como api_password',
+        },
+        api_ca: {
+            ...nulable(enumerado(['***'])),
+            deprecated: true,
+            description:
+                'Obsoleto: `***` si hay CA cargada, null si no (nunca el PEM); usar tiene_api_ca. Para cambiarla, ' +
+                'PUT /routers/:id con el PEM nuevo o null',
+        },
         dhcp_servidor: {
             ...nulable(texto),
             description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',

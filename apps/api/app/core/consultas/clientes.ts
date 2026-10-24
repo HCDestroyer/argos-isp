@@ -1,4 +1,5 @@
 import { isIP } from 'node:net'
+import { sqlExterno, type IdExterno } from '#core/ids_externos'
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
@@ -54,6 +55,8 @@ export type ClienteVista = Record<(typeof COLUMNAS_CLIENTE)[number], unknown> & 
     responsable_pago_nombre: string | null
     /** códigos de referido del cliente, uno por empresa (`core.codigos_referido`; lectura) */
     codigos_referido: Array<{ empresa_id: number; codigo: string }>
+    /** id en el sistema de origen (`core.ids_externos`, importador) o null */
+    externo: IdExterno | null
 }
 
 /** Nombre del responsable de pago de `core.clientes as c` (subconsulta escalar). */
@@ -69,6 +72,7 @@ function columnasVista(cliente: QueryClientContract) {
         ...COLUMNAS_CLIENTE.map((col) => `c.${col}`),
         cliente.raw(NOMBRE_RESPONSABLE),
         cliente.raw(CODIGOS_REFERIDO),
+        cliente.raw(sqlExterno('cliente', 'c.id')),
     ]
 }
 

@@ -58780,6 +58780,44 @@
           }
         }
       },
+      "AlcancesToken": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Recortes del token sobre los permisos y alcances de su usuario (Y lógico). Una clave ausente no recorta esa dimensión; `{}` = mismos permisos y alcance que el usuario",
+        "properties": {
+          "permisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Solo estos permisos (nombres de `GET /permisos`), y solo si el usuario los tiene"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Solo recursos de estos routers"
+          },
+          "zonas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Solo recursos de estas zonas"
+          },
+          "cajas": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Solo estas cajas"
+          }
+        }
+      },
       "Anuncio": {
         "type": "object",
         "required": [
@@ -63765,6 +63803,7 @@
           "referido_por_id",
           "referido_empresa_id",
           "codigos_referido",
+          "externo",
           "version",
           "created_at",
           "updated_at"
@@ -63949,6 +63988,26 @@
               }
             },
             "description": "Códigos para referir clientes, uno por empresa en la que tiene servicio (se crean solos con el primer servicio en cada empresa)"
+          },
+          "externo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "sistema",
+              "id"
+            ],
+            "properties": {
+              "sistema": {
+                "type": "string",
+                "description": "Sistema de origen: `mikrowisp`"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "description": "Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos"
           },
           "version": {
             "type": "integer",
@@ -85678,6 +85737,7 @@
           "id",
           "nombre",
           "descripcion",
+          "base",
           "permisos",
           "version",
           "created_at",
@@ -85696,6 +85756,10 @@
               "string",
               "null"
             ]
+          },
+          "base": {
+            "type": "boolean",
+            "description": "Rol base del seed (admin, cajero, soporte, tecnico, contabilidad, lectura): sus permisos se definen en código; PUT con `permisos` responde 409 `rol_base`. Se puede editar la descripción"
           },
           "permisos": {
             "type": "array",
@@ -85734,6 +85798,7 @@
           "capacidad_subida_kbps",
           "api_url",
           "api_tls_verificar",
+          "tiene_api_ca",
           "api_ca",
           "dhcp_servidor",
           "interfaz_clientes",
@@ -85812,12 +85877,20 @@
             "type": "boolean",
             "description": "Verificar el certificado TLS del router"
           },
+          "tiene_api_ca": {
+            "type": "boolean",
+            "description": "Hay una CA propia cargada (PEM); el PEM nunca sale por la API, como api_password"
+          },
           "api_ca": {
             "type": [
               "string",
               "null"
             ],
-            "description": "CA en PEM para routers con certificado propio"
+            "enum": [
+              "***"
+            ],
+            "deprecated": true,
+            "description": "Obsoleto: `***` si hay CA cargada, null si no (nunca el PEM); usar tiene_api_ca. Para cambiarla, PUT /routers/:id con el PEM nuevo o null"
           },
           "dhcp_servidor": {
             "type": [
@@ -86114,6 +86187,7 @@
           "zona_nombre",
           "excepciones",
           "plan_temporal",
+          "externo",
           "version",
           "created_at",
           "updated_at"
@@ -86349,6 +86423,26 @@
               }
             },
             "description": "Plan temporal programado o activo (lealtad), o null. Activo: `plan_id` del servicio ya es el temporal (RADIUS, RouterOS y facturación lo usan) y vuelve a `plan_original_id` al terminar"
+          },
+          "externo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "sistema",
+              "id"
+            ],
+            "properties": {
+              "sistema": {
+                "type": "string",
+                "description": "Sistema de origen: `mikrowisp`"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "description": "Id en el sistema del que se importó (`core.ids_externos`); null si se creó en Argos"
           },
           "version": {
             "type": "integer",
@@ -87938,8 +88032,7 @@
             "type": "string"
           },
           "alcances": {
-            "type": "object",
-            "additionalProperties": true
+            "$ref": "#/components/schemas/AlcancesToken"
           },
           "ultimo_uso": {
             "type": [
