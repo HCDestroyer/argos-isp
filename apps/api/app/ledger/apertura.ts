@@ -107,15 +107,41 @@ export async function estadoApertura(
 }
 
 /**
- * ¿El saldo importado con fecha `fecha` ya entró en un cierre de apertura? Sí si hay un cierre
- * vigente con fecha ≥ `fecha` (H64). Lo usan la anulación de una factura importada y la de un saldo
- * inicial (H63): en ese caso responden 409 para no reabrir 2.9.01.
+ * ¿El saldo importado por el asiento `asiento` ya entró en un cierre de apertura? Sí si hay un
+ * cierre vigente registrado después de él (id mayor: el cierre trasladó lo que había en 2.9.01 en
+ * ese momento) cuya fecha cubre la del asiento (el cierre mueve el saldo hasta su fecha). H66: no
+ * basta con comparar fechas; una importación tardía con fecha anterior al cierre, registrada
+ * después de él, nunca se trasladó y se puede anular. Lo usan la anulación de una factura
+ * importada y la de un saldo inicial (H63): si entró, responden 409 para no reabrir 2.9.01.
  */
 export async function aperturaCerradaPara(
     c: QueryClientContract,
     empresaId: number,
-    fecha: string,
+    asiento: { id: number; fecha: string },
 ): Promise<boolean> {
     const cierres = await cierresApertura(c, empresaId)
-    return cierres.some((x) => x.fecha >= fecha)
+    return cierres.some((x) => x.asiento_id > asiento.id && x.fecha >= asiento.fecha)
+}
+
+/**
+ * Asiento vigente (sin ser reverso) que llevó a 2.9.01 el saldo del documento `origenTipo/origenId`,
+ * o `null` si el documento no pasó por la apertura.
+ */
+export async function asientoDeApertura(
+    c: QueryClientContract,
+    origenTipos: string[],
+    origenId: number,
+): Promise<{ id: number; fecha: string } | null> {
+    const fila = (await c
+        .from('ledger.asientos as a')
+        .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
+        .join('ledger.cuentas as cu', 'cu.id', 'm.cuenta_id')
+        .whereIn('a.origen_tipo', origenTipos)
+        .where('a.origen_id', origenId)
+        .whereNull('a.reversa_de')
+        .where('cu.codigo', CUENTAS.SALDOS_APERTURA)
+        .orderBy('a.id', 'asc')
+        .select('a.id', c.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`))
+        .first()) as { id: number; fecha: string } | null
+    return fila ? { id: Number(fila.id), fecha: fila.fecha } : null
 }

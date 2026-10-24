@@ -807,12 +807,17 @@ async function verificarLibroCon(
           GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
     )
     await revisar(
-        '9.nota_sobre_importada_con_iva_residual (H27, arreglado: el mismo criterio sobre una factura importada; sus notas llevan el IVA proporcional de la factura contra 2.1.02)',
+        '9.nota_sobre_importada_con_iva_residual (H27, arreglado: el mismo criterio sobre una factura importada; sus notas llevan el IVA proporcional de la factura contra 2.1.02; salvo si tiene una nota vieja, anterior a H50 (su asiento no toca 2.1.02 ni ingresos: base a 2.9.01 con IVA 0), cuyo IVA nunca se rebajó)',
         `SELECT f.id, f.total::text, f.iva::text, sum(n.monto)::text AS notas, sum(n.iva)::text AS iva_notas,
                 count(n.id)::int AS cantidad_notas
            FROM billing.facturas f JOIN billing.notas_credito n ON n.factura_id = f.id AND NOT ${anulada('n')}
           WHERE ${E('f.empresa_id')} AND ${C('f.cliente_id')}
             AND coalesce(f.reglas_snapshot ->> 'importada', '') = 'true'
+            AND NOT EXISTS (SELECT 1 FROM billing.notas_credito v
+                             JOIN ledger.asientos va ON va.origen_tipo = 'nota_credito' AND va.origen_id = v.id AND va.reversa_de IS NULL
+                            WHERE v.factura_id = f.id
+                              AND NOT EXISTS (SELECT 1 FROM ledger.movimientos vm JOIN ledger.cuentas vc ON vc.id = vm.cuenta_id
+                                               WHERE vm.asiento_id = va.id AND (vc.codigo = '${IVA}' OR vc.tipo = 'ingreso')))
           GROUP BY f.id HAVING sum(n.monto) = f.total AND sum(n.iva) <> f.iva`,
     )
     /*
@@ -3383,21 +3388,41 @@ async function verificarLibroCon(
         )
         // fase 7 PR B: la liquidación del IVA (`liquidacion_impuesto`) mueve 2.1.02 sin ser venta: no cuenta.
         // Un ajuste manual a 2.1.02 lo rompe a propósito.
+        // Emisión anterior a H48 (`notas_importadas IS NULL`): la nota sobre una importada con fecha en
+        // un mes de un libro así no sale en él; va de ajuste al primer mes siguiente sin una emisión así
+        // (si se anuló antes de ese mes, no sale). Su 2.1.02 se cuenta en ese mes, no en el suyo.
+        const sinNotasImportadas = (mes: string) => `EXISTS (SELECT 1 FROM fiscal.libros_emisiones v
+              WHERE v.empresa_id = a.empresa_id AND v.libro = 'ventas' AND v.notas_importadas IS NOT TRUE
+                AND ${mes} BETWEEN v.desde AND v.hasta)`
+        const ivaDebito = (e: string) => `(
+            WITH mov AS (
+                SELECT a.id, a.fecha, a.origen_tipo, a.origen_id, a.reversa_de, m.haber - m.debe AS iva
+                  FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
+                  JOIN ledger.cuentas c ON c.id = m.cuenta_id
+                 WHERE a.empresa_id = ${e}.empresa_id AND c.codigo = '${IVA}' AND a.origen_tipo <> 'liquidacion_impuesto'
+            ), desp AS (
+                SELECT n.id AS nota_id,
+                       (SELECT min(g)::date FROM generate_series(date_trunc('month', o.fecha) + interval '1 month',
+                                                                  date_trunc('month', o.fecha) + interval '240 months',
+                                                                  interval '1 month') g
+                         WHERE NOT ${sinNotasImportadas('g::date')}) AS ajuste_en,
+                       (SELECT min(r.fecha) FROM ledger.asientos r WHERE r.reversa_de = o.id) AS anul
+                  FROM billing.notas_credito n JOIN billing.facturas f ON f.id = n.factura_id AND f.clave_externa IS NOT NULL
+                  JOIN ledger.asientos o ON o.origen_tipo = 'nota_credito' AND o.origen_id = n.id AND o.reversa_de IS NULL
+                  JOIN ledger.asientos a ON a.id = o.id
+                 WHERE n.empresa_id = ${e}.empresa_id AND ${sinNotasImportadas('o.fecha')}
+            )
+            SELECT coalesce(sum(mov.iva), 0) FROM mov LEFT JOIN desp ON mov.origen_tipo = 'nota_credito' AND desp.nota_id = mov.origen_id
+             WHERE NOT (desp.nota_id IS NOT NULL AND desp.anul IS NOT NULL AND desp.anul < desp.ajuste_en)
+               AND CASE WHEN desp.nota_id IS NOT NULL AND mov.reversa_de IS NULL THEN desp.ajuste_en ELSE mov.fecha END
+                   BETWEEN ${e}.desde AND ${e}.hasta)`
         await revisar(
-            '20.libro_ventas_distinto_del_iva_debito (libro de ventas emitido, con sus meses aún cerrados: Σ IVA = movimiento de 2.1.02 de la empresa en el rango sin la liquidación del IVA (fase 7 PR B); cada venta suma una sola vez y en el mes en que se movió el débito)',
+            '20.libro_ventas_distinto_del_iva_debito (libro de ventas emitido, con sus meses aún cerrados: Σ IVA = movimiento de 2.1.02 de la empresa en el rango sin la liquidación del IVA (fase 7 PR B); cada venta suma una sola vez y en el mes en que se movió el débito; una nota sobre una importada en un mes de un libro emitido antes de H48 (`notas_importadas` NULL) cuenta en el mes de su ajuste)',
             `SELECT e.id AS emision_id, e.empresa_id, to_char(e.desde, 'YYYY-MM') AS desde, to_char(e.hasta, 'YYYY-MM') AS hasta,
-                    e.totales ->> 'iva' AS iva_libro,
-                    (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
-                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta
-                        AND a.origen_tipo <> 'liquidacion_impuesto')::text AS iva_debito
+                    e.totales ->> 'iva' AS iva_libro, ${ivaDebito('e')}::text AS iva_debito
                FROM fiscal.libros_emisiones e
               WHERE ${E('e.empresa_id')} AND e.libro = 'ventas' AND ${sigueCerrada('e')}
-                AND (e.totales ->> 'iva')::numeric IS DISTINCT FROM
-                    (SELECT coalesce(sum(m.haber - m.debe), 0) FROM ledger.asientos a JOIN ledger.movimientos m ON m.asiento_id = a.id
-                       JOIN ledger.cuentas c ON c.id = m.cuenta_id
-                      WHERE a.empresa_id = e.empresa_id AND c.codigo = '${IVA}' AND a.fecha BETWEEN e.desde AND e.hasta
-                        AND a.origen_tipo <> 'liquidacion_impuesto')`,
+                AND (e.totales ->> 'iva')::numeric IS DISTINCT FROM ${ivaDebito('e')}`,
         )
         if (!opciones.sinFuncionesProducto) {
             const emisiones = await filas(

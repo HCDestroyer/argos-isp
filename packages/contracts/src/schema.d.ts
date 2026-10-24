@@ -10424,7 +10424,7 @@ export interface components {
             cobros_conciliados: number[];
             diferencias: {
                 /** @enum {string} */
-                tipo: "pago_sin_registrar" | "pago_sin_cobro_en_proveedor" | "monto_distinto" | "pago_anulado" | "pago_sin_cobro" | "error_consulta";
+                tipo: "pago_sin_registrar" | "pago_sin_cobro_en_proveedor" | "monto_distinto" | "pago_anulado" | "pago_sin_cobro" | "error_consulta" | "disputa" | "reembolso_sin_aplicar";
                 cobro_id: number | null;
                 pago_id: number | null;
                 id_proveedor: string | null;

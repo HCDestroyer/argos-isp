@@ -8,6 +8,7 @@ import { afirmarLibroCuadrado } from '#tests/ledger/ayudas_libro'
 import { prepararEmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { hoyGuatemala } from '#ledger/fechas'
+import { aTexto, dec } from '#ledger/dinero'
 import {
     CABECERAS_SVIX,
     PasarelaRecurrente,
@@ -134,6 +135,50 @@ const rutasDe = (checkout: string, extra: Record<string, { status?: number; cuer
     },
     ...extra,
 })
+
+/** Aviso `refund.*` (campos de https://docs.recurrente.com/referencia-api/api-reference/refunds/get-refund.md). */
+const reembolsoDe = (
+    checkout: string,
+    id: string,
+    centavos: number,
+    opciones: { cuenta?: number; devolverComision?: boolean } = {},
+) => ({
+    event_type: 'refund.update',
+    refund: {
+        id,
+        status: 'succeeded',
+        customer_refunded_amount_in_cents: centavos,
+        ...(opciones.cuenta === undefined
+            ? {}
+            : {
+                  account_refunded_amount_in_cents: opciones.cuenta,
+                  refund_application_fee: opciones.devolverComision ?? false,
+              }),
+    },
+    intentable: { checkout: { id: checkout } },
+})
+
+/** Saldo (debe − haber) de una cuenta en todo el libro. */
+async function saldoDe(codigo: string) {
+    const fila = await db
+        .from('ledger.movimientos as m')
+        .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        .where('c.codigo', codigo)
+        .select(db.raw('coalesce(sum(m.debe - m.haber), 0)::numeric(14,2)::text as s'))
+        .firstOrFail()
+    return fila.s as string
+}
+
+/** Deuda vigente (total − pagado) de las facturas del cliente. */
+async function deudaDe(clienteId: number) {
+    const fila = await db
+        .from('billing.facturas')
+        .where('cliente_id', clienteId)
+        .whereNot('estado', 'anulada')
+        .select(db.raw('sum(total - pagado)::numeric(14,2)::text as s'))
+        .firstOrFail()
+    return fila.s as string
+}
 
 test.group('billing · pasarela Recurrente (simulada)', (group) => {
     // la prueba de H61 crea empresas propias: se desactivan al terminar
@@ -612,6 +657,345 @@ test.group('billing · pasarela Recurrente (simulada)', (group) => {
                 await afirmarLibroCuadrado(assert)
             },
         )
+    })
+
+    test('H65: un reembolso que deja menos que la comisión se aplica: reemplazo por lo que queda, la comisión sigue y el banco queda negativo', async ({
+        assert,
+    }) => {
+        const checkout = `ch_casi_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                const pago = await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_casi', 29600)))
+                assert.isUndefined(r.ignorado, r.error)
+                assert.isNumber(r.pago_reemplazo_id)
+                const nuevo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+                assert.include(nuevo, {
+                    estado: 'registrado',
+                    monto: '4.00',
+                    comision: '10.50',
+                    retenido: '0.00',
+                })
+                // Q4.00 a la deuda, Q10.50 de gasto: el banco devuelve Q6.50 (la pasarela lo descuenta)
+                assert.deepEqual(await lineasAsiento('pago', r.pago_reemplazo_id!), [
+                    ['1.1.02.01', '0.00', '6.50', null],
+                    ['5.1.02', '10.50', '0.00', null],
+                    ['1.1.03', '0.00', '4.00', Number(nuevo.cliente_id)],
+                ])
+                assert.equal(await deudaDe(datos.clienteId), '296.00')
+                const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+                assert.equal(original.estado, 'anulado')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H65: si lo que queda no supera lo retenido, la constancia se conserva en proporción (§15 #105)', async ({
+        assert,
+    }) => {
+        const checkout = `ch_ret_casi_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                await procesar(
+                    webhook({
+                        ...pagado(checkout, 30000, 1050),
+                        vat_withheld: 482,
+                        vat_withheld_currency: 'GTQ',
+                    }),
+                )
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_ret', 29700)))
+                assert.isUndefined(r.ignorado, r.error)
+                const nuevo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+                // queda Q3.00 ≤ Q4.82 retenido: la constancia va por 4.82 × 3 / 300 = 0.05
+                assert.include(nuevo, { monto: '3.00', retenido: '0.05', comision: '10.50' })
+                assert.deepEqual(await lineasAsiento('pago', r.pago_reemplazo_id!), [
+                    ['1.1.02.01', '0.00', '7.55', null],
+                    ['5.1.02', '10.50', '0.00', null],
+                    ['1.1.05', '0.05', '0.00', null],
+                    ['1.1.03', '0.00', '3.00', Number(nuevo.cliente_id)],
+                ])
+                assert.equal(await deudaDe(datos.clienteId), '297.00')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H65: el reembolso total anula el pago sin reemplazo y la conciliación lo da por bueno; uno rechazado por negocio se reporta', async ({
+        assert,
+    }) => {
+        const checkout = `ch_total_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                const pago = await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_total', 30000)))
+                assert.isUndefined(r.ignorado, r.error)
+                assert.isUndefined(r.pago_reemplazo_id)
+                const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+                assert.equal(original.estado, 'anulado')
+                assert.equal(await deudaDe(datos.clienteId), '300.00')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+
+        // un aviso de reembolso que se rechazó por una regla de negocio no se da por conciliado
+        const otro = `ch_rech_${Date.now()}`
+        await conRecurrente(
+            rutasDe(otro, {
+                [`/checkouts/${otro}`]: { cuerpo: { id: otro, status: 'paid', total_in_cents: 30000 } },
+            }),
+            async () => {
+                const { cobro } = await cobroRecurrente()
+                await procesar(webhook(pagado(otro, 30000, 1050)))
+                await db.table('billing.pasarela_eventos').insert({
+                    proveedor: 'recurrente',
+                    id_evento: `msg_rech_${Date.now()}`,
+                    id_proveedor: otro,
+                    estado: 'reembolsado',
+                    payload: JSON.stringify(reembolsoDe(otro, 're_rech', 1000)),
+                    resultado: JSON.stringify({
+                        ignorado: 'error_de_negocio',
+                        error: 'periodo_cerrado: prueba',
+                    }),
+                })
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.notInclude(c.cobros_conciliados, cobro.id)
+                const d = c.diferencias.find((x) => x.cobro_id === cobro.id)
+                assert.equal(d?.tipo, 'reembolso_sin_aplicar')
+                assert.include(d?.detalle ?? '', 're_rech')
+            },
+        )
+    })
+
+    test('H70: en un reembolso parcial la constancia se prorratea siempre por lo que queda / pago', async ({
+        assert,
+    }) => {
+        const checkout = `ch_h70_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                await cobroRecurrente()
+                await procesar(
+                    webhook({
+                        ...pagado(checkout, 30000, 1050),
+                        vat_withheld: 482,
+                        vat_withheld_currency: 'GTQ',
+                    }),
+                )
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_h70', 10000)))
+                const nuevo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+                // queda Q200.00 > Q4.82 retenido: aun así 4.82 × 200 / 300 = 3.21
+                assert.include(nuevo, { monto: '200.00', retenido: '3.21' })
+                const constancia = await db
+                    .from('ledger.constancias_retencion')
+                    .where({ pago_id: nuevo.id, direccion: 'recibida' })
+                    .firstOrFail()
+                assert.equal(constancia.monto, '3.21')
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H71: el banco baja por lo debitado a la cuenta y la diferencia con lo devuelto al cliente es comisión devuelta', async ({
+        assert,
+    }) => {
+        const checkout = `ch_h71_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const antes = await saldoDe('1.1.02.01')
+                const comisionAntes = await saldoDe('5.1.02')
+                const r = await procesar(
+                    webhook(reembolsoDe(checkout, 're_h71', 10000, { cuenta: 9500, devolverComision: true })),
+                )
+                assert.isUndefined(r.ignorado, r.error)
+                const nuevo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+                assert.include(nuevo, { monto: '200.00', comision: '5.50' })
+                assert.equal(await deudaDe(datos.clienteId), '100.00')
+                assert.equal(aTexto(dec(await saldoDe('1.1.02.01')).minus(antes)), '-95.00')
+                assert.equal(aTexto(dec(await saldoDe('5.1.02')).minus(comisionAntes)), '-5.00')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H71: reembolso total sin devolver la comisión: se anula el pago y la comisión queda de gasto contra el banco', async ({
+        assert,
+    }) => {
+        const checkout = `ch_h71t_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos } = await cobroRecurrente()
+                const antes = await saldoDe('1.1.02.01')
+                const comisionAntes = await saldoDe('5.1.02')
+                const pago = await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_h71t', 30000, { cuenta: 30000 })))
+                assert.isUndefined(r.ignorado, r.error)
+                assert.isUndefined(r.pago_reemplazo_id)
+                const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+                assert.equal(original.estado, 'anulado')
+                assert.equal(await deudaDe(datos.clienteId), '300.00')
+                // recibió 289.50 y le debitaron 300.00: −10.50 en el banco, 10.50 de comisión
+                assert.equal(aTexto(dec(await saldoDe('1.1.02.01')).minus(antes)), '-10.50')
+                assert.equal(aTexto(dec(await saldoDe('5.1.02')).minus(comisionAntes)), '10.50')
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H71: si la comisión devuelta no cabe en la del pago, el aviso no se aplica y la conciliación lo reporta', async ({
+        assert,
+    }) => {
+        const checkout = `ch_h71x_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { cobro } = await cobroRecurrente()
+                const pago = await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_h71x', 10000, { cuenta: 5000 })))
+                assert.equal(r.ignorado, 'error_de_negocio')
+                assert.include(r.error ?? '', 'reembolso_monto_cuenta')
+                const original = await db.from('billing.pagos').where('id', pago.pago_id!).firstOrFail()
+                assert.equal(original.estado, 'registrado')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.equal(
+                    c.diferencias.find((x) => x.cobro_id === cobro.id)?.tipo,
+                    'reembolso_sin_aplicar',
+                )
+            },
+        )
+    })
+
+    test('H72: si la cuenta paga más que lo devuelto al cliente, se aplica igual y el cargo por el reembolso es gasto', async ({
+        assert,
+    }) => {
+        const checkout = `ch_h72_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const antes = await saldoDe('1.1.02.01')
+                const comisionAntes = await saldoDe('5.1.02')
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_h72', 10000, { cuenta: 10100 })))
+                assert.isUndefined(r.ignorado, r.error)
+                const nuevo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+                // comisión 10.50 + cargo 1.00 por el reembolso
+                assert.include(nuevo, { monto: '200.00', comision: '11.50' })
+                assert.equal(await deudaDe(datos.clienteId), '100.00')
+                assert.equal(aTexto(dec(await saldoDe('1.1.02.01')).minus(antes)), '-101.00')
+                assert.equal(aTexto(dec(await saldoDe('5.1.02')).minus(comisionAntes)), '1.00')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H73: sin el monto de la cuenta no se devuelve la comisión: el parcial la conserva y el total la deja en 5.1.02', async ({
+        assert,
+    }) => {
+        const resultados: Array<[string, string]> = []
+        for (const [id, centavos] of [
+            ['re_h73p', 29999],
+            ['re_h73t', 30000],
+        ] as const) {
+            const checkout = `ch_${id}_${Date.now()}`
+            await conRecurrente(
+                rutasDe(checkout, {
+                    [`/checkouts/${checkout}`]: {
+                        cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                    },
+                }),
+                async () => {
+                    await cobroRecurrente()
+                    const banco = await saldoDe('1.1.02.01')
+                    const comision = await saldoDe('5.1.02')
+                    await procesar(webhook(pagado(checkout, 30000, 1050)))
+                    const r = await procesar(webhook(reembolsoDe(checkout, id, centavos)))
+                    assert.isUndefined(r.ignorado, r.error)
+                    resultados.push([
+                        aTexto(dec(await saldoDe('1.1.02.01')).minus(banco)),
+                        aTexto(dec(await saldoDe('5.1.02')).minus(comision)),
+                    ])
+                },
+            )
+        }
+        // un centavo de diferencia en lo reembolsado mueve un centavo, sin saltos
+        assert.deepEqual(resultados, [
+            ['-10.49', '10.50'],
+            ['-10.50', '10.50'],
+        ])
+        await afirmarLibroCuadrado(assert)
     })
 
     test('H61: un error de negocio responde 2xx con la alerta y no deja nada a medias', async ({

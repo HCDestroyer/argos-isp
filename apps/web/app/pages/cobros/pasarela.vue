@@ -28,6 +28,8 @@ const DIFERENCIAS: Record<ConciliacionPasarela['diferencias'][number]['tipo'], s
     pago_anulado: 'El pago está anulado y el proveedor lo cobró',
     pago_sin_cobro: 'Pago sin cobro de pasarela',
     error_consulta: 'No se pudo consultar al proveedor',
+    disputa: 'Contracargo abierto en el proveedor',
+    reembolso_sin_aplicar: 'Reembolso del proveedor rechazado y sin aplicar',
 }
 
 /* Conciliar un día */
