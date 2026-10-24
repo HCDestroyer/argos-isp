@@ -3,7 +3,7 @@ import type { Schema, paths } from '@argosisp/contracts'
 // `TokenApi` sale de `utils/horus.ts` (mismo esquema del contrato).
 export type TokenApiCreado = Schema<'TokenApiCreado'>
 export type DatosTokenApi = paths['/api/v1/tokens']['post']['requestBody']['content']['application/json']
-export type AlcancesTokenApi = NonNullable<DatosTokenApi['alcances']>
+export type AlcancesTokenApi = Schema<'AlcancesToken'>
 
 /** Tokens de API (integraciones, agentes de IA): lista, alta (el valor se ve una sola vez) y revocar. */
 export function useTokensApi() {

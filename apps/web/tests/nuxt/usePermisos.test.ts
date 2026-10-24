@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
-import meCajero from '~~/fixtures/auth/me.cajero.json'
+import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 
 describe('usePermisos', () => {
     afterEach(() => {

@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import PaginaRoles from '~/pages/usuarios/roles.vue'
@@ -84,7 +84,7 @@ describe('ACL · composables y pantallas', () => {
         expect(desactivado.ok && desactivado.data.activo).toBe(false)
     })
 
-    it('roles: un rol base no cambia permisos (422 rol_base); uno propio sí, con version', async () => {
+    it('roles: un rol base no cambia permisos (409 rol_base); uno propio sí, con version', async () => {
         const cajero = bd.roles.find(r => r.nombre === 'cajero')!
         const base = await useRoles().editar(cajero.id, { version: cajero.version, permisos: ['pagos.ver'] })
         expect(!base.ok && base.problema.type).toBe('urn:argosisp:problema:rol_base')

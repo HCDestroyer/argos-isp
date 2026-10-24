@@ -39,16 +39,17 @@ function nombreUsuario(id: number): string {
 }
 
 function resumenAlcances(token: TokenApi): string {
-    const a = alcancesDeToken(token.alcances)
-    const partes = [a.permisos === null ? 'Permisos del usuario' : `${a.permisos.length} ${a.permisos.length === 1 ? 'permiso' : 'permisos'}`]
-    if (a.routers.length) {
-        partes.push(`${a.routers.length} ${a.routers.length === 1 ? 'router' : 'routers'}`)
+    // `AlcancesToken` (A1): una clave ausente no recorta esa dimensión
+    const { permisos, routers, zonas, cajas } = token.alcances
+    const partes = [permisos === undefined ? 'Permisos del usuario' : `${permisos.length} ${permisos.length === 1 ? 'permiso' : 'permisos'}`]
+    if (routers?.length) {
+        partes.push(`${routers.length} ${routers.length === 1 ? 'router' : 'routers'}`)
     }
-    if (a.zonas.length) {
-        partes.push(`${a.zonas.length} ${a.zonas.length === 1 ? 'zona' : 'zonas'}`)
+    if (zonas?.length) {
+        partes.push(`${zonas.length} ${zonas.length === 1 ? 'zona' : 'zonas'}`)
     }
-    if (a.cajas.length) {
-        partes.push(`${a.cajas.length} ${a.cajas.length === 1 ? 'caja' : 'cajas'}`)
+    if (cajas?.length) {
+        partes.push(`${cajas.length} ${cajas.length === 1 ? 'caja' : 'cajas'}`)
     }
     return partes.join(' · ')
 }

@@ -5,6 +5,9 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 /**
  * Alta y edición de cliente. Sin `cliente` crea (`POST /clientes` con `Idempotency-Key`);
  * con `cliente` edita (`PUT /clientes/:id` con su `version`, 409 si alguien más lo cambió).
+ * "Datos adicionales": un control por cada campo activo del catálogo de campos personalizados
+ * (`GET /campos-personalizados?activo=true`, A1), en su orden y con su regla; si el catálogo no se
+ * pudo leer, el error se ve con "Reintentar" y el guardado no toca los valores guardados.
  */
 const props = withDefaults(defineProps<{
     cliente?: Cliente | null
@@ -24,6 +27,47 @@ const clientesApi = useClientes()
 
 const formulario = useTemplateRef('formulario')
 const estado = reactive<EntradaCliente>(entradaDesdeCliente(props.cliente ?? undefined))
+
+/** Catálogo activo: `null` mientras carga o si falló (entonces no se manda `campos_personalizados`). */
+const catalogo = shallowRef<CampoPersonalizado[] | null>(null)
+const cargandoCatalogo = ref(false)
+const problemaCatalogo = ref<Problem | null>(null)
+const esquema = computed(() => esquemaClienteCon(catalogo.value ?? []))
+
+async function cargarCatalogo() {
+    if (!puede('clientes.ver')) {
+        // sin `clientes.ver` no se lee el catálogo; el alta queda sin campos y la API dirá si falta uno
+        return
+    }
+    cargandoCatalogo.value = true
+    problemaCatalogo.value = null
+    const resultado = await useCamposPersonalizados().listar(true)
+    cargandoCatalogo.value = false
+    if (!resultado.ok) {
+        problemaCatalogo.value = resultado.problema
+        return
+    }
+    catalogo.value = resultado.data
+    estado.campos_personalizados = entradaCampos(resultado.data, props.cliente?.campos_personalizados)
+}
+
+function opcionesDe(campo: CampoPersonalizado): SelectItem[] {
+    return campo.opciones.map(opcion => ({ label: opcion, value: opcion }))
+}
+
+function numeroDe(valor: ValorCampoFormulario): number | undefined {
+    return typeof valor === 'number' ? valor : undefined
+}
+
+function textoDe(valor: ValorCampoFormulario): string {
+    return typeof valor === 'string' ? valor : ''
+}
+
+/** Guarda el valor de un campo personalizado y quita su error (la lista y el interruptor no validan al escribir). */
+function fijarCampo(clave: string, valor: ValorCampoFormulario) {
+    estado.campos_personalizados[clave] = valor
+    formulario.value?.clear(`campos_personalizados.${clave}`)
+}
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 /** Una clave por formulario abierto: un doble clic o un reintento no crean dos clientes. */
@@ -83,7 +127,7 @@ watch(() => estado.nit_cui, (valor) => {
 async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
     enviando.value = true
     problema.value = null
-    const cuerpo = cuerpoCliente(evento.data)
+    const cuerpo = cuerpoCliente(evento.data, catalogo.value ? { catalogo: catalogo.value, guardados: props.cliente?.campos_personalizados } : undefined)
     const resultado = props.cliente
         ? await clientesApi.editar(props.cliente.id, { ...cuerpo, version: props.cliente.version })
         : await clientesApi.crear(cuerpo, claveIdempotencia)
@@ -103,6 +147,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaCliente>) {
 }
 
 onMounted(async () => {
+    void cargarCatalogo()
     if (!puede('zonas.ver')) {
         return
     }
@@ -116,7 +161,7 @@ onMounted(async () => {
 <template>
     <UForm
         ref="formulario"
-        :schema="esquemaCliente"
+        :schema="esquema"
         :state="estado"
         :validate-on="VALIDAR_EN"
         class="flex w-full max-w-3xl flex-col gap-6"
@@ -384,6 +429,68 @@ onMounted(async () => {
                         @click="copiarAFiscal"
                     />
                 </div>
+            </div>
+        </UPageCard>
+
+        <UPageCard
+            v-if="problemaCatalogo || cargandoCatalogo || (catalogo && catalogo.length)"
+            title="Datos adicionales"
+            description="Campos propios de la empresa (catálogo de campos personalizados)."
+            variant="subtle"
+            data-prueba="cliente-campos-personalizados"
+        >
+            <ProblemaAlerta
+                v-if="problemaCatalogo"
+                :problema="problemaCatalogo"
+                :reintentar="cargarCatalogo"
+                :reintentando="cargandoCatalogo"
+            />
+            <USkeleton
+                v-else-if="cargandoCatalogo"
+                class="h-16 w-full"
+            />
+            <div
+                v-else-if="catalogo"
+                class="grid gap-4 sm:grid-cols-2"
+            >
+                <UFormField
+                    v-for="campo in catalogo"
+                    :key="campo.clave"
+                    :label="campo.tipo === 'booleano' ? undefined : campo.etiqueta"
+                    :name="`campos_personalizados.${campo.clave}`"
+                    :required="campo.requerido && campo.tipo !== 'booleano'"
+                    :data-prueba="`campo-cliente-${campo.clave}`"
+                >
+                    <USwitch
+                        v-if="campo.tipo === 'booleano'"
+                        :model-value="estado.campos_personalizados[campo.clave] === true"
+                        :label="campo.etiqueta"
+                        @update:model-value="valor => fijarCampo(campo.clave, valor)"
+                    />
+                    <UInputNumber
+                        v-else-if="campo.tipo === 'numero'"
+                        :model-value="numeroDe(estado.campos_personalizados[campo.clave])"
+                        :format-options="{ useGrouping: false, maximumFractionDigits: 6 }"
+                        class="w-full"
+                        @update:model-value="valor => fijarCampo(campo.clave, typeof valor === 'number' ? valor : null)"
+                    />
+                    <USelect
+                        v-else-if="campo.tipo === 'opcion'"
+                        :model-value="textoDe(estado.campos_personalizados[campo.clave]) || undefined"
+                        :items="opcionesDe(campo)"
+                        placeholder="Elige una opción"
+                        class="w-full"
+                        @update:model-value="valor => fijarCampo(campo.clave, typeof valor === 'string' ? valor : '')"
+                    />
+                    <UInput
+                        v-else
+                        :model-value="textoDe(estado.campos_personalizados[campo.clave])"
+                        :type="campo.tipo === 'fecha' ? 'date' : 'text'"
+                        :maxlength="campo.tipo === 'texto' ? 500 : undefined"
+                        class="w-full"
+                        @update:model-value="valor => fijarCampo(campo.clave, String(valor ?? ''))"
+                    />
+                </UFormField>
             </div>
         </UPageCard>
 

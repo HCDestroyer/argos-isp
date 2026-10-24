@@ -116,7 +116,7 @@ const columnasPermisos: TableColumn<FilaPermiso>[] = [
                                 <span class="flex flex-wrap items-center gap-1.5">
                                     <span class="font-mono text-sm font-medium text-highlighted">{{ row.original.nombre }}</span>
                                     <UBadge
-                                        v-if="esRolBase(row.original.nombre)"
+                                        v-if="row.original.base"
                                         label="Base"
                                         icon="i-lucide-lock"
                                         color="neutral"

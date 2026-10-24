@@ -35,7 +35,7 @@ import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
 import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
 import { horusInicial } from './horus/datos'
 import type { HorusFixtures } from './horus/datos'
-import { configuracionGlobal, enviosNotificacion, plantillasNotificacion, recordatoriosPago } from './notificaciones/datos'
+import { configuracionGlobal, enviosNotificacion, eventosNotificacion, plantillasNotificacion, recordatoriosPago } from './notificaciones/datos'
 import { roles, tokensApi, usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
@@ -163,6 +163,8 @@ interface BaseFixtures {
     notificaciones: { global: Schema<'ConfiguracionNotificaciones'>, empresas: Record<number, Schema<'ConfiguracionNotificaciones'>> }
     /** Plantillas de notificación por evento y canal, recordatorios de pago y registro de envíos (A6). */
     plantillasNotificacion: Schema<'PlantillaNotificacion'>[]
+    /** Catálogo de eventos con plantilla y sus variables (A6, `GET /notificaciones/eventos`). */
+    eventosNotificacion: Schema<'EventoNotificacion'>[]
     recordatoriosPago: Schema<'RecordatorioPago'>[]
     enviosNotificacion: Schema<'EnvioNotificacion'>[]
     /** Envíos de prueba hechos (para el `envio_id`). */
@@ -326,6 +328,7 @@ function inicial(): BaseFixtures {
         tokensApi,
         notificaciones: { global: configuracionGlobal, empresas: {} },
         plantillasNotificacion,
+        eventosNotificacion,
         recordatoriosPago,
         enviosNotificacion,
         enviosPrueba: 0,

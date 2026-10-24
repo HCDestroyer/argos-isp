@@ -9,7 +9,6 @@ export { usuarios } from './datos'
 type AsignacionRol = Schema<'AsignacionRol'>
 type Errores = NonNullable<Problem['errors']>
 
-const ROLES_BASE = ['admin', 'cajero', 'soporte', 'tecnico', 'contabilidad', 'lectura']
 const ALCANCES = ['router', 'zona', 'caja']
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -168,21 +167,21 @@ export const rutasUsuarios: RutasFixture = {
             return datosInvalidos(permisos.errores)
         }
         const creado = ahora()
-        const rol: Schema<'Rol'> = { id: siguienteId(bd.roles), nombre, descripcion: texto(cuerpo.descripcion) || null, permisos: permisos.permisos, version: 1, created_at: creado, updated_at: creado }
+        const rol: Schema<'Rol'> = { id: siguienteId(bd.roles), nombre, descripcion: texto(cuerpo.descripcion) || null, base: false, permisos: permisos.permisos, version: 1, created_at: creado, updated_at: creado }
         bd.roles.push(rol)
         registrarAccion(solicitud, 'roles.crear', { tipo: 'rol', id: rol.id }, cuerpo)
         return { status: 201, cuerpo: rol }
     }),
 
-    /** Como `EditarRol` (A1): descripción y permisos con `version`; un rol base no cambia permisos (422 `rol_base`). */
+    /** Como `EditarRol` (A1): descripción y permisos con `version`; un rol base no cambia permisos (409 `rol_base`). */
     'PUT /api/v1/roles/:id': conPermiso('roles.editar', (solicitud) => {
         const rol = bd.roles.find(r => r.id === idDe(solicitud))
         if (!rol) {
             return noEncontrado('el rol')
         }
         const cuerpo = cuerpoObjeto(solicitud)
-        if (cuerpo.permisos !== undefined && ROLES_BASE.includes(rol.nombre)) {
-            return problemaTipado(422, 'rol_base', 'Regla de negocio', `Los permisos del rol base ${rol.nombre} se definen en código; crea un rol propio`)
+        if (cuerpo.permisos !== undefined && rol.base) {
+            return problemaTipado(409, 'rol_base', 'Conflicto', `Los permisos del rol base ${rol.nombre} se definen en código; crea un rol propio`)
         }
         if (cuerpo.version !== rol.version) {
             return versionCambiada()
@@ -214,11 +213,20 @@ export const rutasUsuarios: RutasFixture = {
         if (!bd.usuarios.some(u => u.id === cuerpo.usuario_id)) {
             return noEncontrado(`el usuario ${cuerpo.usuario_id}`)
         }
-        const alcances = typeof cuerpo.alcances === 'object' && cuerpo.alcances !== null ? { ...cuerpo.alcances as Record<string, unknown> } : {}
-        if (alcances.permisos !== undefined) {
-            const permisos = permisosValidos(alcances.permisos, 'alcances.permisos')
+        // `AlcancesToken`: solo las claves que llegan; una ausente no recorta esa dimensión
+        const entrada = typeof cuerpo.alcances === 'object' && cuerpo.alcances !== null ? cuerpo.alcances as Record<string, unknown> : {}
+        const ids = (valor: unknown): number[] => (Array.isArray(valor) ? valor.filter((n): n is number => Number.isInteger(n) && n > 0) : [])
+        const alcances: Schema<'AlcancesToken'> = {}
+        if (entrada.permisos !== undefined) {
+            const permisos = permisosValidos(entrada.permisos, 'alcances.permisos')
             if ('errores' in permisos) {
                 return datosInvalidos(permisos.errores)
+            }
+            alcances.permisos = permisos.permisos
+        }
+        for (const clave of ['routers', 'zonas', 'cajas'] as const) {
+            if (entrada[clave] !== undefined) {
+                alcances[clave] = ids(entrada[clave])
             }
         }
         const token: Schema<'TokenApi'> = { id: siguienteId(bd.tokensApi), usuario_id: cuerpo.usuario_id, nombre, alcances, ultimo_uso: null, revocado_en: null, created_at: ahora() }

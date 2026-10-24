@@ -10,16 +10,6 @@ type DatosToken = paths['/api/v1/tokens']['post']['requestBody']['content']['app
 type Permiso = DatosRol['permisos'][number]
 export type TipoAlcanceRol = NonNullable<Schema<'AsignacionRol'>['alcance_tipo']>
 
-/**
- * Roles base: sus permisos se definen en código (`ROLES_BASE` de `apps/api/app/core/permisos.ts`)
- * y `PUT /roles/:id` los rechaza (422 `rol_base`); solo se edita su descripción.
- */
-export const ROLES_BASE = ['admin', 'cajero', 'soporte', 'tecnico', 'contabilidad', 'lectura'] as const
-
-export function esRolBase(nombre: string): boolean {
-    return (ROLES_BASE as readonly string[]).includes(nombre)
-}
-
 export const ALCANCES_ROL: Record<TipoAlcanceRol, { etiqueta: string, opcion: string, icono: string }> = {
     router: { etiqueta: 'Router', opcion: 'Un router', icono: 'i-lucide-router' },
     zona: { etiqueta: 'Zona', opcion: 'Una zona', icono: 'i-lucide-map-pin' },
@@ -167,17 +157,6 @@ export function cuerpoToken(datos: SalidaToken): DatosToken {
         alcances.cajas = datos.cajas
     }
     return { usuario_id: datos.usuario_id as number, nombre: datos.nombre, alcances }
-}
-
-/** `alcances` de un token (objeto libre en el contrato) leído con cuidado. */
-export function alcancesDeToken(alcances: Record<string, unknown>): { permisos: string[] | null, routers: number[], zonas: number[], cajas: number[] } {
-    const numeros = (valor: unknown): number[] => (Array.isArray(valor) ? valor.filter((n): n is number => typeof n === 'number') : [])
-    return {
-        permisos: Array.isArray(alcances.permisos) ? alcances.permisos.filter((p): p is string => typeof p === 'string') : null,
-        routers: numeros(alcances.routers),
-        zonas: numeros(alcances.zonas),
-        cajas: numeros(alcances.cajas),
-    }
 }
 
 /*

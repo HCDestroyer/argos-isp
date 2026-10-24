@@ -3,6 +3,7 @@ import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/f
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, numeroQuery, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { configuracionSinFila } from './datos'
+import { vistaPrevia } from './vistaPrevia'
 
 type Configuracion = Schema<'ConfiguracionNotificaciones'>
 
@@ -163,6 +164,32 @@ const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
 
 export const rutasNotificaciones: RutasFixture = {
     'GET /api/v1/notificaciones/plantillas': conPermiso('notificaciones.ver', () => ({ status: 200, cuerpo: bd.plantillasNotificacion })),
+
+    'GET /api/v1/notificaciones/eventos': conPermiso('notificaciones.ver', () => ({ status: 200, cuerpo: bd.eventosNotificacion })),
+
+    /** Como `vistaPrevia` (A6): evento con plantilla y Mustache válido (422 por campo); no guarda. */
+    'POST /api/v1/notificaciones/plantillas/vista-previa': conPermiso('notificaciones.ver', (solicitud) => {
+        const cuerpo = cuerpoObjeto(solicitud)
+        const evento = typeof cuerpo.evento === 'string' ? cuerpo.evento : ''
+        const canal = cuerpo.canal === 'telegram' || cuerpo.canal === 'whatsapp' ? cuerpo.canal : 'correo'
+        const asunto = typeof cuerpo.asunto === 'string' ? cuerpo.asunto : null
+        const texto = typeof cuerpo.cuerpo === 'string' ? cuerpo.cuerpo : ''
+        const errores: NonNullable<Problem['errors']> = []
+        if (!bd.eventosNotificacion.some(e => e.evento === evento)) {
+            errores.push({ field: 'evento', message: `El evento ${evento} no tiene plantilla`, rule: 'evento' })
+        }
+        if (!texto) {
+            errores.push({ field: 'cuerpo', message: 'El cuerpo es obligatorio', rule: 'minLength' })
+        }
+        for (const [campo, valor] of [['asunto', asunto], ['cuerpo', texto]] as const) {
+            const error = valor ? errorMustache(valor) : null
+            if (error) {
+                errores.push({ field: campo, message: `Plantilla inválida: ${error}`, rule: 'mustache' })
+            }
+        }
+        const resultado = errores.length ? null : vistaPrevia({ evento, canal, asunto, cuerpo: texto })
+        return resultado ? { status: 200, cuerpo: resultado } : datosInvalidos(errores)
+    }),
 
     /** Como `EditarPlantillaNotificacion` (A6): Mustache válido (422 por campo), `version` (409). */
     'PUT /api/v1/notificaciones/plantillas/:id': conPermiso('notificaciones.editar', (solicitud) => {

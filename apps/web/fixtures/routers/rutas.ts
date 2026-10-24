@@ -241,8 +241,10 @@ export const rutasRouters: RutasFixture = {
             modo_velocidad: control === 'arbol_pcq' ? 'pcq' : 'simple',
             activo: cuerpo.activo !== false,
             api_url: null,
-            api_tls_verificar: true,
-            api_ca: null,
+            api_tls_verificar: cuerpo.api_tls_verificar !== false,
+            // Como la API: el PEM nunca sale; `***` solo si se cargó una CA.
+            tiene_api_ca: typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.length > 0,
+            api_ca: typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.length > 0 ? '***' : null,
             dhcp_servidor: null,
             interfaz_clientes: null,
             empresa_sugerida_id: null,

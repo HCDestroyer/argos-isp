@@ -1,6 +1,7 @@
 import type { Schema } from '@argosisp/contracts'
 import plantillasJson from './plantillas.json'
 import recordatoriosJson from './recordatorios.json'
+import eventosJson from './eventos.json'
 
 type Configuracion = Schema<'ConfiguracionNotificaciones'>
 
@@ -70,6 +71,12 @@ export function configuracionSinFila(empresaId: number, global: Configuracion): 
 
 /** Plantillas de `notify_plantillas_seeder` como las devuelve `GET /notificaciones/plantillas` (A6). */
 export const plantillasNotificacion: Schema<'PlantillaNotificacion'>[] = plantillasJson as Schema<'PlantillaNotificacion'>[]
+
+/**
+ * Catálogo de eventos con plantilla y sus variables con ejemplo, copiado de `GET
+ * /notificaciones/eventos` de la API real (A6, `notify/catalogo.ts`).
+ */
+export const eventosNotificacion: Schema<'EventoNotificacion'>[] = eventosJson as Schema<'EventoNotificacion'>[]
 
 /** Los tres recordatorios de pago del seed (−3, 0 y +3 días a las 09:00). */
 export const recordatoriosPago: Schema<'RecordatorioPago'>[] = recordatoriosJson

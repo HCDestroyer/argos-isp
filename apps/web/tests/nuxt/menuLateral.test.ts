@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
-import meCajero from '~~/fixtures/auth/me.cajero.json'
+import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 
 /** Menú resumido (decisión del PM): grupos plegables, barra compacta recordada y buscador. */
 describe('menú lateral agrupado', () => {

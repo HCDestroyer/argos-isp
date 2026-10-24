@@ -219,7 +219,7 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'RolFormulario.vue': { permisos: ['roles.crear', 'roles.editar'], desde: ['pages/usuarios/roles.vue'] },
     'TokenApiModal.vue': { permisos: ['tokens.crear'], desde: ['pages/usuarios/tokens.vue'] },
     // Pendientes de la prioridad 2: avisos, plan por router, router nuevo.
-    'PlantillaNotificacionModal.vue': { permisos: ['notificaciones.editar'], desde: ['pages/notificaciones/index.vue'] },
+    'PlantillaNotificacionModal.vue': { permisos: ['notificaciones.editar', 'notificaciones.ver'], desde: ['pages/notificaciones/index.vue'] },
     'RecordatorioPagoModal.vue': { permisos: ['notificaciones.editar'], desde: ['pages/notificaciones/index.vue'] },
     'RouterAltaModal.vue': { permisos: ['routers.crear'], desde: ['pages/routers/index.vue'] },
     // Secciones de fichas: leen con el permiso de la ficha que las monta.

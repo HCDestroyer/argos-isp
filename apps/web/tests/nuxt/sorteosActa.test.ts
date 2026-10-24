@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { SORTEO_CORTE_ID, SORTEO_EJECUTADO_ID } from '~~/fixtures/sorteos/datos'
 import PaginaSorteo from '~/pages/lealtad/sorteos/[id].vue'
 import { esperar } from '../ayudas/esperar'

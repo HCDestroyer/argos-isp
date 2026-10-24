@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
 import PaginaAvisos from '~/pages/notificaciones/index.vue'
@@ -51,7 +51,7 @@ describe('avisos: plantillas, recordatorios y envíos', () => {
         const fallidos = await useEnviosNotificacion().listar({ estado: 'fallido' })
         expect(fallidos.ok && fallidos.data.data.map(e => e.id)).toEqual([3])
         expect(diasRecordatorio(-3)).toBe('3 días antes del vencimiento')
-        expect(etiquetaEvento('recordatorio.2')).toBe('Recordatorio de pago 2')
+        expect(bd.eventosNotificacion.find(e => e.evento === 'recordatorio.2')?.grupo).toBe('recordatorio')
     })
 
     it('la pantalla muestra plantillas, recordatorios y envíos con su estado', async () => {

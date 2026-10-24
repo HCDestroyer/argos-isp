@@ -11,6 +11,8 @@ const toast = useToast()
 const servicioId = computed(() => Number(route.params.id))
 
 const servicio = shallowRef<Servicio | null>(null)
+/** Servicio importado (Mikrowisp): «Importado de Mikrowisp #id», discreto bajo el título. */
+const origen = computed(() => (servicio.value ? origenExterno(servicio.value) : null))
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
@@ -351,6 +353,17 @@ onMounted(cargar)
                         · {{ nombreZona(servicio) }}
                     </template>
                     · versión {{ servicio.version }}
+                </p>
+                <p
+                    v-if="origen"
+                    class="flex items-center gap-1.5 text-xs text-dimmed"
+                    data-prueba="servicio-importado"
+                >
+                    <UIcon
+                        name="i-lucide-import"
+                        class="size-3.5 shrink-0"
+                    />
+                    {{ textoImportado(origen) }}
                 </p>
             </div>
 

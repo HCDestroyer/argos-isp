@@ -1,5 +1,5 @@
 import type { Schema } from '@argosisp/contracts'
-import { clientes } from '../clientes/datos'
+import { CLIENTE_IMPORTADO, clientes } from '../clientes/datos'
 import { planes } from '../planes/datos'
 import { routers } from '../routers/datos'
 import { zonas } from '../zonas/datos'
@@ -84,7 +84,8 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         excepciones: cliente.id === 11 && sucursal ? { dias_gracia: 10 } : {},
         // Como la API (lealtad): siempre viene; null sin plan temporal programado ni activo.
         plan_temporal: null,
-        externo: null,
+        // Como la API (`core.ids_externos`): el servicio del cliente importado vino de Mikrowisp.
+        externo: cliente.id === CLIENTE_IMPORTADO && !sucursal ? { sistema: 'mikrowisp', id: '2088' } : null,
         version: 1,
         created_at: instalado.toISOString(),
         updated_at: instalado.toISOString(),

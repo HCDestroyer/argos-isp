@@ -5,10 +5,7 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { ManejadorFixture, RespuestaFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from './bd'
-import loginAdmin from './auth/login.admin.json'
-import loginCajero from './auth/login.cajero.json'
-import meAdmin from './auth/me.admin.json'
-import meCajero from './auth/me.cajero.json'
+import { loginAdmin, loginCajero, meAdmin, meCajero } from './auth/sesiones'
 
 export const usuariosPorToken: Record<string, Schema<'Me'>> = {
     [loginAdmin.token]: meAdmin,

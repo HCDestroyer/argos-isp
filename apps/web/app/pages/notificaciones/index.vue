@@ -45,6 +45,29 @@ const itemsCanal: SelectItem[] = [
     ...(Object.keys(CANALES_AVISO) as CanalAviso[]).map(c => ({ label: CANALES_AVISO[c].etiqueta, value: c, icon: CANALES_AVISO[c].icono })),
 ]
 
+/* Catálogo de eventos (A6): nombre, grupo y variables de cada evento */
+const eventos = shallowRef<EventoNotificacion[] | null>(null)
+const cargandoEventos = ref(false)
+const problemaEventos = ref<Problem | null>(null)
+
+async function cargarEventos() {
+    cargandoEventos.value = true
+    problemaEventos.value = null
+    const resultado = await useEventosNotificacion().listar()
+    cargandoEventos.value = false
+    eventos.value = resultado.ok ? resultado.data : null
+    problemaEventos.value = resultado.ok ? null : resultado.problema
+}
+
+function eventoDe(evento: string): EventoNotificacion | null {
+    return eventos.value?.find(e => e.evento === evento) ?? null
+}
+
+/** Nombre del evento según la API; sin catálogo (o un evento que no tiene), el nombre técnico. */
+function nombreEvento(evento: string): string {
+    return eventoDe(evento)?.nombre ?? evento
+}
+
 async function cargarPlantillas() {
     cargandoPlantillas.value = true
     const resultado = await usePlantillasNotificacion().listar()
@@ -54,9 +77,9 @@ async function cargarPlantillas() {
 }
 
 const filasPlantillas = computed(() => plantillas.value
-    .filter(p => grupo.value === TODOS || grupoEvento(p.evento) === grupo.value)
+    .filter(p => grupo.value === TODOS || eventoDe(p.evento)?.grupo === grupo.value)
     .filter(p => canal.value === TODOS || p.canal === canal.value)
-    .sort((a, b) => etiquetaEvento(a.evento).localeCompare(etiquetaEvento(b.evento)) || a.canal.localeCompare(b.canal)))
+    .sort((a, b) => nombreEvento(a.evento).localeCompare(nombreEvento(b.evento)) || a.canal.localeCompare(b.canal)))
 
 const columnasPlantillas: TableColumn<PlantillaNotificacion>[] = [
     { accessorKey: 'evento', header: 'Evento', meta: { class: { td: 'whitespace-normal' } } },
@@ -75,7 +98,7 @@ function editar(plantilla: PlantillaNotificacion) {
 
 function alGuardarPlantilla(plantilla: PlantillaNotificacion) {
     plantillas.value = plantillas.value.map(p => (p.id === plantilla.id ? plantilla : p))
-    toast.add({ title: 'Plantilla guardada', description: `${etiquetaEvento(plantilla.evento)} · ${CANALES_AVISO[plantilla.canal].etiqueta}`, color: 'success', icon: 'i-lucide-circle-check' })
+    toast.add({ title: 'Plantilla guardada', description: `${nombreEvento(plantilla.evento)} · ${CANALES_AVISO[plantilla.canal].etiqueta}`, color: 'success', icon: 'i-lucide-circle-check' })
 }
 
 function resumen(texto: string): string {
@@ -193,7 +216,11 @@ function cargarPestana(valor: Pestana) {
     }
 }
 watch(pestana, cargarPestana)
-onMounted(() => cargarPestana(pestana.value))
+onMounted(() => {
+    // los nombres de los eventos sirven en plantillas y envíos
+    void cargarEventos()
+    cargarPestana(pestana.value)
+})
 </script>
 
 <template>
@@ -222,6 +249,13 @@ onMounted(() => cargarPestana(pestana.value))
                     :problema="problemaPlantillas"
                     :reintentar="cargarPlantillas"
                     :reintentando="cargandoPlantillas"
+                />
+                <ProblemaAlerta
+                    v-if="problemaEventos"
+                    :problema="problemaEventos"
+                    :reintentar="cargarEventos"
+                    :reintentando="cargandoEventos"
+                    data-prueba="eventos-error"
                 />
                 <template v-else>
                     <div class="flex flex-col gap-2 sm:flex-row">
@@ -252,7 +286,7 @@ onMounted(() => cargarPestana(pestana.value))
                                 :data-aviso="`${row.original.evento}/${row.original.canal}`"
                             >
                                 <span class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-highlighted">
-                                    {{ etiquetaEvento(row.original.evento) }}
+                                    {{ nombreEvento(row.original.evento) }}
                                     <UBadge
                                         v-if="!row.original.activa"
                                         label="Apagada"
@@ -289,7 +323,7 @@ onMounted(() => cargarPestana(pestana.value))
                                 color="neutral"
                                 variant="ghost"
                                 size="sm"
-                                :aria-label="`Editar ${etiquetaEvento(row.original.evento)} por ${CANALES_AVISO[row.original.canal].etiqueta}`"
+                                :aria-label="`Editar ${nombreEvento(row.original.evento)} por ${CANALES_AVISO[row.original.canal].etiqueta}`"
                                 :data-prueba="`editar-aviso-${row.original.id}`"
                                 @click="editar(row.original)"
                             />
@@ -414,7 +448,7 @@ onMounted(() => cargarPestana(pestana.value))
                                 class="flex min-w-0 flex-col gap-0.5"
                                 :data-envio="row.original.id"
                             >
-                                <span class="text-sm font-medium text-highlighted">{{ etiquetaEvento(row.original.evento) }}</span>
+                                <span class="text-sm font-medium text-highlighted">{{ nombreEvento(row.original.evento) }}</span>
                                 <span class="text-xs text-muted">
                                     <UIcon
                                         :name="CANALES_AVISO[row.original.canal].icono"
@@ -479,6 +513,7 @@ onMounted(() => cargarPestana(pestana.value))
             v-if="editando"
             v-model:open="editorAbierto"
             :plantilla="editando"
+            :evento="eventoDe(editando.evento)"
             @guardado="alGuardarPlantilla"
         />
         <RecordatorioPagoModal
@@ -489,7 +524,7 @@ onMounted(() => cargarPestana(pestana.value))
         />
         <UModal
             v-model:open="envioAbierto"
-            :title="envio ? `Envío #${envio.id} · ${etiquetaEvento(envio.evento)}` : 'Envío'"
+            :title="envio ? `Envío #${envio.id} · ${nombreEvento(envio.evento)}` : 'Envío'"
             :description="envio ? `${CANALES_AVISO[envio.canal].etiqueta} a ${envio.destino}` : undefined"
         >
             <template #body>

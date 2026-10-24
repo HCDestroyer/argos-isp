@@ -1,7 +1,6 @@
 import type { Schema } from '@argosisp/contracts'
-import meAdmin from '../auth/me.admin.json'
-import meCajero from '../auth/me.cajero.json'
-import permisosJson from './permisos.json'
+import { meAdmin, meCajero } from '../auth/sesiones'
+import { PERMISOS_CONTRATO } from 'virtual:permisos-contrato'
 import rolesBaseJson from './roles.base.json'
 
 const creado = '2026-09-01T15:00:00.000Z'
@@ -17,19 +16,33 @@ export const usuarios: Schema<'Usuario'>[] = [
 ]
 
 /**
- * Catálogo de `GET /permisos`: el `PERMISOS` de `apps/api/app/core/permisos.ts` con su descripción,
- * en el mismo orden (los ids los pone el seed). Y los roles base de `ROLES_BASE` con sus permisos.
- * Se copiaron de la API (`PERMISOS` y `ROLES_BASE`); `tests/nuxt/usuariosAcl.test.ts` comprueba que el
- * catálogo trae los mismos nombres que el enum del contrato.
+ * Catálogo de `GET /permisos`, derivado del enum del OpenAPI (`virtual:permisos-contrato`, ver
+ * `build/permisosContrato.ts`): nunca se desfasa del backend. La descripción es el resumen del
+ * endpoint que lo pide (la API real usa la de `PERMISOS`).
  */
-export const catalogoPermisos: Schema<'Permiso'>[] = permisosJson
+export const catalogoPermisos: Schema<'Permiso'>[] = PERMISOS_CONTRATO.map((permiso, indice) => ({ id: indice + 1, ...permiso }))
 
+const nombresContrato = new Set(PERMISOS_CONTRATO.map(permiso => permiso.nombre))
+
+/**
+ * Roles base (`Rol.base`): `admin` con todos los permisos del contrato; los otros cinco con los de
+ * `ROLES_BASE` (`roles.base.json`, que el OpenAPI no publica; pedido a A1 en `a4.md`), recortados
+ * a los que existen en el contrato.
+ */
 export const roles: Schema<'Rol'>[] = [
-    ...rolesBaseJson.map(rol => ({ ...rol, version: 1, created_at: creado, updated_at: creado })),
+    ...rolesBaseJson.map(rol => ({
+        ...rol,
+        permisos: rol.nombre === 'admin' ? [...nombresContrato] : rol.permisos.filter(permiso => nombresContrato.has(permiso)),
+        base: true,
+        version: 1,
+        created_at: creado,
+        updated_at: creado,
+    })),
     {
         id: rolesBaseJson.length + 1,
         nombre: 'cobrador_zona',
         descripcion: 'Cobra en campo y registra promesas en su zona',
+        base: false,
         permisos: ['clientes.estado_cuenta', 'clientes.ver', 'pagos.registrar', 'pagos.ver', 'promesas.crear', 'promesas.ver', 'servicios.ver'],
         version: 1,
         created_at: creado,

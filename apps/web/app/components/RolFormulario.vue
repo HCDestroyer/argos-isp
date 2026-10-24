@@ -24,7 +24,7 @@ const estado = reactive<EntradaRol>(entradaDesdeRol(null))
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
 
-const base = computed(() => props.rol !== null && esRolBase(props.rol.nombre))
+const base = computed(() => props.rol?.base === true)
 
 watch(abierto, (valor) => {
     if (valor) {

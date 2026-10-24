@@ -1,6 +1,8 @@
 import type { Schema, paths } from '@argosisp/contracts'
 
 export type PlantillaNotificacion = Schema<'PlantillaNotificacion'>
+export type VistaPreviaPlantilla = Schema<'VistaPreviaPlantilla'>
+export type EntradaVistaPrevia = paths['/api/v1/notificaciones/plantillas/vista-previa']['post']['requestBody']['content']['application/json']
 export type CambiosPlantillaNotificacion = paths['/api/v1/notificaciones/plantillas/{id}']['put']['requestBody']['content']['application/json']
 
 /** Plantillas de notificación por evento y canal (A6): lista y edición de asunto, cuerpo y activa. */
@@ -16,5 +18,13 @@ export function usePlantillasNotificacion() {
         return resolver(api.PUT('/api/v1/notificaciones/plantillas/{id}', { params: { path: { id } }, body: cambios }))
     }
 
-    return { listar, editar }
+    /**
+     * `POST /notificaciones/plantillas/vista-previa` (`notificaciones.ver`): asunto y cuerpo del
+     * editor, sin guardar, con los datos de ejemplo del evento; 422 por campo si el Mustache no vale.
+     */
+    function vistaPrevia(entrada: EntradaVistaPrevia): Promise<Resultado<VistaPreviaPlantilla>> {
+        return resolver(api.POST('/api/v1/notificaciones/plantillas/vista-previa', { body: entrada }))
+    }
+
+    return { listar, editar, vistaPrevia }
 }
