@@ -2,8 +2,8 @@ import env from '#start/env'
 import { Problema, ValidacionFallida } from '#shared/errores'
 
 /**
- * Contrato de un proveedor de pago en línea. Cada proveedor (el falso del laboratorio y, cuando
- * el PM entregue credenciales, el real) es un adaptador con estas tres operaciones; el resto
+ * Contrato de un proveedor de pago en línea. Cada proveedor (el falso del laboratorio y
+ * Recurrente, el real elegido por el PM) es un adaptador con estas tres operaciones; el resto
  * (cobros, webhook idempotente, pago, asiento, conciliación) no depende del proveedor.
  *
  * - `crearCobro`: crea el cobro en el proveedor y devuelve dónde paga el cliente.
@@ -160,6 +160,13 @@ const registro = new Map<string, () => Promise<Pasarela>>([
         async () => {
             const { PasarelaFalsa } = await import('#billing/pasarelas/falsa')
             return new PasarelaFalsa()
+        },
+    ],
+    [
+        'recurrente',
+        async () => {
+            const { PasarelaRecurrente } = await import('#billing/pasarelas/recurrente')
+            return new PasarelaRecurrente()
         },
     ],
 ])

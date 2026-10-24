@@ -228,7 +228,7 @@ Auditoría (decisión del PM, 2026-10-16): `servicios.evaluar_estado` solo escri
 
 ## Pasarela en línea (semana 2, `pasarelas/`)
 
-Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasarela.ts`). Proveedor activo: `PASARELA_PROVEEDOR`; sin ella, `falsa` fuera de producción y ninguno en producción (503 `pasarela_no_configurada`). El adaptador real se agrega al registro de `pasarela.ts` cuando el PM entregue credenciales; nada más cambia.
+Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasarela.ts`). Proveedor activo: `PASARELA_PROVEEDOR`; sin ella, `falsa` fuera de producción y ninguno en producción (503 `pasarela_no_configurada`). Adaptadores: `falsa` (laboratorio) y `recurrente` (real, decisión del PM).
 
 | Acción                      | Archivo                                | Quién la llama                                                                                              |
 | --------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -240,6 +240,7 @@ Contrato `Pasarela { crearCobro, verificarWebhook, consultar }` (`pasarelas/pasa
 - Webhook: el adaptador verifica HMAC-SHA256 y la ventana de ±5 min (401 `firma_invalida`); solo el proveedor configurado. Idempotente por id del evento (`billing.pasarela_eventos`, `ON CONFLICT DO NOTHING`): repetido o simultáneo responde `duplicado: true` sin otro pago; además `referencia` = id del cobro en el proveedor (única por método). Pagado → `RegistrarPago` anidada con `metodo: pasarela`, `comision` y las facturas del cobro: asiento `1.1.02.01 Banco principal (neto) + 5.1.02 Comisiones / CxC`, `pago.registrado` y reactivación en la misma transacción.
 - Conciliación: compara cobros y pagos `pasarela` del día con `consultar` y guarda la corrida (`billing.pasarela_conciliaciones`) con diferencias `pago_sin_registrar`, `pago_sin_cobro_en_proveedor`, `monto_distinto`, `pago_anulado`, `pago_sin_cobro`, `error_consulta`. Solo reporta; los que cuadran quedan con `conciliado_en`.
 - Pasarela falsa (`pasarelas/falsa.ts`, laboratorio y pruebas): guarda su lado en `billing.pasarela_falsa`, comisión simulada 3.5 %, firma `X-Pasarela-Firma: t=<unix>,v1=<hex>` sobre `"<t>.<cuerpo>"` con `PASARELA_FALSA_SECRETO`. `GET /pasarela/falsa/:cobro` (página con "Pagar (simulado)") y `POST /pasarela/falsa/:cobro/pagar { estado?, monto?, notificar? }` procesan el webhook firmado por el mismo camino que uno real (`notificar: false` simula un webhook perdido). Ambas responden 404 si la falsa no es la configurada.
+- Recurrente (`pasarelas/recurrente.ts`, `PASARELA_PROVEEDOR=recurrente`): checkout `POST /checkouts` (GTQ en centavos, mínimo Q5.00), webhook Svix (`svix-id`/`svix-timestamp`/`svix-signature`, secreto `whsec_…`; `id_evento` = `svix-id`), comisión `details.fee`, conciliación con `GET /checkouts/{id}` y `GET /intents/{id}`. Variables `RECURRENTE_*` (`.env.example`). Contrato y fuentes: `contratos/pago-en-linea.md` § Recurrente; prueba real en el Sandbox solo con `RECURRENTE_SECRET_KEY=sk_test_…`.
 
 ## Promesas de pago (tarea 10)
 
