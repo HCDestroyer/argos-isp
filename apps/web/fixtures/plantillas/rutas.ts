@@ -189,6 +189,10 @@ function crear(solicitud: SolicitudFixture) {
         version: 1,
         created_at: creada,
         updated_at: creada,
+        // Vigente: la API devuelve los campos del retiro en null (`plantillas.retirar`).
+        retirada_en: null,
+        retirada_por: null,
+        motivo_retiro: null,
     }
     const errores = validar(plantilla)
     if (errores.length) {
