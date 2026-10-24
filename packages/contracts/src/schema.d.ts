@@ -5268,6 +5268,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notificaciones/eventos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Eventos con plantilla y sus variables Mustache (con ejemplos)
+         * @description Avisos al cliente, recordatorios y alertas al equipo. Las variables son las que arma el aviso real para ese evento; la empresa es la activa (o la principal), con sus datos reales.
+         */
+        get: operations["notificacionesEventosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notificaciones/plantillas": {
         parameters: {
             query?: never;
@@ -5299,6 +5319,26 @@ export interface paths {
          */
         put: operations["notificacionesPlantillasEditar"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificaciones/plantillas/vista-previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vista previa de una plantilla con datos de ejemplo del evento (no guarda)
+         * @description Renderiza asunto y cuerpo como el envío real, con el ejemplo de `GET /notificaciones/eventos` y la empresa activa. 422 si el evento no tiene plantilla o el Mustache no es válido. `variables_desconocidas` lista lo que la plantilla usa y el evento no trae.
+         */
+        post: operations["notificacionesPlantillasVistaPrevia"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11049,6 +11089,32 @@ export interface components {
             /** @description Al cumplirse, incumplirse, rechazarse o cancelarse */
             cierre?: components["schemas"]["CierrePromesa"];
         };
+        EventoNotificacion: {
+            /** @description Evento de la plantilla (`factura.emitida`, `recordatorio.1`, `alerta.…`) */
+            evento: string;
+            /** @description Nombre legible en español */
+            nombre: string;
+            /** @enum {string} */
+            grupo: "cliente" | "recordatorio" | "alerta";
+            /** @description Interruptor de `avisos` de la configuración que lo apaga; null = no se apaga por tipo */
+            tipo_aviso: string | null;
+            /** @description Canales con plantilla de fábrica */
+            canales: ("correo" | "telegram" | "whatsapp")[];
+            /** @description Variables Mustache por grupo, las mismas que arma el aviso real. En las alertas, `alerta.*` sale de sus plantillas de fábrica y el ejemplo es el nombre */
+            variables: {
+                /** @description Primer nivel: `empresa`, `factura`, `alerta`… */
+                grupo: string;
+                etiqueta: string;
+                variables: {
+                    /** @description Nombre completo para Mustache: `factura.total_q` */
+                    nombre: string;
+                    /** @enum {string} */
+                    tipo: "texto" | "numero" | "booleano";
+                    /** @description Valor de ejemplo (el de la vista previa), como texto */
+                    ejemplo: string;
+                }[];
+            }[];
+        };
         EventoRed: {
             id: number;
             /** @enum {string} */
@@ -15584,6 +15650,17 @@ export interface components {
                 clave: string;
                 nombre: string | null;
             }[];
+        };
+        VistaPreviaPlantilla: {
+            evento: string;
+            /** @enum {string} */
+            canal: "correo" | "telegram" | "whatsapp";
+            asunto: string | null;
+            cuerpo: string;
+            /** @description Lo que recibe el destinatario: en Telegram, asunto y cuerpo en un solo texto (máx. 4096) */
+            mensaje: string;
+            /** @description Variables que la plantilla usa y el evento no trae: se renderizan vacías */
+            variables_desconocidas: string[];
         };
         VistaPreviaVelocidad: {
             /** @description Mikrotik-Rate-Limit completo en estado activo (o rate_limit_override) */
@@ -36522,6 +36599,44 @@ export interface operations {
             };
         };
     };
+    notificacionesEventosListar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Eventos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventoNotificacion"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     notificacionesPlantillasListar: {
         parameters: {
             query?: never;
@@ -36621,6 +36736,66 @@ export interface operations {
             };
             /** @description Conflicto de versión */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notificacionesPlantillasVistaPrevia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Evento de la plantilla (`GET /notificaciones/eventos`) */
+                    evento: string;
+                    /** @enum {string} */
+                    canal: "correo" | "telegram" | "whatsapp";
+                    /** @description Asunto Mustache (en Telegram va como primera línea del mensaje) */
+                    asunto?: string | null;
+                    /** @description Cuerpo Mustache sin guardar */
+                    cuerpo: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Vista previa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VistaPreviaPlantilla"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso notificaciones.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

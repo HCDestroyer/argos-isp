@@ -38383,6 +38383,61 @@
         "x-implementado": true
       }
     },
+    "/api/v1/notificaciones/eventos": {
+      "get": {
+        "operationId": "notificacionesEventosListar",
+        "summary": "Eventos con plantilla y sus variables Mustache (con ejemplos)",
+        "description": "Avisos al cliente, recordatorios y alertas al equipo. Las variables son las que arma el aviso real para ese evento; la empresa es la activa (o la principal), con sus datos reales.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventoNotificacion"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/notificaciones/plantillas": {
       "get": {
         "operationId": "notificacionesPlantillasListar",
@@ -38565,6 +38620,114 @@
           }
         },
         "x-permiso": "notificaciones.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/notificaciones/plantillas/vista-previa": {
+      "post": {
+        "operationId": "notificacionesPlantillasVistaPrevia",
+        "summary": "Vista previa de una plantilla con datos de ejemplo del evento (no guarda)",
+        "description": "Renderiza asunto y cuerpo como el envío real, con el ejemplo de `GET /notificaciones/eventos` y la empresa activa. 422 si el evento no tiene plantilla o el Mustache no es válido. `variables_desconocidas` lista lo que la plantilla usa y el evento no trae.",
+        "tags": [
+          "notificaciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Evento de la plantilla (`GET /notificaciones/eventos`)"
+                  },
+                  "canal": {
+                    "type": "string",
+                    "enum": [
+                      "correo",
+                      "telegram",
+                      "whatsapp"
+                    ]
+                  },
+                  "asunto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300,
+                    "description": "Asunto Mustache (en Telegram va como primera línea del mensaje)"
+                  },
+                  "cuerpo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "description": "Cuerpo Mustache sin guardar"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "canal",
+                  "cuerpo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaPlantilla"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso notificaciones.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "notificaciones.ver",
         "x-implementado": true
       }
     },
@@ -70018,6 +70181,104 @@
           }
         }
       },
+      "EventoNotificacion": {
+        "type": "object",
+        "required": [
+          "evento",
+          "nombre",
+          "grupo",
+          "tipo_aviso",
+          "canales",
+          "variables"
+        ],
+        "properties": {
+          "evento": {
+            "type": "string",
+            "description": "Evento de la plantilla (`factura.emitida`, `recordatorio.1`, `alerta.…`)"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre legible en español"
+          },
+          "grupo": {
+            "type": "string",
+            "enum": [
+              "cliente",
+              "recordatorio",
+              "alerta"
+            ]
+          },
+          "tipo_aviso": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Interruptor de `avisos` de la configuración que lo apaga; null = no se apaga por tipo"
+          },
+          "canales": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "correo",
+                "telegram",
+                "whatsapp"
+              ]
+            },
+            "description": "Canales con plantilla de fábrica"
+          },
+          "variables": {
+            "type": "array",
+            "description": "Variables Mustache por grupo, las mismas que arma el aviso real. En las alertas, `alerta.*` sale de sus plantillas de fábrica y el ejemplo es el nombre",
+            "items": {
+              "type": "object",
+              "required": [
+                "grupo",
+                "etiqueta",
+                "variables"
+              ],
+              "properties": {
+                "grupo": {
+                  "type": "string",
+                  "description": "Primer nivel: `empresa`, `factura`, `alerta`…"
+                },
+                "etiqueta": {
+                  "type": "string"
+                },
+                "variables": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "nombre",
+                      "tipo",
+                      "ejemplo"
+                    ],
+                    "properties": {
+                      "nombre": {
+                        "type": "string",
+                        "description": "Nombre completo para Mustache: `factura.total_q`"
+                      },
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "texto",
+                          "numero",
+                          "booleano"
+                        ]
+                      },
+                      "ejemplo": {
+                        "type": "string",
+                        "description": "Valor de ejemplo (el de la vista previa), como texto"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "EventoRed": {
         "type": "object",
         "required": [
@@ -88125,6 +88386,50 @@
                 }
               }
             }
+          }
+        }
+      },
+      "VistaPreviaPlantilla": {
+        "type": "object",
+        "required": [
+          "evento",
+          "canal",
+          "asunto",
+          "cuerpo",
+          "mensaje",
+          "variables_desconocidas"
+        ],
+        "properties": {
+          "evento": {
+            "type": "string"
+          },
+          "canal": {
+            "type": "string",
+            "enum": [
+              "correo",
+              "telegram",
+              "whatsapp"
+            ]
+          },
+          "asunto": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cuerpo": {
+            "type": "string"
+          },
+          "mensaje": {
+            "type": "string",
+            "description": "Lo que recibe el destinatario: en Telegram, asunto y cuerpo en un solo texto (máx. 4096)"
+          },
+          "variables_desconocidas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Variables que la plantilla usa y el evento no trae: se renderizan vacías"
           }
         }
       },
