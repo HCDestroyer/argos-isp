@@ -107,3 +107,17 @@ test('cajero: ve el inventario pero no registra movimientos', async ({ page }) =
     await expect(page.locator('[data-existencia="1/1"]')).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('[data-prueba="inventario-registrar"]')).toHaveCount(0)
 })
+
+test('cargo único: elegir un producto sugiere su precio de venta y pide el equipo', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/servicios/1')
+    await expect(page.locator('[data-prueba="servicio-equipos"]')).toBeVisible({ timeout: 15_000 })
+    await page.locator('[data-prueba="abrir-cargo-unico"]').click()
+    const modal = page.getByRole('dialog', { name: 'Cargo único' })
+    await elegir(page, modal, 'cargo-producto-1', /Router TP-Link AX1500/)
+    await expect(campo(modal, 'cargo-precio-1')).toHaveValue('650.00')
+    await elegir(page, modal, 'cargo-bodega-1', 'Bodega central')
+    await elegir(page, modal, 'cargo-unidad-1', /TPAX15000001/)
+    await modal.locator('[data-prueba="emitir-cargo"]').click()
+    await expect(modal).toBeHidden()
+})

@@ -188,6 +188,9 @@ function textoProducto(cuerpo: Record<string, unknown>, parcial: boolean): Error
     if ((!parcial || (nombre !== undefined && nombre !== null)) && (typeof nombre !== 'string' || nombre.trim().length < 2)) {
         errores.push({ field: 'nombre', message: 'El nombre debe tener al menos 2 caracteres', rule: 'minLength' })
     }
+    if (cuerpo.precio_venta !== undefined && cuerpo.precio_venta !== null && (typeof cuerpo.precio_venta !== 'string' || !/^\d{1,12}(\.\d{1,2})?$/.test(cuerpo.precio_venta))) {
+        errores.push({ field: 'precio_venta', message: 'Precio con hasta 2 decimales, sin signo', rule: 'regex' })
+    }
     if (cuerpo.existencia_minima !== undefined && cuerpo.existencia_minima !== null && (typeof cuerpo.existencia_minima !== 'string' || !CANTIDAD.test(cuerpo.existencia_minima))) {
         errores.push({ field: 'existencia_minima', message: 'Cantidad con hasta 3 decimales', rule: 'regex' })
     }
@@ -275,6 +278,7 @@ export const rutasInventario: RutasFixture = {
             cuenta_costo: typeof cuerpo.cuenta_costo === 'string' ? cuerpo.cuenta_costo : null,
             cuenta_consumo: typeof cuerpo.cuenta_consumo === 'string' ? cuerpo.cuenta_consumo : null,
             existencia_minima: typeof cuerpo.existencia_minima === 'string' ? cantidad3(cuerpo.existencia_minima) : null,
+            precio_venta: typeof cuerpo.precio_venta === 'string' ? monto2(cuerpo.precio_venta) : null,
             activo: true,
             existencia: '0.000',
             valor: '0.00',
@@ -315,6 +319,7 @@ export const rutasInventario: RutasFixture = {
             cuenta_costo: 'cuenta_costo' in cuerpo ? (typeof cuerpo.cuenta_costo === 'string' ? cuerpo.cuenta_costo : null) : producto.cuenta_costo,
             cuenta_consumo: 'cuenta_consumo' in cuerpo ? (typeof cuerpo.cuenta_consumo === 'string' ? cuerpo.cuenta_consumo : null) : producto.cuenta_consumo,
             existencia_minima: 'existencia_minima' in cuerpo ? (typeof cuerpo.existencia_minima === 'string' ? cantidad3(cuerpo.existencia_minima) : null) : producto.existencia_minima,
+            precio_venta: 'precio_venta' in cuerpo ? (typeof cuerpo.precio_venta === 'string' ? monto2(cuerpo.precio_venta) : null) : producto.precio_venta,
             version: producto.version + 1,
             updated_at: ahora(),
         })
@@ -1063,8 +1068,21 @@ export function inventarioDeCompra(compra: Schema<'Compra'>, entrada: unknown, c
         const costo = creditoFiscal ? new Decimal(linea.base) : new Decimal(linea.base).plus(linea.iva)
         const unidades = Array.isArray(l.unidades) ? l.unidades : []
         const unidadIds = Array.isArray(l.unidad_ids) ? l.unidad_ids.filter((n): n is number => typeof n === 'number') : []
-        if (producto.seguimiento === 'serie' && compra.tipo_documento !== 'NCRE' && unidades.length !== cantidad) {
-            return regla('requiere_unidades', `Escribe ${cantidad} series o MAC (una por equipo)`, campo('unidades'))
+        // Como `compras.ts` de A3: menos unidades que la cantidad (o ninguna) es 422 de validación
+        // `requiere_unidades` en `unidades` (NCRE: `unidad_ids`); más, `cantidad`
+        if (producto.seguimiento === 'serie') {
+            const devolucion = compra.tipo_documento === 'NCRE'
+            const recibidas = devolucion ? unidadIds.length : unidades.length
+            if (recibidas < cantidad) {
+                return datosInvalidos([{
+                    field: campo(devolucion ? 'unidad_ids' : 'unidades'),
+                    message: devolucion ? `Indica los ${cantidad} equipos que se devuelven (vienen ${recibidas})` : `Escribe ${cantidad} series o MAC, una por equipo (vienen ${recibidas})`,
+                    rule: 'requiere_unidades',
+                }])
+            }
+            if (recibidas !== cantidad) {
+                return datosInvalidos([{ field: campo('cantidad'), message: `La cantidad (${cantidad}) es el número de unidades (${recibidas})`, rule: 'cantidad' }])
+            }
         }
         if (producto.seguimiento === 'serie' && compra.tipo_documento === 'NCRE') {
             const devueltas = bd.unidadesInventario.filter(u => unidadIds.includes(u.id))

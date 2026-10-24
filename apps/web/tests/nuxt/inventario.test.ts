@@ -1,6 +1,8 @@
+import type { Problem } from '@argosisp/contracts'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
+import { datosInvalidos } from '~~/fixtures/comun'
 import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { UApp } from '#components'
@@ -43,6 +45,14 @@ describe('utilidades', () => {
         expect(serieOMac('AA-BB-CC-00-00-09')).toEqual({ serie: null, mac: 'AA-BB-CC-00-00-09' })
         expect(serieOMac('HWTC99')).toEqual({ serie: 'HWTC99', mac: null })
         expect(identificacionUnidad({ serie: 'SN1', mac: null })).toBe('SN1')
+    })
+
+    it('el producto lleva su precio de venta: hasta 2 decimales, nunca negativo, vacío = sin precio', () => {
+        const base = entradaProducto(null)
+        expect(esquemaProducto.parse({ ...base, sku: 'X', nombre: 'Router', precio_venta: '450.5' }).precio_venta).toBe('450.5')
+        expect(esquemaProducto.parse({ ...base, sku: 'X', nombre: 'Router' }).precio_venta).toBeNull()
+        expect(esquemaProducto.safeParse({ ...base, sku: 'X', nombre: 'Router', precio_venta: '-1' }).success).toBe(false)
+        expect(esquemaProducto.safeParse({ ...base, sku: 'X', nombre: 'Router', precio_venta: '1.999' }).success).toBe(false)
     })
 
     it('el esquema de cada operación pide lo suyo', () => {
@@ -135,10 +145,22 @@ describe('fixtures del inventario (como la API)', () => {
             proveedor_id: 2, tipo_documento: 'FACT', serie: 'R', numero: '78', fecha_documento: '2026-10-12', condicion: 'credito',
             lineas: [{ descripcion: 'ONU', tipo: 'bien', total: '392.00', producto_id: 3, bodega_id: 1, cantidad: 2, unidades: [{ serie: 'X1' }] }],
         }, clave())
-        expect(!faltanSeries.ok && faltanSeries.problema.type).toBe('urn:argosisp:problema:requiere_unidades')
+        // 422 de validación (el de `datosInvalidos`), no un tipo propio
+        expect(!faltanSeries.ok && [faltanSeries.problema.status, faltanSeries.problema.type]).toEqual([422, (datosInvalidos([]).cuerpo as Problem).type])
+        expect(!faltanSeries.ok && faltanSeries.problema.errors).toEqual([expect.objectContaining({ field: 'lineas.0.unidades', rule: 'requiere_unidades' })])
+        const sobranSeries = await useCompras().registrar({
+            proveedor_id: 2, tipo_documento: 'FACT', serie: 'R', numero: '79', fecha_documento: '2026-10-12', condicion: 'credito',
+            lineas: [{ descripcion: 'ONU', tipo: 'bien', total: '392.00', producto_id: 3, bodega_id: 1, cantidad: 1, unidades: [{ serie: 'X1' }, { serie: 'X2' }] }],
+        }, clave())
+        expect(!sobranSeries.ok && sobranSeries.problema.errors).toEqual([expect.objectContaining({ field: 'lineas.0.cantidad', rule: 'cantidad' })])
 
         const servicio = bd.servicios.find(s => s.cliente_id === 1)!
         const concepto = bd.conceptosCargo.find(c => c.empresa_id === 1 && c.activo)!
+        expect(bd.productos.find(p => p.id === 4)?.precio_venta).toBe('650.00')
+        const conPrecio = await useProductos().editar(1, { version: 1, precio_venta: '4.75' })
+        expect(conPrecio.ok && conPrecio.data.precio_venta).toBe('4.75')
+        const precioMalo = await useProductos().editar(1, { version: 2, precio_venta: '-1' })
+        expect(!precioMalo.ok && precioMalo.problema.errors?.[0]?.field).toBe('precio_venta')
         const venta = await useCargoUnico().emitir({ servicio_id: servicio.id, lineas: [{ concepto_id: concepto.id, cantidad: '1', precio_unitario: '600.00', producto_id: 4, bodega_id: 1, unidad_id: 4 }] }, clave())
         expect(venta.ok && venta.data.documento).toBe('factura')
         expect(bd.unidadesInventario.find(u => u.id === 4)?.estado).toBe('vendida')

@@ -27,6 +27,7 @@ const producto = (id: number, datos: Pick<Producto, 'sku' | 'nombre' | 'unidad' 
     cuenta_costo: null,
     cuenta_consumo: null,
     existencia_minima: null,
+    precio_venta: null,
     activo: true,
     existencia: '0.000',
     valor: '0.00',
@@ -38,7 +39,7 @@ export const productosIniciales: Producto[] = [
     producto(1, { sku: 'CAB-UTP6', nombre: 'Cable UTP Cat6', unidad: 'metro', tipo: 'material', seguimiento: 'cantidad', existencia_minima: '100.000' }),
     producto(2, { sku: 'CON-RJ45', nombre: 'Conector RJ45', unidad: 'unidad', tipo: 'material', seguimiento: 'cantidad', existencia_minima: '50.000' }),
     producto(3, { sku: 'ONU-HG8145', nombre: 'ONU Huawei HG8145', unidad: 'unidad', tipo: 'equipo', seguimiento: 'serie' }),
-    producto(4, { sku: 'RT-AX1500', nombre: 'Router TP-Link AX1500', unidad: 'unidad', tipo: 'equipo', seguimiento: 'serie', concepto_cargo_id: 1 }),
+    producto(4, { sku: 'RT-AX1500', nombre: 'Router TP-Link AX1500', unidad: 'unidad', tipo: 'equipo', seguimiento: 'serie', concepto_cargo_id: 1, precio_venta: '650.00' }),
     producto(5, { sku: 'GRAPA-10', nombre: 'Grapa plástica 10 mm', unidad: 'caja', tipo: 'material', seguimiento: 'cantidad', empresa_id: 2 }),
 ]
 

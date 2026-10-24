@@ -10,7 +10,7 @@ import type Decimal from 'decimal.js'
  * una **bonificación** (decisión del PM): pide motivo del catálogo, explicación y el permiso
  * `facturas.cargo_sin_costo`; sin él la API responde 403 y aquí se avisa antes.
  * Venta de inventario (A3, fase C; con `inventario.ver`): elegir un producto llena el concepto (el
- * suyo, si lo tiene) y la descripción, pide la bodega de donde sale y, por serie, el equipo; la API
+ * suyo, si lo tiene), la descripción y el precio sugerido (`precio_venta`), pide la bodega de donde sale y, por serie, el equipo; la API
  * asienta el costo de ventas en la misma factura.
  */
 const props = defineProps<{
@@ -84,6 +84,10 @@ function elegirProducto(indice: number, valor: unknown) {
     if (producto) {
         linea.concepto_id = producto.concepto_cargo_id ?? linea.concepto_id
         linea.descripcion = linea.descripcion || producto.nombre
+        // precio de venta sugerido (A3, con IVA); el operador lo puede cambiar
+        if (producto.precio_venta) {
+            linea.precio_unitario = producto.precio_venta
+        }
         if (producto.seguimiento === 'serie') {
             linea.cantidad = '1'
         }

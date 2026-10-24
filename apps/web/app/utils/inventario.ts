@@ -127,6 +127,8 @@ export const esquemaProducto = z.object({
     cuenta_costo: z.string().trim().max(30).refine(v => v === '' || CUENTA.test(v), 'Código de cuenta: 5.6.01').transform(v => v || null),
     cuenta_consumo: z.string().trim().max(30).refine(v => v === '' || CUENTA.test(v), 'Código de cuenta: 5.2.07').transform(v => v || null),
     existencia_minima: z.string().trim().refine(v => v === '' || CANTIDAD.test(v), 'Hasta 3 decimales').transform(v => v || null),
+    /** Precio de venta con IVA que sugiere el cargo único (A3); vacío = sin precio. */
+    precio_venta: z.string().trim().refine(v => v === '' || /^\d{1,12}(\.\d{1,2})?$/.test(v), 'Precio con hasta 2 decimales, sin signo').transform(v => v || null),
 })
 
 export type EntradaProducto = z.input<typeof esquemaProducto>
@@ -143,6 +145,7 @@ export function entradaProducto(producto: ProductoApi | null): EntradaProducto {
         cuenta_costo: producto?.cuenta_costo ?? '',
         cuenta_consumo: producto?.cuenta_consumo ?? '',
         existencia_minima: producto?.existencia_minima ? formatearCantidad(producto.existencia_minima).replaceAll(',', '') : '',
+        precio_venta: producto?.precio_venta ?? '',
     }
 }
 

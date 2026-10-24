@@ -6,7 +6,8 @@ import Decimal from 'decimal.js'
 /**
  * Alta y edición de un producto del inventario (A3): SKU, nombre, unidad, tipo, seguimiento (por
  * cantidad o por serie; no cambia si ya tiene movimientos), clase de activo para el comodato,
- * cuentas propias de costo y consumo y existencia mínima. Al editar va la `version` (409).
+ * cuentas propias de costo y consumo, existencia mínima y precio de venta (con IVA, el que sugiere
+ * el cargo único). Al editar va la `version` (409).
  */
 const props = withDefaults(defineProps<{
     producto?: Producto | null
@@ -147,6 +148,23 @@ async function enviar(evento: FormSubmitEvent<SalidaProducto>) {
                         :items="itemsClase"
                         class="w-full"
                     />
+                </UFormField>
+                <UFormField
+                    label="Precio de venta"
+                    name="precio_venta"
+                    help="Con IVA. Lo sugiere el cargo único al vender el producto; vacío = sin precio."
+                >
+                    <UInput
+                        v-model="estado.precio_venta"
+                        inputmode="decimal"
+                        placeholder="0.00"
+                        class="w-full sm:w-48"
+                        data-prueba="producto-precio"
+                    >
+                        <template #leading>
+                            <span class="text-sm text-muted">Q</span>
+                        </template>
+                    </UInput>
                 </UFormField>
                 <div class="grid gap-4 sm:grid-cols-3">
                     <UFormField
