@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
-import meCajero from '~~/fixtures/auth/me.cajero.json'
+import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 
 describe('usePermisos', () => {
     afterEach(() => {
@@ -37,6 +36,6 @@ describe('usePermisos', () => {
         const { puede } = usePermisos()
         const visibles = SECCIONES_PANEL.filter(seccion => puede(seccion.permiso)).map(seccion => seccion.id)
         // Igual que ROLES_BASE.cajero de apps/api/app/core/permisos.ts (incluye facturas.ver para bonificaciones, planes.ver, fel.ver, lealtad.ver y adicionales.ver).
-        expect(visibles).toEqual(['clientes', 'servicios', 'cobro', 'facturas', 'pagos', 'comprobantes', 'promesas', 'dte', 'notas-credito', 'bonificaciones', 'lealtad', 'caja', 'planes', 'adicionales', 'fel', 'cuentas-bancarias'])
+        expect(visibles).toEqual(['clientes', 'servicios', 'cobro', 'facturas', 'pagos', 'comprobantes', 'pasarela', 'promesas', 'dte', 'notas-credito', 'bonificaciones', 'lealtad', 'premios-lealtad', 'canjes-lealtad', 'caja', 'planes', 'adicionales', 'fel', 'cuentas-bancarias'])
     })
 })

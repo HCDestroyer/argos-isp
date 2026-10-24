@@ -11,6 +11,8 @@ const toast = useToast()
 const servicioId = computed(() => Number(route.params.id))
 
 const servicio = shallowRef<Servicio | null>(null)
+/** Servicio importado (Mikrowisp): «Importado de Mikrowisp #id», discreto bajo el título. */
+const origen = computed(() => (servicio.value ? origenExterno(servicio.value) : null))
 const cargando = ref(true)
 const problema = ref<Problem | null>(null)
 
@@ -227,6 +229,19 @@ function alTerminar(actualizado: Servicio, accion: PresentacionAccionServicio) {
     void historialAsignaciones.value?.recargar()
 }
 
+const configuracionEfectiva = useTemplateRef<{ recargar: () => Promise<void> }>('configuracionEfectiva')
+
+/** Un plan temporal que empieza o se cancela cambia el plan del servicio: se relee la ficha. */
+async function alCambiarPlanTemporal() {
+    const resultado = await useServicios().ver(servicioId.value)
+    if (resultado.ok) {
+        servicio.value = resultado.data
+        void cargarRelacionados(resultado.data)
+    }
+    void configuracionEfectiva.value?.recargar()
+    void lineaTiempo.value?.recargar()
+}
+
 const precio = computed(() => servicio.value?.costo_override ?? plan.value?.precio ?? null)
 
 watch(servicioId, cargar)
@@ -338,6 +353,17 @@ onMounted(cargar)
                         · {{ nombreZona(servicio) }}
                     </template>
                     · versión {{ servicio.version }}
+                </p>
+                <p
+                    v-if="origen"
+                    class="flex items-center gap-1.5 text-xs text-dimmed"
+                    data-prueba="servicio-importado"
+                >
+                    <UIcon
+                        name="i-lucide-import"
+                        class="size-3.5 shrink-0"
+                    />
+                    {{ textoImportado(origen) }}
                 </p>
             </div>
 
@@ -610,6 +636,16 @@ onMounted(cargar)
                     </dl>
                 </UPageCard>
             </div>
+
+            <ServicioConfiguracionEfectiva
+                ref="configuracionEfectiva"
+                :servicio-id="servicio.id"
+            />
+
+            <ServicioPlanesTemporales
+                :servicio="servicio"
+                @cambiado="alCambiarPlanTemporal"
+            />
 
             <ServicioHorus
                 v-if="puede('horus.ver')"

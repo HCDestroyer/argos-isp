@@ -5,6 +5,7 @@ export type CredencialesPpp = Schema<'CredencialesPpp'>
 export type DatosServicio = paths['/api/v1/servicios']['post']['requestBody']['content']['application/json']
 export type ModoIpv6 = Servicio['ipv6_modo']
 export type TramoAsignacion = Schema<'TramoAsignacion'>
+export type ConfiguracionEfectivaServicio = Schema<'ConfiguracionEfectivaServicio'>
 export type FiltrosServicios = Omit<NonNullable<paths['/api/v1/servicios']['get']['parameters']['query']>, 'cursor'>
 
 /** Tamaño de página de la lista de servicios. */
@@ -103,5 +104,13 @@ export function useServicios() {
         }))
     }
 
-    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa }
+    /**
+     * `GET /servicios/:id/configuracion-efectiva` (`servicios.ver`): el plan como queda en su router
+     * (rate-limit, profile, pools) y la plantilla con las excepciones del servicio aplicadas.
+     */
+    function configuracionEfectiva(id: number): Promise<Resultado<ConfiguracionEfectivaServicio>> {
+        return resolver(api.GET('/api/v1/servicios/{id}/configuracion-efectiva', { params: { path: { id } } }))
+    }
+
+    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva }
 }

@@ -103,6 +103,11 @@ x-api-env: &api-env
   # Orígenes a los que la pasarela puede devolver al cliente (A3; separados por coma). Por defecto,
   # el del portal: sin él, el cliente no vuelve al portal después de pagar.
   PASARELA_RETORNO_ORIGENES: ${PASARELA_RETORNO_ORIGENES:-${PORTAL_URL_PUBLICA:-}}
+  # Recurrente (PASARELA_PROVEEDOR=recurrente; en el laboratorio, la llave sk_test_ de un Sandbox).
+  RECURRENTE_SECRET_KEY: ${RECURRENTE_SECRET_KEY:-}
+  RECURRENTE_WEBHOOK_SECRETO: ${RECURRENTE_WEBHOOK_SECRETO:-}
+  RECURRENTE_API_URL: ${RECURRENTE_API_URL:-https://app.recurrente.com/api}
+  RECURRENTE_EXPIRA_HORAS: ${RECURRENTE_EXPIRA_HORAS:-24}
   # Comprobantes de depósito (A3, billing/comprobantes_archivos.ts): fuera de Postgres, en el volumen
   # `comprobantes` (o COMPROBANTES_HOST_DIR) montado solo en api, que los guarda y los sirve
   # (el portal los sube y los pide a través de la API). El servicio backup los respalda.

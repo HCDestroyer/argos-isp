@@ -2,8 +2,7 @@ import Decimal from 'decimal.js'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
-import meCajero from '~~/fixtures/auth/me.cajero.json'
+import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { esperadoDelTurno } from '~~/fixtures/cajas/rutas'
 import PaginaCaja from '~/pages/caja/index.vue'
@@ -229,7 +228,7 @@ describe('fase 4 · cobros y bancos', () => {
             expect(!cerrada.ok && cerrada.problema.type).toBe('urn:argosisp:problema:sin_turno_abierto')
         })
 
-        it('la caja resta los depósitos del esperado provisional y el cajero deposita sin ver la lista', async () => {
+        it('la caja resta los depósitos del esperado provisional y el cajero deposita y ve su esperado', async () => {
             await useCajas().depositar(2, { monto: '100.00', boleta: 'B-80', cuenta_id: 16 }, nuevaClaveIdempotencia())
             const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=2' })
             await esperar(() => expect(vista.find('[data-prueba="turno-depositos"]').exists()).toBe(true))
@@ -243,7 +242,8 @@ describe('fase 4 · cobros y bancos', () => {
             sesionFixture('fixture-cajero')
             const cajero = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
             await esperar(() => expect(cajero.find('[data-prueba="abrir-deposito"]').exists()).toBe(true))
-            expect(cajero.find('[data-prueba="turno-depositos"]').exists()).toBe(false)
+            // Con `cajas.ver` el cajero lee egresos y depósitos de su turno: ve el esperado completo.
+            await esperar(() => expect(cajero.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
         })
 
         it('traslado y fondos en tránsito: lo pendiente por empresa', async () => {

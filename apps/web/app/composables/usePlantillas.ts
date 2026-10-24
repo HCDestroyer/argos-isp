@@ -10,16 +10,30 @@ export function usePlantillas() {
         return resolver(api.GET('/api/v1/plantillas-facturacion'))
     }
 
+    function ver(id: number): Promise<Resultado<PlantillaFacturacion>> {
+        return resolver(api.GET('/api/v1/plantillas-facturacion/{id}', { params: { path: { id } } }))
+    }
+
+    /** `POST /plantillas-facturacion` (`plantillas.crear`); 422 por campo, también las reglas de coherencia. */
+    function crear(datos: DatosPlantilla): Promise<Resultado<PlantillaFacturacion>> {
+        return resolver(api.POST('/api/v1/plantillas-facturacion', { body: datos }))
+    }
+
+    /**
+     * `PUT /plantillas-facturacion/:id` (`plantillas.editar`) con la `version` leída (409 si cambió).
+     * `reglas_promesa` reemplaza el objeto completo. Las facturas ya emitidas no cambian.
+     */
+    function editar(id: number, cambios: CambiosPlantilla): Promise<Resultado<PlantillaFacturacion>> {
+        return resolver(api.PUT('/api/v1/plantillas-facturacion/{id}', { params: { path: { id } }, body: cambios }))
+    }
+
     /**
      * `PUT /plantillas-facturacion/:id` (`plantillas.editar`) solo con el momento de certificar
      * (`certificar_al`) y la `version` leída; 409 si otra persona la cambió.
      */
     function cambiarCertificarAl(plantilla: Pick<PlantillaFacturacion, 'id' | 'version'>, certificarAl: PlantillaFacturacion['certificar_al']): Promise<Resultado<PlantillaFacturacion>> {
-        return resolver(api.PUT('/api/v1/plantillas-facturacion/{id}', {
-            params: { path: { id: plantilla.id } },
-            body: { version: plantilla.version, certificar_al: certificarAl },
-        }))
+        return editar(plantilla.id, { version: plantilla.version, certificar_al: certificarAl })
     }
 
-    return { listar, cambiarCertificarAl }
+    return { listar, ver, crear, editar, cambiarCertificarAl }
 }

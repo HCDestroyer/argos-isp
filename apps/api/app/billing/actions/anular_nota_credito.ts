@@ -4,6 +4,7 @@ import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
+import { rehacerVentasDeNota } from '#inventario/ventas'
 import { bloquearCliente, sumarAPagado, type FacturaPendiente } from '#billing/cobros'
 import { verNotaCredito } from '#billing/notas_credito'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
@@ -138,6 +139,8 @@ export default class AnularNotaCredito extends DomainAction<
                 anulado_por: usuarioDelActor(t.ctx.actor),
             })
 
+        // inventario (fase C): lo que la nota reingresó vuelve a salir al mismo costo
+        await rehacerVentasDeNota(t, nota.id, `anulación de la nota ${nota.id}: ${motivo}`)
         const f = (await t.trx
             .from('billing.facturas')
             .where('id', nota.factura_id)

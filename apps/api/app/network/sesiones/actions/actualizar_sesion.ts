@@ -1,4 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { anotarAccounting } from '#network/sesiones/contacto'
 import type { RegistroAccounting } from '#network/sesiones/registro'
 import {
     actualizarSesionAbierta,
@@ -37,6 +38,8 @@ export default class ActualizarSesion extends DomainAction<RegistroAccounting, R
     }
 
     protected async handle(r: RegistroAccounting, t: Transaccion): Promise<ResultadoAccounting> {
+        // El NAS mandó accounting: contacto del router (Router.en_linea), a lo sumo cada 60 s.
+        await anotarAccounting(t.trx, r)
         const ctx = await resolverContexto(t, r)
         const nueva = await insertarSesion(t, r, ctx, { inicio: inicioEstimado(r) })
         if (nueva) {

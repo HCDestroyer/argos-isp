@@ -1,8 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
-import meCajero from '~~/fixtures/auth/me.cajero.json'
+import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { CAJA_SUR_ID, FACTURA_ACREDITADA_ID } from '~~/fixtures/facturacion/datos'
 import PaginaCaja from '~/pages/caja/index.vue'
@@ -76,14 +75,14 @@ describe('fase 4 final · acreditada, depósitos del cajero y proveedor del pago
         expect(!otroTurno.ok && otroTurno.problema.errors?.[0]?.field).toBe('turno_id')
     })
 
-    it('la caja del cajero lista los depósitos de su turno (sin esperado: le falta egresos.ver)', async () => {
+    it('la caja del cajero lista los depósitos de su turno y el esperado los resta (egresos con cajas.ver)', async () => {
         await useCajas().depositar(1, { monto: '50.00', boleta: 'B-81', cuenta_id: 16 }, nuevaClaveIdempotencia())
         comoCajero()
         const vista = await mountSuspended(PaginaCaja, { route: '/caja?caja=1' })
         await esperar(() => expect(vista.find('[data-prueba="depositos-turno"]').exists()).toBe(true))
         expect(vista.find('[data-prueba="depositos-turno"]').text()).toContain('boleta B-81')
         expect(vista.find('[data-prueba="depositos-turno"]').text()).not.toContain('B-4471')
-        expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(false)
+        await esperar(() => expect(vista.find('[data-prueba="turno-esperado"]').exists()).toBe(true))
         vista.unmount()
     })
 

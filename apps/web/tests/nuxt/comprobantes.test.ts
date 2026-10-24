@@ -1,7 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import PaginaComprobante from '~/pages/comprobantes/[id].vue'
 import PaginaComprobantes from '~/pages/comprobantes/index.vue'
 import { esperar } from '../ayudas/esperar'

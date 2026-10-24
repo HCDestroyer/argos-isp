@@ -212,6 +212,25 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'DiferirLineaModal.vue': { permisos: ['libro.registrar_asiento'], desde: ['pages/compras/[id].vue'] },
     'ActivoAltaModal.vue': { permisos: ['activos.registrar'], desde: ['pages/activos/index.vue'] },
     'BajaActivoModal.vue': { permisos: ['activos.dar_de_baja'], desde: ['pages/activos/[id].vue'] },
+    // Tarea 8 y 9 (pantallas pendientes): plantillas, usuarios, roles y tokens de API. La página
+    // abre el formulario en solo lectura sin el permiso de editar (y lo dice el propio formulario).
+    'PlantillaFormulario.vue': { permisos: ['plantillas.crear', 'plantillas.editar', 'plantillas.ver'], desde: ['pages/plantillas/index.vue'] },
+    'UsuarioFormulario.vue': { permisos: ['usuarios.crear', 'usuarios.editar'], desde: ['pages/usuarios/index.vue'] },
+    'RolFormulario.vue': { permisos: ['roles.crear', 'roles.editar'], desde: ['pages/usuarios/roles.vue'] },
+    'TokenApiModal.vue': { permisos: ['tokens.crear'], desde: ['pages/usuarios/tokens.vue'] },
+    // Pendientes de la prioridad 2: avisos, plan por router, router nuevo.
+    'PlantillaNotificacionModal.vue': { permisos: ['notificaciones.editar', 'notificaciones.ver'], desde: ['pages/notificaciones/index.vue'] },
+    'RecordatorioPagoModal.vue': { permisos: ['notificaciones.editar'], desde: ['pages/notificaciones/index.vue'] },
+    'RouterAltaModal.vue': { permisos: ['routers.crear'], desde: ['pages/routers/index.vue'] },
+    // Secciones de fichas: leen con el permiso de la ficha que las monta.
+    'PlanRouters.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
+    'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'CorteAhoraBoton.vue': { permisos: ['facturas.generar'], desde: ['pages/facturas/index.vue'] },
+    'CertificarLoteModal.vue': { permisos: ['fel.certificar'], desde: ['pages/dte/index.vue'] },
+    'PremioLealtadModal.vue': { permisos: ['lealtad.configurar'], desde: ['pages/lealtad/premios.vue'] },
+    'CampoPersonalizadoFormulario.vue': { permisos: ['campos_personalizados.crear', 'campos_personalizados.editar'], desde: ['pages/campos-personalizados.vue'] },
+    'CanjeLealtadModal.vue': { permisos: ['lealtad.canjear', 'lealtad.ver'], desde: ['pages/lealtad/canjes.vue'] },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {

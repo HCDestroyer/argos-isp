@@ -1,5 +1,10 @@
 import { descifrar } from '#shared/cifrado'
-import { ClienteRouterOS, type Bitacora, type ConexionRouterOS } from '#network/routeros/cliente'
+import {
+    ClienteRouterOS,
+    type Bitacora,
+    type ConexionRouterOS,
+    type ContactoRouter,
+} from '#network/routeros/cliente'
 
 /**
  * Datos de `network.routers` que hacen falta para hablar con su API REST (columnas de A1, contrato en
@@ -32,6 +37,8 @@ export class RouterSinCredenciales extends Error {
 export interface OpcionesRouter {
     clave: Buffer
     bitacora?: Bitacora
+    /** Respuestas 2xx → contacto del router (`Router.en_linea`); null = no anotar */
+    contacto?: ContactoRouter | null
     timeoutMs?: number
     reintentos?: number
     esperaMs?: number
@@ -68,5 +75,8 @@ export function conexionDeRouter(router: RouterApi, op: OpcionesRouter): Conexio
 }
 
 export function clienteDeRouter(router: RouterApi, op: OpcionesRouter): ClienteRouterOS {
-    return new ClienteRouterOS(conexionDeRouter(router, op), { bitacora: op.bitacora })
+    return new ClienteRouterOS(conexionDeRouter(router, op), {
+        bitacora: op.bitacora,
+        contacto: op.contacto ?? null,
+    })
 }

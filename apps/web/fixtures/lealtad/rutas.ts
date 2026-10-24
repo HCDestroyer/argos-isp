@@ -89,6 +89,12 @@ function aplicarPrograma(programa: Programa, cuerpo: Record<string, unknown>): v
     if (typeof cuerpo.terminos === 'string') {
         programa.terminos = cuerpo.terminos
     }
+    if (typeof cuerpo.visible_portal === 'boolean') {
+        programa.visible_portal = cuerpo.visible_portal
+    }
+    if (typeof cuerpo.canje_portal === 'boolean') {
+        programa.canje_portal = cuerpo.canje_portal
+    }
     if (typeof cuerpo.vigente_desde === 'string' && FECHA.test(cuerpo.vigente_desde)) {
         programa.vigente_desde = cuerpo.vigente_desde
     }
@@ -323,6 +329,11 @@ export const rutasLealtad: RutasFixture = {
             return versionCambiada()
         }
         const errores = validarPrograma(cuerpo, true)
+        // Como la API (fase 2): canjear en el portal exige que los puntos se vean ahí.
+        const visible = typeof cuerpo.visible_portal === 'boolean' ? cuerpo.visible_portal : programa.visible_portal
+        if (cuerpo.canje_portal === true && !visible) {
+            errores.push({ field: 'canje_portal', message: 'canje_portal exige visible_portal', rule: 'portal' })
+        }
         if (errores.length) {
             return invalido(errores)
         }

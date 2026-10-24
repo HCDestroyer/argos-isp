@@ -614,6 +614,46 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
         })),
 
         /**
+         * Como `CertificarLote` (A3): facturas de la empresa por lista o por rango de emisión
+         * (Guatemala); las vigentes devuelven su DTE sin crear otro y las anuladas van en `errores`.
+         */
+        'POST /api/v1/fel/lotes': conPermiso('fel.certificar', conIdempotencia((solicitud) => {
+            const cuerpo = cuerpoObjeto(solicitud)
+            const empresa = empresaDe(solicitud, cuerpo)
+            if (typeof empresa !== 'number') {
+                return empresa
+            }
+            const ids = Array.isArray(cuerpo.facturas) ? cuerpo.facturas.filter((n): n is number => typeof n === 'number') : null
+            const desde = typeof cuerpo.desde === 'string' ? cuerpo.desde : null
+            const hasta = typeof cuerpo.hasta === 'string' ? cuerpo.hasta : null
+            if (!ids?.length && (!desde || !hasta)) {
+                return datosInvalidos([{ field: 'facturas', message: 'Indica las facturas o el rango desde/hasta', rule: 'required' }])
+            }
+            const configuracion = configuracionFel(empresa)
+            if (configuracion.modo === 'desactivada' || !configuracion.proveedor) {
+                return problemaTipado(422, 'fel_no_configurada', 'FEL no configurada', 'La empresa no tiene certificador FEL configurado')
+            }
+            const facturas = bd.facturas.filter(f => (f.empresa_id ?? 1) === empresa && (ids?.length ? ids.includes(f.id) : fechaGuatemala(f.emitida_en) >= (desde ?? '') && fechaGuatemala(f.emitida_en) <= (hasta ?? '')))
+            const solicitadas: Schema<'SolicitudCertificacion'>[] = []
+            const errores: { factura_id: number, tipo: string, detalle: string }[] = []
+            for (const factura of facturas) {
+                if (factura.estado === 'anulada') {
+                    errores.push({ factura_id: factura.id, tipo: 'factura_anulada', detalle: `La factura ${factura.id} está anulada` })
+                    continue
+                }
+                const vigente = factura.dte_id ? bd.fel.dte.find(d => d.id === factura.dte_id) : undefined
+                if (vigente && vigente.estado !== 'rechazado' && vigente.estado !== 'anulado') {
+                    solicitadas.push({ factura_id: factura.id, dte: structuredClone(vigente), creado: false, motivo: `La factura ya tiene el DTE ${vigente.id} (${vigente.estado})` })
+                    continue
+                }
+                const dte = solicitarDteFactura(factura, 'manual')
+                solicitadas.push({ factura_id: factura.id, dte: structuredClone(dte), creado: true, motivo: null })
+            }
+            registrarAccion(solicitud, 'fel.certificar_lote', { tipo: 'empresa', id: empresa }, cuerpo)
+            return { status: 200, cuerpo: { solicitadas, errores } }
+        })),
+
+        /**
          * Como `SustituirFactura`: sin pagos ni mora; sin DTE certificado anula la original, con DTE
          * la acredita con una NCRE por su saldo; la nueva toma `clave_unica = <clave>#s<n>`.
          */
