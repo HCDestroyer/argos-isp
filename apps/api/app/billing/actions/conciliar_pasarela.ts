@@ -18,6 +18,7 @@ import { pasarela, proveedorConfigurado, PasarelaNoConfigurada } from '#billing/
  * | `pago_anulado` | el proveedor cobró pero el pago está anulado |
  * | `pago_sin_cobro` | pago `pasarela` del día sin cobro en línea |
  * | `error_consulta` | el proveedor no respondió por ese cobro |
+ * | `reembolso_sin_aplicar` | el proveedor reembolsó y el aviso se rechazó por una regla de negocio |
  *
  * Solo reporta: no registra ni anula pagos (eso lo decide una persona). Los cobros que cuadran
  * quedan con `conciliado_en`.
@@ -94,7 +95,25 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
                     t.trx.raw('count(*)::int as n'),
                 )
                 .first()) as { centavos: string; n: number }
-            return { hay: Number(fila.n) > 0, monto: dec(fila.centavos).div(100) }
+            // H65: un aviso de reembolso rechazado (error de negocio) y nunca aplicado después
+            const sinAplicar = (await t.trx
+                .from('billing.pasarela_eventos as e')
+                .where({ 'e.proveedor': proveedor, 'e.id_proveedor': idProveedor, 'e.estado': 'reembolsado' })
+                .whereRaw(`e.resultado->>'ignorado' = 'error_de_negocio'`)
+                .whereNotExists((q) =>
+                    q
+                        .from('billing.pasarela_eventos as x')
+                        .whereRaw('x.proveedor = e.proveedor AND x.id_proveedor = e.id_proveedor')
+                        .where('x.estado', 'reembolsado')
+                        .whereRaw(`x.payload->'refund'->>'id' = e.payload->'refund'->>'id'`)
+                        .whereRaw(`coalesce(x.resultado->>'ignorado', '') = ''`),
+                )
+                .select(
+                    t.trx.raw(`e.payload->'refund'->>'id' as refund_id`),
+                    t.trx.raw(`e.resultado->>'error' as error`),
+                )
+                .first()) as { refund_id: string | null; error: string | null } | null
+            return { hay: Number(fila.n) > 0, monto: dec(fila.centavos).div(100), sinAplicar }
         }
         const diferencias: Diferencia[] = []
         const conciliados: number[] = []
@@ -119,6 +138,16 @@ export default class ConciliarPasarela extends DomainAction<EntradaConciliar, Re
             // menos lo reembolsado (total: pago anulado; parcial: el pago de reemplazo)
             if (pagadoRemoto && cobro.pago_id !== null) {
                 const r = await reembolsado(cobro.id_proveedor)
+                if (r.sinAplicar) {
+                    diferencias.push({
+                        ...comun,
+                        tipo: 'reembolso_sin_aplicar',
+                        nuestro: vigente ? (cobro.pago_monto ?? null) : null,
+                        proveedor: remoto.monto_pagado,
+                        detalle: `Reembolso ${r.sinAplicar.refund_id ?? ''} rechazado: ${r.sinAplicar.error ?? 'error de negocio'}`,
+                    })
+                    continue
+                }
                 if (r.hay) {
                     const resto = dec(remoto.monto_pagado ?? '0').minus(r.monto)
                     const nuestro = vigente ? dec(cobro.pago_monto ?? '0') : dec('0')

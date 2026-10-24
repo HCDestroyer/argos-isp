@@ -65469,7 +65469,9 @@
                     "monto_distinto",
                     "pago_anulado",
                     "pago_sin_cobro",
-                    "error_consulta"
+                    "error_consulta",
+                    "disputa",
+                    "reembolso_sin_aplicar"
                   ]
                 },
                 "cobro_id": {

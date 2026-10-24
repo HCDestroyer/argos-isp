@@ -1,5 +1,5 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
-import { aperturaCerradaPara } from '#ledger/apertura'
+import { aperturaCerradaPara, asientoDeApertura } from '#ledger/apertura'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado, ValidacionFallida } from '#shared/errores'
@@ -109,12 +109,12 @@ export default class AnularSaldoInicial extends DomainAction<
         }
 
         // H63: si el saldo ya entró en un cierre de apertura, anularlo reabriría 2.9.01 (como la importada)
-        const fila = (await t.trx
-            .from('billing.saldos_iniciales')
-            .where('id', saldo.id)
-            .select(t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`))
-            .firstOrFail()) as { fecha: string }
-        if (await aperturaCerradaPara(t.trx, Number(previo.empresa_id), fila.fecha)) {
+        // H66: decide el registro del asiento del saldo (factura o ajuste), no la fecha del documento
+        const facturaApertura = previo.factura_id === null ? null : Number(previo.factura_id)
+        const deApertura = facturaApertura
+            ? await asientoDeApertura(t.trx, ['factura'], facturaApertura)
+            : await asientoDeApertura(t.trx, ['ajuste'], saldo.id)
+        if (deApertura && (await aperturaCerradaPara(t.trx, Number(previo.empresa_id), deApertura))) {
             throw new Conflicto(
                 `El saldo inicial ${saldo.clave_externa} ya entró en el cierre de apertura: corrígelo con una nota de crédito o un ajuste del periodo`,
                 'saldo_con_apertura_cerrada',

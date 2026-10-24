@@ -15,7 +15,9 @@ import { empresasSinFel } from '#tests/contabilidad/ayudas_libros'
 import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import AnularSaldoInicial from '#billing/actions/anular_saldo_inicial'
 import CambiarRegimen from '#fiscal/actions/cambiar_regimen'
-import { construirLibro, finDeMes } from '#fiscal/libros_legales'
+import { construirLibro, finDeMes, type LibroLegal } from '#fiscal/libros_legales'
+import HabilitarLibro from '#fiscal/actions/habilitar_libro'
+import { DateTime } from 'luxon'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import VerificarCierre from '#ledger/actions/verificar_cierre'
 import { verFactura } from '#billing/facturas'
@@ -51,6 +53,47 @@ async function importada(ctx: ContextoAccion, empresaId: number, total = '43.98'
         total: string
     }
     return { ...factura, clienteId }
+}
+
+/**
+ * Emisión del libro de ventas del mes como la deja `libros.emitir` (el mes en curso no se puede
+ * cerrar en la prueba): habilitación y fila de `fiscal.libros_emisiones`. `notasImportadas` null es
+ * una emisión anterior a H48 (sin las notas sobre importadas).
+ */
+async function emisionSimulada(
+    ctx: ContextoAccion,
+    empresaId: number,
+    mes: { desde: string; hasta: string },
+    libro: LibroLegal,
+    notasImportadas: true | null,
+) {
+    await new HabilitarLibro().execute(
+        {
+            empresa_id: empresaId,
+            libro: 'ventas',
+            autorizacion: unico('SAT'),
+            folio_desde: 1,
+            folio_hasta: 10,
+            fecha: mes.desde,
+        },
+        ctx,
+    )
+    await db.table('fiscal.libros_emisiones').insert({
+        empresa_id: empresaId,
+        libro: 'ventas',
+        desde: mes.desde,
+        hasta: mes.hasta,
+        folio_inicial: 1,
+        folio_final: 1,
+        paginas: 1,
+        formato: 'pdf',
+        archivo: `libros/prueba/${unico('v')}.pdf`,
+        tamano: 1,
+        sha256: '0'.repeat(64),
+        filas: libro.reporte.filas.length,
+        totales: JSON.stringify(libro.reporte.totales),
+        notas_importadas: notasImportadas,
+    })
 }
 
 async function movimientosDeNota(notaId: number) {
@@ -234,6 +277,113 @@ test.group('Facturación · nota de crédito sobre una factura importada (H27, H
         )
         assert.equal(await saldoCuenta(e.B, '2.9.01'), '0.00')
         await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H66: una importada tardía con fecha anterior al cierre (registrada después, nunca trasladada) se anula contra 2.9.01', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        const primera = await importada(e.ctx, e.B, '50.00', '2026-09-05')
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: hoyGuatemala() }, e.ctx)
+        const tardia = await importada(e.ctx, e.B, '112.00', '2026-09-20')
+        await new AnularFactura().execute(
+            { factura_id: tardia.id, motivo: 'importación tardía errónea' },
+            e.ctx,
+        )
+        assert.equal(await saldoCuenta(e.B, '2.9.01'), '0.00')
+        // la que sí entró en el cierre sigue con 409
+        const r = await errorDe(
+            new AnularFactura().execute({ factura_id: primera.id, motivo: 'tras el cierre' }, e.ctx),
+        )
+        assert.deepInclude(r, { status: 409, codigo: 'importada_con_apertura_cerrada' })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('H66: un saldo inicial tardío con fecha anterior al cierre se anula; uno que entró, 409', async ({
+        assert,
+    }) => {
+        const e = await prepararEmpresasGt()
+        // un cliente por saldo: el saldo a favor se aplicaría a la factura de apertura del otro
+        const saldo = async (fecha: string, monto: string) =>
+            new RegistrarSaldoInicial().execute(
+                {
+                    origen: 'prueba_h66',
+                    id_externo: unico('s'),
+                    cliente_id: await crearClienteFila(),
+                    empresa_id: e.B,
+                    monto,
+                    fecha,
+                },
+                e.ctx,
+            )
+        const entro = await saldo('2026-09-07', '-20.00')
+        await new CerrarApertura().execute({ empresa_id: e.B, fecha: hoyGuatemala() }, e.ctx)
+        const tardio = await saldo('2026-09-10', '75.00')
+        await new AnularSaldoInicial().execute(
+            { saldo_inicial_id: tardio.saldo_inicial_id, motivo: 'carga tardía errónea' },
+            e.ctx,
+        )
+        assert.equal(await saldoCuenta(e.B, '2.9.01'), '0.00')
+        const r = await errorDe(
+            new AnularSaldoInicial().execute(
+                { saldo_inicial_id: entro.saldo_inicial_id, motivo: 'tras el cierre' },
+                e.ctx,
+            ),
+        )
+        assert.deepInclude(r, { status: 409, codigo: 'saldo_con_apertura_cerrada' })
+        await sinViolaciones(assert, [e.B, e.C])
+    })
+
+    test('libro de ventas emitido sin las notas sobre importadas (antes de H48): no cambia y la nota va de ajuste al mes siguiente', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        const f = await importada(e.ctx, e.B, '112.00', '2026-08-10')
+        const hoy = hoyGuatemala()
+        const mes = { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) }
+        const siguiente = inicioDeMes(DateTime.fromISO(hoy).plus({ months: 1 }).toISODate()!)
+        const otroMes = { desde: siguiente, hasta: finDeMes(siguiente) }
+
+        // el libro del mes como se emitió con la regla anterior (sin la nota)
+        const emitido = await construirLibro('ventas', e.B, mes)
+        await emisionSimulada(e.ctx, e.B, mes, emitido, null)
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '56.00', motivo: 'rebaja tras la emisión' },
+            e.ctx,
+        )
+
+        const otraVez = await construirLibro('ventas', e.B, mes)
+        assert.deepEqual(otraVez.reporte.filas, emitido.reporte.filas)
+        assert.deepEqual(otraVez.reporte.totales, emitido.reporte.totales)
+        const ajuste = await construirLibro('ventas', e.B, otroMes)
+        const fila = ajuste.reporte.filas.find((x) => x.numero === String(nota.id))
+        assert.exists(fila)
+        assert.include(fila!, { fecha: siguiente, total: '-56.00', iva: aTexto(dec(nota.iva).negated()) })
+        assert.include(
+            String(fila!.documento),
+            `ajuste: nota del ${hoy} (libro de ${hoy.slice(0, 7)} ya emitido)`,
+        )
+    })
+
+    test('libro de ventas emitido con la regla nueva: la nota sobre la importada queda en su mes y el libro no cambia al volver a generarlo', async ({
+        assert,
+    }) => {
+        const e = await empresasSinFel()
+        const f = await importada(e.ctx, e.B, '112.00', '2026-08-10')
+        const nota = await new EmitirNotaCredito().execute(
+            { factura_id: f.id, monto: '56.00', motivo: 'rebaja' },
+            e.ctx,
+        )
+        const hoy = hoyGuatemala()
+        const mes = { desde: inicioDeMes(hoy), hasta: finDeMes(hoy) }
+        const emitido = await construirLibro('ventas', e.B, mes)
+        assert.exists(emitido.reporte.filas.find((x) => x.numero === String(nota.id)))
+        await emisionSimulada(e.ctx, e.B, mes, emitido, true)
+        const otraVez = await construirLibro('ventas', e.B, mes)
+        assert.deepEqual(otraVez.reporte.filas, emitido.reporte.filas)
+        const siguiente = inicioDeMes(DateTime.fromISO(hoy).plus({ months: 1 }).toISODate()!)
+        const despues = await construirLibro('ventas', e.B, { desde: siguiente, hasta: finDeMes(siguiente) })
+        assert.notExists(despues.reporte.filas.find((x) => x.numero === String(nota.id)))
     })
 
     test('H62: en pequeño contribuyente la importada no desglosa IVA y su nota sale en el libro de ventas', async ({

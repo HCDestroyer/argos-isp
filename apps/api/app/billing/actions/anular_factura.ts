@@ -11,8 +11,7 @@ import { hoyGuatemala } from '#ledger/fechas'
 import { ERROR_DOCUMENTO_ANULADO, dteVigente, finPlazoAnulacion, type DteFila } from '#fiscal/fel/dte'
 import { AnulacionFueraDePlazo, DteEnProceso } from '#fiscal/fel/errores'
 import { diferimientoDeFactura } from '#ledger/diferidos'
-import { CUENTAS } from '#ledger/plan_cuentas'
-import { aperturaCerradaPara } from '#ledger/apertura'
+import { aperturaCerradaPara, asientoDeApertura } from '#ledger/apertura'
 
 /**
  * H50 / H64 (decisiones del líder): si el saldo de una importada (`CxC / 2.9.01`) ya entró en un
@@ -22,19 +21,10 @@ import { aperturaCerradaPara } from '#ledger/apertura'
  * anula normal contra 2.9.01 (corrige la importación).
  */
 async function exigirAnulableImportada(t: Transaccion, facturaId: number, empresaId: number) {
-    const importada = (await t.trx
-        .from('ledger.asientos as a')
-        .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
-        .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
-        .whereIn('a.origen_tipo', ['factura', 'mora'])
-        .where('a.origen_id', facturaId)
-        .whereNull('a.reversa_de')
-        .where('c.codigo', CUENTAS.SALDOS_APERTURA)
-        .where('m.haber', '>', 0)
-        .select(t.trx.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`))
-        .first()) as { fecha: string } | null
+    // el asiento de la importada lleva el saldo al haber de 2.9.01 (H66: decide su registro, no su fecha)
+    const importada = await asientoDeApertura(t.trx, ['factura', 'mora'], facturaId)
     if (!importada) return
-    if (!(await aperturaCerradaPara(t.trx, empresaId, importada.fecha))) return
+    if (!(await aperturaCerradaPara(t.trx, empresaId, importada))) return
     throw new Conflicto(
         `La factura ${facturaId} es importada y su saldo ya entró en el cierre de apertura: acredítala con una nota de crédito (rebaja de ventas del periodo)`,
         'importada_con_apertura_cerrada',

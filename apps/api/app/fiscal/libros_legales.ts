@@ -505,7 +505,10 @@ interface DocumentoVenta {
  * - sin FEL: facturas que no son aviso de cobro, no importadas (`clave_externa`) y sin DTE
  *   certificado hasta `hasta`, en la fecha de su asiento (la del IVA débito); y sus notas de crédito
  *   sin NCRE hasta `hasta`, en la fecha de la nota. Las notas sobre importadas también salen
- *   (H48, H62): rebajan las ventas (y 2.1.02) del mes aunque la importada no esté en el libro. El receptor es el guardado al emitirlas
+ *   (H48, H62): rebajan las ventas (y 2.1.02) del mes aunque la importada no esté en el libro. Si el
+ *   libro de ventas de ese mes se emitió sin ellas (`libros_emisiones.notas_importadas` NULL, antes
+ *   de H48), ese libro no cambia: la nota va como fila de ajuste (con su referencia) en el primer
+ *   mes siguiente sin un libro emitido así. El receptor es el guardado al emitirlas
  *   (`billing.facturas.receptor`, `billing.notas_credito.receptor`), no el dato actual del cliente.
  * - Anulación (como el desvío c del libro de compras): en el mismo mes del documento, la fila sale en
  *   cero; en un mes posterior, la fila original queda vigente y en el mes de la anulación (fecha del
@@ -623,14 +626,26 @@ export async function libroVentasLegal(
                                    AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta
                                    AND date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
                                        = date_trunc('month', o.fecha))
-         ), notas AS (
-             SELECT 'interno' AS origen, 'nota_credito' AS clase, n.id, NULL::bigint AS factura_id, o.fecha AS fecha_doc,
+         ), notas_base AS (
+             SELECT n.*, o.fecha AS o_fecha,
                     (SELECT coalesce(a.fecha, (x.anulado_en AT TIME ZONE 'America/Guatemala')::date)
                        FROM billing.notas_credito_anulaciones x LEFT JOIN ledger.asientos a ON a.id = x.asiento_id
-                      WHERE x.nota_id = n.id ORDER BY x.id LIMIT 1) AS fecha_anul,
-                    'NOTA' AS tipo, NULL::text AS serie, n.id::text AS numero, NULL::text AS autorizacion,
-                    coalesce(n.receptor->>'id', 'CF') AS nit, coalesce(n.receptor->>'nombre', '') AS cliente,
-                    n.monto::text AS total, n.iva::text AS iva, NULL::text AS informativo, NULL::text AS referencia
+                      WHERE x.nota_id = n.id ORDER BY x.id LIMIT 1) AS anul,
+                    -- un libro emitido no cambia: la nota sobre una importada en un mes cuyo libro se emitió
+                    -- sin ellas (antes de H48) va como ajuste al primer mes siguiente sin un libro así
+                    CASE WHEN f.clave_externa IS NOT NULL AND EXISTS (
+                             SELECT 1 FROM fiscal.libros_emisiones e
+                              WHERE e.empresa_id = n.empresa_id AND e.libro = 'ventas' AND e.notas_importadas IS NOT TRUE
+                                AND o.fecha BETWEEN e.desde AND e.hasta)
+                         THEN (SELECT min(g)::date
+                                 FROM generate_series(date_trunc('month', o.fecha) + interval '1 month',
+                                                      date_trunc('month', o.fecha) + interval '240 months',
+                                                      interval '1 month') g
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM fiscal.libros_emisiones e
+                                     WHERE e.empresa_id = n.empresa_id AND e.libro = 'ventas'
+                                       AND e.notas_importadas IS NOT TRUE AND g::date BETWEEN e.desde AND e.hasta))
+                    END AS ajuste_en
                FROM billing.notas_credito n
                JOIN debito o ON o.clase = 'nota_credito' AND o.id = n.id
                -- H48 / H62: la nota sobre una importada (sin FEL) es una rebaja de ventas del mes, con o sin IVA
@@ -641,6 +656,20 @@ export async function libroVentasLegal(
                                    AND (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date <= :hasta
                                    AND date_trunc('month', (d.fecha_emision AT TIME ZONE 'America/Guatemala')::date)
                                        = date_trunc('month', o.fecha))
+         ), notas AS (
+             SELECT 'interno' AS origen, 'nota_credito' AS clase, n.id, NULL::bigint AS factura_id,
+                    coalesce(n.ajuste_en, n.o_fecha) AS fecha_doc,
+                    n.anul AS fecha_anul,
+                    'NOTA' AS tipo, NULL::text AS serie, n.id::text AS numero, NULL::text AS autorizacion,
+                    coalesce(n.receptor->>'id', 'CF') AS nit, coalesce(n.receptor->>'nombre', '') AS cliente,
+                    n.monto::text AS total, n.iva::text AS iva, NULL::text AS informativo,
+                    CASE WHEN n.ajuste_en IS NOT NULL
+                         THEN 'ajuste: nota del ' || to_char(n.o_fecha, 'YYYY-MM-DD') || ' (libro de '
+                              || to_char(n.o_fecha, 'YYYY-MM') || ' ya emitido)'
+                    END AS referencia
+               FROM notas_base n
+              -- desplazada y anulada antes del mes del ajuste (en un mes ya emitido): no hay nada que ajustar
+              WHERE NOT (n.ajuste_en IS NOT NULL AND n.anul IS NOT NULL AND n.anul < n.ajuste_en)
          ), docs AS (
              SELECT * FROM dte UNION ALL SELECT * FROM facturas UNION ALL SELECT * FROM notas
          ), filas AS (

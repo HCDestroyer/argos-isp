@@ -303,7 +303,9 @@ export default class ProcesarWebhookPasarela extends DomainAction<
      * Parcial: anula el pago vigente y, en la misma transacción, registra uno nuevo por lo que queda
      * (pago − reembolsado) a las mismas facturas, con la misma comisión (§15 #104) y sus constancias,
      * referencia `<referencia>:reembolso:<id>`; el cobro apunta al pago nuevo. Así la deuda vuelve solo
-     * por lo reembolsado. Idempotente por id del reembolso.
+     * por lo reembolsado. H65: se aplica aunque lo que queda sea menor que la comisión (el banco recibe
+     * un neto negativo) o no supere lo retenido (constancias en proporción, §15 #105). Idempotente por
+     * id del reembolso.
      */
     private async reembolsar(
         t: Transaccion,
@@ -379,25 +381,33 @@ export default class ProcesarWebhookPasarela extends DomainAction<
         // total (o sin monto en el aviso): solo se anula
         if (reembolsado.lte(0) || queda.lte(0)) return { ...base, cobro_id: cobro.id, pago_id: pago.id }
 
+        // §15 #105 (provisional): las constancias se conservan completas mientras lo que queda supere lo
+        // retenido; si no lo supera, se conservan en proporción a lo que queda (queda / pago), porque un
+        // pago no puede tener retenido más que su monto
         const retenido = dec(pago.retenido)
-        const conRetencion = queda.gt(retenido) && retenido.gt(0)
+        const proporcional = retenido.gt(0) && queda.lte(retenido)
+        const factor = queda.div(pago.monto)
+        const retenciones = constancias
+            .map((c) => ({
+                codigo: c.impuesto_codigo,
+                numero: c.numero,
+                fecha: c.fecha,
+                monto: aTexto(proporcional ? dec(c.monto).times(factor) : dec(c.monto)),
+            }))
+            .filter((c) => dec(c.monto).gt(0))
+        const retenidoReemplazo = retenciones.reduce((a, c) => a.plus(c.monto), dec('0'))
         const reemplazo = await new RegistrarPago().execute(
             {
                 cliente_id: Number(pago.cliente_id),
                 metodo: 'pasarela',
-                monto: aTexto(conRetencion ? queda.minus(retenido) : queda),
+                monto: aTexto(queda.minus(retenidoReemplazo)),
+                // H65: la comisión se mantiene como gasto aunque supere lo que queda (§15 #104)
                 comision: dec(pago.comision).gt(0) ? aTexto(pago.comision) : null,
+                reemplazo_de_reembolso: true,
                 pasarela: proveedor,
                 referencia: `${pago.referencia ?? aviso.id_proveedor}:reembolso:${refundId}`,
                 facturas: facturas.map((f) => Number(f.factura_id)),
-                retenciones: conRetencion
-                    ? constancias.map((c) => ({
-                          codigo: c.impuesto_codigo,
-                          numero: c.numero,
-                          fecha: c.fecha,
-                          monto: c.monto,
-                      }))
-                    : undefined,
+                retenciones: retenciones.length > 0 ? retenciones : undefined,
                 nota: `Pago en línea (cobro ${cobro.id}) tras el reembolso parcial ${refundId} del pago ${pago.id}`,
                 empresa_id: Number(cobro.empresa_id),
             },
