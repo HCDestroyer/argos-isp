@@ -308,7 +308,8 @@ export default class ProcesarWebhookPasarela extends DomainAction<
      * referencia `<referencia>:reembolso:<id>`; el cobro apunta al pago nuevo. Así la deuda vuelve solo
      * por lo reembolsado. H65: se aplica aunque lo que queda sea menor que la comisión (el banco recibe
      * un neto negativo). H70: constancias siempre en proporción a lo que queda (§15 #105). H71: con
-     * `monto_cuenta`, el banco baja por lo debitado a la cuenta y la diferencia es comisión devuelta.
+     * `monto_cuenta`, el banco baja por lo debitado a la cuenta y la diferencia ajusta 5.1.02 (comisión
+     * devuelta, o cargo por el reembolso si es negativa, H72); sin él, no se devuelve nada (H73).
      * Idempotente por id del reembolso.
      */
     private async reembolsar(
@@ -361,23 +362,23 @@ export default class ProcesarWebhookPasarela extends DomainAction<
         }
         const reembolsado = dec(aviso.monto)
         const queda = dec(pago.monto).minus(reembolsado)
-        // H71: lo devuelto al cliente vuelve a la deuda; el banco baja por lo debitado a la cuenta del
-        // comercio (`account_refunded_amount_in_cents`) y la diferencia es comisión devuelta (5.1.02).
-        // Sin el monto de la cuenta, la de antes: la comisión se conserva (parcial) o se revierte (total).
-        // Con proveedor de cobro la comisión real sale en la liquidación: no se ajusta aquí.
+        // H71–H73 (decisiones del líder): lo devuelto al cliente vuelve a la deuda; el banco baja por lo
+        // debitado a la cuenta del comercio (`account_refunded_amount_in_cents`) y la diferencia ajusta
+        // 5.1.02: positiva, comisión devuelta; negativa, cargo de la pasarela por el reembolso (H72). Sin
+        // el monto de la cuenta, Recurrente no devuelve nada (H73): devuelta 0, parcial o total. Con
+        // proveedor de cobro la comisión real sale en la liquidación: no se ajusta aquí.
+        const ajustaComision = pago.proveedor_cobro_id === null && reembolsado.gt(0)
         const devuelta =
-            aviso.monto_cuenta && pago.proveedor_cobro_id === null && reembolsado.gt(0)
-                ? reembolsado.minus(aviso.monto_cuenta)
-                : null
+            ajustaComision && aviso.monto_cuenta ? reembolsado.minus(aviso.monto_cuenta) : dec('0')
         const comision = dec(pago.comision)
-        // comisión que queda de gasto tras el reembolso (H71)
-        const comisionFinal = devuelta === null ? comision : comision.minus(devuelta)
-        if (devuelta !== null && (devuelta.isNegative() || comisionFinal.isNegative())) {
+        // comisión (y cargo por el reembolso) que queda de gasto
+        const comisionFinal = comision.minus(devuelta)
+        if (comisionFinal.isNegative()) {
             throw new Problema(
                 422,
                 'reembolso_monto_cuenta',
                 'Monto de la cuenta inválido',
-                `El reembolso ${refundId} debita Q${aTexto(aviso.monto_cuenta!)} a la cuenta y devuelve Q${aTexto(reembolsado)} al cliente: la comisión devuelta (Q${aTexto(devuelta)}) no cabe en la comisión del pago (Q${aTexto(comision)})`,
+                `El reembolso ${refundId} debita Q${aTexto(aviso.monto_cuenta!)} a la cuenta y devuelve Q${aTexto(reembolsado)} al cliente: la comisión devuelta (Q${aTexto(devuelta)}) supera la comisión del pago (Q${aTexto(comision)})`,
             )
         }
         const facturas = (await t.trx
@@ -411,10 +412,11 @@ export default class ProcesarWebhookPasarela extends DomainAction<
             t.ctx,
             { trx: t.trx },
         )
-        // total (o sin monto en el aviso): solo se anula; la anulación revierte la comisión entera y, con
-        // el monto de la cuenta (H71), la que no se devolvió vuelve a gasto contra el banco
+        // total (o sin monto en el aviso): se anula; la anulación revierte la comisión entera y la que no
+        // se devolvió (toda, sin el monto de la cuenta, H73; más el cargo por el reembolso, H72) vuelve a
+        // gasto contra el banco
         if (reembolsado.lte(0) || queda.lte(0)) {
-            if (devuelta !== null && comisionFinal.gt(0)) {
+            if (ajustaComision && comisionFinal.gt(0)) {
                 await this.comisionRetenida(t, pago.id, Number(cobro.empresa_id), comisionFinal, refundId)
             }
             return { ...base, cobro_id: cobro.id, pago_id: pago.id }
@@ -438,7 +440,7 @@ export default class ProcesarWebhookPasarela extends DomainAction<
                 metodo: 'pasarela',
                 monto: aTexto(queda.minus(retenidoReemplazo)),
                 // H65: la comisión se mantiene como gasto aunque supere lo que queda (§15 #104), menos la
-                // que el proveedor devolvió (H71)
+                // que el proveedor devolvió (H71) o más su cargo por el reembolso (H72)
                 comision: comisionFinal.gt(0) ? aTexto(comisionFinal) : null,
                 reemplazo_de_reembolso: true,
                 pasarela: proveedor,
@@ -463,8 +465,8 @@ export default class ProcesarWebhookPasarela extends DomainAction<
     }
 
     /**
-     * Reembolso total con el monto de la cuenta (H71): la anulación revirtió la comisión entera; la que
-     * el proveedor no devolvió es gasto contra el mismo banco que recibió el pago (asiento `ajuste`
+     * Reembolso total (H71–H73): la anulación revirtió la comisión entera; la que el proveedor no
+     * devolvió (más su cargo por el reembolso) es gasto contra el mismo banco que recibió el pago (asiento `ajuste`
      * sin documento, como un asiento manual sobre bancos).
      */
     private async comisionRetenida(

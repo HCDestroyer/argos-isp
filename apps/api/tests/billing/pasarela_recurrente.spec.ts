@@ -928,6 +928,76 @@ test.group('billing · pasarela Recurrente (simulada)', (group) => {
         )
     })
 
+    test('H72: si la cuenta paga más que lo devuelto al cliente, se aplica igual y el cargo por el reembolso es gasto', async ({
+        assert,
+    }) => {
+        const checkout = `ch_h72_${Date.now()}`
+        await conRecurrente(
+            rutasDe(checkout, {
+                [`/checkouts/${checkout}`]: {
+                    cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                },
+            }),
+            async () => {
+                const { datos, cobro } = await cobroRecurrente()
+                await procesar(webhook(pagado(checkout, 30000, 1050)))
+                const antes = await saldoDe('1.1.02.01')
+                const comisionAntes = await saldoDe('5.1.02')
+                const r = await procesar(webhook(reembolsoDe(checkout, 're_h72', 10000, { cuenta: 10100 })))
+                assert.isUndefined(r.ignorado, r.error)
+                const nuevo = await db.from('billing.pagos').where('id', r.pago_reemplazo_id!).firstOrFail()
+                // comisión 10.50 + cargo 1.00 por el reembolso
+                assert.include(nuevo, { monto: '200.00', comision: '11.50' })
+                assert.equal(await deudaDe(datos.clienteId), '100.00')
+                assert.equal(aTexto(dec(await saldoDe('1.1.02.01')).minus(antes)), '-101.00')
+                assert.equal(aTexto(dec(await saldoDe('5.1.02')).minus(comisionAntes)), '1.00')
+                const c = await new ConciliarPasarela().execute(
+                    { fecha: hoyGuatemala() },
+                    contextoSistema('cron'),
+                )
+                assert.include(c.cobros_conciliados, cobro.id)
+                await afirmarLibroCuadrado(assert)
+            },
+        )
+    })
+
+    test('H73: sin el monto de la cuenta no se devuelve la comisión: el parcial la conserva y el total la deja en 5.1.02', async ({
+        assert,
+    }) => {
+        const resultados: Array<[string, string]> = []
+        for (const [id, centavos] of [
+            ['re_h73p', 29999],
+            ['re_h73t', 30000],
+        ] as const) {
+            const checkout = `ch_${id}_${Date.now()}`
+            await conRecurrente(
+                rutasDe(checkout, {
+                    [`/checkouts/${checkout}`]: {
+                        cuerpo: { id: checkout, status: 'paid', total_in_cents: 30000 },
+                    },
+                }),
+                async () => {
+                    await cobroRecurrente()
+                    const banco = await saldoDe('1.1.02.01')
+                    const comision = await saldoDe('5.1.02')
+                    await procesar(webhook(pagado(checkout, 30000, 1050)))
+                    const r = await procesar(webhook(reembolsoDe(checkout, id, centavos)))
+                    assert.isUndefined(r.ignorado, r.error)
+                    resultados.push([
+                        aTexto(dec(await saldoDe('1.1.02.01')).minus(banco)),
+                        aTexto(dec(await saldoDe('5.1.02')).minus(comision)),
+                    ])
+                },
+            )
+        }
+        // un centavo de diferencia en lo reembolsado mueve un centavo, sin saltos
+        assert.deepEqual(resultados, [
+            ['-10.49', '10.50'],
+            ['-10.50', '10.50'],
+        ])
+        await afirmarLibroCuadrado(assert)
+    })
+
     test('H61: un error de negocio responde 2xx con la alerta y no deja nada a medias', async ({
         assert,
     }) => {
