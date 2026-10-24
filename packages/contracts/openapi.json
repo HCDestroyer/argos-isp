@@ -64579,7 +64579,8 @@
               "usuario",
               "password",
               "remitente",
-              "nombre_visible"
+              "nombre_visible",
+              "contabilidad"
             ],
             "properties": {
               "activo": {
@@ -64640,7 +64641,7 @@
                   "string",
                   "null"
                 ],
-                "description": "Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada); direcciones separadas por coma. La API siempre lo devuelve"
+                "description": "Correo de contabilidad para los avisos fiscales (integridad del libro, DTE rechazado, contingencia FEL, nota de crédito anulada, libro y cierres); direcciones separadas por coma"
               }
             }
           },
