@@ -206,10 +206,29 @@ const SOBRE_LA_SESION =
  */
 async function ipDelCliente(ctx: HttpContext, endpoint: string): Promise<string> {
     ctx.response.header('Cache-Control', 'no-store')
+    const aplicados = limitesAplicados.get(ctx) ?? new Map<string, string>()
+    const yaContada = aplicados.get(endpoint)
+    if (yaContada) return yaContada
     const ip = await ipOrigenDelCliente(ctx)
     if (!ip) throw new Error('La conexión no trae una IP de origen válida')
     await limitarPorIp(ctx, endpoint, ip)
+    aplicados.set(endpoint, ip)
+    limitesAplicados.set(ctx, aplicados)
     return ip
+}
+
+/** Endpoints cuyo límite ya se contó en esta petición (el gancho `antes` y el handler cuentan una vez). */
+const limitesAplicados = new WeakMap<HttpContext, Map<string, string>>()
+
+/**
+ * Gancho `antes` de las rutas con cuerpo o query (`a5.md` fila 27): el límite corre **antes** de
+ * validar con VineJS, así un cuerpo inválido (422) también consume el cupo. El handler vuelve a
+ * llamar `ipDelCliente` con el mismo endpoint y no cuenta dos veces.
+ */
+function limitarAntesDeValidar(endpoint: string): (ctx: HttpContext) => Promise<void> {
+    return async (ctx) => {
+        await ipDelCliente(ctx, endpoint)
+    }
 }
 
 /**
@@ -276,6 +295,7 @@ const publicas: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
+        antes: limitarAntesDeValidar('codigo'),
         permiso: null,
         cuerpo: solicitarCodigoValidator,
         respuesta: {
@@ -319,6 +339,7 @@ const publicas: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
+        antes: limitarAntesDeValidar('verificar'),
         permiso: null,
         cuerpo: verificarCodigoValidator,
         respuesta: { status: 200, descripcion: 'Sesión abierta', esquema: PortalSesion },
@@ -380,6 +401,7 @@ const autenticadas: Ruta[] = [
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('facturas'),
         respuesta: { status: 200, descripcion: 'Página de facturas', esquema: pagina(PortalFactura) },
         handler: async (ctx, { query }) =>
             facturasPortal(await clienteDeLaSesionLimitada(ctx, 'facturas'), query),
@@ -397,6 +419,7 @@ const autenticadas: Ruta[] = [
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('bonificaciones'),
         respuesta: {
             status: 200,
             descripcion: 'Página de bonificaciones',
@@ -430,6 +453,7 @@ const autenticadas: Ruta[] = [
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('notas-credito'),
         respuesta: {
             status: 200,
             descripcion: 'Página de notas de crédito',
@@ -449,6 +473,7 @@ const autenticadas: Ruta[] = [
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('pagos'),
         respuesta: { status: 200, descripcion: 'Página de pagos', esquema: pagina(PortalPago) },
         handler: async (ctx, { query }) => pagosPortal(await clienteDeLaSesionLimitada(ctx, 'pagos'), query),
     }),
@@ -463,6 +488,7 @@ const autenticadas: Ruta[] = [
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('promesas-lista'),
         respuesta: { status: 200, descripcion: 'Página de promesas', esquema: pagina(PortalPromesa) },
         handler: async (ctx, { query }) =>
             promesasPortal(await clienteDeLaSesionLimitada(ctx, 'promesas-lista'), query),
@@ -481,6 +507,7 @@ const autenticadas: Ruta[] = [
         versionada: true,
         cuerpo: editarContactoValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('contacto'),
         respuesta: { status: 200, descripcion: 'Contacto actualizado', esquema: PortalContacto },
         handler: async (ctx, { cuerpo }) => {
             await ipDelCliente(ctx, 'contacto')
@@ -523,6 +550,7 @@ const telegram: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'portal',
         limitada: true,
+        antes: limitarAntesDeValidar('telegram-vincular'),
         permiso: null,
         cuerpo: vincularTelegramValidator,
         respuesta: { status: 201, descripcion: 'Enlace al bot', esquema: PortalVinculoTelegram },
@@ -775,6 +803,7 @@ const promesas: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
+        antes: limitarAntesDeValidar('promesas-condiciones'),
         permiso: null,
         query: condicionesPromesaValidator,
         respuesta: { status: 200, descripcion: 'Condiciones', esquema: PortalCondicionesPromesa },
@@ -798,6 +827,7 @@ const promesas: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
+        antes: limitarAntesDeValidar('promesas'),
         idempotente: true,
         permiso: null,
         cuerpo: solicitarPromesaValidator,
@@ -834,7 +864,8 @@ const pagosEnLinea: Ruta[] = [
         operacion: 'portalIniciarPago',
         resumen: 'Pagar en línea: crea el cobro en la pasarela y devuelve la url de pago del proveedor',
         descripcion:
-            'Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal` y actor sistema. Sin ' +
+            'Llama `pasarela.crear_cobro` (`CrearCobroPasarela` de A3) con canal `portal`, actor `cliente` con ' +
+            'la sesión o `sistema` por la IP. Sin ' +
             '`facturas` cobra las facturas vencidas con saldo del servicio (o todo lo pendiente del servicio si ' +
             'nada está vencido); 422 `sin_deuda` si no debe nada. `facturas` concretas exigen la sesión y deben ' +
             'ser del cliente (404 si no). Un cobro es de una sola empresa: facturas de varias empresas → 422 ' +
@@ -845,6 +876,7 @@ const pagosEnLinea: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
+        antes: limitarAntesDeValidar('pagos-iniciar'),
         idempotente: true,
         permiso: null,
         cuerpo: iniciarPagoValidator,
@@ -854,8 +886,7 @@ const pagosEnLinea: Ruta[] = [
             const pagador = await pagadorDeLaPeticion(ctx, ip, cuerpo)
             const facturas = await facturasAPagar(ctx, pagador, cuerpo.facturas)
             try {
-                // Actor sistema aun con la sesión: `CrearCobroPasarela` guarda `actor.id` en
-                // `creado_por` (core.usuarios). Pasa a `contextoDelTitular` cuando A3 use `usuarioDelActor`.
+                // Actor `cliente` con la sesión, `sistema` solo por IP (`creado_por` = usuarioDelActor: null).
                 const cobro = await new CrearCobroPasarela().execute(
                     {
                         cliente_id: pagador.clienteId,
@@ -863,7 +894,7 @@ const pagosEnLinea: Ruta[] = [
                         facturas,
                         url_retorno: urlRetornoPortal(),
                     },
-                    ctx.contextoAccion('portal'),
+                    contextoDelTitular(ctx, pagador),
                 )
                 return cobroParaCliente(cobro)
             } catch (error) {
@@ -933,6 +964,7 @@ const empresa: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
+        antes: limitarAntesDeValidar('empresa'),
         permiso: null,
         query: empresaPortalValidator,
         respuesta: { status: 200, descripcion: 'Empresa', esquema: EmpresaPublica },
@@ -1040,7 +1072,8 @@ const comprobantes: Ruta[] = [
         resumen: 'El cliente sube el comprobante de un depósito, transferencia, ACH o remesa',
         descripcion:
             '`multipart/form-data`: los campos más el archivo `archivo`. Llama `comprobantes.registrar` ' +
-            '(`RegistrarComprobante` de A3) con canal `portal` y actor sistema: queda `pendiente` hasta que ' +
+            '(`RegistrarComprobante` de A3) con canal `portal`, actor `cliente` con la sesión o `sistema` por la ' +
+            'IP: queda `pendiente` hasta que ' +
             'el panel lo revise; no cambia el estado del servicio. 422 por campo con el texto para el cliente ' +
             '(`archivo` con `rule` `required`, `tipo` o `tamano`); 422 `cuenta_de_otra_empresa` (campo ' +
             '`cuenta_bancaria_id`) si la cuenta es de otra empresa que la del servicio; 409 `referencia_duplicada`. ' +
@@ -1048,6 +1081,7 @@ const comprobantes: Ruta[] = [
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
+        antes: limitarAntesDeValidar('comprobantes'),
         idempotente: true,
         permiso: null,
         cuerpo: subirComprobanteValidator,
@@ -1063,8 +1097,7 @@ const comprobantes: Ruta[] = [
             const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             const archivo = await archivoDeLaPeticion(ctx)
             try {
-                // Actor sistema aun con la sesión: `RegistrarComprobante` guarda `actor.id` en
-                // `registrado_por` (core.usuarios). Pasa a `contextoDelTitular` cuando A3 use `usuarioDelActor`.
+                // Actor `cliente` con la sesión, `sistema` solo por IP (`registrado_por` = usuarioDelActor: null).
                 const comprobante = await new RegistrarComprobante().execute(
                     {
                         cliente_id: titular.clienteId,
@@ -1079,7 +1112,7 @@ const comprobantes: Ruta[] = [
                         canal: 'portal',
                         archivo,
                     },
-                    ctx.contextoAccion('portal'),
+                    contextoDelTitular(ctx, titular),
                 )
                 return comprobanteParaCliente(comprobante)
             } catch (error) {
@@ -1098,6 +1131,7 @@ const comprobantes: Ruta[] = [
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('comprobantes-lista'),
         respuesta: { status: 200, descripcion: 'Página de comprobantes', esquema: pagina(PortalComprobante) },
         handler: async (ctx, { query }) =>
             comprobantesPortal(await clienteDeLaSesionLimitada(ctx, 'comprobantes-lista'), query),
@@ -1561,6 +1595,7 @@ const puntosPortalRutas: Ruta[] = [
         permiso: null,
         query: paginaPortalValidator,
         limitada: true,
+        antes: limitarAntesDeValidar('canjes-lista'),
         respuesta: { status: 200, descripcion: 'Página de canjes', esquema: pagina(PortalCanje) },
         handler: async (ctx, { query }) =>
             canjesPortal(await clienteDeLaSesionLimitada(ctx, 'canjes-lista'), query),
@@ -1580,6 +1615,7 @@ const puntosPortalRutas: Ruta[] = [
         seguridad: 'portal',
         permiso: null,
         limitada: true,
+        antes: limitarAntesDeValidar('canjes'),
         idempotente: true,
         cuerpo: canjearPuntosValidator,
         respuesta: { status: 201, descripcion: 'Canje hecho', esquema: PortalCanje },

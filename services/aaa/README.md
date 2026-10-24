@@ -17,7 +17,7 @@ Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accountin
 ## `/aaa/authorize`
 
 1. Lee `User-Name` del cuerpo de `rlm_rest`.
-2. Busca `aaa:user:<user_ppp>` en Redis. Si no está, o Redis no responde (timeout 150 ms), consulta el respaldo: `GET $API_INTERNAL_URL/internal/aaa/servicio?user_ppp=` con `Authorization: Bearer $AAA_INTERNAL_TOKEN` o, mientras A1 no lo publique, `fixtures/servicios.json` (`AAA_RESPALDO=fixtures`).
+2. Busca `aaa:user:<user_ppp>` en Redis. Si no está, o Redis no responde (timeout 150 ms), consulta el respaldo: `GET $API_INTERNAL_URL/internal/aaa/servicio?user_ppp=` con `Authorization: Bearer $AAA_INTERNAL_TOKEN` (las consultas que llegan a la vez van juntas en `POST internal/aaa/servicios`, ver "Prueba de carga"). `fixtures/servicios.json` (`AAA_RESPALDO=fixtures`) queda solo para pruebas y desarrollo sin la API.
 3. Cachea lo obtenido con `SET NX` y **sin TTL**: si A1 escribió mientras se consultaba, gana A1. Los inexistentes no se cachean.
 4. Descifra `pass_ppp` (`v1.<iv>.<tag>.<datos>`, AES-256-GCM, `AAA_PPP_KEY`) y responde a FreeRADIUS, que autentica PAP o CHAP contra `control:Cleartext-Password`.
 
@@ -185,7 +185,7 @@ Resultado (2026-10-20, idéntico en PAP y CHAP; todas las respuestas traen `Mess
 
 También se verificó: tras el primer login la clave queda en Redis sin TTL, y un cambio escrito por A1 en Redis (activo → suspendido) se aplica en el siguiente login sin reiniciar nada. Latencia de `aaa` por autorización: 1 a 2 ms (log `ms`).
 
-Pendiente con el MikroTik del laboratorio (A6/PM): PPPoE real con estos atributos (el PM ya verificó en RouterOS 7.24.5 los mismos atributos con un `aaa` simulado, ver `infra/mikrotik/README.md`).
+Pendiente con el MikroTik del laboratorio (PM): PPPoE real con estos atributos (el PM ya verificó en RouterOS 7.24.5 los mismos atributos con un `aaa` simulado, ver `infra/mikrotik/README.md`). Pasos en `docs/laboratorio/validacion-fisica.md`, sección 2.
 
 ## Pruebas de punta a punta con FreeRADIUS en Docker (tarea 10)
 
@@ -262,6 +262,21 @@ Cero rechazos y cero timeouts en todas las rondas desde los arreglos. Dentro de 
 | El generador en el proceso de la prueba compartía bucle con la API y el worker                                                                                                      | Generador y `sesiones:worker` en procesos propios                                                             | Mide lo que vería el NAS                                                       |
 
 Probado y descartado: subir el pool de hilos de FreeRADIUS (`start_servers` 16–32, `max_servers` 64) no mejoró de forma medible en esta máquina; queda la variable `AAA_CARGA_RADIUSD` para montar otro `radiusd.conf` y repetir la comparación en el laboratorio.
+
+### Consultas a la API por lotes (2026-10-24)
+
+Con Redis vacío el p95 lo ponía la API: 200 `GET /internal/aaa/servicio` sobre 16 sockets. Desde que A1 publicó `POST /internal/aaa/servicios` (`contratos/aaa.md`, «Carga por lotes»), `FuenteApi` junta las consultas que llegan en el mismo turno del bucle de eventos y las manda en lotes de hasta 100 (`AAA_API_LOTES`, por defecto 1):
+
+- Una consulta sola sigue por el GET, sin espera añadida. Un usuario repetido en el mismo turno viaja una vez.
+- Los ausentes del lote son inexistentes (como el 404 del GET). Un registro fuera de contrato falla solo para su usuario. Un 5xx o timeout del lote es error para todos los del lote (modo degradado, como con el GET).
+- Si la API no tiene la ruta (404/405, versión anterior), `aaa` vuelve al GET y no lo intenta más hasta reiniciar.
+- El lote lleva el `X-Request-Id` del primero.
+
+Pruebas: `test/lotes.test.ts`. Falta medir el efecto en la prueba de carga (en esta corrida no hubo Docker); queda para el laboratorio (`docs/laboratorio/validacion-fisica.md`, sección 7) y para la próxima corrida de `pnpm aaa:carga`.
+
+### Laboratorio
+
+La prueba en el hardware real la corre el PM con `scripts/laboratorio/carga.sh` (mismo generador, contra el FreeRADIUS y el `aaa` de producción): `docs/laboratorio/validacion-fisica.md`, sección 7.
 
 ## Dependencias
 

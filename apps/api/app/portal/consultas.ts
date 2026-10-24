@@ -3,6 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { resolverIp } from '#network/consultas/ip'
 import { marcaDeEmpresa, type MarcaEmpresa } from '#portal/marca'
+import { ESTADOS_PENDIENTES, type EstadoFactura } from '#billing/facturas'
 
 /**
  * Lecturas públicas del portal por IP de origen (`quien-soy` y `estado`). Son de solo lectura;
@@ -38,6 +39,23 @@ export interface EstadoPortal {
 export interface Lectura<T> {
     servicioId: number | null
     respuesta: T
+}
+
+/**
+ * Lo que el cliente todavía debe de UNA factura, con la regla de A3 (`ESTADOS_PENDIENTES` de
+ * `#billing/facturas`, la misma de `estadoCuenta` y del corte): `total − pagado` solo si está
+ * `emitida`, `parcial` o `vencida`, y nunca negativo. Todo lo demás es 0.00:
+ *
+ * - `pagada`, `anulada` (también la original de una sustitución) y `acreditada` (H16: cubierta
+ *   entera por notas internas);
+ * - `castigada` (decisión g, contrato §18): lo que falta está en `ledger.castigos_facturas`, no se
+ *   le cobra a la factura. Si el cliente paga después, A3 lo lleva a recuperación (`4.2.03`), nunca
+ *   a la factura castigada: el portal no lo muestra como deuda;
+ * - `por_certificar` (no sale en el portal; contrato §8.3).
+ */
+export function saldoCobrable(factura: { estado: string; total: string; pagado: string }): Decimal {
+    if (!ESTADOS_PENDIENTES.includes(factura.estado as EstadoFactura)) return new Decimal(0)
+    return Decimal.max(new Decimal(factura.total).minus(factura.pagado), 0)
 }
 
 /** Zona en la que vence una factura (`vence_en` es fecha local de Guatemala). */
@@ -153,17 +171,17 @@ export async function saldoDelServicio(
     const facturas = (await cliente
         .from('billing.facturas')
         .where('servicio_id', servicioId)
-        .whereIn('estado', ['emitida', 'parcial', 'vencida'])
-        .select('total', 'pagado')
+        .whereIn('estado', [...ESTADOS_PENDIENTES])
+        .select('estado', 'total', 'pagado')
         .select(
             cliente.raw(`(estado = 'vencida' OR vence_en < (now() AT TIME ZONE ?)::date) AS vencida`, [ZONA]),
-        )) as { total: string; pagado: string; vencida: boolean }[]
+        )) as { estado: string; total: string; pagado: string; vencida: boolean }[]
 
     let adeudado = new Decimal(0)
     let vencidoTotal = new Decimal(0)
     let vencidas = 0
     for (const factura of facturas) {
-        const saldo = new Decimal(factura.total).minus(factura.pagado)
+        const saldo = saldoCobrable(factura)
         if (saldo.lessThanOrEqualTo(0)) continue
         adeudado = adeudado.plus(saldo)
         if (factura.vencida) {
