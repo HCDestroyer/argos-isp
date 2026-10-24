@@ -52,7 +52,7 @@ import type { ContextoAccion } from '#shared/contexto'
  * - Pasarela Recurrente: dos eventos de pago del mismo checkout, IVA retenido por la emisora.
  * - Egresos del cajero.
  *
- * Hallazgos de esta revisión: H43 a H47 (`.fails`, fila en `a3.md`).
+ * Hallazgos de esta revisión: H48 a H53 (`.fails`, fila en `a3.md`).
  */
 
 async function importar(
@@ -218,7 +218,7 @@ test.group('Auditor contable · cierre de los saldos de apertura (§23)', (group
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H43: una importada que entra después del cierre de apertura (y antes de su fecha) manda la base de su NCRE a patrimonio aunque su saldo nunca se cerró', async ({
+    test('H49: una importada que entra después del cierre de apertura (y antes de su fecha) manda la base de su NCRE a patrimonio aunque su saldo nunca se cerró', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -235,14 +235,14 @@ test.group('Auditor contable · cierre de los saldos de apertura (§23)', (group
         // aún sin cerrar); hoy va a 3.3.01 y 2.9.01 queda con los 112.00 completos
         assert.equal(await apertura(e.B), '-12.00')
     }).fails(
-        'H43: cuentaBaseApertura decide por la fecha del asiento importado, no por si entró en el cierre',
+        'H49: cuentaBaseApertura decide por la fecha del asiento importado, no por si entró en el cierre',
     )
 })
 
 test.group('Auditor contable · H27 en el libro de ventas y la declaración', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    test('H42: la nota de crédito sin FEL sobre una importada rebaja 2.1.02 del mes pero no sale en el libro de ventas (la declaración de IVA no la ve)', async ({
+    test('H48: la nota de crédito sin FEL sobre una importada rebaja 2.1.02 del mes pero no sale en el libro de ventas (la declaración de IVA no la ve)', async ({
         assert,
     }) => {
         const e = await empresasSinFel()
@@ -267,7 +267,7 @@ test.group('Auditor contable · H27 en el libro de ventas y la declaración', (g
         )
         assert.notEqual(v.checks.find((c) => c.clave === 'iva_cuadrado')?.estado, 'anomalia')
         await sinViolaciones(assert, [e.B, e.C])
-    }).fails('H42: libroVentasLegal excluye las notas de facturas con clave_externa (importadas)')
+    }).fails('H48: libroVentasLegal excluye las notas de facturas con clave_externa (importadas)')
 
     test('cuatro NCRE parciales con redondeo sobre una importada: Σ IVA = IVA de la factura y Σ base = su base', async ({
         assert,
@@ -291,7 +291,7 @@ test.group('Auditor contable · H27 en el libro de ventas y la declaración', (g
         await sinViolaciones(assert, [e.B, e.C])
     })
 
-    test('H44: la base de la NCRE sobre una importada no rebaja los ingresos del periodo (va a 2.9.01 o a patrimonio) aunque su IVA sí rebaja el débito del mes', async ({
+    test('H50: la base de la NCRE sobre una importada no rebaja los ingresos del periodo (va a 2.9.01 o a patrimonio) aunque su IVA sí rebaja el débito del mes', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -307,7 +307,7 @@ test.group('Auditor contable · H27 en el libro de ventas y la declaración', (g
         const aIngreso = movimientos.filter((m) => m[1] === 'ingreso' && m[2] === '100.00')
         assert.lengthOf(aIngreso, 1, JSON.stringify(movimientos))
     }).fails(
-        'H44: la base de la NCRE de una importada va contra 2.9.01/3.3.01, no contra ingresos del periodo',
+        'H50: la base de la NCRE de una importada va contra 2.9.01/3.3.01, no contra ingresos del periodo',
     )
 })
 
@@ -498,7 +498,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
         })
     })
 
-    test('H45: el IVA que retiene la emisora de la tarjeta (`vat_withheld` del webhook) no se registra: el banco recibe de más y falta la retención en 1.1.05', async ({
+    test('H51: el IVA que retiene la emisora de la tarjeta (`vat_withheld` del webhook) no se registra: el banco recibe de más y falta la retención en 1.1.05', async ({
         assert,
     }) => {
         const datos = await servicioCortado()
@@ -532,7 +532,7 @@ test.group('Auditor contable · pasarela Recurrente', (group) => {
             assert.equal(banco?.[1], aTexto(dec(cobro.monto).minus('10.50').minus(retenido)))
             assert.isDefined(asiento.find((l) => l[0] === '1.1.05'))
         })
-    }).fails('H45: vat_withheld de Recurrente se ignora')
+    }).fails('H51: vat_withheld de Recurrente se ignora')
 })
 
 test.group('Auditor contable · egresos del cajero', (group) => {
@@ -566,7 +566,7 @@ test.group('Auditor contable · egresos del cajero', (group) => {
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H46: el cajero registra un egreso con fecha anterior a la apertura de su turno', async ({
+    test('H52: el cajero registra un egreso con fecha anterior a la apertura de su turno', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -587,9 +587,9 @@ test.group('Auditor contable · egresos del cajero', (group) => {
             ),
         )
         assert.equal(error.status, 422)
-    }).fails('H46: el egreso del cajero acepta una fecha anterior a su turno')
+    }).fails('H52: el egreso del cajero acepta una fecha anterior a su turno')
 
-    test('H47: el cajero saca de su caja más efectivo del que tiene (esperado negativo)', async ({
+    test('H53: el cajero saca de su caja más efectivo del que tiene (esperado negativo)', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -607,5 +607,5 @@ test.group('Auditor contable · egresos del cajero', (group) => {
             ),
         )
         assert.equal(error.status, 422)
-    }).fails('H47: el egreso del cajero no se limita al efectivo de su turno')
+    }).fails('H53: el egreso del cajero no se limita al efectivo de su turno')
 })
