@@ -20,7 +20,7 @@ export const CUENTAS_GT = {
     FONDOS_EN_TRANSITO: '1.1.11',
     ESTIMACION_INCOBRABLES: '1.1.12',
     GASTOS_PAGADOS_ANTICIPADO: '1.1.13',
-    /** gt-2026.3 (inventario, `contratos/inventario.md` §3): valor del kardex de la empresa */
+    /** gt-2026.4 (inventario, `contratos/inventario.md` §3): valor del kardex de la empresa */
     INVENTARIOS: '1.1.14',
     PROPIEDAD_PLANTA_EQUIPO: '1.2.01',
     DEPRECIACION_ACUMULADA: '1.2.02',
@@ -45,7 +45,7 @@ export const CUENTAS_GT = {
     GANANCIA_VENTA_ACTIVOS: '4.2.02',
     /** gt-2026.2 (fase 4, decisión g del líder): lo cobrado después de un castigo */
     RECUPERACION_INCOBRABLES: '4.2.03',
-    /** gt-2026.3 (inventario §3): conteo con sobrante y ajuste positivo */
+    /** gt-2026.4 (inventario §3): conteo con sobrante y ajuste positivo */
     SOBRANTES_INVENTARIO: '4.2.04',
     PREMIOS_PROMOCIONES: '5.1.03',
     DEPRECIACIONES: '5.3.01',
@@ -58,7 +58,7 @@ export const CUENTAS_GT = {
     GASTOS_NO_DEDUCIBLES: '5.4.01',
     MULTAS_TRIBUTARIAS: '5.4.02',
     IMPUESTO_SOBRE_RENTA: '5.5.01',
-    /** gt-2026.3 (inventario §3) */
+    /** gt-2026.4 (inventario §3) */
     MATERIALES_INSTALACION: '5.2.07',
     COSTO_VENTAS: '5.6',
     COSTO_EQUIPO_VENDIDO: '5.6.01',
@@ -233,8 +233,8 @@ export const CUENTAS_PAQUETE_GT_2026_2: readonly DefinicionCuentaPaquete[] = [
 ]
 
 /**
- * gt-2026.3 (inventario interno, `contratos/inventario.md` §3): las cuentas del kardex. Igual que
- * 2026.2 más estas seis; instalarla sobre 2026.2 solo las agrega. El plan base (`PLAN_CUENTAS`) no
+ * gt-2026.4 (inventario interno, `contratos/inventario.md` §3): las cuentas del kardex. Las cuentas
+ * de 2026.2 (2026.3 solo agrega un parámetro) más estas seis; instalarla sobre 2026.3 solo las agrega. El plan base (`PLAN_CUENTAS`) no
  * cambia: forma parte del checksum publicado de 2026.1 y 2026.2.
  */
 export const CUENTAS_INVENTARIO_GT: readonly DefinicionCuentaPaquete[] = [
@@ -249,7 +249,7 @@ export const CUENTAS_INVENTARIO_GT: readonly DefinicionCuentaPaquete[] = [
     return flujo ? { ...cuenta, categoria_flujo: flujo } : cuenta
 })
 
-export const CUENTAS_PAQUETE_GT_2026_3: readonly DefinicionCuentaPaquete[] = [
+export const CUENTAS_PAQUETE_GT_2026_4: readonly DefinicionCuentaPaquete[] = [
     ...CUENTAS_PAQUETE_GT_2026_2,
     ...CUENTAS_INVENTARIO_GT,
 ]

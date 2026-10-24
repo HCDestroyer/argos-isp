@@ -94,7 +94,11 @@ test.group('billing · contrato de resultado_evaluacion', (group) => {
         ])
         assert.deepEqual(esquemas.ReglaEvaluada.properties.regla.enum, [...NOMBRES_REGLA])
         const resultado = esquemas.Promesa.properties.resultado_evaluacion
-        assert.include(resultado.description, 'EvaluacionPromesa')
+        // a3.md:81: el campo ya no es objeto libre, es nulable(EvaluacionPromesa)
+        assert.deepEqual(resultado.anyOf, [
+            { $ref: '#/components/schemas/EvaluacionPromesa' },
+            { type: 'null' },
+        ])
     })
 
     test('cada respuesta real cumple el esquema exacto', async ({ client, assert }) => {

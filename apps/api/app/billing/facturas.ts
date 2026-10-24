@@ -1,7 +1,9 @@
 import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
-import { NoEncontrado } from '#shared/errores'
+import { NoEncontrado, Problema } from '#shared/errores'
+import { valorParametro } from '#fiscal/parametros'
+import { hoyGuatemala } from '#ledger/fechas'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { CERO, D, aTexto, dec, redondear, type Dec, type Monto } from '#ledger/dinero'
@@ -352,7 +354,124 @@ export async function verFactura(id: number, cliente: QueryClientContract = db.c
     const notas = await notasDeFactura(id, cliente)
     // FEL (semana 5): la factura se certifica con el NIT y los datos fiscales de su empresa
     const emisor = await emisorDeFactura(id, cliente)
-    return { ...fila, lineas, notas_credito: notas, emisor }
+    const pagos = await pagosDeFactura(id, cliente)
+    const asientos = await asientosDeFactura(id, cliente)
+    const diferenciaCobroTope = await topeDiferenciaCobro(Number(fila.empresa_id), cliente)
+    return {
+        ...fila,
+        lineas,
+        notas_credito: notas,
+        emisor,
+        pagos,
+        asientos,
+        diferencia_cobro_tope: diferenciaCobroTope,
+    }
+}
+
+/**
+ * `diferencia_cobro_tope` vigente hoy de la empresa (lo que `pagos.cerrar_diferencia` admite), o
+ * null si la empresa no tiene el parámetro (sin localización instalada).
+ */
+export async function topeDiferenciaCobro(
+    empresaId: number,
+    cliente: QueryClientContract = db.connection(),
+): Promise<string | null> {
+    try {
+        const valor = await valorParametro<string>(
+            empresaId,
+            'diferencia_cobro_tope',
+            hoyGuatemala(),
+            cliente,
+        )
+        return valor === null || valor === undefined ? null : aTexto(String(valor))
+    } catch (error) {
+        if (error instanceof Problema) return null
+        throw error
+    }
+}
+
+/** Pagos aplicados a la factura (una fila por aplicación, también los de pagos anulados). */
+export async function pagosDeFactura(id: number, cliente: QueryClientContract = db.connection()) {
+    const filas = (await cliente
+        .from('billing.pagos_aplicaciones as pa')
+        .join('billing.pagos as p', 'p.id', 'pa.pago_id')
+        .where('pa.factura_id', id)
+        .orderBy('pa.id', 'asc')
+        .select(
+            'pa.id as aplicacion_id',
+            'p.id as pago_id',
+            'p.cobro_id',
+            'pa.monto',
+            'p.monto as pago_monto',
+            'p.metodo',
+            'p.referencia',
+            'p.estado',
+            'p.historico',
+            'pa.created_at as aplicado_en',
+        )) as Array<{
+        aplicacion_id: number
+        pago_id: number
+        cobro_id: number | null
+        monto: string
+        pago_monto: string
+        metodo: string
+        referencia: string | null
+        estado: string
+        historico: boolean
+        aplicado_en: Date
+    }>
+    return filas.map((f) => ({
+        ...f,
+        aplicacion_id: Number(f.aplicacion_id),
+        pago_id: Number(f.pago_id),
+        cobro_id: f.cobro_id === null ? null : Number(f.cobro_id),
+    }))
+}
+
+/** Asientos de la factura (origen `factura` o `mora` con su id), los reversos incluidos, en orden. */
+export async function asientosDeFactura(id: number, cliente: QueryClientContract = db.connection()) {
+    const filas = (await cliente
+        .from('ledger.asientos as a')
+        .whereIn('a.origen_tipo', ['factura', 'mora'])
+        .where('a.origen_id', id)
+        .orderBy('a.id', 'asc')
+        .select(
+            'a.id',
+            cliente.raw(`to_char(a.fecha, 'YYYY-MM-DD') as fecha`),
+            'a.origen_tipo',
+            'a.descripcion',
+            'a.reversa_de',
+            cliente.raw(
+                '(select d.codigo from ledger.asientos_numeros n join ledger.diarios d on d.id = n.diario_id where n.asiento_id = a.id) as diario',
+            ),
+            cliente.raw(
+                '(select n.numero from ledger.asientos_numeros n where n.asiento_id = a.id) as numero',
+            ),
+            cliente.raw(
+                '(select r.id from ledger.asientos r where r.reversa_de = a.id limit 1) as revertido_por',
+            ),
+            cliente.raw(
+                '(select sum(m.debe)::text from ledger.movimientos m where m.asiento_id = a.id) as total',
+            ),
+        )) as Array<{
+        id: number
+        fecha: string
+        origen_tipo: string
+        descripcion: string
+        reversa_de: number | null
+        diario: string | null
+        numero: number | null
+        revertido_por: number | null
+        total: string
+    }>
+    return filas.map((f) => ({
+        ...f,
+        id: Number(f.id),
+        reversa_de: f.reversa_de === null ? null : Number(f.reversa_de),
+        revertido_por: f.revertido_por === null ? null : Number(f.revertido_por),
+        numero: f.numero === null ? null : Number(f.numero),
+        total: aTexto(f.total ?? '0'),
+    }))
 }
 
 /** Dimensiones de alcance de una factura (para `exigirAlcance`). */

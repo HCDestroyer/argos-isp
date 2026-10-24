@@ -817,6 +817,9 @@ test.group('Lealtad · sorteos', (group) => {
             e.ctx,
         )
         assert.isNotNull(actual.premios[1]!.imagen_archivo_id)
+        // sin sesión (página pública, pedido de A5): en borrador, sin bases publicadas, 404
+        const imagenPublica = `/api/v1/portal/sorteos/${sorteo.id}/premios/2/imagen`
+        await estado(client.get(imagenPublica), 404)
 
         // aviso en el portal: false por defecto, editable con version hasta antes de ejecutar
         assert.isTrue(actual.aviso_portal)
@@ -878,6 +881,8 @@ test.group('Lealtad · sorteos', (group) => {
             client.get(`/api/v1/portal/sorteos/${sorteo.id}/premios/2/imagen`).header('Cookie', cookie),
             404,
         )
+        // sin sesión tampoco: bases publicadas pero sin aviso_portal
+        await estado(client.get(imagenPublica), 404)
         const vigente = await verificacionDeEstado(sorteo.id)
         await new CambiarAvisoPortalSorteo().execute(
             { id: sorteo.id, version: vigente, aviso_portal: true },
@@ -894,6 +899,12 @@ test.group('Lealtad · sorteos', (group) => {
             200,
         )
         assert.equal(delPortal.header('content-type'), 'image/png')
+        // sin sesión: solo la imagen, con las bases publicadas y el aviso en el portal
+        const anonima = await estado(client.get(imagenPublica), 200)
+        assert.equal(anonima.header('content-type'), 'image/png')
+        assert.equal(anonima.header('cache-control'), 'private, max-age=300')
+        await estado(client.get(`/api/v1/portal/sorteos/${sorteo.id}/premios/9/imagen`), 404)
+        await estado(client.get('/api/v1/portal/sorteos'), 401)
         assert.deepEqual(await otrasViolaciones([e.B, e.C]), [])
     })
 

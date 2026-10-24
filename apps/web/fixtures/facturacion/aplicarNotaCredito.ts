@@ -60,6 +60,7 @@ export function aplicarNotaCredito(
         descripcion: `Nota de crédito ${nota.id} · factura ${factura.id} · ${motivo}`,
         origen_tipo: 'nota_credito',
         origen_id: nota.id,
+        diario: 'VEN',
         reversa_de: null,
         created_by: nota.created_by,
         created_at: momento,

@@ -35,7 +35,7 @@ Decisión del PM, 24 de octubre: alcance completo. ArgosIsp lleva el inventario 
 
 ## 3. Plan de cuentas
 
-Lo agrega el paquete de localización (`gt-2026.1`, con su migración de datos para empresas instaladas) y el plan base:
+Lo agrega el paquete de localización (`gt-2026.4`; el contrato decía `gt-2026.1`, con su migración de datos para empresas instaladas) y el plan base:
 
 | Código | Nombre | Tipo | Uso |
 | --- | --- | --- | --- |
@@ -240,7 +240,7 @@ Se agregan a la tabla de `localizacion-fiscal.md` §15 y al documento para el co
 Rama `a3/inventario-a` (A3). Lo que el contrato no decía o no cuadraba con el código, resuelto con lo más simple que respeta sus reglas. Los marcados **(pregunta)** esperan decisión del líder.
 
 1. **Costo promedio por producto y bodega** (aceptado por el líder; ya está en §2), no por producto y empresa. Con un promedio único por producto, el valor de cada bodega no puede ser a la vez la suma de su kardex (§8.2) y salir al promedio: comprar a otro precio en la central y consumir en la bodega de un técnico deja al técnico con valor negativo. Cada bodega lleva su `cantidad` y su `valor`; una salida vale `cantidad × valor / existencia` y la que vacía la bodega lleva todo su valor; el traslado lleva el promedio de origen al destino. El total de la empresa sigue cuadrando con `1.1.14`. El cálculo vive en `costoSalida` (`#inventario/kardex`).
-2. **Cuentas en `gt-2026.3`**, no en `gt-2026.1`: una versión publicada no cambia (su checksum), como `gt-2026.2` para `4.2.03`. `PLAN_CUENTAS` tampoco cambia (forma parte del checksum de 2026.1 y 2026.2); los códigos van en `CUENTAS_GT` (`INVENTARIOS`, `MATERIALES_INSTALACION`, `SOBRANTES_INVENTARIO`, `COSTO_VENTAS`, `COSTO_EQUIPO_VENDIDO`, `MERMAS_INVENTARIO`). La migración instala 2026.3 en cada empresa ya instalada; las nuevas la reciben al crearse. `1.1.14` lleva `libro_inventario`.
+2. **Cuentas en `gt-2026.4`** (sobre la `gt-2026.3` del tope de egresos del cajero), no en `gt-2026.1`: una versión publicada no cambia (su checksum), como `gt-2026.2` para `4.2.03`. `PLAN_CUENTAS` tampoco cambia (forma parte del checksum de 2026.1 y 2026.2); los códigos van en `CUENTAS_GT` (`INVENTARIOS`, `MATERIALES_INSTALACION`, `SOBRANTES_INVENTARIO`, `COSTO_VENTAS`, `COSTO_EQUIPO_VENDIDO`, `MERMAS_INVENTARIO`). La migración instala 2026.4 en cada empresa ya instalada; las nuevas la reciben al crearse. `1.1.14` lleva `libro_inventario`.
 3. **Cantidad de una compra**: es el campo `cantidad` que ya existe en la línea (entero ≥ 1, el de los premios de sorteo). Las cantidades con decimales entran por saldo inicial o ajuste y salen por consumo, traslado, ajuste y baja.
 4. **Fechas**: consumo, traslado, ajuste y baja llevan la fecha de hoy (sin fecha en la entrada). Así ninguna salida queda antes de su entrada y no hay existencia negativa en ninguna fecha (§8.4). El saldo inicial acepta una fecha pasada; las compras usan su fecha contable y el reverso la del asiento de reverso.
 5. **Bloqueo**: el error de siempre de `RegistrarAsiento` (422 `periodo_cerrado` o `periodo_bloqueado`, 409 `bloqueo_duro`), no un 409 genérico. Los movimientos propios son del bloqueo global (origen `inventario`, diario `VAR`); los de compras, del bloqueo de compras por su asiento. El traslado no tiene asiento y no mira el bloqueo.

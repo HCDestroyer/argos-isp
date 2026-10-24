@@ -3,11 +3,9 @@ import { DateTime } from 'luxon'
 import { instalarPaquete, instalacionVigente, paqueteDePais } from '#fiscal/instalador'
 
 /**
- * A3 · inventario, fase A (`contratos/inventario.md` §3): actualiza cada empresa instalada a la
- * versión más reciente del paquete de su país (`gt-2026.3`: agrega `1.1.14 Inventarios`, `5.2.07
- * Materiales de instalación y mantenimiento`, `4.2.04 Sobrantes de inventario` y el grupo `5.6 Costo
- * de ventas` con `5.6.01` y `5.6.02`). Aditivo e idempotente: una empresa ya en la versión no
- * cambia; ninguna fila del libro se toca.
+ * A3 · decisión del PM (egresos del cajero): actualiza cada empresa a la versión más reciente del
+ * paquete de su país (`gt-2026.3`: agrega el parámetro `egreso_cajero_maximo`, Q500.00). Aditivo e
+ * idempotente: una empresa ya en la versión no cambia; ninguna fila del libro se toca.
  */
 export default class extends BaseSchema {
     async up() {

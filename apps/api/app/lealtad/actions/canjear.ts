@@ -1,5 +1,5 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import { Prohibido, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { NoEncontrado, Prohibido, ReglaNegocio, ValidacionFallida } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { usuarioDelActor } from '#shared/contexto'
 import { dec, redondear, type Dec } from '#ledger/dinero'
@@ -56,7 +56,8 @@ import { bloquearClienteLealtad, saldoPuntos, salidaCanje } from '#lealtad/punto
  *   queda `aplicado`. Los puntos salen como en cualquier canje (`2.1.10 / 4.1.06` con diferimiento).
  *
  * Portal (A5): con actor `cliente` o canal `portal`, exige `visible_portal` y `canje_portal` del programa
- * (403 `canje_portal_inactivo`) y que el cliente sea el del canje (403); queda con canal `portal` y
+ * (403 `canje_portal_inactivo`), que el cliente sea el del canje (403) y que el premio tenga `en_portal`
+ * (404, como `GET /portal/premios`); queda con canal `portal` y
  * auditado como el cliente.
  *
  * Eventos `lealtad.canje_reservado` o `lealtad.canje_aplicado`.
@@ -96,6 +97,10 @@ export default class Canjear extends DomainAction<EntradaCanjear, CanjeVista> {
             if (!programa.visible_portal || !programa.canje_portal) throw new CanjePortalInactivo(empresaId)
             if (t.ctx.actor.tipo === 'cliente' && t.ctx.actor.id !== input.cliente_id) {
                 throw new Prohibido('Un cliente solo canjea sus propios puntos')
+            }
+            // el portal solo ofrece los premios con en_portal (A5 respondía 404 antes de llamar)
+            if (!premio.en_portal) {
+                throw new NoEncontrado(`El premio ${premio.id} no está disponible en el portal`)
             }
         }
         if (premio.programa_id !== programa.id || !premio.activo) {
