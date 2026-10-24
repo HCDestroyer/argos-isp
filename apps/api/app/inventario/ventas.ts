@@ -2,7 +2,6 @@ import type { Transaccion } from '#shared/domain_action'
 import { Conflicto, ValidacionFallida, type ErrorCampo } from '#shared/errores'
 import { dec, type Dec } from '#ledger/dinero'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
-import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import {
     ExistenciaInsuficiente,
     bloquearProducto,
@@ -10,7 +9,6 @@ import {
     cantidadValida,
     costoSalida,
     exigirSeguimiento,
-    insertarMovimiento,
     productoMovible,
     registrarMovimientoConAsiento,
     saldoDe,
@@ -29,8 +27,8 @@ import { CUENTA_COSTO_POR_DEFECTO } from '#inventario/productos'
  *   ventas (`VEN`: respeta el bloqueo de ventas), en la transacción de la factura. El ingreso y el
  *   IVA son los de la factura, como hoy.
  * - **Reverso** (`reverso_venta`): anular la factura o acreditar toda la línea con una nota de
- *   crédito (o la factura entera) reingresa lo que sigue vendido de esa línea al mismo costo, con el
- *   reverso del asiento de costo. La unidad vuelve `disponible` a su bodega.
+ *   crédito (o la factura entera) reingresa lo que sigue vendido de esa línea al mismo costo, con su
+ *   asiento propio `1.1.14 / cuenta de costo` (origen `inventario` = el reverso). La unidad vuelve `disponible` a su bodega.
  * - **Anular la nota** vuelve a sacar lo que ella reingresó (`venta`, al mismo costo): 409
  *   `existencia_insuficiente` o `unidad_no_disponible` si ya no está.
  */
@@ -82,7 +80,10 @@ export async function prepararVentas(
         if (!productos.has(linea.producto_id!)) {
             productos.set(
                 linea.producto_id!,
-                await productoMovible(t, linea.producto_id!, { empresaId, campo: `lineas.${indice}.producto_id` }),
+                await productoMovible(t, linea.producto_id!, {
+                    empresaId,
+                    campo: `lineas.${indice}.producto_id`,
+                }),
             )
         }
     }
@@ -93,11 +94,17 @@ export async function prepararVentas(
     for (const { indice, linea } of con) {
         const producto = productos.get(linea.producto_id!)!
         exigirSeguimiento(producto, Boolean(linea.unidad_id), `lineas.${indice}.unidad_id`)
-        const bodega = await bodegaMovible(t, linea.bodega_id!, empresaId, { campo: `lineas.${indice}.bodega_id` })
+        const bodega = await bodegaMovible(t, linea.bodega_id!, empresaId, {
+            campo: `lineas.${indice}.bodega_id`,
+        })
         if (linea.unidad_id) {
             if (linea.cantidad && !dec(linea.cantidad).eq(1)) {
                 throw new ValidacionFallida([
-                    { field: `lineas.${indice}.cantidad`, message: 'Una unidad de serie se vende de una en una', rule: 'cantidad' },
+                    {
+                        field: `lineas.${indice}.cantidad`,
+                        message: 'Una unidad de serie se vende de una en una',
+                        rule: 'cantidad',
+                    },
                 ])
             }
             const [unidad] = await unidadesDeBodega(t, [linea.unidad_id], {
@@ -109,17 +116,31 @@ export async function prepararVentas(
             })
             if (salida.some((v) => v.unidad?.id === unidad!.id)) {
                 throw new ValidacionFallida([
-                    { field: `lineas.${indice}.unidad_id`, message: 'La unidad está en dos líneas', rule: 'distinta' },
+                    {
+                        field: `lineas.${indice}.unidad_id`,
+                        message: 'La unidad está en dos líneas',
+                        rule: 'distinta',
+                    },
                 ])
             }
-            salida.push({ indice, producto, bodegaId: bodega.id, cantidad: dec('1'), costo: dec(unidad!.costo), unidad: unidad! })
+            salida.push({
+                indice,
+                producto,
+                bodegaId: bodega.id,
+                cantidad: dec('1'),
+                costo: dec(unidad!.costo),
+                unidad: unidad!,
+            })
             continue
         }
         const cantidad = cantidadValida(linea.cantidad ?? '1', `lineas.${indice}.cantidad`)
         const clave = `${producto.id}:${bodega.id}`
         const saldo = await saldoDe(t, producto.id, bodega.id)
         const previo = usado.get(clave) ?? { cantidad: dec('0'), valor: dec('0') }
-        const restante = { cantidad: saldo.cantidad.minus(previo.cantidad), valor: saldo.valor.minus(previo.valor) }
+        const restante = {
+            cantidad: saldo.cantidad.minus(previo.cantidad),
+            valor: saldo.valor.minus(previo.valor),
+        }
         const costo = costoSalida(restante, cantidad, producto, bodega.id)
         usado.set(clave, { cantidad: previo.cantidad.plus(cantidad), valor: previo.valor.plus(costo) })
         salida.push({ indice, producto, bodegaId: bodega.id, cantidad, costo, unidad: null })
@@ -224,41 +245,53 @@ export async function revertirVentas(
         // la última salida vigente de la línea (venta original o la que rehízo una nota anulada)
         const salida = [...deLinea].reverse().find((m) => m.tipo === 'venta')!
         const producto = await productoMovible(t, Number(salida.producto_id))
-        let asientoId: number | null = null
-        if (salida.asiento_id) {
-            const reverso = await new RevertirAsiento().execute(
-                { asiento_id: Number(salida.asiento_id), motivo, por_anulacion: true },
-                t.ctx,
-                { trx: t.trx },
-            )
-            asientoId = reverso.id
-        }
-        const fecha = (await t.trx
-            .from('ledger.asientos')
-            .where('id', asientoId ?? 0)
-            .select(t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`))
-            .first()) as { fecha: string } | null
         const unidadId = salida.unidad_id === null ? null : Number(salida.unidad_id)
         if (unidadId) {
-            await actualizarUnidad(t, unidadId, { estado: 'disponible', bodega_id: Number(salida.bodega_id), servicio_id: null })
+            await actualizarUnidad(t, unidadId, {
+                estado: 'disponible',
+                bodega_id: Number(salida.bodega_id),
+                servicio_id: null,
+            })
         }
-        await insertarMovimiento(t, {
-            empresaId: Number(salida.empresa_id),
-            tipo: 'reverso_venta',
-            fecha: fecha?.fecha ?? (await hoy(t)),
-            producto,
-            bodegaId: Number(salida.bodega_id),
-            cantidad: dec(salida.cantidad).neg(),
-            costoTotal: dec(salida.costo_total).neg(),
-            unidadId,
-            servicioId: salida.servicio_id === null ? null : Number(salida.servicio_id),
-            facturaLineaId: lineaId,
-            asientoId,
-            origen,
-            reversoDe: Number(salida.id),
-            motivo,
-        })
+        // asiento propio del reverso (origen `inventario` = este movimiento): 1.1.14 / la cuenta de
+        // costo de la venta que corrige, por el mismo costo
+        await registrarMovimientoConAsiento(
+            t,
+            {
+                empresaId: Number(salida.empresa_id),
+                tipo: 'reverso_venta',
+                fecha: await hoy(t),
+                producto,
+                bodegaId: Number(salida.bodega_id),
+                cantidad: dec(salida.cantidad).neg(),
+                costoTotal: dec(salida.costo_total).neg(),
+                unidadId,
+                servicioId: salida.servicio_id === null ? null : Number(salida.servicio_id),
+                facturaLineaId: lineaId,
+                origen,
+                reversoDe: Number(salida.id),
+                motivo,
+            },
+            {
+                contrapartida: await cuentaDeCosto(t, Number(salida.id), producto),
+                descripcion: `Reverso del costo de ventas de ${producto.sku}: ${motivo}`,
+                diario: 'VEN',
+            },
+        )
     }
+}
+
+/** Cuenta de costo del asiento de una venta (la que no es 1.1.14), o la del producto. */
+async function cuentaDeCosto(t: Transaccion, ventaId: number, producto: ProductoMovible): Promise<string> {
+    const fila = (await t.trx
+        .from('ledger.movimientos as m')
+        .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        .join('inventario.movimientos as v', 'v.asiento_id', 'm.asiento_id')
+        .where('v.id', ventaId)
+        .whereNot('c.codigo', CUENTAS_GT.INVENTARIOS)
+        .select('c.codigo')
+        .first()) as { codigo: string } | null
+    return fila?.codigo ?? producto.cuenta_costo ?? CUENTA_COSTO_POR_DEFECTO
 }
 
 async function hoy(t: Transaccion): Promise<string> {
@@ -300,7 +333,9 @@ export async function rehacerVentasDeNota(t: Transaccion, notaId: number, motivo
             })
         } else {
             const saldo = await saldoDe(t, producto.id, bodegaId)
-            if (cantidad.gt(saldo.cantidad)) throw new ExistenciaInsuficiente(producto, bodegaId, cantidad, saldo.cantidad)
+            if (cantidad.gt(saldo.cantidad)) {
+                throw new ExistenciaInsuficiente(producto, bodegaId, cantidad, saldo.cantidad)
+            }
             const queda = { cantidad: saldo.cantidad.minus(cantidad), valor: saldo.valor.minus(costo) }
             if (queda.valor.lt(0) || (queda.cantidad.isZero() && !queda.valor.isZero())) {
                 throw new Conflicto(
@@ -310,14 +345,6 @@ export async function rehacerVentasDeNota(t: Transaccion, notaId: number, motivo
                 )
             }
         }
-        const original = (await t.trx
-            .from('ledger.movimientos as m')
-            .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
-            .join('inventario.movimientos as v', 'v.asiento_id', 'm.asiento_id')
-            .where('v.id', Number(r.reverso_de))
-            .whereNot('c.codigo', CUENTAS_GT.INVENTARIOS)
-            .select('c.codigo')
-            .first()) as { codigo: string } | null
         await registrarMovimientoConAsiento(
             t,
             {
@@ -336,7 +363,7 @@ export async function rehacerVentasDeNota(t: Transaccion, notaId: number, motivo
                 motivo,
             },
             {
-                contrapartida: original?.codigo ?? producto.cuenta_costo ?? CUENTA_COSTO_POR_DEFECTO,
+                contrapartida: await cuentaDeCosto(t, Number(r.reverso_de), producto),
                 descripcion: `Costo de ventas de ${producto.sku} otra vez: anulación de la nota ${notaId}`,
                 diario: 'VEN',
             },
@@ -389,11 +416,20 @@ export async function revertirVentasPorNota(
             return todaLaFactura || dec(l.acreditado).gte(neto)
         })
         .map((l) => Number(l.id))
-    await revertirVentas(t, completas, { tipo: 'nota_credito', id: nota.id }, `nota de crédito ${nota.id}: ${nota.motivo}`)
+    await revertirVentas(
+        t,
+        completas,
+        { tipo: 'nota_credito', id: nota.id },
+        `nota de crédito ${nota.id}: ${nota.motivo}`,
+    )
 }
 
 /** Al anular la factura: todo lo que sigue vendido de sus líneas. */
-export async function revertirVentasDeFactura(t: Transaccion, facturaId: number, motivo: string): Promise<void> {
+export async function revertirVentasDeFactura(
+    t: Transaccion,
+    facturaId: number,
+    motivo: string,
+): Promise<void> {
     const lineas = await lineasDeVenta(t, facturaId)
     await revertirVentas(
         t,
