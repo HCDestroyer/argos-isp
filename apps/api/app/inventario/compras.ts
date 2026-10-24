@@ -381,10 +381,15 @@ export async function revertirEntradasDeLaCompra(
                 'bodega_id',
                 'costo',
                 // H42: lo que la unidad hizo después de entrar (fuera de traslados): comodato, ajuste…
+                // H54: IS DISTINCT FROM, porque los movimientos sin origen (comodato) también cuentan.
+                // Una NCRE de devolución ya anulada (su salida y su reverso, al mismo costo) no cuenta.
                 t.trx.raw(
                     `(SELECT count(*)::int FROM inventario.movimientos x
                        WHERE x.unidad_id = inventario.unidades.id AND x.tipo <> 'traslado'
-                         AND NOT (x.origen_tipo = 'compra' AND x.origen_id = ?)) as otros`,
+                         AND (x.origen_tipo IS DISTINCT FROM 'compra' OR x.origen_id IS DISTINCT FROM ?)
+                         AND NOT (x.origen_tipo = 'compra' AND x.tipo IN ('devolucion_proveedor', 'reverso_compra')
+                                  AND EXISTS (SELECT 1 FROM ledger.compras_anulaciones an
+                                               WHERE an.compra_id = x.origen_id))) as otros`,
                     [compraId],
                 ),
             )) as Array<{
