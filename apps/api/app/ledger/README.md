@@ -178,6 +178,10 @@ Viven en `app/fiscal` (`libros_legales.ts`, `libros_pdf.ts`, `libros_emisiones.t
 - Efectivo: el egreso queda en el turno abierto de la caja (`turno_id`) y `cerrarCaja` lo resta del esperado (`fondo + cobros − egresos vigentes del turno`).
 - Alcance por caja: un usuario con rol acotado a una caja solo ve y registra egresos de esa caja.
 
+## Egresos del cajero (decisión del PM, contrato de localización fiscal §24)
+
+Sin `egresos.registrar_sin_limite` (el rol `cajero`), `egresos.registrar` solo acepta efectivo de la caja abierta propia, con motivo (`descripcion`) y hasta `egreso_cajero_maximo` de la empresa (gt-2026.3, Q500.00): 403 `egreso_solo_caja`, `caja_ajena`, `egreso_sobre_limite`, `egreso_sin_limite_configurado`; 422 `caja_no_abierta` y `descripcion` requerida. Contabilidad (`egresos.registrar_sin_limite`) registra lo que pasa del tope.
+
 ## Endpoints
 
 | Método | Ruta                                                                  | Permiso        |

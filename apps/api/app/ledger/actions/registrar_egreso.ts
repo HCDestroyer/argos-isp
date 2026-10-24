@@ -1,7 +1,9 @@
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
-import { ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { Problema, ValidacionFallida, type ErrorCampo } from '#shared/errores'
+import { permisosDeUsuario } from '#core/acl'
+import { valorParametro } from '#fiscal/parametros'
 import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import type { ClaveCategoriaEgreso } from '#ledger/plan_cuentas'
@@ -19,6 +21,14 @@ import RegistrarAsiento from '#ledger/actions/registrar_asiento'
  * - Asiento `Gasto (categoría) / Caja | Banco | subcuenta bancaria` con la fecha del egreso
  *   (`fecha`, por defecto hoy; no futura; un mes cerrado la rechaza). Origen `egreso`.
  * - `comprobante` opcional: número o serie del documento del proveedor.
+ *
+ * Cajero (decisión del PM, `a3.md` fila 47): quien registra sin `egresos.registrar_sin_limite`
+ * (el rol `cajero`) solo saca efectivo de **su** caja abierta (de la que es cajero o cuyo turno
+ * abrió), con motivo (`descripcion`) y hasta `egreso_cajero_maximo` de la empresa (parámetro
+ * fiscal, gt-2026.3). Errores: 403 `egreso_solo_caja` (otro método), 422 `caja_no_abierta`, 403
+ * `caja_ajena`, 422 en `descripcion` (`required`), 403 `egreso_sobre_limite` (sobre el tope: lo
+ * registra contabilidad) y 403 `egreso_sin_limite_configurado` (la empresa no tiene el parámetro).
+ * Contabilidad los revisa en el cierre de caja: bajan el esperado del turno.
  */
 
 export interface EntradaRegistrarEgreso {
@@ -97,10 +107,23 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
         }
         if (errores.length > 0) throw new ValidacionFallida(errores)
 
+        const usuarioId = usuarioDelActor(t.ctx.actor)
+        const permisos = usuarioId === null ? null : await permisosDeUsuario(usuarioId)
+        const conLimite = permisos !== null && !permisos.includes('egresos.registrar_sin_limite')
+        if (conLimite && input.metodo !== 'caja') {
+            throw new Problema(
+                403,
+                'egreso_solo_caja',
+                'Egreso solo de caja',
+                'Sin egresos.registrar_sin_limite solo se registran egresos en efectivo de tu caja abierta',
+            )
+        }
+
         const origen = await resolverOrigenEgreso(t.trx, t.ctx, input)
         // el egreso es de la empresa de su caja, banco o cuenta bancaria
         exigirAccesoEmpresa(t.ctx, origen.empresa_id)
         t.fijarEmpresa(origen.empresa_id)
+        if (conLimite) await this.exigirLimiteCajero(t, input, monto, origen, usuarioId!)
 
         const [fila] = (await t.trx
             .insertQuery()
@@ -143,5 +166,75 @@ export default class RegistrarEgreso extends DomainAction<EntradaRegistrarEgreso
             { trx: t.trx },
         )
         return verEgreso(egresoId, t.trx)
+    }
+
+    /** Reglas del cajero (decisión del PM): su caja abierta, motivo y tope por egreso. */
+    private async exigirLimiteCajero(
+        t: Transaccion,
+        input: EntradaRegistrarEgreso,
+        monto: ReturnType<typeof dec>,
+        origen: { empresa_id: number; caja_id: number | null; turno_id: number | null; nombre: string },
+        usuarioId: number,
+    ) {
+        if (origen.turno_id === null) {
+            throw new Problema(
+                422,
+                'caja_no_abierta',
+                'Caja no abierta',
+                `La caja ${origen.nombre} no tiene un turno abierto: ábrela para registrar el egreso`,
+            )
+        }
+        const turno = (await t.trx
+            .from('ledger.cajas_turnos as tu')
+            .join('ledger.cajas as c', 'c.id', 'tu.caja_id')
+            .where('tu.id', origen.turno_id)
+            .select('tu.abierto_por', 'c.cajero_id')
+            .firstOrFail()) as { abierto_por: number | null; cajero_id: number | null }
+        if (Number(turno.abierto_por) !== usuarioId && Number(turno.cajero_id) !== usuarioId) {
+            throw new Problema(
+                403,
+                'caja_ajena',
+                'Caja ajena',
+                `La caja ${origen.nombre} no es tuya: un cajero solo registra egresos de su caja abierta`,
+            )
+        }
+        if (!input.descripcion?.trim()) {
+            throw new ValidacionFallida([
+                {
+                    field: 'descripcion',
+                    message: 'El motivo del egreso es obligatorio para el cajero',
+                    rule: 'required',
+                },
+            ])
+        }
+        let tope: ReturnType<typeof dec>
+        try {
+            tope = dec(
+                String(
+                    await valorParametro<string>(
+                        origen.empresa_id,
+                        'egreso_cajero_maximo',
+                        hoyGuatemala(),
+                        t.trx,
+                    ),
+                ),
+            )
+        } catch (error) {
+            if (!(error instanceof Problema)) throw error
+            throw new Problema(
+                403,
+                'egreso_sin_limite_configurado',
+                'Sin límite de egresos del cajero',
+                'La empresa no tiene egreso_cajero_maximo (actualiza su localización a gt-2026.3): el egreso lo registra contabilidad',
+            )
+        }
+        if (monto.gt(tope)) {
+            throw new Problema(
+                403,
+                'egreso_sobre_limite',
+                'Egreso sobre el límite del cajero',
+                `El egreso de Q${aTexto(monto)} supera el máximo del cajero (Q${aTexto(tope)}, egreso_cajero_maximo): lo registra contabilidad`,
+            )
+        }
     }
 }

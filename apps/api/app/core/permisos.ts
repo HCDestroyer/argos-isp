@@ -111,6 +111,8 @@ export const PERMISOS = {
     'egresos.ver': 'Ver egresos y sus categorías',
     'egresos.registrar': 'Registrar egresos (gastos pagados por caja, banco o cuenta bancaria)',
     'egresos.anular': 'Anular egresos con asiento de reverso',
+    'egresos.registrar_sin_limite':
+        'Registrar egresos de cualquier caja, banco o cuenta, sin el tope egreso_cajero_maximo ni motivo obligatorio',
     'reportes.ver': 'Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard',
     // Cobros y bancos (localización fiscal §10.3 y §10.9, fase 4; los endpoints son de A3)
     'cobros.configurar':
@@ -306,6 +308,9 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'comprobantes.rechazar',
             'fel.ver',
             'cajas.depositar',
+            // decisión del PM: egresos de su caja abierta, con motivo y hasta egreso_cajero_maximo (sin
+            // egresos.ver: lee solo los de su caja con cajas.ver, como antes)
+            'egresos.registrar',
             'lealtad.ver',
             'lealtad.canjear',
         ],
@@ -434,6 +439,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'cierres.revisar_check',
             'egresos.ver',
             'egresos.registrar',
+            'egresos.registrar_sin_limite',
             'egresos.anular',
             'reportes.ver',
             'bitacora.ver',
