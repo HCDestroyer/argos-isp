@@ -221,3 +221,24 @@ export const probarCanalValidator = vine.compile(
         }),
     }),
 )
+
+export const vistaPreviaPlantillaValidator = vine.compile(
+    vine.object({
+        evento: vine
+            .string()
+            .trim()
+            .minLength(1)
+            .maxLength(100)
+            .meta({ description: 'Evento de la plantilla (`GET /notificaciones/eventos`)' }),
+        canal: vine.enum(['correo', 'telegram', 'whatsapp'] as const),
+        asunto: vine.string().trim().maxLength(300).nullable().optional().meta({
+            description: 'Asunto Mustache (en Telegram va como primera línea del mensaje)',
+        }),
+        cuerpo: vine
+            .string()
+            .trim()
+            .minLength(1)
+            .maxLength(4000)
+            .meta({ description: 'Cuerpo Mustache sin guardar' }),
+    }),
+)
