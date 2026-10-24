@@ -10,7 +10,7 @@ import RegistrarPago from '#billing/actions/registrar_pago'
 import EditarCliente from '#core/actions/editar_cliente'
 import EmitirLibro from '#fiscal/actions/emitir_libro'
 import { construirLibro, finDeMes } from '#fiscal/libros_legales'
-import { CERO, aTexto } from '#ledger/dinero'
+import { CERO, aTexto, dec } from '#ledger/dinero'
 import { hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import {
     cerrarYBloquear,
@@ -30,11 +30,11 @@ import { crearClienteFila } from '#tests/core/fabricas'
  * Auditor contable · hallazgos abiertos de la fase 6. Cada uno con su `.fails` mientras exista; su
  * invariante está en `HALLAZGOS_ABIERTOS` y no lo revisan las demás pruebas.
  *
- * H27 (lo destapó el generativo en fase 6 PR B, y está en main): una factura importada guarda su IVA
- * desglosado (`iva` > 0) pero su asiento es CxC / 2.9.01 sin IVA; una nota de crédito por su total se
- * guarda con IVA 0. Σ IVA de las notas ≠ IVA de la factura acreditada completa. Qué IVA debe llevar
- * esa nota (o si la importada debe guardar `iva` 0) lo decide el PM. Sigue abierto: en Japa un
- * `.fails` que falla como se espera sale en el resumen como «regression» (no es que pase).
+ * H27 (lo destapó el generativo en fase 6 PR B; arreglado por A3 en b4ffb08, decisión del líder): una
+ * factura importada guarda su IVA desglosado (`iva` > 0) pero su asiento es CxC / 2.9.01 sin IVA; la
+ * nota de crédito por su total se guardaba con IVA 0. Ahora lleva el IVA proporcional (`2.1.02` al
+ * debe) y la base va contra 2.9.01 o, cerrada la apertura, contra su cuenta de patrimonio. Queda como
+ * prueba normal; el inv. 9.nota_sobre_importada_con_iva_residual ya lo revisan todas.
  *
  * H28–H30 (fase 6 PR D, libros con folio): el libro de ventas de un mes cerrado, bloqueado y ya
  * emitido cambiaba con hechos posteriores (anulación, dato fiscal del cliente, retención recibida).
@@ -55,7 +55,7 @@ import { crearClienteFila } from '#tests/core/fabricas'
 test.group('Auditor contable · hallazgos de la fase 6', (group) => {
     group.each.teardown(() => soloEmpresaPrincipal())
 
-    test('H27: la nota de crédito por el total de una factura importada con IVA deja IVA residual', async ({
+    test('H27 (arreglado en b4ffb08): la nota de crédito por el total de una factura importada con IVA lleva el IVA de la factura y debita 2.1.02', async ({
         assert,
     }) => {
         const e = await prepararEmpresas()
@@ -74,16 +74,42 @@ test.group('Auditor contable · hallazgos de la fase 6', (group) => {
         )
         const factura = await db.from('billing.facturas').where('id', importada.factura_id!).firstOrFail()
         assert.notEqual(factura.iva, '0.00', 'la importada desglosa su IVA')
-        await new EmitirNotaCredito().execute(
+        const nota = await new EmitirNotaCredito().execute(
             { factura_id: importada.factura_id!, monto: '43.98', motivo: 'auditoría: acredita el total' },
             e.ctx,
+        )
+        const fila = await db.from('billing.notas_credito').where('id', nota.id).firstOrFail()
+        assert.deepEqual(
+            { iva: fila.iva, subtotal: fila.subtotal },
+            { iva: factura.iva, subtotal: aTexto(dec(factura.total).minus(factura.iva)) },
+        )
+        // asiento: 2.1.02 al debe por el IVA, la base contra 2.9.01 (apertura abierta), CxC al haber
+        const movimientos = (await db
+            .from('ledger.movimientos as m')
+            .join('ledger.asientos as a', 'a.id', 'm.asiento_id')
+            .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+            .where('a.origen_tipo', 'nota_credito')
+            .where('a.origen_id', nota.id)
+            .orderBy('c.codigo')
+            .select('c.codigo', 'm.debe', 'm.haber')) as Array<{
+            codigo: string
+            debe: string
+            haber: string
+        }>
+        assert.deepEqual(
+            movimientos.map((m) => [m.codigo, m.debe, m.haber]),
+            [
+                ['1.1.03', '0.00', '43.98'],
+                ['2.1.02', factura.iva, '0.00'],
+                ['2.9.01', aTexto(dec(factura.total).minus(factura.iva)), '0.00'],
+            ],
         )
         const violaciones = await verificarLibro([e.B, e.C], { incluirHallazgosAbiertos: true })
         assert.deepEqual(
             violaciones.map((v) => v.invariante.split(' ')[0]),
             [],
         )
-    }).fails('H27: nota de crédito sobre una factura importada con IVA (decisión del PM pendiente)')
+    })
 
     test('H28 (arreglado en 8814035): anular en un mes abierto una factura de un mes con el libro de ventas emitido no cambia ese libro y la anulación sale en negativo en su mes', async ({
         assert,
