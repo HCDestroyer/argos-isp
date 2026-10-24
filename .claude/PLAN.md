@@ -36,14 +36,14 @@ FEL va al final a propósito: la factura interna mueve cobro, corte y libro; FEL
 
 Nada de código de negocio hoy. El día 1 decide si los seis agentes producen un sistema o seis.
 
-- [ ] PM: monorepo con pnpm workspaces y `.claude/` con `CLAUDE.md`, `PLAN.md`, `agents/`, `integration/` y `STATUS.md`
-- [ ] PM: `infra/docker-compose.yml` con Postgres 16, Redis 7, FreeRADIUS 3.2, api, web, portal, aaa, coa; CI que corre lint, typecheck y pruebas
-- [ ] Líder BE: migraciones del modelo de datos base (`.claude/modelo-datos.md`) y clase `DomainAction` con auditoría y outbox
-- [ ] Líder BE: OpenAPI base con los recursos y acciones de la semana, aunque devuelvan 501; `packages/contracts` generado
-- [ ] Líder FE: esqueleto de `apps/web` y `apps/portal` con Nuxt 4 + Nuxt UI, layout, login contra el ACL, cliente HTTP desde contracts, fixtures de prueba
-- [ ] PM: MikroTik del laboratorio con PPPoE server, VPN al servidor, `radius incoming`, perfil `suspendido`, DHCPv6-PD; documentado en `infra/mikrotik/README.md`
-- [ ] PM: pedir sandbox de INFILE y credenciales de la pasarela (se usan en semanas 2 y 5)
-- [ ] Todos: lanzar las seis sesiones de Claude Code con su brief al final del día
+- [x] PM: monorepo con pnpm workspaces y `.claude/` con `CLAUDE.md`, `PLAN.md`, `agents/`, `integration/` y `STATUS.md`
+- [x] PM: `infra/docker-compose.yml` con Postgres 16, Redis 7, FreeRADIUS 3.2, api, web, portal, aaa, coa; CI que corre lint, typecheck y pruebas
+- [x] Líder BE: migraciones del modelo de datos base (`.claude/modelo-datos.md`) y clase `DomainAction` con auditoría y outbox
+- [x] Líder BE: OpenAPI base con los recursos y acciones de la semana, aunque devuelvan 501; `packages/contracts` generado
+- [x] Líder FE: esqueleto de `apps/web` y `apps/portal` con Nuxt 4 + Nuxt UI, layout, login contra el ACL, cliente HTTP desde contracts, fixtures de prueba
+- [ ] PM: MikroTik del laboratorio con PPPoE server (hecho en CHR; el equipo físico sigue la guía `docs/laboratorio/validacion-fisica.md`), VPN al servidor, `radius incoming`, perfil `suspendido`, DHCPv6-PD; documentado en `infra/mikrotik/README.md`
+- [ ] PM: pedir sandbox de INFILE y credenciales de la pasarela (24 oct: el PM tramita INFILE; la pasarela será Recurrente)
+- [x] Todos: lanzar las seis sesiones de Claude Code con su brief al final del día
 
 ### Días 2 a 4 · martes 20 a jueves 22 · agentes construyendo
 
@@ -63,6 +63,8 @@ Dependencias entre agentes durante estos días (el PM las vigila):
 ### Día 5 · viernes 23 · integración en laboratorio
 
 Los tres humanos en el laboratorio con los agentes en espera para corregir. Se pausa toda construcción nueva.
+
+Estado (24 oct): todo se verificó en CHR, en el CI (Playwright, `distribucion`) y en la prueba `e2e-final` de la versión 0.9.2. Falta repetirlo en el MikroTik físico con la guía `docs/laboratorio/validacion-fisica.md`; las casillas se marcan con esa corrida.
 
 - [ ] Alta de cliente con servicio PPPoE dual-stack desde el panel
 - [ ] El cliente conecta; sesión visible en el panel con IPv4, prefijo de enlace y prefijo delegado

@@ -56,34 +56,9 @@ Cada líder, al final del día, tres líneas por agente.
 - Bloqueado: credenciales de INFILE y pasarela; `lab.rsc` en el MikroTik físico; `infra/.env`.
 - Siguiente: revisar e integrar el día 3.
 
-## 2026-10-20
+## 2026-10-24 · Versión 1.0.0 publicada
 
-### A1
-- Hecho:
-- Bloqueado:
-- Siguiente:
-
-### A2
-- Hecho:
-- Bloqueado:
-- Siguiente:
-
-### A3
-- Hecho:
-- Bloqueado:
-- Siguiente:
-
-### A4
-- Hecho:
-- Bloqueado:
-- Siguiente:
-
-### A5
-- Hecho:
-- Bloqueado:
-- Siguiente:
-
-### A6
-- Hecho:
-- Bloqueado:
-- Siguiente:
+### Líderes y PM
+- Hecho: versión 1.0.0 publicada (7 imágenes amd64 y arm64, paquete, canal estable; las imágenes se descargan sin credenciales). Contabilidad completa: fases 1 a 8 auditadas. Revisión de todas las anotaciones abiertas del repositorio.
+- En curso: inventario interno (A3, contrato `contratos/inventario.md`); pantallas que faltan en el panel (A4); consumidores y recordatorios de notify (A6); facturas castigadas en el portal (A5); cierre de apertura 2.9.01 y huecos de la API (A3); contratos requeridos (A1); guía de laboratorio físico (A2).
+- Bloqueado (externo): sandbox de INFILE (lo tramita el PM); cuenta de Recurrente; pruebas en el MikroTik físico y de carga en hardware real (guía para el PM); importación con datos reales.
