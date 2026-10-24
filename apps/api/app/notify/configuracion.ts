@@ -554,25 +554,6 @@ function entero(valor: unknown): number | null {
     return null
 }
 
-const columnas = new Map<string, Promise<boolean>>()
-
-/** Si existe la columna (las de empresa llegan con la migración de A1). Se pregunta una vez por proceso. */
-function columnaExiste(cliente: QueryClientContract, schema: string, tabla: string, columna: string) {
-    const clave = `${schema}.${tabla}.${columna}`
-    let existe = columnas.get(clave)
-    if (!existe) {
-        existe = cliente
-            .from('information_schema.columns')
-            .where({ table_schema: schema, table_name: tabla, column_name: columna })
-            .select('column_name')
-            .first()
-            .then((fila) => Boolean(fila))
-        columnas.set(clave, existe)
-        existe.catch(() => columnas.delete(clave))
-    }
-    return existe
-}
-
 /** Empresa de un servicio (`core.servicios.empresa_id`), o null si no existe. */
 async function empresaDeServicio(cliente: QueryClientContract, servicioId: number): Promise<number | null> {
     const fila = (await cliente
@@ -585,24 +566,14 @@ async function empresaDeServicio(cliente: QueryClientContract, servicioId: numbe
     return fila?.empresa_id ? Number(fila.empresa_id) : null
 }
 
-/** Empresa de una factura: su `empresa_id` (cuando A3 lo agregue) o la de su servicio. */
+/** Empresa de una factura (`billing.facturas.empresa_id`, la del servicio al emitirse). */
 async function empresaDeFactura(cliente: QueryClientContract, facturaId: number): Promise<number | null> {
-    if (await columnaExiste(cliente, 'billing', 'facturas', 'empresa_id')) {
-        const fila = await cliente
-            .from('billing.facturas')
-            .where('id', facturaId)
-            .select('empresa_id')
-            .first()
-        if (fila?.empresa_id) return Number(fila.empresa_id)
-    }
     const fila = (await cliente
         .from('billing.facturas')
         .where('id', facturaId)
-        .select('servicio_id')
-        .first()) as {
-        servicio_id: number | null
-    } | null
-    return fila?.servicio_id ? empresaDeServicio(cliente, Number(fila.servicio_id)) : null
+        .select('empresa_id')
+        .first()) as { empresa_id: number | null } | null
+    return fila?.empresa_id ? Number(fila.empresa_id) : null
 }
 
 /**
@@ -610,7 +581,7 @@ async function empresaDeFactura(cliente: QueryClientContract, facturaId: number)
  * salen de la empresa del servicio o de la factura del evento), en este orden:
  *
  * 1. `empresa_id` del payload (los eventos de servicio y financieros lo traen);
- * 2. la de la factura (`factura_id` o la primera de `facturas[]`): su `empresa_id` o la de su servicio;
+ * 2. la de la factura (`factura_id` o la primera de `facturas[]`): su `empresa_id`;
  * 3. la del servicio (`servicio_id`);
  * 4. la del servicio de la promesa (`promesa_id`);
  * 5. la de la primera factura que pagó el pago (`pago_id`, también en `comprobante.*`).
