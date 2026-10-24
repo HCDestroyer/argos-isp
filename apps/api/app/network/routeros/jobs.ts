@@ -7,6 +7,7 @@ import ReconciliarRouterOS, { type ResultadoReconciliar } from '#network/routero
 import { routerDispatcher, routersConServiciosSinPppoe } from '#network/routeros/consultas'
 import { fabricaPorDefecto, routersPendientes, type OpcionesDispatcher } from '#network/routeros/dispatcher'
 import { ejecutarCambioControl, type EntradaCambioControl } from '#network/routeros/cambio_control'
+import SondearRouters, { type ResultadoSondear } from '#network/routeros/actions/sondear_routers'
 
 /**
  * Crons del reconciliador (`node ace routeros:worker`), cola `routeros-cron`:
@@ -15,6 +16,7 @@ import { ejecutarCambioControl, type EntradaCambioControl } from '#network/route
  * | --- | --- | --- |
  * | `recuperar` | 30 s (`ROUTEROS_RECUPERAR_CADA_MS`) | Sondea (`/system/resource`) los routers que fallaron; al responder, los reconcilia |
  * | `reconciliar` | 15 min (`ROUTEROS_RECONCILIAR_CADA_MS`) | Reconcilia todos los routers con servicios sin PPPoE (red de seguridad) |
+ * | `sondear` | 5 min (`ROUTEROS_SONDEO_CADA_MS`, por defecto `AAA_INTERIM_SEGUNDOS`; 0 = apagado) | `GET /system/resource` a los routers con API sin contacto reciente (`Router.en_linea`) |
  * | `cambiar_control` | por evento (`router.control_cambiado`) | Cambio de modo de control por lotes (`cambio_control.ts`); `jobId` = el evento |
  *
  * Lock: concurrencia 1 y un advisory lock de Postgres por job (si otra instancia lo tiene, el
@@ -24,11 +26,18 @@ import { ejecutarCambioControl, type EntradaCambioControl } from '#network/route
 
 export const NOMBRE_COLA_ROUTEROS = 'routeros-cron'
 
-export function cronsRouterOS() {
-    return {
+/** ms entre sondeos de contacto: un Interim-Update (300 s) por defecto; 0 lo apaga. */
+export function sondeoCadaMs(): number {
+    return env.get('ROUTEROS_SONDEO_CADA_MS') ?? (env.get('AAA_INTERIM_SEGUNDOS') ?? 300) * 1000
+}
+
+export function cronsRouterOS(): Record<string, number> {
+    const crons: Record<string, number> = {
         recuperar: env.get('ROUTEROS_RECUPERAR_CADA_MS') ?? 30_000,
         reconciliar: env.get('ROUTEROS_RECONCILIAR_CADA_MS') ?? 15 * 60_000,
     }
+    if (sondeoCadaMs() > 0) crons.sondear = sondeoCadaMs()
+    return crons
 }
 
 function conexion(): RedisOptions {
@@ -50,6 +59,8 @@ export async function programarCronsRouterOS(opciones: { prefijo?: string } = {}
         connection: conexion(),
         prefix: prefijo(opciones.prefijo),
     })
+    // Un cron apagado (sondeo en 0) no debe quedar programado de una versión anterior.
+    if (!('sondear' in cronsRouterOS())) await cola.removeJobScheduler('sondear')
     for (const [nombre, cada] of Object.entries(cronsRouterOS())) {
         await cola.upsertJobScheduler(
             nombre,
@@ -87,7 +98,7 @@ async function conLock<T>(
 export async function ejecutarCronRouterOS(
     nombre: string,
     opciones: OpcionesDispatcher & { ahora?: Date } = {},
-): Promise<{ omitido: boolean; resultado?: ResultadoReconciliar[] }> {
+): Promise<{ omitido: boolean; resultado?: ResultadoReconciliar[] | ResultadoSondear[] }> {
     const ahora = opciones.ahora ?? new Date()
     const ctx = contextoSistema('cron', `routeros-${nombre}-${ahora.toISOString()}`)
     const fabrica = opciones.clientes ?? fabricaPorDefecto
@@ -129,6 +140,15 @@ export async function ejecutarCronRouterOS(
                     salidas.push(await reconciliar(id, 'recuperado'))
                 }
                 return salidas
+            })
+        case 'sondear':
+            return conLock(nombre, async () => {
+                // Sin contacto en el último intervalo de sondeo (accounting o API lo cubren si hubo).
+                const salida = await new SondearRouters({ clientes: fabrica }).execute(
+                    { sin_contacto_desde_s: Math.max(1, (sondeoCadaMs() || 300_000) / 1000) },
+                    ctx,
+                )
+                return [salida]
             })
         default:
             throw new Error(`Cron de routeros desconocido: ${nombre}`)

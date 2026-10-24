@@ -96,6 +96,12 @@ export interface Bitacora {
     registrar(fila: FilaRouterOS): Promise<void>
 }
 
+/**
+ * Aviso de que el router respondió bien (2xx): `Router.en_linea` (`contactoRouterOS` de
+ * `#network/sesiones/contacto`). No debe lanzar; se espera antes de devolver la respuesta.
+ */
+export type ContactoRouter = (routerId: number) => Promise<void>
+
 export interface ResultadoAsegurar {
     accion: 'creado' | 'actualizado' | 'sin_cambios'
     objeto: ObjetoRouterOS
@@ -124,8 +130,12 @@ export class ClienteRouterOS {
     readonly #esperaMs: number
     readonly #agente: AgenteHttp | AgenteHttps
     readonly #bitacora: Bitacora | null
+    readonly #contacto: ContactoRouter | null
 
-    constructor(conexion: ConexionRouterOS, opciones: { bitacora?: Bitacora } = {}) {
+    constructor(
+        conexion: ConexionRouterOS,
+        opciones: { bitacora?: Bitacora; contacto?: ContactoRouter | null } = {},
+    ) {
         this.routerId = conexion.routerId
         this.#base = new URL(conexion.url.endsWith('/') ? conexion.url : `${conexion.url}/`)
         if (this.#base.protocol !== 'https:' && this.#base.protocol !== 'http:') {
@@ -145,6 +155,7 @@ export class ClienteRouterOS {
                   })
                 : new AgenteHttp({ keepAlive: true, maxSockets: 4 })
         this.#bitacora = opciones.bitacora ?? null
+        this.#contacto = opciones.contacto ?? null
     }
 
     /** Host del router (para logs y `audit.red`; nunca con credenciales). */
@@ -380,12 +391,18 @@ export class ClienteRouterOS {
     }
 
     #http(metodo: string, camino: string, cuerpo?: Propiedades): Promise<RespuestaHttp> {
-        return this.#peticion(metodo, camino, cuerpo).catch((error: unknown) => {
-            if (error instanceof ErrorRouterOS && error.operacion === null) {
-                error.operacion = operacionLegible(metodo, camino)
-            }
-            throw error
-        })
+        return this.#peticion(metodo, camino, cuerpo).then(
+            async (respuesta) => {
+                if (this.#contacto && this.routerId !== null) await this.#contacto(this.routerId)
+                return respuesta
+            },
+            (error: unknown) => {
+                if (error instanceof ErrorRouterOS && error.operacion === null) {
+                    error.operacion = operacionLegible(metodo, camino)
+                }
+                throw error
+            },
+        )
     }
 
     #peticion(metodo: string, camino: string, cuerpo?: Propiedades): Promise<RespuestaHttp> {

@@ -79,6 +79,13 @@ export default await Env.create(new URL('../', import.meta.url), {
     /** ms entre reconciliaciones completas (900000) y entre sondeos de routers caídos (30000) */
     ROUTEROS_RECONCILIAR_CADA_MS: Env.schema.number.optional(),
     ROUTEROS_RECUPERAR_CADA_MS: Env.schema.number.optional(),
+    /**
+     * Contacto de los routers (`Router.en_linea`, A2): ms entre sondeos de la API REST a los routers
+     * sin contacto reciente (por defecto `AAA_INTERIM_SEGUNDOS` × 1000; 0 lo apaga) y segundos mínimos
+     * entre dos escrituras del mismo router desde un proceso (60)
+     */
+    ROUTEROS_SONDEO_CADA_MS: Env.schema.number.optional(),
+    ROUTERS_CONTACTO_MINIMO_S: Env.schema.number.optional(),
 
     /*
     |----------------------------------------------------------

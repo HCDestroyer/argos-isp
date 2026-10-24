@@ -278,6 +278,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routeros.aplicar_servicio': 'Servicio aplicado en el router',
     'routeros.cambiar_control': 'Modo de colas aplicado en el router',
     'routeros.reconciliar': 'Router reconciliado',
+    'routeros.sondear': 'Sondeo de routers con fallas',
     'routers.cambiar_control_velocidad': 'Modo de colas del router cambiado',
     'routers.marcar_migrado': 'Fecha de migración al nuevo RADIUS marcada',
     'sesiones.completar_prefijo': 'Prefijo IPv6 de la sesión completado',
