@@ -27,7 +27,7 @@ import { ConsumidorInventario } from '#inventario/consumidor'
  * `a3/inventario-b`, a5df8c0 y c15a016) y del equipo de comodato en Q0 (decisión del líder): variantes
  * que la prueba de cada hallazgo no cubre.
  *
- * - **H54** (menor, `.fails`): el arreglo de H42 cuenta los movimientos de la unidad posteriores a su
+ * - **H54** (menor, arreglado en e4c872b): el arreglo de H42 cuenta los movimientos de la unidad posteriores a su
  *   entrada con `NOT (origen_tipo = 'compra' AND origen_id = ?)`; los del comodato tienen
  *   `origen_tipo` NULL y esa condición da NULL, así que no cuentan. Una unidad prestada y devuelta el
  *   mismo mes (sin depreciación, mismo costo) deja anular su compra. El libro cuadra (el costo no
@@ -262,7 +262,7 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
         await afirmarLibro(assert, [e.B, e.C])
     })
 
-    test('H54: una unidad prestada y devuelta el mismo mes (mismo costo) no está «tal como entró»: anular su compra debe ser 409 unidades_en_uso', async ({
+    test('H54 (arreglado): una unidad prestada y devuelta el mismo mes (mismo costo) no está «tal como entró»: anular su compra debe ser 409 unidades_en_uso', async ({
         assert,
     }) => {
         const e = await prepararEmpresasGt()
@@ -279,7 +279,7 @@ test.group('Auditor contable · arreglos de H39–H43 y comodato en Q0', (group)
             new AnularCompra().execute({ compra_id: b.compra.id, motivo: 'auditoría' }, e.ctx),
         )
         assert.equal(usada.codigo, 'unidades_en_uso')
-    }).fails('H54: el conteo de movimientos de H42 no ve los que no tienen origen')
+    })
 
     test('comodato en Q0: un equipo totalmente depreciado vuelve en Q0, se presta otra vez con un activo en Q0 sin asientos, se retira, vuelve, se devuelve y se pierde; todo cuadra con los inv. 15 y 24', async ({
         assert,

@@ -718,6 +718,7 @@ test.group('Auditor contable · inventario fase A', (group) => {
         for (const [debe, haber, monto] of [
             [CUENTAS_GT.MATERIALES_INSTALACION, '1.1.02.01', '7.00'],
             [CUENTAS_GT.MERMAS_INVENTARIO, '1.1.02.01', '3.00'],
+            [CUENTAS_GT.COSTO_EQUIPO_VENDIDO, '1.1.02.01', '4.00'],
             ['1.1.02.01', CUENTAS_GT.SOBRANTES_INVENTARIO, '2.00'],
             ['1.1.02.01', '4.1.01', '100.00'],
         ] as const) {
@@ -750,12 +751,12 @@ test.group('Auditor contable · inventario fase A', (group) => {
             e.ctx,
         )
         const activo = await saldoActivo(db.connection(), e.B, `${ANIO}-12-31`)
-        assert.equal(activo.toFixed(2), '172.00')
+        assert.equal(activo.toFixed(2), '168.00')
         const resultados = await estadoResultados({ desde: `${ANIO}-01-01`, hasta: `${ANIO}-12-31` }, [e.B])
         assert.deepEqual(resultados.empresas[0]!.totales, {
             ingresos: '102.00',
-            gastos: '10.00',
-            resultado: '92.00',
+            gastos: '14.00',
+            resultado: '88.00',
         })
         for (let mes = 1; mes <= 11; mes++) {
             await new CerrarPeriodo().execute({ empresa_id: e.B, anio: ANIO, mes }, e.ctx)
@@ -768,6 +769,7 @@ test.group('Auditor contable · inventario fase A', (group) => {
         for (const codigo of [
             CUENTAS_GT.MATERIALES_INSTALACION,
             CUENTAS_GT.MERMAS_INVENTARIO,
+            CUENTAS_GT.COSTO_EQUIPO_VENDIDO,
             CUENTAS_GT.SOBRANTES_INVENTARIO,
         ]) {
             assert.equal(cuentas.get(codigo) ?? '0.00', '0.00', codigo)
