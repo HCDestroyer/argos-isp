@@ -53,7 +53,7 @@ describe('portal autenticado /cuenta', () => {
         const wrapper = await montarCuenta('/cuenta?seccion=facturas')
         expect(wrapper.find('[data-testid="saldo-cuenta"]').text()).toBe('Q 550.00')
         const facturas = wrapper.findAll('[data-testid="factura"]')
-        expect(facturas).toHaveLength(7)
+        expect(facturas).toHaveLength(9)
         expect(facturas[0]!.text()).toContain('Servicio de octubre 2026')
         expect(facturas[0]!.text()).toContain('Aviso de cobro 1203')
         expect(facturas[0]!.text()).toContain('Vencida')
@@ -61,6 +61,29 @@ describe('portal autenticado /cuenta', () => {
         const pdf = facturas[0]!.find('[data-testid="descargar-pdf"]')
         expect(pdf.attributes('href')).toBe('/api/v1/portal/facturas/1203/pdf')
         expect(pdf.text()).toContain('Ver aviso de cobro (PDF)')
+    })
+
+    it('castigada y acreditada: su estado y sin «Saldo» (no son deuda); las pendientes sí lo muestran', async () => {
+        fijarSesionFixture(true)
+        const wrapper = await montarCuenta('/cuenta?seccion=facturas')
+        const facturas = wrapper.findAll('[data-testid="factura"]')
+        const castigada = facturas.find(f => f.text().includes('Aviso de cobro 950'))!
+        expect(castigada.find('[data-testid="estado-factura"]').text()).toBe('Dada de baja')
+        expect(castigada.text()).not.toContain('Saldo')
+        expect(castigada.find('[data-testid="castigada"]').text()).toContain('ya no tiene saldo por cobrar')
+        const acreditada = facturas.find(f => f.text().includes('Aviso de cobro 990'))!
+        expect(acreditada.find('[data-testid="estado-factura"]').text()).toBe('Cubierta por crédito')
+        expect(acreditada.text()).not.toContain('Saldo')
+        expect(acreditada.find('[data-testid="acreditado"]').text()).toContain('Q 175.00')
+        const parcial = facturas.find(f => f.text().includes('Aviso de cobro 1160'))!
+        expect(parcial.text()).toContain('Saldo')
+        // el saldo de arriba es el de la cuenta (A3), no se recalcula con las castigadas
+        expect(wrapper.find('[data-testid="saldo-cuenta"]').text()).toBe('Q 550.00')
+    })
+
+    it('facturaConSaldo: solo emitida, parcial y vencida', () => {
+        const estados = ['emitida', 'parcial', 'vencida', 'pagada', 'anulada', 'acreditada', 'castigada'] as const
+        expect(estados.filter(estado => facturaConSaldo({ estado }))).toEqual(['emitida', 'parcial', 'vencida'])
     })
 
     it('"Pagar en línea" está habilitado con pasarela y explica a dónde lleva', async () => {
