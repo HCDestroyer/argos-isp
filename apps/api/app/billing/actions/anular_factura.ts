@@ -2,7 +2,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, NoEncontrado } from '#shared/errores'
-import { dec } from '#ledger/dinero'
+import { CERO, aTexto, dec } from '#ledger/dinero'
 import RevertirAsiento from '#ledger/actions/revertir_asiento'
 import { aplicarAnticipos, bloquearCliente, revertirAplicacionesDeNotas } from '#billing/cobros'
 import { columnasFactura, type FacturaFila } from '#billing/facturas'
@@ -11,6 +11,51 @@ import { hoyGuatemala } from '#ledger/fechas'
 import { ERROR_DOCUMENTO_ANULADO, dteVigente, finPlazoAnulacion, type DteFila } from '#fiscal/fel/dte'
 import { AnulacionFueraDePlazo, DteEnProceso } from '#fiscal/fel/errores'
 import { diferimientoDeFactura } from '#ledger/diferidos'
+import { CUENTAS } from '#ledger/plan_cuentas'
+import { cuentaBaseApertura } from '#ledger/apertura'
+import RegistrarAsiento, { type AsientoRegistrado } from '#ledger/actions/registrar_asiento'
+
+/**
+ * H27: el reverso de una importada (`CxC / 2.9.01`) devuelve su monto a 2.9.01. Si la apertura ya se
+ * cerró (cierre vigente con fecha ≥ la del asiento importado), lo traslada otra vez a la misma cuenta
+ * de patrimonio con un cierre de apertura (`ajuste`, diario VAR): 2.9.01 no se reabre y
+ * `apertura_cero` sigue pasando.
+ */
+async function recerrarApertura(
+    t: Transaccion,
+    empresaId: number,
+    fechaOriginal: string,
+    reverso: AsientoRegistrado,
+    facturaId: number,
+) {
+    const neto = reverso.movimientos
+        .filter((m) => m.cuenta_codigo === CUENTAS.SALDOS_APERTURA)
+        .reduce((s, m) => s.plus(m.debe).minus(m.haber), CERO)
+    if (neto.isZero()) return
+    const destino = await cuentaBaseApertura(t.trx, empresaId, fechaOriginal)
+    if (destino === CUENTAS.SALDOS_APERTURA) return
+    const monto = aTexto(neto.abs())
+    await new RegistrarAsiento().execute(
+        {
+            empresa_id: empresaId,
+            fecha: reverso.fecha,
+            descripcion: `Cierre de saldos de apertura: ${CUENTAS.SALDOS_APERTURA} a ${destino} · anulación de la factura importada ${facturaId}`,
+            origen_tipo: 'ajuste',
+            diario: 'VAR',
+            movimientos: neto.isPositive()
+                ? [
+                      { cuenta: destino, debe: monto },
+                      { cuenta: CUENTAS.SALDOS_APERTURA, haber: monto },
+                  ]
+                : [
+                      { cuenta: CUENTAS.SALDOS_APERTURA, debe: monto },
+                      { cuenta: destino, haber: monto },
+                  ],
+        },
+        t.ctx,
+        { trx: t.trx },
+    )
+}
 
 /** Bloquea el DTE sin esperar: si el worker lo está enviando, 409 `dte_en_proceso`. */
 async function bloquearDte(t: Transaccion, dteId: number): Promise<void> {
@@ -281,7 +326,12 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                 .orderBy('a.id', 'asc')
                 .select('a.id')) as Array<{ id: number }>
             for (const asiento of asientos) {
-                await new RevertirAsiento().execute(
+                const original = (await t.trx
+                    .from('ledger.asientos')
+                    .where('id', asiento.id)
+                    .select(t.trx.raw(`to_char(fecha, 'YYYY-MM-DD') as fecha`), 'empresa_id')
+                    .firstOrFail()) as { fecha: string; empresa_id: number }
+                const reverso = await new RevertirAsiento().execute(
                     {
                         asiento_id: asiento.id,
                         motivo: `anulación de la factura ${f.id}: ${motivo}`,
@@ -290,6 +340,7 @@ export default class AnularFactura extends DomainAction<EntradaAnularFactura, Fa
                     t.ctx,
                     { trx: t.trx },
                 )
+                await recerrarApertura(t, Number(original.empresa_id), original.fecha, reverso, f.id)
             }
             await t.trx
                 .from('billing.facturas')

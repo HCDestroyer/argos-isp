@@ -33,6 +33,58 @@ async function idCuenta(t: Transaccion, codigo: string): Promise<number> {
 }
 import type { ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
 import { diferimientoDeFactura } from '#ledger/diferidos'
+import { cuentaBaseApertura } from '#ledger/apertura'
+
+/**
+ * Factura importada (contrato de importación): su asiento vigente acredita `2.9.01` y no ingresos ni
+ * IVA. Devuelve la fecha de ese asiento o null si la factura no es importada.
+ */
+async function asientoDeImportada(t: Transaccion, factura: FacturaNota): Promise<string | null> {
+    const fila = (await t.trx
+        .from('ledger.asientos as a')
+        .join('ledger.movimientos as m', 'm.asiento_id', 'a.id')
+        .join('ledger.cuentas as c', 'c.id', 'm.cuenta_id')
+        .where('a.origen_tipo', factura.tipo === 'mora' ? 'mora' : 'factura')
+        .where('a.origen_id', factura.id)
+        .whereNull('a.reversa_de')
+        .whereNotExists((q) => q.from('ledger.asientos as r').whereRaw('r.reversa_de = a.id'))
+        .where('c.codigo', CUENTAS.SALDOS_APERTURA)
+        .where('m.haber', '>', 0)
+        .select(t.trx.raw(`to_char(min(a.fecha), 'YYYY-MM-DD') as fecha`))
+        .first()) as { fecha: string | null } | null
+    return fila?.fecha ?? null
+}
+
+/** Cuenta de la base de una nota sobre una importada (`2.9.01` o el patrimonio del cierre), o null. */
+async function cuentaBaseDeImportada(t: Transaccion, factura: FacturaNota): Promise<string | null> {
+    const fecha = await asientoDeImportada(t, factura)
+    return fecha === null ? null : cuentaBaseApertura(t.trx, factura.empresa_id, fecha)
+}
+
+/**
+ * H27: lo que el asiento de una importada acreditó en 2.9.01 (`haber`), partido como una factura:
+ * el IVA de la factura (hasta `haber`) a `2.1.02` y el resto, la base, a 2.9.01 o al patrimonio
+ * al que se cerró la apertura.
+ */
+async function partesImportada(t: Transaccion, factura: FacturaNota, haber: Dec) {
+    const fila = (await t.trx
+        .from('billing.facturas')
+        .where('id', factura.id)
+        .select('iva')
+        .firstOrFail()) as {
+        iva: string
+    }
+    const iva = Decimal.min(Decimal.max(dec(fila.iva), CERO), haber)
+    const base = (await cuentaBaseDeImportada(t, factura)) ?? CUENTAS.SALDOS_APERTURA
+    return {
+        iva: {
+            cuenta_id: await idCuenta(t, CUENTAS.IVA_DEBITO),
+            codigo: CUENTAS.IVA_DEBITO as string,
+            monto: iva,
+        },
+        base: { cuenta_id: await idCuenta(t, base), codigo: base, monto: haber.minus(iva) },
+    }
+}
 
 /**
  * `facturas.nota_credito` (`POST /facturas/:id/notas-credito { monto, motivo }`): nota de crédito
@@ -448,6 +500,8 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         const sumar = (cuenta: string, monto: Dec) =>
             porCuenta.set(cuenta, (porCuenta.get(cuenta) ?? CERO).plus(monto))
         const cuentaIva = certificada || !factura.aviso_cobro ? CUENTAS.IVA_DEBITO : IVA_POR_CERTIFICAR
+        // H27: la base de una importada va contra 2.9.01 (o el patrimonio del cierre), no al ingreso
+        const baseImportada = await cuentaBaseDeImportada(t, factura)
         pedidas.forEach((p, i) => {
             const linea = porId.get(Number(p.linea_id))
             if (linea?.tipo === 'descuento') {
@@ -484,7 +538,7 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
                   ? ivaRestante
                   : Decimal.min(redondear(monto.minus(monto.div('1.12'))), ivaRestante)
             resultado.push({ linea_id: Number(linea.id), monto, iva })
-            sumar(cuentaIngresoDeLinea(linea), monto.minus(iva))
+            sumar(baseImportada ?? cuentaIngresoDeLinea(linea), monto.minus(iva))
             if (iva.gt(0)) sumar(cuentaIva, iva)
         })
         if (errores.length > 0) throw new ValidacionFallida(errores)
@@ -551,6 +605,30 @@ export default class EmitirNotaCredito extends DomainAction<EntradaNotaCredito, 
         for (const d of descuentos) {
             const cuenta = lineas.find((l) => l.cuenta_codigo === cuentaIngresoDeLinea(d))
             if (cuenta) cuenta.haber = aTexto(dec(cuenta.haber).minus(d.monto))
+        }
+        // H27: una importada (asiento CxC / 2.9.01) que desglosa IVA se acredita como cualquier
+        // factura: su IVA contra 2.1.02 y la base contra 2.9.01 (o el patrimonio del cierre de apertura)
+        const apertura = lineas.find((l) => l.cuenta_codigo === CUENTAS.SALDOS_APERTURA)
+        if (apertura) {
+            const partes = await partesImportada(t, factura, dec(apertura.haber))
+            const idApertura = Number(apertura.cuenta_id)
+            apertura.cuenta_id = partes.base.cuenta_id
+            apertura.cuenta_codigo = partes.base.codigo
+            apertura.haber = aTexto(partes.base.monto)
+            if (partes.base.cuenta_id !== idApertura) {
+                // lo que notas anteriores debitaron de 2.9.01 cuenta como ya acreditado de la base
+                yaDebitado.set(
+                    partes.base.cuenta_id,
+                    (yaDebitado.get(partes.base.cuenta_id) ?? CERO).plus(yaDebitado.get(idApertura) ?? CERO),
+                )
+            }
+            if (partes.iva.monto.gt(0)) {
+                lineas.push({
+                    cuenta_id: partes.iva.cuenta_id,
+                    cuenta_codigo: partes.iva.codigo,
+                    haber: aTexto(partes.iva.monto),
+                })
+            }
         }
         if (certificada) {
             // aviso certificado: su IVA ya se reclasificó a 2.1.02; lo que las notas internas

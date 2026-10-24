@@ -105,3 +105,19 @@ export async function estadoApertura(
         cierres: await cierresApertura(c, empresaId),
     }
 }
+
+/**
+ * Cuenta contra la que va lo que sale de un saldo importado con fecha `desde` (H27: base de una nota
+ * de crédito, anulación de una importada): `2.9.01` mientras la apertura siga abierta, o la cuenta
+ * de patrimonio del cierre vigente más reciente con fecha ≥ `desde` (ese saldo ya se trasladó; volver
+ * a mover 2.9.01 dispararía `apertura_cero`).
+ */
+export async function cuentaBaseApertura(
+    c: QueryClientContract,
+    empresaId: number,
+    desde: string,
+): Promise<string> {
+    const cierres = await cierresApertura(c, empresaId)
+    const cierre = cierres.find((x) => x.fecha >= desde)
+    return cierre?.cuenta_destino ?? CUENTAS.SALDOS_APERTURA
+}
