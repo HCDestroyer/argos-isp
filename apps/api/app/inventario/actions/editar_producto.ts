@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, ConflictoVersion, NoEncontrado } from '#shared/errores'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
+import { aTexto, dec } from '#ledger/dinero'
 import { verProducto, type ProductoVista } from '#inventario/productos'
 import { exigirSkuLibre, validarDatosProducto, type DatosProducto } from '#inventario/actions/crear_producto'
 
@@ -8,7 +9,7 @@ import { exigirSkuLibre, validarDatosProducto, type DatosProducto } from '#inven
  * `productos.editar` (`POST /productos/:id/editar`): datos del producto con `version` (409 si cambió)
  * y `audit.cambios`. `seguimiento` no cambia si el producto ya tiene movimientos (409
  * `producto_con_movimientos`). `null` limpia los opcionales (clase de activo, concepto, cuentas,
- * mínimo). Para desactivar: `productos.desactivar`.
+ * mínimo, precio de venta). Para desactivar: `productos.desactivar`.
  */
 
 export interface EntradaEditarProducto extends DatosProducto {
@@ -27,6 +28,7 @@ const EDITABLES = [
     'cuenta_costo',
     'cuenta_consumo',
     'existencia_minima',
+    'precio_venta',
 ] as const
 const OPCIONALES = new Set<string>([
     'clase_activo',
@@ -34,6 +36,7 @@ const OPCIONALES = new Set<string>([
     'cuenta_costo',
     'cuenta_consumo',
     'existencia_minima',
+    'precio_venta',
 ])
 
 export default class EditarProducto extends DomainAction<EntradaEditarProducto, ProductoVista> {
@@ -45,7 +48,11 @@ export default class EditarProducto extends DomainAction<EntradaEditarProducto, 
             .from('inventario.productos')
             .where('id', input.id)
             .forUpdate()
-            .select('*', t.trx.raw('existencia_minima::text as existencia_minima'))
+            .select(
+                '*',
+                t.trx.raw('existencia_minima::text as existencia_minima'),
+                t.trx.raw('precio_venta::text as precio_venta'),
+            )
             .first()) as Record<string, unknown> | null
         if (!actual) throw new NoEncontrado(`El producto ${input.id} no existe`)
         const empresaId = Number(actual.empresa_id)
@@ -66,6 +73,10 @@ export default class EditarProducto extends DomainAction<EntradaEditarProducto, 
                 continue
             }
             nuevo[campo] = typeof valor === 'string' ? valor.trim() || null : valor
+        }
+        if (typeof nuevo.precio_venta === 'string' && nuevo.precio_venta !== antes.precio_venta) {
+            const precio = dec(nuevo.precio_venta)
+            if (!precio.isNegative() && precio.decimalPlaces() <= 2) nuevo.precio_venta = aTexto(precio)
         }
         if (nuevo.seguimiento === 'cantidad') nuevo.clase_activo = null
         if (nuevo.seguimiento === 'serie' && !nuevo.clase_activo) nuevo.clase_activo = 'equipo_red'

@@ -37,6 +37,8 @@ export interface ProductoVista {
     /** null = la del plan (`5.2.07`) */
     cuenta_consumo: string | null
     existencia_minima: string | null
+    /** precio de venta sugerido para el cargo único, IVA incluido; null = sin precio */
+    precio_venta: string | null
     activo: boolean
     /** existencia total en todas las bodegas */
     existencia: string
@@ -63,6 +65,7 @@ function consulta(cliente: QueryClientContract) {
             'p.cuenta_costo',
             'p.cuenta_consumo',
             cliente.raw('p.existencia_minima::text as existencia_minima'),
+            cliente.raw('p.precio_venta::text as precio_venta'),
             'p.activo',
             cliente.raw(
                 `coalesce((SELECT sum(s.cantidad) FROM inventario.saldos s WHERE s.producto_id = p.id), 0)::numeric(14,3)::text as existencia`,

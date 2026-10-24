@@ -73,6 +73,18 @@ const esquemaLineaCargo = z.object({
     precio_unitario: z.string().trim().regex(MONTO, 'Precio con IVA, hasta 2 decimales, sin comas').refine(v => !MONTO.test(v) || new Decimal(v).gt(0), 'Mayor que 0 (lo regalado va como descuento)'),
     descuento: z.string().trim().refine(v => v === '' || MONTO.test(v), 'Monto con hasta 2 decimales'),
     descuento_concepto: z.string().trim().max(200, 'Hasta 200 caracteres'),
+    /** Venta de inventario (A3, fase C): producto y bodega de donde sale; por serie, el equipo. */
+    producto_id: z.number().int().positive().nullable().default(null),
+    bodega_id: z.number().int().positive().nullable().default(null),
+    unidad_id: z.number().int().positive().nullable().default(null),
+    seguimiento: z.enum(['cantidad', 'serie']).nullable().default(null),
+}).superRefine((l, ctx) => {
+    if (l.producto_id !== null && l.bodega_id === null) {
+        ctx.addIssue({ code: 'custom', path: ['bodega_id'], message: 'Elija la bodega de donde sale' })
+    }
+    if (l.producto_id !== null && l.seguimiento === 'serie' && l.unidad_id === null) {
+        ctx.addIssue({ code: 'custom', path: ['unidad_id'], message: 'Elija el equipo que se vende' })
+    }
 })
 
 /** Bruto de una línea (cantidad × precio, a centavos) y su neto tras el descuento. */
@@ -128,7 +140,7 @@ export type EntradaCargoUnico = z.input<typeof esquemaCargoUnico>
 export type EntradaLineaCargo = EntradaCargoUnico['lineas'][number]
 
 export function lineaCargoVacia(): EntradaLineaCargo {
-    return { concepto_id: null, descripcion: '', cantidad: '1', precio_unitario: '', descuento: '', descuento_concepto: '' }
+    return { concepto_id: null, descripcion: '', cantidad: '1', precio_unitario: '', descuento: '', descuento_concepto: '', producto_id: null, bodega_id: null, unidad_id: null, seguimiento: null }
 }
 
 export function entradaCargoUnicoVacia(): EntradaCargoUnico {
@@ -150,6 +162,7 @@ export function cuerpoCargoUnico(destino: { servicio_id: number } | { cliente_id
                 cantidad: new Decimal(l.cantidad).toString(),
                 precio_unitario: new Decimal(l.precio_unitario).toFixed(2),
                 ...(descuento?.gt(0) ? { descuentos: [{ concepto: l.descuento_concepto, monto: descuento.toFixed(2) }] } : {}),
+                ...(l.producto_id !== null ? { producto_id: l.producto_id, bodega_id: l.bodega_id, ...(l.seguimiento === 'serie' ? { unidad_id: l.unidad_id } : {}) } : {}),
             }
         }),
         motivo_sin_costo_id: sinCosto ? datos.motivo_sin_costo_id : null,

@@ -14294,6 +14294,8 @@ export interface components {
             cuenta_consumo: string | null;
             /** @description Cantidad con 3 decimales */
             existencia_minima: string | null;
+            /** @description Precio de venta sugerido para el cargo único (IVA incluido); null = sin precio */
+            precio_venta: components["schemas"]["Dinero"] | null;
             activo: boolean;
             /** @description Existencia total en todas las bodegas */
             existencia: string;
@@ -44067,6 +44069,11 @@ export interface operations {
                     cuenta_consumo?: string | null;
                     /** @description Existencia total bajo la cual se avisa (inventario.existencia_minima) */
                     existencia_minima?: string | null;
+                    /**
+                     * @description Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)
+                     * @example 450.00
+                     */
+                    precio_venta?: string | null;
                 };
             };
         };
@@ -44279,6 +44286,11 @@ export interface operations {
                     cuenta_consumo?: string | null;
                     /** @description Existencia total bajo la cual se avisa (inventario.existencia_minima) */
                     existencia_minima?: string | null;
+                    /**
+                     * @description Precio de venta sugerido para el cargo único, IVA incluido (null lo quita)
+                     * @example 450.00
+                     */
+                    precio_venta?: string | null;
                 };
             };
         };
