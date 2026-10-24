@@ -172,4 +172,55 @@ test.group('billing · simulador de promesas', () => {
             403,
         )
     })
+
+    test('reglas sin guardar (simulador de la plantilla): se aplican sobre las del servicio y no se guardan', async ({
+        client,
+        assert,
+    }) => {
+        const datos = await servicioCortado({
+            plantilla: { reglas_promesa: JSON.stringify(normalizarReglasPromesa({ abono_inicial_pct: 50 })) },
+        })
+        const { token } = await usuarioConRoles(['cajero'])
+        const venceEn = new Date(Date.now() + 10 * DIA).toISOString()
+        const simular = (reglas: Record<string, unknown>) =>
+            estado(
+                client.post('/api/v1/promesas/simular').bearerToken(token).json({
+                    servicio_id: datos.servicioId,
+                    vence_en: venceEn,
+                    monto: '150.00',
+                    reglas_promesa: reglas,
+                }),
+                200,
+            )
+        // plazo de 15 días, sin abono ni tope de la siguiente factura: la misma promesa se aprueba
+        const aprobada = await simular({
+            plazo_max_dias: 15,
+            abono_inicial_pct: 0,
+            no_exceder_siguiente_facturacion: false,
+            canales: { operador: { plazo_max_dias: 15 } },
+        })
+        assert.equal(
+            aprobada.body().resultado,
+            'aprobada',
+            JSON.stringify(aprobada.body().reglas.filter((r: { ok: boolean }) => !r.ok)),
+        )
+        const deshabilitada = await simular({ habilitadas: false })
+        assert.deepInclude(deshabilitada.body(), { resultado: 'rechazada', regla: 'habilitadas' })
+        // la plantilla no cambió y no se creó nada
+        const plantilla = await db
+            .from('billing.plantillas_facturacion as p')
+            .join('core.servicios as s', 's.plantilla_facturacion_id', 'p.id')
+            .where('s.id', datos.servicioId)
+            .select('p.reglas_promesa')
+            .firstOrFail()
+        assert.include(plantilla.reglas_promesa, { abono_inicial_pct: 50, habilitadas: true })
+        assert.equal(await cuentaPromesas(datos.servicioId), 0)
+        await estado(
+            client
+                .post('/api/v1/promesas/simular')
+                .bearerToken(token)
+                .json({ servicio_id: datos.servicioId, reglas_promesa: { plazo_max_dias: 0 } }),
+            422,
+        )
+    })
 })

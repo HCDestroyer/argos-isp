@@ -633,7 +633,7 @@ const promesas: Ruta[] = [
         permiso: 'promesas.ver',
         cuerpo: v.simularPromesaValidator,
         descripcion:
-            'Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.',
+            'Misma evaluación que POST /promesas, pero revisa todas las reglas (aplica=false si la configuración no la exige) y no guarda nada. Con reglas_promesa prueba esas reglas (sobre las efectivas del servicio) sin guardarlas: el simulador dentro de la plantilla. resultado/regla son los que daría crear con estos datos; validaciones, los 422/409 previos; limites, el plazo y la fecha máxima del canal.',
         respuesta: { status: 200, descripcion: 'Simulación', esquema: SimulacionPromesa },
         handler: async (ctx, { cuerpo }) => {
             await exigirServicio(ctx, cuerpo.servicio_id)
@@ -646,6 +646,7 @@ const promesas: Ruta[] = [
                 vence_en: cuerpo.vence_en,
                 monto: cuerpo.monto,
                 ahora: cuerpo.evaluar_en,
+                reglas_promesa: cuerpo.reglas_promesa,
             })
         },
     }),

@@ -604,6 +604,10 @@ export const simularPromesaValidator = vine.compile(
         evaluar_en: instanteIso()
             .optional()
             .meta({ description: 'Simular como si fuera este instante (por defecto ahora)' }),
+        reglas_promesa: reglasPromesaSchema().optional().meta({
+            description:
+                'Reglas a probar sin guardarlas (simulador de la plantilla): se aplican sobre las efectivas del servicio; las claves que falten quedan como están',
+        }),
     }),
 )
 
