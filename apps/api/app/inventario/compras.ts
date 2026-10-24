@@ -104,6 +104,18 @@ export async function entradasDeLaCompra(t: Transaccion, compra: CompraPreparada
                 )
             }
             const unidades = devolucion ? linea.unidad_ids.length : linea.unidades.length
+            // pedido de A4: menos series (o equipos devueltos) que la cantidad es el mismo 422
+            // `requiere_unidades` que sin ninguna, en el campo de las unidades; más, `cantidad`
+            if (serie && unidades < linea.cantidad) {
+                throw problemaLinea(
+                    i,
+                    devolucion ? 'unidad_ids' : 'unidades',
+                    devolucion
+                        ? `Indica los ${linea.cantidad} equipos que se devuelven (vienen ${unidades})`
+                        : `Escribe ${linea.cantidad} series o MAC, una por equipo (vienen ${unidades})`,
+                    'requiere_unidades',
+                )
+            }
             if (serie && unidades !== linea.cantidad) {
                 throw problemaLinea(
                     i,
