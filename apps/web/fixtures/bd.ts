@@ -35,15 +35,19 @@ import { fiscalInicial, type FiscalFixtures } from './fiscal/datos'
 import { felInicial, sembrarFel, type FelFixtures } from './fel/datos'
 import { horusInicial } from './horus/datos'
 import type { HorusFixtures } from './horus/datos'
-import { configuracionGlobal } from './notificaciones/datos'
-import { usuarios } from './usuarios/datos'
+import { configuracionGlobal, enviosNotificacion, eventosNotificacion, plantillasNotificacion, recordatoriosPago } from './notificaciones/datos'
+import { roles, tokensApi, usuarios } from './usuarios/datos'
 import { sembrarNotasCredito } from './facturacion/aplicarNotaCredito'
 import { cajas, facturas, pagos, turnos } from './facturacion/datos'
 import { asientos, cuentas } from './libro/datos'
 import { promesas } from './promesas/datos'
 import { planes, planesPorRouter } from './planes/datos'
+import { implementacionesPlan } from './planes/implementaciones'
+import { nodosPortal } from './nodosPortal/datos'
+import { camposPersonalizados } from './camposPersonalizados/datos'
+import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
-import { ipv6Bloques, redesIpv4, routers } from './routers/datos'
+import { ipv6Bloques, ipv6Pools, redesIpv4, routers } from './routers/datos'
 import { servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
@@ -93,8 +97,11 @@ interface BaseFixtures {
     routers: Schema<'Router'>[]
     redesIpv4: Schema<'RedIpv4'>[]
     ipv6Bloques: Schema<'Ipv6Bloque'>[]
+    ipv6Pools: Schema<'Ipv6Pool'>[]
     planes: Schema<'Plan'>[]
     planesPorRouter: Record<number, number[]>
+    /** Implementación de cada plan en un router (`GET /planes/:id/routers`). */
+    implementacionesPlan: Schema<'PlanRouter'>[]
     plantillas: Schema<'PlantillaFacturacion'>[]
     acciones: Schema<'AccionAuditoria'>[]
     cambios: Schema<'CambioAuditoria'>[]
@@ -138,10 +145,28 @@ interface BaseFixtures {
     empresa: Schema<'Empresa'>
     /** Multiempresa: las empresas (NIT) de la instalación. */
     empresas: Schema<'EmpresaGrupo'>[]
+    /** Corridas de la conciliación de la pasarela (A3). */
+    conciliacionesPasarela: Schema<'ConciliacionPasarela'>[]
+    /** Nodos portal remotos (A5). */
+    nodosPortal: Schema<'NodoPortal'>[]
+    /** Catálogo de campos personalizados del cliente (A1). */
+    camposPersonalizados: Schema<'CampoPersonalizado'>[]
+    /** Planes temporales de los servicios (A1): mejoras de plan con fecha de fin. */
+    planesTemporales: Schema<'PlanTemporal'>[]
     /** Usuarios del panel (`GET /usuarios`) con su alcance por empresa. */
     usuarios: Schema<'Usuario'>[]
+    /** Roles del ACL con sus permisos (`GET /roles`). */
+    roles: Schema<'Rol'>[]
+    /** Tokens de API (`GET /tokens`); el valor en claro solo sale en `POST /tokens`. */
+    tokensApi: Schema<'TokenApi'>[]
     /** Configuración de canales de notificación: la global y la de cada empresa con fila propia. */
     notificaciones: { global: Schema<'ConfiguracionNotificaciones'>, empresas: Record<number, Schema<'ConfiguracionNotificaciones'>> }
+    /** Plantillas de notificación por evento y canal, recordatorios de pago y registro de envíos (A6). */
+    plantillasNotificacion: Schema<'PlantillaNotificacion'>[]
+    /** Catálogo de eventos con plantilla y sus variables (A6, `GET /notificaciones/eventos`). */
+    eventosNotificacion: Schema<'EventoNotificacion'>[]
+    recordatoriosPago: Schema<'RecordatorioPago'>[]
+    enviosNotificacion: Schema<'EnvioNotificacion'>[]
     /** Envíos de prueba hechos (para el `envio_id`). */
     enviosPrueba: number
     /** Cobros de `POST /pagos` (`billing.cobros`): un pago por empresa con el mismo `cobro_id`. */
@@ -222,6 +247,8 @@ interface BaseFixtures {
     referidosLealtad: Schema<'ReferidoLealtad'>[]
     /* Lealtad, fases 2 y 3: catálogo de premios y sorteos (A3, `contratos/lealtad.md` §7 y §15.3). */
     premiosLealtad: Schema<'PremioLealtad'>[]
+    /** Canjes de puntos (A3, fase 2). */
+    canjesLealtad: Schema<'CanjeLealtad'>[]
     sorteos: Schema<'SorteoDetalle'>[]
     sorteosPrivados: SorteoPrivado[]
     /** Imágenes de premios subidas en la sesión (`imagen_archivo_id` → bytes); las sembradas, en `sorteos/imagenes.ts`. */
@@ -254,8 +281,10 @@ function inicial(): BaseFixtures {
         routers,
         redesIpv4,
         ipv6Bloques,
+        ipv6Pools,
         planes,
         planesPorRouter,
+        implementacionesPlan,
         plantillas,
         // Las corridas del cron (facturar y vencer) van al final, con ids que siguen a la semilla.
         acciones: [...acciones, ...accionesCorridas.map((a, i) => ({ ...a, id: siguienteId(acciones) + i, request_id: `req-cron-${siguienteId(acciones) + i}` }))],
@@ -291,7 +320,17 @@ function inicial(): BaseFixtures {
         empresa,
         empresas,
         usuarios,
+        planesTemporales: [],
+        nodosPortal,
+        camposPersonalizados,
+        conciliacionesPasarela,
+        roles,
+        tokensApi,
         notificaciones: { global: configuracionGlobal, empresas: {} },
+        plantillasNotificacion,
+        eventosNotificacion,
+        recordatoriosPago,
+        enviosNotificacion,
         enviosPrueba: 0,
         cobros: [],
         plantillaAvisoCobro,
@@ -343,6 +382,7 @@ function inicial(): BaseFixtures {
         referidosLealtad,
         pasivoLibroLealtad: {},
         premiosLealtad,
+        canjesLealtad: [],
         sorteos,
         sorteosPrivados,
         imagenesSorteos: {},

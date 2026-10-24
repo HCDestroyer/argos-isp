@@ -46,14 +46,14 @@ const cargandoCobros = ref(false)
 const problemaCobros = ref<Problem | null>(null)
 
 /*
- * Egresos en efectivo del turno (`GET /egresos?caja_id=&metodo=caja`, `egresos.ver`): bajan el
- * esperado. Sin ese permiso (el cajero) el panel no puede leerlos y no muestra un esperado que
- * saldría de más: lo calcula la API al cerrar.
+ * Egresos en efectivo del turno (`GET /egresos?caja_id=&turno_id=&metodo=caja`): bajan el esperado.
+ * La API los deja leer con `egresos.ver` o, para la caja propia, con `cajas.ver` (el cajero), así
+ * que quien ve esta página siempre puede leerlos.
  */
 const egresos = shallowRef<Egreso[]>([])
 const cargandoEgresos = ref(false)
 const problemaEgresos = ref<Problem | null>(null)
-const leeEgresos = computed(() => puede('egresos.ver'))
+const leeEgresos = computed(() => puede('egresos.ver') || puede('cajas.ver'))
 const egresosTurno = computed(() => (turnoAbierto.value ? egresosEnEfectivo(egresos.value, turnoAbierto.value.id) : []))
 const totalEgresos = computed(() => egresosTurno.value.reduce((suma, e) => suma.plus(e.monto), new Decimal(0)))
 
@@ -102,7 +102,7 @@ const sinEsperado = computed<string | null>(() => {
         return null
     }
     if (!leeEgresos.value) {
-        return 'El esperado lo calcula la API al cerrar: resta los egresos en efectivo del turno, que tu usuario no puede ver (falta egresos.ver).'
+        return 'El esperado lo calcula la API al cerrar: resta los egresos en efectivo del turno, que tu usuario no puede ver (falta egresos.ver o cajas.ver).'
     }
     if (!leeDepositos.value) {
         return 'El esperado lo calcula la API al cerrar: resta los depósitos al banco del turno, que tu usuario no puede ver (falta cajas.ver).'
@@ -153,7 +153,7 @@ async function cargarEgresos(turno: TurnoCaja) {
     let fallo: Problem | null = null
     // Un turno no tiene cientos de egresos; se leen hasta 5 páginas de 200.
     for (let pagina = 0; pagina < 5; pagina++) {
-        const resultado = await useEgresos().listar({ caja_id: turno.caja_id, metodo: 'caja', estado: 'registrado', desde: fechaGuatemala(turno.abierto_en), limit: 200 }, cursor)
+        const resultado = await useEgresos().listar({ caja_id: turno.caja_id, turno_id: turno.id, metodo: 'caja', estado: 'registrado', desde: fechaGuatemala(turno.abierto_en), limit: 200 }, cursor)
         if (!resultado.ok) {
             fallo = resultado.problema
             break

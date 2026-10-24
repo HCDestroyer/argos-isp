@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import Decimal from 'decimal.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import PaginaLibro from '~/pages/libro/index.vue'
 import { esperar } from '../ayudas/esperar'
 

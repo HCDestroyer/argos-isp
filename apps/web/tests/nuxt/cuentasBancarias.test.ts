@@ -1,8 +1,7 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
-import meCajero from '~~/fixtures/auth/me.cajero.json'
+import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import PaginaCuentas from '~/pages/configuracion/cuentas-bancarias.vue'
 import { esperar } from '../ayudas/esperar'
 

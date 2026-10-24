@@ -4,9 +4,9 @@ import { entrar, ir } from './ayudas'
 /**
  * Prueba obligatoria 5 del brief de A4: "Cierre de caja con diferencia". El cajero cobra
  * Q 300.00 en efectivo en su Caja Central (turno abierto con fondo Q 500.00), cuenta Q 795.00 y
- * cierra con un faltante de Q 5.00. El cajero no tiene `egresos.ver`: el panel no muestra un
- * esperado provisional (saldría sin restar los egresos en efectivo) y el 422 de la API pide el
- * motivo. El esperado provisional con egresos lo prueba `tests/nuxt/caja.test.ts` con admin.
+ * cierra con un faltante de Q 5.00. El cajero lee los egresos de su turno con `cajas.ver`
+ * (`GET /egresos?caja_id=&turno_id=`), así que ve el esperado provisional y la diferencia mientras
+ * cuenta; el motivo es obligatorio antes de enviar y la API confirma el esperado al cerrar.
  */
 test('cierre de caja con faltante y motivo obligatorio', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
@@ -22,17 +22,17 @@ test('cierre de caja con faltante y motivo obligatorio', async ({ page }) => {
     const turno = page.locator('[data-prueba="turno-abierto"]')
     await expect(turno).toContainText('Turno #41 abierto')
     await expect(turno).toContainText('Q 300.00')
-    await expect(turno.locator('[data-prueba="sin-esperado"]')).toContainText('egresos.ver')
-    await expect(turno.locator('[data-prueba="turno-esperado"]')).toHaveCount(0)
+    await expect(turno.locator('[data-prueba="turno-esperado"]')).toContainText('Q 800.00')
+    await expect(turno.locator('[data-prueba="sin-esperado"]')).toHaveCount(0)
 
     await turno.getByRole('button', { name: 'Cerrar turno' }).click()
     const modal = page.getByRole('dialog')
-    await expect(modal.locator('[data-prueba="cierre-esperado"]')).toHaveText('—')
-    await expect(modal).toContainText('falta egresos.ver')
+    await expect(modal.locator('[data-prueba="cierre-esperado"]')).toContainText('Q 800.00')
     await modal.getByLabel('Efectivo contado').fill('795.00')
+    await expect(modal.locator('[data-prueba="cierre-diferencia"]')).toContainText('5.00')
 
     await modal.getByRole('button', { name: 'Cerrar turno' }).click()
-    await expect(modal).toContainText('El motivo es obligatorio si hay diferencia')
+    await expect(modal).toContainText('Hay diferencia: explica el motivo')
 
     await modal.getByLabel('Motivo de la diferencia').fill('Faltaron Q 5.00: vuelto mal entregado')
     await modal.getByRole('button', { name: 'Cerrar turno' }).click()

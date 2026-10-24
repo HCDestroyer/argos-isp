@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { bd } from '~~/fixtures/bd'
 import { configuracionGlobal } from '~~/fixtures/notificaciones/datos'
-import meAdmin from '~~/fixtures/auth/me.admin.json'
+import { meAdmin } from '~~/fixtures/auth/sesiones'
 import PaginaNotificaciones from '~/pages/configuracion/notificaciones.vue'
 import { esperar } from '../ayudas/esperar'
 

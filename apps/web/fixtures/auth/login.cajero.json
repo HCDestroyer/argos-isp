@@ -32,7 +32,8 @@
       "lealtad.ver",
       "lealtad.canjear",
       "adicionales.ver",
-      "facturas.emitir_cargo_unico"
+      "facturas.emitir_cargo_unico",
+      "egresos.registrar"
     ],
     "alcance_global": false,
     "empresas": [

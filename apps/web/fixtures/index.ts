@@ -10,8 +10,7 @@
 import type { Problem, Schema, paths } from '@argosisp/contracts'
 import type { ManejadorFixture, RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from './bd'
-import loginAdmin from './auth/login.admin.json'
-import loginCajero from './auth/login.cajero.json'
+import { loginAdmin, loginCajero } from './auth/sesiones'
 import login401 from './auth/login.401.json'
 import { rutasBancos } from './bancos/rutas'
 import { rutasBitacora } from './bitacora/rutas'
@@ -21,6 +20,7 @@ import { rutasCartera } from './cartera/rutas'
 import { rutasCobros } from './cobros/rutas'
 import { rutasConciliacion } from './conciliacion/rutas'
 import { rutasLealtad } from './lealtad/rutas'
+import { rutasCanjesLealtad } from './lealtad/canjes'
 import { rutasSorteos } from './sorteos/rutas'
 import { rutasCompras } from './compras/rutas'
 import { rutasBonificaciones } from './bonificaciones/rutas'
@@ -48,7 +48,11 @@ import { rutasChecksCierre, rutasCorridasFacturacion } from './libro/checks'
 import { empresaActivaDe, empresaNoPermitida, problemaTipado, sinSesion, usuariosPorToken } from './comun'
 import { TICKET_SIN_VINCULAR, TICKET_VINCULADO, TOKEN_VINCULACION } from './horus/datos'
 import { rutasHorus } from './horus/rutas'
+import { rutasImplementacionesPlan } from './planes/implementaciones'
 import { rutasPlanes } from './planes/rutas'
+import { rutasNodosPortal } from './nodosPortal/rutas'
+import { rutasCamposPersonalizados } from './camposPersonalizados/rutas'
+import { rutasProcesosFacturacion } from './facturacion/procesos'
 import { rutasPlantillas } from './plantillas/rutas'
 import { rutasPromesas } from './promesas/rutas'
 import { rutasRed } from './red/rutas'
@@ -56,6 +60,7 @@ import { rutasSimulador } from './promesas/simulador'
 import { rutasReportes } from './reportes/rutas'
 import { rutasRouters } from './routers/rutas'
 import { rutasAsignaciones } from './servicios/asignaciones'
+import { rutasPlanesTemporales } from './servicios/planesTemporales'
 import { rutasServicios } from './servicios/rutas'
 import { rutasSesiones } from './sesiones/rutas'
 import { rutasUsuarios } from './usuarios/rutas'
@@ -535,6 +540,12 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasSimulador,
     ...rutasPromesas,
     ...rutasUsuarios,
+    ...rutasPlanesTemporales,
+    ...rutasImplementacionesPlan,
+    ...rutasNodosPortal,
+    ...rutasCamposPersonalizados,
+    ...rutasProcesosFacturacion,
+    ...rutasCanjesLealtad,
     ...rutasBancos,
     ...rutasDocumentos,
     ...rutasReportes,

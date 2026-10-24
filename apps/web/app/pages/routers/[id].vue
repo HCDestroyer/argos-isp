@@ -2,8 +2,10 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Ficha corta del router: destino del autologin desde Horus (`/routers/:id`, `rutaDestino` de A1)
- * y acceso a "Ver en Horus". La velocidad y la conexión se cambian desde la lista de routers.
+ * Ficha del router: destino del autologin desde Horus (`/routers/:id`, `rutaDestino` de A1), "Ver
+ * en Horus", su estado en línea con el último contacto (`en_linea` null = desconocido) y su
+ * direccionamiento (redes IPv4, bloques y pools IPv6). La velocidad y la conexión se cambian desde
+ * la lista de routers.
  */
 definePageMeta({ permiso: 'routers.ver' })
 
@@ -28,6 +30,8 @@ async function cargar() {
 }
 
 onMounted(cargar)
+
+const contacto = computed(() => ESTADOS_ROUTER[nas.value ? estadoContactoRouter(nas.value) : 'desconocido'])
 
 const control = computed(() => {
     const actual = nas.value
@@ -102,6 +106,21 @@ const control = computed(() => {
                         size="sm"
                     />
                 </DatoFicha>
+                <DatoFicha etiqueta="En línea">
+                    <UBadge
+                        :label="contacto.etiqueta"
+                        :icon="contacto.icono"
+                        :color="contacto.color"
+                        variant="subtle"
+                        size="sm"
+                        :data-prueba="`en-linea-${nas.id}`"
+                    />
+                </DatoFicha>
+                <DatoFicha
+                    etiqueta="Último contacto"
+                    :valor="nas.ultimo_contacto ? `${formatearFechaHora(nas.ultimo_contacto)} (${textoUltimoContacto(nas)})` : 'Nunca respondió'"
+                    :data-prueba="`ultimo-contacto-${nas.id}`"
+                />
                 <DatoFicha
                     v-if="control"
                     etiqueta="Colas"
@@ -109,5 +128,10 @@ const control = computed(() => {
                 />
             </dl>
         </section>
+        <RouterDireccionamiento
+            v-if="nas"
+            :router-id="nas.id"
+            class="mx-auto mt-6 w-full max-w-4xl"
+        />
     </PanelPagina>
 </template>

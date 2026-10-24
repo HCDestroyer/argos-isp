@@ -207,9 +207,13 @@ onMounted(cargar)
                                 :valor="formatearPuntos(programa.minimo_canje)"
                             />
                             <DatoFicha
+                                etiqueta="Portal del cliente"
+                                :valor="programa.canje_portal ? 'Ve sus puntos y canjea' : programa.visible_portal ? 'Ve sus puntos (sin canjear)' : 'Oculto'"
+                            />
+                            <DatoFicha
                                 etiqueta="Términos"
                                 :valor="programa.terminos || 'Sin términos publicados'"
-                                class="col-span-2 whitespace-pre-line lg:col-span-3"
+                                class="col-span-2 whitespace-pre-line lg:col-span-2"
                             />
                         </dl>
                         <ProblemaAlerta

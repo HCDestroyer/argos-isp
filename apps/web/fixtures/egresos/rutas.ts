@@ -2,7 +2,7 @@ import type { Problem, Schema } from '@argosisp/contracts'
 import Decimal from 'decimal.js'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
-import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, registrarAccion, usuariosPorToken } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, deLaEmpresa, empresaActivaDe, idDe, noEncontrado, numeroQuery, paginar, problema, registrarAccion, sinSesion, usuariosPorToken } from '../comun'
 import { bancosLibro } from '../libro/datos'
 import { categoriasEgreso } from './datos'
 import { ncreSinCertificar, rupturaDe } from '../fel/rutas'
@@ -62,8 +62,22 @@ function periodoValido(anio: unknown, mes: unknown): string | Errores {
 export const rutasEgresos: RutasFixture = {
     'GET /api/v1/egresos/categorias': conPermiso('egresos.ver', () => ({ status: 200, cuerpo: categoriasEgreso })),
 
-    'GET /api/v1/egresos': conPermiso('egresos.ver', (solicitud) => {
+    /**
+     * Como la API (A3, `a3/diferencia-gasto`): `egresos.ver`, o solo `cajas.ver` (el cajero, para el
+     * esperado provisional de /caja) con `caja_id` o `turno_id` obligatorio.
+     */
+    'GET /api/v1/egresos': (solicitud) => {
         const { query } = solicitud
+        const usuario = solicitud.token ? usuariosPorToken[solicitud.token] : undefined
+        if (!usuario) {
+            return sinSesion()
+        }
+        if (!usuario.permisos.includes('egresos.ver') && !usuario.permisos.includes('cajas.ver')) {
+            return problema(403, 'Sin permiso', 'Falta el permiso egresos.ver o cajas.ver.')
+        }
+        if (!usuario.permisos.includes('egresos.ver') && !query.get('caja_id') && !query.get('turno_id')) {
+            return datosInvalidos([{ field: 'caja_id', message: 'Con solo cajas.ver, caja_id o turno_id es obligatorio', rule: 'required' }])
+        }
         const desde = query.get('desde')
         const hasta = query.get('hasta')
         const errores = [['desde', desde], ['hasta', hasta]].filter(([, v]) => v && !FECHA.test(v)).map(([field]) => ({ field: field ?? '', message: 'Fecha inválida', rule: 'regex' }))
@@ -72,6 +86,7 @@ export const rutasEgresos: RutasFixture = {
         }
         const caja = numeroQuery(solicitud, 'caja_id')
         const cuenta = numeroQuery(solicitud, 'cuenta_bancaria_id')
+        const turno = numeroQuery(solicitud, 'turno_id')
         const filas = deLaEmpresa(bd.egresos, solicitud)
             .filter(e => !desde || e.fecha >= desde)
             .filter(e => !hasta || e.fecha <= hasta)
@@ -79,10 +94,11 @@ export const rutasEgresos: RutasFixture = {
             .filter(e => !query.get('metodo') || e.metodo === query.get('metodo'))
             .filter(e => !query.get('estado') || e.estado === query.get('estado'))
             .filter(e => caja === undefined || e.caja_id === caja)
+            .filter(e => turno === undefined || e.turno_id === turno)
             .filter(e => cuenta === undefined || e.cuenta_bancaria_id === cuenta)
             .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id)
         return { status: 200, cuerpo: paginar(filas, solicitud) }
-    }),
+    },
 
     'GET /api/v1/egresos/:id': conPermiso('egresos.ver', (solicitud) => {
         const egreso = bd.egresos.find(e => e.id === idDe(solicitud))

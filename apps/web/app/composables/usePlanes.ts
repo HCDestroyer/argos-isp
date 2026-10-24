@@ -5,6 +5,8 @@ export type FiltrosPlanes = Omit<NonNullable<paths['/api/v1/planes']['get']['par
 export type DatosPlan = paths['/api/v1/planes']['post']['requestBody']['content']['application/json']
 export type CambiosPlan = paths['/api/v1/planes/{id}']['put']['requestBody']['content']['application/json']
 export type AdicionalPlan = Schema<'AdicionalPlan'>
+export type PlanRouter = Schema<'PlanRouter'>
+export type DatosPlanRouter = paths['/api/v1/planes/{id}/routers/{routerId}']['put']['requestBody']['content']['application/json']
 export type ListaAdicionalesPlan = paths['/api/v1/planes/{id}/adicionales']['put']['requestBody']['content']['application/json']['adicionales']
 
 /** Planes de velocidad: lista, alta y edición (con `version`; 409 si alguien lo cambió). */
@@ -55,5 +57,18 @@ export function usePlanes() {
         return resolver(api.PUT('/api/v1/planes/{id}/adicionales', { params: { path: { id } }, body: { version, adicionales: lista } }))
     }
 
-    return { listar, ver, crear, editar, vistaPrevia, adicionales, definirAdicionales }
+    /** `GET /planes/:id/routers` (`planes.ver`): la implementación del plan en cada router (profile, pools, excepciones de velocidad). */
+    function implementaciones(id: number): Promise<Resultado<PlanRouter[]>> {
+        return resolver(api.GET('/api/v1/planes/{id}/routers', { params: { path: { id } } }))
+    }
+
+    /**
+     * `PUT /planes/:id/routers/:routerId` (`planes.editar`): crea la implementación (sin `version`) o
+     * la edita (con la `version` leída; 409 si cambió). Los `null` heredan del plan.
+     */
+    function implementar(id: number, routerId: number, datos: DatosPlanRouter): Promise<Resultado<PlanRouter>> {
+        return resolver(api.PUT('/api/v1/planes/{id}/routers/{routerId}', { params: { path: { id, routerId } }, body: datos }))
+    }
+
+    return { listar, ver, crear, editar, vistaPrevia, adicionales, definirAdicionales, implementaciones, implementar }
 }

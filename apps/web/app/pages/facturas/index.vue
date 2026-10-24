@@ -161,6 +161,12 @@ onMounted(async () => {
         titulo="Facturas"
         icono="i-lucide-receipt-text"
     >
+        <template #acciones>
+            <CorteAhoraBoton
+                v-if="puede('facturas.generar')"
+                @hecho="lista.recargar()"
+            />
+        </template>
         <div class="flex flex-col gap-4">
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
                 <ClienteSelector

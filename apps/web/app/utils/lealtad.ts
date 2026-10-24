@@ -100,9 +100,16 @@ export const esquemaPrograma = z.object({
     terminos: z.string().trim().max(20000, 'Máximo 20 000 caracteres'),
     vigente_desde: fechaOpcional(),
     vigente_hasta: fechaOpcional(),
+    /** Fase 2 (A3): mostrar los puntos en el portal y dejar canjear desde ahí (solo al editar). */
+    visible_portal: z.boolean(),
+    canje_portal: z.boolean(),
 }).superRefine((datos, ctx) => {
     if (datos.vigente_desde && datos.vigente_hasta && datos.vigente_hasta < datos.vigente_desde) {
         ctx.addIssue({ code: 'custom', path: ['vigente_hasta'], message: 'No puede ser anterior al inicio' })
+    }
+    // Como la API: 422 en `canje_portal` sin `visible_portal`.
+    if (datos.canje_portal && !datos.visible_portal) {
+        ctx.addIssue({ code: 'custom', path: ['canje_portal'], message: 'Para canjear en el portal, los puntos deben verse en él' })
     }
 })
 
@@ -110,7 +117,7 @@ export type EntradaPrograma = z.input<typeof esquemaPrograma>
 export type SalidaPrograma = z.output<typeof esquemaPrograma>
 
 export function entradaProgramaVacia(): EntradaPrograma {
-    return { nombre: 'Puntos Argos', valor_punto: '0.10', diferimiento: false, canje_esperado_pct: '100', vence: true, vencimiento_meses: 12, aviso_vencimiento_dias: 30, minimo_canje: 0, terminos: '', vigente_desde: '', vigente_hasta: '' }
+    return { nombre: 'Puntos Argos', valor_punto: '0.10', diferimiento: false, canje_esperado_pct: '100', vence: true, vencimiento_meses: 12, aviso_vencimiento_dias: 30, minimo_canje: 0, terminos: '', vigente_desde: '', vigente_hasta: '', visible_portal: false, canje_portal: false }
 }
 
 export function entradaDePrograma(programa: Programa): EntradaPrograma {
@@ -126,6 +133,8 @@ export function entradaDePrograma(programa: Programa): EntradaPrograma {
         terminos: programa.terminos,
         vigente_desde: programa.vigente_desde,
         vigente_hasta: programa.vigente_hasta ?? '',
+        visible_portal: programa.visible_portal ?? false,
+        canje_portal: programa.canje_portal ?? false,
     }
 }
 
@@ -147,9 +156,12 @@ export function cuerpoPrograma(datos: SalidaPrograma): CuerpoPrograma {
     return cuerpo
 }
 
-/** Cuerpo de `PUT /lealtad/programas/:id`: todo lo del formulario más la `version` leída. */
+/**
+ * Cuerpo de `PUT /lealtad/programas/:id`: todo lo del formulario más la `version` leída, con
+ * `visible_portal` y `canje_portal` (el alta no los acepta: el programa nace oculto en el portal).
+ */
 export function cuerpoEdicionPrograma(programa: Programa, datos: SalidaPrograma): CuerpoEdicionPrograma {
-    return { version: programa.version, ...cuerpoPrograma(datos) }
+    return { version: programa.version, ...cuerpoPrograma(datos), visible_portal: datos.visible_portal, canje_portal: datos.visible_portal && datos.canje_portal }
 }
 
 /** `valor_punto × canje_esperado_pct / 100` con 6 decimales (lo que calcula la API como `valor_pasivo_punto`). */

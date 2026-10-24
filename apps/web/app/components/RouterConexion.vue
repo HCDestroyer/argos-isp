@@ -26,7 +26,8 @@ const actual = shallowRef<RouterNas>(props.router)
 const estado = reactive<EntradaConexionRouter>(entradaConexionRouter(props.router))
 const guardando = ref(false)
 const problema = ref<Problem | null>(null)
-const conCa = computed(() => tieneCa(actual.value))
+// `tiene_api_ca` (A1): el PEM nunca sale por la API (`api_ca` llega `***` o null, obsoleto)
+const conCa = computed(() => actual.value.tiene_api_ca)
 const soloLectura = computed(() => !puede('routers.editar'))
 
 const itemsCa = computed<RadioGroupItem[]>(() => [

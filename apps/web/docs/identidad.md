@@ -84,8 +84,9 @@ Nunca `primary` para un estado. Siempre `UBadge variant="subtle"` (salvo bandera
 | | anulada | `neutral` | `ban` | Anulada | |
 | Sesión PPPoE | en línea | `success` | `plug-zap` + punto en vivo (`primary`) | En línea · En vivo · 10:42 | `utils/estados.ts` (`ESTADOS_SESION`) |
 | | desconectada | `neutral` | `unplug` | Desconectada | |
-| Router | en línea | `success` | `circle-check` | En línea | `utils/estados.ts` (`ESTADOS_ROUTER`); la API aún no lo expone |
+| Router | en línea | `success` | `circle-check` | En línea | `utils/estados.ts` (`ESTADOS_ROUTER`) desde `Router.en_linea` (`RouterContacto.vue`) |
 | | caído | `error` | `circle-x` | Fuera de línea | |
+| | desconocido (`en_linea` null) | `neutral` | `circle-help` | Desconocido | Nada lo mide todavía; nunca como fuera de línea |
 | Comprobante | pendiente | `warning` | `hourglass` | Pendiente | `utils/comprobante.ts` |
 | | aprobado | `success` | `circle-check` | Aprobado | |
 | | rechazado | `neutral` | `circle-x` | Rechazado | |

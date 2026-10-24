@@ -1,5 +1,6 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
+import { errorValorCampo, type ValorCampoFormulario } from '~/utils/camposPersonalizados'
 import { deducirTipoDocumento, errorDocumentoFiscal, limpiarDocumento, type TipoDocumentoFiscal } from '~/utils/documentoFiscal'
 import { bd, siguienteId } from '../bd'
 import {
@@ -53,10 +54,29 @@ function validar(cuerpo: Record<string, unknown>, parcial: boolean): NonNullable
     if (typeof email === 'string' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
         errores.push({ field: 'email', message: 'Correo inválido', rule: 'email' })
     }
+    // `validarCamposPersonalizados` (A1): en el alta siempre; al editar, si llegan (se reemplazan).
+    if (!parcial || cuerpo.campos_personalizados !== undefined) {
+        const valores = typeof cuerpo.campos_personalizados === 'object' && cuerpo.campos_personalizados !== null ? cuerpo.campos_personalizados as Record<string, unknown> : {}
+        for (const campo of bd.camposPersonalizados.filter(c => c.activo)) {
+            const mensaje = errorValorCampo(campo, comoValor(valores[campo.clave]))
+            if (mensaje) {
+                errores.push({ field: `campos_personalizados.${campo.clave}`, message: mensaje, rule: mensaje.endsWith('es obligatorio') ? 'required' : campo.tipo })
+            }
+        }
+    }
     if (typeof nombre === 'string' && nombre.trim().toLowerCase() === 'duplicado') {
         errores.push({ field: 'nombre', message: 'Ya existe un cliente con ese nombre (prueba del 422 desde la API)', rule: 'unique' })
     }
     return errores
+}
+
+/** Un valor del cuerpo como lo compara `errorValorCampo` (un objeto o lista nunca es de un tipo válido). */
+function comoValor(valor: unknown): ValorCampoFormulario {
+    if (valor === null || valor === undefined || typeof valor === 'string' || typeof valor === 'number' || typeof valor === 'boolean') {
+        return valor
+    }
+    // NaN no es texto, ni número finito, ni fecha, ni booleano, ni opción: falla en todos los tipos
+    return Number.NaN
 }
 
 function texto(valor: unknown): string | null {
@@ -101,6 +121,10 @@ function aplicar(base: CamposCliente, cuerpo: Record<string, unknown>): CamposCl
     }
     if ('zona_id' in cuerpo) {
         resultado.zona_id = typeof cuerpo.zona_id === 'number' ? cuerpo.zona_id : null
+    }
+    // Como la API: el objeto llega completo y reemplaza al guardado.
+    if (typeof cuerpo.campos_personalizados === 'object' && cuerpo.campos_personalizados !== null && !Array.isArray(cuerpo.campos_personalizados)) {
+        resultado.campos_personalizados = { ...cuerpo.campos_personalizados }
     }
     return resultado
 }
@@ -239,6 +263,35 @@ export const rutasClientes: RutasFixture = {
     'GET /api/v1/clientes/:id': conPermiso('clientes.ver', (solicitud) => {
         const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
         return cliente ? { status: 200, cuerpo: cliente } : noEncontrado('el cliente')
+    }),
+
+    /** Como `VincularTelegramCliente` (A1): chat id con signo y hasta 20 dígitos; repetir no cambia nada. */
+    'POST /api/v1/clientes/:id/vincular-telegram': conPermiso('clientes.vincular_telegram', (solicitud) => {
+        const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
+        if (!cliente) {
+            return noEncontrado('el cliente')
+        }
+        const chat = String(cuerpoObjeto(solicitud).chat_id ?? '')
+        if (!/^-?\d{1,20}$/.test(chat)) {
+            return datosInvalidos([{ field: 'chat_id', message: 'El chat id no es válido', rule: 'regex' }])
+        }
+        cliente.telegram_chat_id = chat
+        cliente.version += 1
+        registrarAccion(solicitud, 'clientes.vincular_telegram', { tipo: 'cliente', id: cliente.id }, { chat_id: '***' })
+        return { status: 200, cuerpo: cliente }
+    }),
+
+    'POST /api/v1/clientes/:id/desvincular-telegram': conPermiso('clientes.desvincular_telegram', (solicitud) => {
+        const cliente = bd.clientes.find(c => c.id === idDe(solicitud))
+        if (!cliente) {
+            return noEncontrado('el cliente')
+        }
+        if (cliente.telegram_chat_id) {
+            cliente.telegram_chat_id = null
+            cliente.version += 1
+            registrarAccion(solicitud, 'clientes.desvincular_telegram', { tipo: 'cliente', id: cliente.id }, {})
+        }
+        return { status: 200, cuerpo: cliente }
     }),
 
     'GET /api/v1/clientes/:id/dependientes': conPermiso('clientes.ver', (solicitud) => {
