@@ -14,6 +14,7 @@ const VARIABLES = [
     'LOGIN_LIMITE_USUARIO',
     'LOGIN_LIMITE_VENTANA_S',
     'LOGIN_LIMITE_PREFIJO',
+    'PORTAL_PROXIES_CONFIABLES',
 ]
 
 function encender(valores: Record<string, string>) {
@@ -93,6 +94,42 @@ test.group('Auth · límite de intentos de login', (group) => {
         const r = await estado(login(client, email, password), 429)
         assert.isAbove(Number(r.header('retry-after')), 0)
         assert.include(r.body().detail, 'conexión')
+    })
+
+    test('por IP detrás de un proxy confiable: cada cliente tiene su cupo (X-Forwarded-For), no el del proxy', async ({
+        client,
+        assert,
+    }) => {
+        // las pruebas llegan desde 127.0.0.1: hace de Caddy
+        apagar = encender({
+            LOGIN_LIMITE_IP: '2',
+            LOGIN_LIMITE_USUARIO: '0',
+            PORTAL_PROXIES_CONFIABLES: '127.0.0.1,::1',
+        })
+        const { email, password } = await crearUsuarioLogin()
+        const desde = (ip: string) => login(client, email, password).header('X-Forwarded-For', ip)
+
+        await estado(desde('203.0.113.10'), 200)
+        await estado(desde('203.0.113.10'), 200)
+        await estado(desde('203.0.113.10'), 429)
+        // otro cliente detrás del mismo proxy no comparte el contador
+        const otro = await estado(desde('203.0.113.20'), 200)
+        assert.equal(otro.header('ratelimit-remaining'), '1')
+        // lo que el cliente escribe a la izquierda no cuenta: manda el último salto antes del proxy
+        await estado(desde('198.51.100.1, 203.0.113.10'), 429)
+        await estado(desde('203.0.113.20'), 200)
+        await estado(desde('192.0.2.99, 203.0.113.20'), 429)
+    })
+
+    test('por IP sin proxies confiables: X-Forwarded-For se ignora (un cliente no se reparte el cupo)', async ({
+        client,
+    }) => {
+        apagar = encender({ LOGIN_LIMITE_IP: '2', LOGIN_LIMITE_USUARIO: '0', PORTAL_PROXIES_CONFIABLES: '' })
+        const { email, password } = await crearUsuarioLogin()
+        const desde = (ip: string) => login(client, email, password).header('X-Forwarded-For', ip)
+        await estado(desde('203.0.113.30'), 200)
+        await estado(desde('203.0.113.31'), 200)
+        await estado(desde('203.0.113.32'), 429)
     })
 
     test('por IP: un cuerpo inválido (422) también consume el cupo, antes de validar', async ({
