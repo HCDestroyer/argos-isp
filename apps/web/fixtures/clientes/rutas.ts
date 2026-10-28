@@ -157,7 +157,8 @@ const VACIO: CamposCliente = {
     externo: null,
 }
 
-const GRAVEDAD: Record<Schema<'Servicio'>['estado'], number> = { suspendido: 3, limitado: 2, activo: 1, retirado: 0 }
+/** Como `RESUMEN_SERVICIOS` de la API: suspendido > limitado > activo > pendiente de instalación. */
+const GRAVEDAD: Record<Schema<'Servicio'>['estado'], number> = { suspendido: 4, limitado: 3, activo: 2, pendiente_instalacion: 1, retirado: 0 }
 
 /** Fila de `GET /clientes/:id/dependientes`: el estado más grave de sus servicios no retirados. */
 function dependiente(cliente: Cliente): Schema<'DependientePago'> {

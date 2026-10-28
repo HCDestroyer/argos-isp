@@ -49,7 +49,7 @@ const pasos = computed<Paso[]>(() => [
     estado.tipo_conexion === 'pppoe'
         ? { title: 'Credenciales PPP', icon: 'i-lucide-key-round', campos: ['user_ppp', 'pass_ppp'] }
         : { title: 'Equipo', icon: 'i-lucide-cpu', campos: ['mac', 'amarre_ip_mac'] },
-    { title: 'Facturación', icon: 'i-lucide-receipt-text', campos: ['plantilla_facturacion_id', 'costo_override', 'excluir_firewall', 'mac', 'direccion', 'coordenadas', 'fecha_instalacion'] },
+    { title: 'Facturación', icon: 'i-lucide-receipt-text', campos: ['plantilla_facturacion_id', 'costo_override', 'excluir_firewall', 'mac', 'direccion', 'coordenadas', 'fecha_instalacion', 'estado_inicial'] },
     { title: 'Confirmar', icon: 'i-lucide-check', campos: [] },
 ])
 
@@ -87,6 +87,13 @@ const sugerencia = computed(() => sugerenciaEmpresa({
 const empresaServicio = computed<number | null>(() => (empresaElegida.value ? Number(empresaElegida.value) : sugerencia.value.empresaId))
 const itemsEmpresa = computed(() => empresasUsuario.value.map(e => ({ label: e.nombre_comercial, value: String(e.id), description: e.nit ? `NIT ${e.nit}` : undefined })))
 const conPppoe = computed(() => estado.tipo_conexion === 'pppoe')
+/** Nace «pendiente de instalación» (`estado_inicial`): no navega ni factura hasta activarlo. */
+const nacePendiente = computed({
+    get: () => estado.estado_inicial === 'pendiente_instalacion',
+    set: (valor: boolean) => {
+        estado.estado_inicial = valor ? 'pendiente_instalacion' : 'activo'
+    },
+})
 
 /** El esquema base más la regla que necesita las redes cargadas: la IP fija cae en la red elegida. */
 const esquema = computed(() => esquemaServicio.superRefine((datos, ctx) => {
@@ -326,7 +333,7 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
     enviando.value = false
     if (resultado.ok) {
         toast.add({
-            title: 'Servicio creado',
+            title: esPendienteInstalacion(resultado.data) ? 'Servicio creado, pendiente de instalación' : 'Servicio creado',
             description: `${TIPOS_CONEXION[tipoConexionDe(resultado.data)].corta} · ${etiquetaServicio(resultado.data)}${resultado.data.user_ppp && resultado.data.ipv4 ? ` · ${resultado.data.ipv4}` : ''}`,
             color: 'success',
             icon: 'i-lucide-circle-check',
@@ -861,6 +868,18 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         <h3 class="text-sm font-semibold text-highlighted">
                             Instalación
                         </h3>
+                        <UFormField
+                            name="estado_inicial"
+                            :description="nacePendiente
+                                ? 'Queda con usuario PPPoE, IP y plan para configurar el equipo, sin navegar ni facturar. La facturación arranca al usar «Activar instalación» en la ficha.'
+                                : 'El servicio nace activo y navega en cuanto el equipo se conecte.'"
+                        >
+                            <USwitch
+                                v-model="nacePendiente"
+                                label="Pendiente de instalación"
+                                data-prueba="nace-pendiente"
+                            />
+                        </UFormField>
                         <div class="grid gap-4 sm:grid-cols-2">
                             <UFormField
                                 name="fecha_instalacion"
@@ -919,6 +938,15 @@ async function alEnviar(evento: FormSubmitEvent<SalidaServicio>) {
                         etiqueta="Router"
                         :valor="router?.nombre"
                     />
+                    <DatoFicha
+                        etiqueta="Estado inicial"
+                        data-prueba="resumen-estado-inicial"
+                    >
+                        <EstadoServicioBadge
+                            :estado="estado.estado_inicial"
+                            size="sm"
+                        />
+                    </DatoFicha>
                     <DatoFicha
                         v-if="variasEmpresas"
                         etiqueta="Empresa que factura"

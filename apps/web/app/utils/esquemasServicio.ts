@@ -19,6 +19,9 @@ const PATRON_COORDENADAS = /^-?\d+(\.\d+)?, ?-?\d+(\.\d+)?$/
 
 export const MODOS_IPV6 = ['radius_servicio', 'radius_pool', 'duid', 'estatico', 'ninguno'] as const
 
+/** Espejo de `ESTADOS_INICIALES_SERVICIO` (`#core/instalacion` de A1). */
+export const ESTADOS_INICIALES_SERVICIO = ['activo', 'pendiente_instalacion'] as const satisfies readonly NonNullable<CuerpoCrearServicio['estado_inicial']>[]
+
 function opcional(maximo: number) {
     return z.string().trim().max(maximo, `Máximo ${maximo} caracteres`).transform(valor => valor || null)
 }
@@ -52,6 +55,8 @@ export const esquemaServicio = z.object({
     direccion: opcional(300),
     coordenadas: conPatron(PATRON_COORDENADAS, 'Latitud y longitud: 14.6349,-90.5069'),
     fecha_instalacion: conPatron(PATRON_FECHA, 'Fecha AAAA-MM-DD'),
+    // `contratos/instalacion.md` §1: `activo` por defecto; pendiente no navega ni factura hasta activarlo.
+    estado_inicial: z.enum(ESTADOS_INICIALES_SERVICIO),
 }).superRefine((datos, ctx) => {
     if (datos.tipo_conexion === 'pppoe') {
         if (!PATRON_USUARIO_PPP.test(datos.user_ppp)) {
@@ -117,6 +122,7 @@ export function entradaServicioVacia(clienteId?: number): EntradaServicio {
         direccion: '',
         coordenadas: '',
         fecha_instalacion: '',
+        estado_inicial: 'activo',
     }
 }
 
@@ -166,6 +172,10 @@ export function cuerpoServicio(datos: SalidaServicio, opciones: OpcionesCuerpoSe
     }
     if (datos.ipv6_modo === 'estatico') {
         cuerpo.prefijo_delegado_v6 = datos.prefijo_delegado_v6
+    }
+    // `activo` es el valor por defecto de la API: solo se manda el pendiente.
+    if (datos.estado_inicial === 'pendiente_instalacion') {
+        cuerpo.estado_inicial = 'pendiente_instalacion'
     }
     return cuerpo
 }

@@ -6,6 +6,10 @@ export type DatosServicio = paths['/api/v1/servicios']['post']['requestBody']['c
 export type ModoIpv6 = Servicio['ipv6_modo']
 export type TramoAsignacion = Schema<'TramoAsignacion'>
 export type ConfiguracionEfectivaServicio = Schema<'ConfiguracionEfectivaServicio'>
+/** Cuerpo de `POST /servicios/:id/activar-instalacion` (`contratos/instalacion.md` §2). */
+export type DatosActivarInstalacion = paths['/api/v1/servicios/{id}/activar-instalacion']['post']['requestBody']['content']['application/json']
+/** Referencia de planta (caja, puerto, OLT, slot, PON, potencia), de solo lectura. */
+export type PlantaServicio = NonNullable<Servicio['planta']>
 export type FiltrosServicios = Omit<NonNullable<paths['/api/v1/servicios']['get']['parameters']['query']>, 'cursor'>
 
 /** Tamaño de página de la lista de servicios. */
@@ -112,5 +116,18 @@ export function useServicios() {
         return resolver(api.GET('/api/v1/servicios/{id}/configuracion-efectiva', { params: { path: { id } } }))
     }
 
-    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva }
+    /**
+     * `POST /servicios/:id/activar-instalacion` (`servicios.activar_instalacion`): pasa un
+     * `pendiente_instalacion` a `activo` e inicia la facturación. `Idempotency-Key` obligatoria y
+     * `version` (409); 422 `servicio_no_pendiente` si ya no está pendiente, o por campo
+     * (`instalado_en` futura o anterior al alta, `planta.potencia_dbm` fuera de rango).
+     */
+    function activarInstalacion(id: number, datos: DatosActivarInstalacion, claveIdempotencia: string): Promise<Resultado<Servicio>> {
+        return resolver(api.POST('/api/v1/servicios/{id}/activar-instalacion', {
+            params: { path: { id }, header: { 'Idempotency-Key': claveIdempotencia } },
+            body: datos,
+        }))
+    }
+
+    return { listar, ver, crear, editar, credenciales, ejecutar, asignaciones, cambiarEmpresa, configuracionEfectiva, activarInstalacion }
 }

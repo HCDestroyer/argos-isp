@@ -85,7 +85,8 @@ export const ACCIONES_SERVICIO: PresentacionAccionServicio[] = [
         icono: 'i-lucide-archive',
         color: 'error',
         permiso: 'servicios.retirar',
-        desde: ['activo', 'limitado', 'suspendido'],
+        // Un pendiente de instalación se retira si la venta se cae (`contratos/instalacion.md` §1).
+        desde: ['pendiente_instalacion', 'activo', 'limitado', 'suspendido'],
         hecho: 'Servicio retirado',
     },
 ]
