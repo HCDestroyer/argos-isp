@@ -4,14 +4,19 @@ import logger from '@adonisjs/core/services/logger'
 import type { HttpContext } from '@adonisjs/core/http'
 import { CredencialesInvalidas, Problema } from '#shared/errores'
 import { prefijoColas, redis } from '#shared/redis'
+import { configIpOrigen, resolverIpOrigen } from '#portal/ip_origen'
 
 /**
  * Límite de intentos de `POST /auth/login` (semana 3, revisión de seguridad), con dos contadores
  * de ventana fija en Redis (`INCR` + `PEXPIRE` atómicos; la expiración es la de la ventana, no una
  * caché de datos: no choca con la regla 5):
  *
- * - **Por IP** (`ctx.request.ip()`): cuenta todos los intentos. Frena a quien prueba muchas cuentas
- *   desde un mismo origen. Por defecto 30 por ventana.
+ * - **Por IP del cliente** (`ipDelCliente`): cuenta todos los intentos. Frena a quien prueba muchas
+ *   cuentas desde un mismo origen. Por defecto 30 por ventana. Detrás de Caddy (y de Nginx Proxy
+ *   Manager) la conexión llega desde el proxy: la IP es la de `X-Forwarded-For` solo si el socket es
+ *   un proxy confiable (`PORTAL_PROXIES_CONFIABLES`, la red de compose; misma regla que el portal,
+ *   `#portal/ip_origen`). Sin proxy confiable, la del socket: un `X-Forwarded-For` falso no
+ *   reparte el cupo.
  * - **Por usuario** (correo en minúsculas, guardado como hash): cuenta solo los intentos
  *   fallidos y se reinicia con un login correcto. Frena la fuerza bruta contra una cuenta aunque
  *   cambie la IP. Por defecto 5 por ventana.
@@ -106,7 +111,7 @@ export class LimiteLogin {
             const [n, pttl] = (await this.conexion().eval(
                 SCRIPT_CONTAR,
                 1,
-                this.#claveIp(c, ctx.request.ip()),
+                this.#claveIp(c, ipDelCliente(ctx)),
                 String(c.ventanaS * 1000),
             )) as [number, number]
             ctx.response.header('RateLimit-Limit', String(c.porIp))
@@ -142,6 +147,23 @@ export class LimiteLogin {
         ctx.response.header('Retry-After', String(reintentarEnS))
         throw new DemasiadosIntentos(reintentarEnS, motivo)
     }
+}
+
+/**
+ * IP real del cliente para el contador: `X-Forwarded-For` (o `PORTAL_CABECERA_IP`) recorrido desde
+ * la derecha mientras el salto sea un proxy confiable (`PORTAL_PROXIES_CONFIABLES`); si no hay
+ * proxies confiables, la IP del socket. `ctx.request.ip()` (que con `trustProxy` por defecto solo
+ * confía en loopback) queda de último recurso.
+ */
+export function ipDelCliente(ctx: HttpContext): string {
+    const config = configIpOrigen()
+    return (
+        resolverIpOrigen(
+            ctx.request.request.socket.remoteAddress,
+            ctx.request.header(config.cabecera),
+            config,
+        ) ?? ctx.request.ip()
+    )
 }
 
 /** Peticiones cuya IP ya contó el gancho `antes` de la ruta (no se cuenta dos veces). */
