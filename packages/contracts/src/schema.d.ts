@@ -7888,6 +7888,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servicios/{id}/activar-instalacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)
+         * @description Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.
+         */
+        post: operations["serviciosActivarInstalacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servicios/{id}/adicionales": {
         parameters: {
             query?: never;
@@ -9556,7 +9576,7 @@ export interface components {
             /** @enum {string} */
             accion: "bloqueado" | "desbloqueado";
             /** @enum {string} */
-            estado_servicio: "activo" | "limitado" | "suspendido" | "retirado";
+            estado_servicio: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
             motivo: string | null;
             /** Format: date-time */
             created_at: string;
@@ -11248,10 +11268,10 @@ export interface components {
             /** @description Servicios no retirados */
             servicios: number;
             /**
-             * @description Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); retirado si todos lo están; null sin servicios
+             * @description Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo > pendiente_instalacion); retirado si todos lo están; null sin servicios
              * @enum {string|null}
              */
-            estado_servicio: "activo" | "limitado" | "suspendido" | "retirado" | null;
+            estado_servicio: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado" | null;
         };
         Deposito: {
             id: number;
@@ -11867,7 +11887,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        EstadoServicio: "activo" | "limitado" | "suspendido" | "retirado";
+        EstadoServicio: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
         EstimadoDeclaracion: {
             impuesto: string;
             /** @description AAAA-MM, AAAA-Tn o AAAA */
@@ -12548,7 +12568,7 @@ export interface components {
                 /** @description Nombre del plan */
                 plan: string;
                 /** @enum {string} */
-                estado: "activo" | "limitado" | "suspendido" | "retirado";
+                estado: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
                 router_id: number;
             };
             empresa: {
@@ -13026,7 +13046,7 @@ export interface components {
          * @description Nombre de un permiso del ACL (= nombre de la acción)
          * @enum {string}
          */
-        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
+        NombrePermiso: "activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver";
         NotaCredito: {
             id: number;
             /** @description Empresa de la factura (multiempresa) */
@@ -16010,6 +16030,21 @@ export interface components {
             coordenadas: string | null;
             /** Format: date */
             fecha_instalacion: string | null;
+            /**
+             * Format: date-time
+             * @description Activación de la instalación (inicio de la facturación); null mientras está pendiente_instalacion
+             */
+            instalado_en: string | null;
+            /** @description Referencia de planta de la instalación (caja, puerto, OLT, slot, PON, potencia), de solo lectura: la planta vive en OZmap y llega desde Iris al activar la instalación. null sin datos */
+            planta: {
+                caja?: string;
+                puerto?: string;
+                olt?: string;
+                slot?: string;
+                pon?: string;
+                /** @description Potencia óptica en dBm, decimal con 2 decimales (p. ej. "-19.40") */
+                potencia_dbm?: string;
+            } | null;
             costo_override: components["schemas"]["Dinero"] | null;
             excluir_firewall: boolean;
             ipv4: string | null;
@@ -21382,7 +21417,7 @@ export interface operations {
                 q?: string;
                 zona_id?: number;
                 /** @description Clientes con al menos un servicio en este estado */
-                estado_servicio?: "activo" | "limitado" | "suspendido" | "retirado";
+                estado_servicio?: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
                 /** @description Clientes con al menos un servicio en este router */
                 router_id?: number;
                 /** @description Clientes con al menos un servicio en este plan */
@@ -46179,7 +46214,7 @@ export interface operations {
                 "application/json": {
                     nombre: string;
                     descripcion?: string | null;
-                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -46237,7 +46272,7 @@ export interface operations {
                     /** @description version leída; si cambió responde 409 */
                     version: number;
                     descripcion?: string | null;
-                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                    permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                 };
             };
         };
@@ -47249,7 +47284,7 @@ export interface operations {
                 cliente_id?: number;
                 router_id?: number;
                 plan_id?: number;
-                estado?: "activo" | "limitado" | "suspendido" | "retirado";
+                estado?: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
                 tipo_conexion?: "pppoe" | "ip_estatica" | "dhcp_fija";
                 /** @description Zona del cliente */
                 zona_id?: number;
@@ -47378,6 +47413,11 @@ export interface operations {
                     } & {
                         [key: string]: unknown;
                     };
+                    /**
+                     * @description Por defecto activo. pendiente_instalacion: venta desde Iris; no navega ni factura hasta POST /servicios/:id/activar-instalacion
+                     * @enum {string}
+                     */
+                    estado_inicial?: "activo" | "pendiente_instalacion";
                 };
             };
         };
@@ -47566,6 +47606,111 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso servicios.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflicto de versión */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    serviciosActivarInstalacion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Clave única por intento lógico; repetirla devuelve la misma respuesta */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description version leída; si cambió responde 409 */
+                    version: number;
+                    /**
+                     * Format: date-time
+                     * @description Cuándo quedó instalado (inicio de la facturación). Sin él, ahora. Ni futuro (5 min de tolerancia de reloj) ni anterior al alta del servicio
+                     */
+                    instalado_en?: string;
+                    /** @description Sistema y documento que activa, p. ej. iris_orden (auditoría y evento) */
+                    origen_tipo?: string;
+                    /** @description Id del documento de origen (la orden de Iris) */
+                    origen_id?: string;
+                    /** @description Referencia de planta de la instalación (pedido A9 de Iris): solo lectura, no se valida contra nada */
+                    planta?: {
+                        caja?: string;
+                        puerto?: string;
+                        olt?: string;
+                        slot?: string;
+                        pon?: string;
+                        /** @description Potencia óptica en dBm, decimal como texto (p. ej. "-19.40"), entre -60 y 10, hasta 2 decimales */
+                        potencia_dbm?: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Servicio activo con instalado_en */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Servicio"];
+                };
+            };
+            /** @description Falta el header Idempotency-Key (`idempotency_key_requerida`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso servicios.activar_instalacion; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -49698,7 +49843,7 @@ export interface operations {
                     /** @description Alcances: permisos permitidos y routers, zonas o cajas */
                     alcances?: {
                         /** @description Recorta los permisos del usuario a esta lista */
-                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
+                        permisos?: ("activos.dar_de_baja" | "activos.registrar" | "activos.ver" | "adicionales.crear" | "adicionales.crear_motivo" | "adicionales.desactivar" | "adicionales.desactivar_motivo" | "adicionales.editar" | "adicionales.ver" | "anuncios.administrar" | "anuncios.ver" | "bancos.conciliar" | "bancos.importar_extracto" | "bancos.reatribuir_llegada" | "bancos.trasladar" | "bancos.ver" | "bitacora.ver" | "bodegas.crear" | "bodegas.desactivar" | "bodegas.editar" | "cajas.abrir" | "cajas.cerrar" | "cajas.crear" | "cajas.depositar" | "cajas.ver" | "campos_personalizados.activar" | "campos_personalizados.crear" | "campos_personalizados.desactivar" | "campos_personalizados.editar" | "cartera.castigar" | "cartera.provisionar" | "cierres.revisar_check" | "cierres.verificar" | "clientes.asignar_responsable_pago" | "clientes.crear" | "clientes.desvincular_telegram" | "clientes.editar" | "clientes.estado_cuenta" | "clientes.quitar_responsable_pago" | "clientes.ver" | "clientes.vincular_telegram" | "cobros.configurar" | "cobros.liquidar" | "compras.anular" | "compras.pagar" | "compras.registrar" | "compras.ver" | "comprobantes.aprobar" | "comprobantes.rechazar" | "comprobantes.ver" | "cuentas_bancarias.editar" | "cuentas_bancarias.ver" | "declaraciones.ajustar" | "declaraciones.anular_pago" | "declaraciones.calcular" | "declaraciones.pagar" | "declaraciones.presentar" | "declaraciones.revisar" | "declaraciones.ver" | "documentos.editar" | "documentos.ver" | "egresos.anular" | "egresos.registrar" | "egresos.registrar_sin_limite" | "egresos.ver" | "empresa.editar" | "empresa.ver" | "empresas.cambiar_logo" | "empresas.cambiar_pais" | "empresas.crear" | "empresas.desactivar" | "empresas.editar" | "empresas.ver" | "facturas.anular" | "facturas.anular_nota_credito" | "facturas.cargo_sin_costo" | "facturas.configurar_conceptos" | "facturas.configurar_motivos" | "facturas.emitir_cargo_unico" | "facturas.generar" | "facturas.nota_credito" | "facturas.sustituir" | "facturas.ver" | "fel.anular" | "fel.certificar" | "fel.configurar" | "fel.contingencia" | "fel.ver" | "fiscal.cambiar_regimen" | "fiscal.configurar" | "fiscal.editar_parametros" | "fiscal.instalar" | "fiscal.ver" | "horus.abrir" | "horus.configurar" | "horus.generar_token" | "horus.probar" | "horus.revocar_token" | "horus.ver" | "inventario.abrir_conteo" | "inventario.ajustar" | "inventario.asignar_comodato" | "inventario.cancelar_conteo" | "inventario.cargar_saldo_inicial" | "inventario.cerrar_conteo" | "inventario.consumir" | "inventario.contar" | "inventario.dar_de_baja" | "inventario.declarar_perdida_comodato" | "inventario.devolver_comodato" | "inventario.marcar_reparada" | "inventario.trasladar" | "inventario.ver" | "ip.resolver" | "ipv6.crear" | "ipv6.ver" | "lealtad.ajustar" | "lealtad.canjear" | "lealtad.configurar" | "lealtad.entregar" | "lealtad.revertir_canje" | "lealtad.ver" | "libro.bloquear" | "libro.bloquear_duro" | "libro.cerrar_apertura" | "libro.cerrar_ejercicio" | "libro.cerrar_periodo" | "libro.desbloquear" | "libro.excepcion_bloqueo" | "libro.reabrir_ejercicio" | "libro.reabrir_periodo" | "libro.registrar_asiento" | "libro.revertir_asiento" | "libro.ver" | "libros.emitir" | "libros.habilitar" | "libros.ver" | "nodos_portal.administrar" | "notificaciones.configurar" | "notificaciones.editar" | "notificaciones.probar" | "notificaciones.ver" | "pagos.anular" | "pagos.cerrar_diferencia" | "pagos.registrar" | "pagos.ver" | "planes.crear" | "planes.editar" | "planes.ver" | "plantillas.crear" | "plantillas.editar" | "plantillas.retirar" | "plantillas.ver" | "productos.crear" | "productos.desactivar" | "productos.editar" | "promesas.aprobar" | "promesas.cancelar" | "promesas.crear" | "promesas.rechazar" | "promesas.ver" | "proveedores.editar" | "proveedores.ver" | "red.ver" | "redes.crear" | "redes.ver" | "reportes.ver" | "roles.crear" | "roles.editar" | "roles.ver" | "routers.cambiar_control_velocidad" | "routers.crear" | "routers.editar" | "routers.marcar_migrado" | "routers.ver" | "servicios.activar_instalacion" | "servicios.adicional_cortesia" | "servicios.agregar_adicional" | "servicios.cambiar_empresa" | "servicios.cancelar_plan_temporal" | "servicios.crear" | "servicios.desconectar" | "servicios.editar" | "servicios.editar_adicional" | "servicios.limitar" | "servicios.programar_plan_temporal" | "servicios.quitar_adicional" | "servicios.quitar_limite" | "servicios.reactivar" | "servicios.retirar" | "servicios.suspender" | "servicios.ver" | "servicios.ver_credencial_adicional" | "servicios.ver_credenciales" | "sesiones.desconectar" | "sesiones.ver" | "sorteos.ejecutar" | "sorteos.entregar" | "sorteos.exportar" | "sorteos.gestionar" | "sorteos.marcar_requisito" | "sorteos.publicar" | "sorteos.ver" | "sso.emitir" | "tokens.crear" | "tokens.revocar" | "tokens.ver" | "usuarios.asignar_empresas" | "usuarios.crear" | "usuarios.editar" | "usuarios.ver" | "vinculaciones.revocar" | "zonas.crear" | "zonas.editar" | "zonas.ver")[];
                         routers?: number[];
                         zonas?: number[];
                         cajas?: number[];

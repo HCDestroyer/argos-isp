@@ -6,7 +6,8 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
+import type { PlantaServicio } from '#core/instalacion'
 import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
@@ -32,7 +33,7 @@ export interface ServicioVista {
     router_id: number
     plan_id: number
     plantilla_facturacion_id: number | null
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     promesa_activa: boolean
     suspension_manual: boolean
     suspension_manual_motivo: string | null
@@ -45,6 +46,10 @@ export interface ServicioVista {
     direccion: string | null
     coordenadas: string | null
     fecha_instalacion: string | null
+    /** activación de la instalación (inicio de facturación); null mientras está pendiente */
+    instalado_en: string | null
+    /** referencia de planta de la instalación (pedido A9 de Iris) o null */
+    planta: PlantaServicio | null
     costo_override: string | null
     excluir_firewall: boolean
     ipv4: string | null
@@ -105,6 +110,8 @@ function columnas(cliente: QueryClientContract) {
         's.direccion',
         's.coordenadas',
         cliente.raw(`to_char(s.fecha_instalacion, 'YYYY-MM-DD') AS fecha_instalacion`),
+        's.instalado_en',
+        's.planta',
         's.costo_override',
         's.excluir_firewall',
         cliente.raw(
@@ -170,7 +177,7 @@ export interface FiltrosServicios extends OpcionesPaginacion {
     cliente_id?: number
     router_id?: number
     plan_id?: number
-    estado?: EstadoServicio
+    estado?: EstadoServicioConPendiente
     tipo_conexion?: TipoConexion
     /** zona del cliente del servicio */
     zona_id?: number

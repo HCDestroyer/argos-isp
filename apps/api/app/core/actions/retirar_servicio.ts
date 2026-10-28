@@ -1,6 +1,6 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
 import { liberarAsignaciones } from '#core/asignaciones_servicio'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
@@ -31,7 +31,7 @@ export default class RetirarServicio extends DomainAction<EntradaRetirarServicio
             .where('id', input.id)
             .forUpdate()
             .select('estado', 'empresa_id')
-            .first()) as { estado: EstadoServicio; empresa_id: number } | null
+            .first()) as { estado: EstadoServicioConPendiente; empresa_id: number } | null
         if (!fila) throw new NoEncontrado(`El servicio ${input.id} no existe`)
         const empresaId = Number(fila.empresa_id)
         t.fijarEmpresa(empresaId)

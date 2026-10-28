@@ -9,7 +9,24 @@
  * ("150.00"), fechas como ISO 8601 (UTC para instantes, YYYY-MM-DD para fechas).
  */
 
-export type EstadoServicio = 'activo' | 'limitado' | 'suspendido' | 'retirado'
+/**
+ * Estados del servicio (`core.servicios.estado`). `pendiente_instalacion` (vendido desde Iris, aún sin
+ * instalar; `contratos/instalacion.md`) solo sale con `servicios.activar_instalacion` o `servicios.retirar`.
+ */
+export const ESTADOS_SERVICIO = [
+    'pendiente_instalacion',
+    'activo',
+    'limitado',
+    'suspendido',
+    'retirado',
+] as const
+export type EstadoServicioConPendiente = (typeof ESTADOS_SERVICIO)[number]
+/**
+ * Estados sin `pendiente_instalacion`: los que ven hoy billing, portal y lealtad. Se mantiene
+ * mientras A3 y A5 adoptan el pendiente (`.claude/integration/a1.md`); el núcleo usa
+ * `EstadoServicioConPendiente` donde un pendiente puede aparecer.
+ */
+export type EstadoServicio = Exclude<EstadoServicioConPendiente, 'pendiente_instalacion'>
 /** Métodos de pago (`billing.pagos.metodo`). transferencia, ach y remesa: decisión del PM 2026-10-16. */
 export const METODOS_PAGO = [
     'caja',
@@ -164,9 +181,15 @@ export interface CatalogoEventos {
     'servicio.estado_cambiado': {
         servicio_id: number
         empresa_id: number
-        de: EstadoServicio
+        de: EstadoServicioConPendiente
         a: EstadoServicio
         motivo: string
+        /**
+         * Solo en la activación de la instalación (`motivo: 'instalacion'`, `contratos/instalacion.md`)
+         * cuando viene de otro sistema: p. ej. `iris_orden` y el id de la orden. Aditivo.
+         */
+        origen_tipo?: string
+        origen_id?: string
     }
     /**
      * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)

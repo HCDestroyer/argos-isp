@@ -24,8 +24,10 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
     - pasa el servicio de `pendiente_instalacion` a `activo` y fija `core.servicios.instalado_en`, que es `instalado_en` o, si no viene, `now()`;
     - emite `servicio.estado_cambiado` con `de = pendiente_instalacion`, `a = activo` y `motivo = instalacion`;
     - refresca Redis AAA y RouterOS como cualquier cambio de estado.
-- **Reintento:** con la misma `Idempotency-Key` devuelve la misma respuesta. Una clave nueva sobre un servicio ya activo devuelve 422 `servicio_no_pendiente`.
-- **Fecha:** `instalado_en` no puede ser futura ni anterior a la creación del servicio (422).
+- **Reintento:** con la misma `Idempotency-Key` devuelve la misma respuesta. Una clave nueva sobre un servicio ya activo devuelve 422 `servicio_no_pendiente` (se revisa antes que la `version`, así no llega un 409). Sin la cabecera: 400 `idempotency_key_requerida`.
+- **Fecha:** `instalado_en` no puede ser futura ni anterior a la creación del servicio (422 en `instalado_en`). Se toleran 5 minutos de reloj adelantado; un instante dentro de esa tolerancia se guarda como la hora de Argos. Si `fecha_instalacion` estaba vacía, toma el día de `instalado_en` en Guatemala.
+- **Permiso:** `servicios.activar_instalacion` lo tienen `admin`, `soporte` (que ya reactiva) y `tecnico` (que ya crea servicios e instala), y el usuario técnico «Iris».
+- **Transiciones prohibidas:** sobre un pendiente, suspender, reactivar, limitar, quitar límite, desconectar, programar un plan temporal y la transición de `evaluarEstadoServicio` (`CambiarEstadoServicio`) responden 422 `servicio_pendiente_instalacion`. Editarlo (plan, router, IPs) y cambiarlo de empresa sí se puede.
 - **Origen:** `origen_tipo` y `origen_id` quedan en la auditoría y en el evento, para enlazar con la orden de Iris.
 - **Planta (pedido A9 de Iris, contrato 0.2.0):** `planta` es opcional y todos sus campos también. Los textos van hasta 100 caracteres y `potencia_dbm` es decimal (numeric(6,2), entre −60 y 10). Se guarda tal cual en `core.servicios.planta jsonb null` y se muestra en la ficha del servicio. Es solo una referencia de lectura: la planta de fibra vive en OZmap, que Iris integra, y Argos no la valida ni la recalcula.
 
@@ -47,3 +49,5 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 - **Columnas nuevas:** `core.servicios.instalado_en timestamptz null` y `core.servicios.planta jsonb null` (A9).
 - **Servicios existentes:** se rellena con la fecha en que se creó cada uno, así que nada cambia para ellos.
 - **Constraint de `estado`:** suma `pendiente_instalacion`.
+- **Valor por defecto** de `instalado_en`: `now()`, así quien inserta un servicio activo no cambia; `servicios.crear` lo deja en null solo para un pendiente. CHECK `servicios_pendiente_sin_instalar`: un pendiente nunca tiene `instalado_en`.
+- **OpenAPI:** `EstadoServicio` suma `pendiente_instalacion` y `Servicio.instalado_en` (date-time o null) es obligatorio. Los tipos de `packages/contracts` cambian: A4 y A5 deben cubrir el estado nuevo en sus `Record<EstadoServicio, …>` y sus fixtures de `Servicio`.

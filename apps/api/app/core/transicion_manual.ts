@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
-import type { EstadoServicio } from '#shared/eventos'
+import { ServicioPendienteInstalacion } from '#core/instalacion'
+import type { EstadoServicio, EstadoServicioConPendiente } from '#shared/eventos'
 import { usuarioDelActor } from '#shared/contexto'
 import CambiarEstadoServicio, { type EstadoOperativo } from '#core/actions/cambiar_estado_servicio'
 import { verServicio, type ServicioVista } from '#core/consultas/servicios'
@@ -40,11 +41,13 @@ export abstract class TransicionManual extends DomainAction<EntradaTransicionMan
             .where('id', input.id)
             .forUpdate()
             .select('estado', 'suspension_manual')
-            .first()) as { estado: EstadoServicio; suspension_manual: boolean } | null
+            .first()) as { estado: EstadoServicioConPendiente; suspension_manual: boolean } | null
         if (!fila) throw new NoEncontrado(`El servicio ${input.id} no existe`)
         if (fila.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado y no cambia de estado', 'servicio_retirado')
         }
+        // pendiente de instalación: solo `activar-instalacion` o `retirar` (contratos/instalacion.md §1)
+        if (fila.estado === 'pendiente_instalacion') throw new ServicioPendienteInstalacion(this.verbo)
         if (fila.estado !== this.destino && !this.origenes.includes(fila.estado)) {
             throw new ReglaNegocio(
                 `No se puede ${this.verbo} un servicio en estado ${fila.estado}`,

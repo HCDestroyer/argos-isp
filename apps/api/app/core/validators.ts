@@ -1,4 +1,5 @@
 import vine from '@vinejs/vine'
+import { Decimal } from 'decimal.js'
 import { reglasPaginacion } from '#shared/paginacion'
 import {
     coordenadas,
@@ -20,11 +21,10 @@ import { TIPOS_EXCEPCION } from '#core/esquemas'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { CONECTORES_SSO, TIPOS_DESTINO_SSO } from '#core/sso'
-import { MODALIDADES_ADICIONAL, PRIMEROS_PERIODOS_ADICIONAL } from '#shared/eventos'
+import { ESTADOS_SERVICIO, MODALIDADES_ADICIONAL, PRIMEROS_PERIODOS_ADICIONAL } from '#shared/eventos'
+import { ESTADOS_INICIALES_SERVICIO } from '#core/instalacion'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
-
-const ESTADOS_SERVICIO = ['activo', 'limitado', 'suspendido', 'retirado'] as const
 
 /*
 |--------------------------------------------------------------------------
@@ -366,6 +366,10 @@ export const crearServicioValidator = vine.compile(
         ipv6_duid: vine.string().trim().maxLength(130).nullable().optional(),
         prefijo_delegado_v6: prefijoV6().optional().meta({ description: 'Solo modo estatico' }),
         excepciones: excepciones(),
+        estado_inicial: vine.enum(ESTADOS_INICIALES_SERVICIO).optional().meta({
+            description:
+                'Por defecto activo. pendiente_instalacion: venta desde Iris; no navega ni factura hasta POST /servicios/:id/activar-instalacion',
+        }),
     }),
 )
 
@@ -437,6 +441,64 @@ export const listarServiciosValidator = vine.compile(
 
 /** suspender, reactivar, limitar, quitar-limite, retirar, desconectar */
 export const motivoValidator = vine.compile(vine.object({ motivo: motivo() }))
+
+const textoPlanta = () => vine.string().trim().minLength(1).maxLength(100).optional()
+
+/** `potencia_dbm` entre -60 y 10 (comparación decimal, sin pasar por number). */
+const potenciaEnRango = vine.createRule((valor, _opciones, campo) => {
+    if (typeof valor !== 'string') return
+    const d = new Decimal(valor)
+    if (d.lessThan(-60) || d.greaterThan(10)) {
+        campo.report('La potencia debe estar entre -60 y 10 dBm', 'rango', campo)
+    }
+})
+
+/** `POST /servicios/:id/activar-instalacion` (`contratos/instalacion.md` §2). */
+export const activarInstalacionValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        instalado_en: instanteIso().optional().meta({
+            description:
+                'Cuándo quedó instalado (inicio de la facturación). Sin él, ahora. Ni futuro (5 min de tolerancia de reloj) ni anterior al alta del servicio',
+        }),
+        origen_tipo: vine
+            .string()
+            .trim()
+            .regex(/^[a-z][a-z0-9_]{1,39}$/)
+            .optional()
+            .meta({ description: 'Sistema y documento que activa, p. ej. iris_orden (auditoría y evento)' }),
+        origen_id: vine
+            .string()
+            .trim()
+            .minLength(1)
+            .maxLength(100)
+            .optional()
+            .meta({ description: 'Id del documento de origen (la orden de Iris)' }),
+        planta: vine
+            .object({
+                caja: textoPlanta(),
+                puerto: textoPlanta(),
+                olt: textoPlanta(),
+                slot: textoPlanta(),
+                pon: textoPlanta(),
+                potencia_dbm: vine
+                    .string()
+                    .trim()
+                    .regex(/^-?\d{1,2}(\.\d{1,2})?$/)
+                    .use(potenciaEnRango())
+                    .optional()
+                    .meta({
+                        description:
+                            'Potencia óptica en dBm, decimal como texto (p. ej. "-19.40"), entre -60 y 10, hasta 2 decimales',
+                    }),
+            })
+            .optional()
+            .meta({
+                description:
+                    'Referencia de planta de la instalación (pedido A9 de Iris): solo lectura, no se valida contra nada',
+            }),
+    }),
+)
 
 /** `POST /servicios/:id/planes-temporales` (lealtad, `contratos/lealtad.md` §5). */
 export const programarPlanTemporalValidator = vine.compile(

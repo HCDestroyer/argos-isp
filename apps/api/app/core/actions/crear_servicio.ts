@@ -18,6 +18,7 @@ import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { guardarExcepciones, paraAuditoriaServicio, validarExcepciones } from '#core/excepciones_servicio'
 import { resolverEmpresaServicio } from '#core/empresas'
 import { reconciliarIncluidos } from '#core/adicionales'
+import type { EstadoInicialServicio } from '#core/instalacion'
 import { advertenciasServicio, type Advertencia } from '#network/tipos_plan'
 
 /** Servicio con las advertencias del tipo de su plan (`app/network/tipos_plan.ts`); nunca bloquean. */
@@ -57,6 +58,12 @@ export interface EntradaCrearServicio {
     prefijo_delegado_v6?: string
     /** excepciones a la plantilla `{ campo: valor }` (campos de `app/billing/excepciones.ts`) */
     excepciones?: Record<string, unknown>
+    /**
+     * `activo` (por defecto) o `pendiente_instalacion` (venta desde Iris, `contratos/instalacion.md`):
+     * el pendiente ya tiene credenciales, router, plan e IPs, pero no navega ni factura hasta
+     * `servicios.activar_instalacion`; su `instalado_en` queda en null.
+     */
+    estado_inicial?: EstadoInicialServicio
     /** id en un sistema de origen (importador); 409 `externo_duplicado` si ya está vinculado */
     externo?: IdExterno
 }
@@ -79,6 +86,8 @@ export async function exigirUserPppLibre(t: Transaccion, userPpp: string) {
  *   cifrada v1).
  * - `ip_estatica` / `dhcp_fija`: sin credenciales; IPv4 obligatoria de las redes del router;
  *   `dhcp_fija` exige `mac` (`validarTipoConexion`).
+ *
+ * Con `estado_inicial: pendiente_instalacion` nace pendiente (sin `instalado_en`); por defecto activo.
  *
  * Asigna IPv4 y reserva prefijos IPv6 según el modo; guarda las excepciones a la plantilla
  * (validadas por A3); emite `servicio.creado` y `asignacion.cambiada`. Asigna los adicionales que
@@ -179,6 +188,9 @@ export default class CrearServicio extends DomainAction<EntradaCrearServicio, Se
                 excluir_firewall: input.excluir_firewall ?? false,
                 ipv6_modo: modo,
                 ipv6_duid: input.ipv6_duid ?? null,
+                ...(input.estado_inicial === 'pendiente_instalacion'
+                    ? { estado: 'pendiente_instalacion', instalado_en: null }
+                    : {}),
             })
             .returning('id')) as Array<{ id: number }>
         const id = fila!.id

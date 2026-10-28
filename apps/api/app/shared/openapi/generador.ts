@@ -210,7 +210,7 @@ function operacion(ruta: Ruta): EsquemaJson {
         parametros.push({
             name: 'Idempotency-Key',
             in: 'header',
-            required: false,
+            required: ruta.idempotente === 'obligatoria',
             description: 'Clave única por intento lógico; repetirla devuelve la misma respuesta',
             schema: { type: 'string', minLength: 1, maxLength: 255 },
         })
@@ -245,6 +245,9 @@ function operacion(ruta: Ruta): EsquemaJson {
         const permiso = ruta.permiso ? `Sin el permiso ${ruta.permiso}` : null
         const motivos = [permiso, csrf].filter((m): m is string => m !== null)
         if (motivos.length > 0) respuestas['403'] = problema(motivos.join('; o '))
+    }
+    if (ruta.idempotente === 'obligatoria') {
+        respuestas['400'] = problema('Falta el header Idempotency-Key (`idempotency_key_requerida`)')
     }
     if (parametrosDeRuta(ruta.ruta).length > 0) respuestas['404'] = problema('No encontrado')
     if (ruta.versionada || ruta.idempotente) {

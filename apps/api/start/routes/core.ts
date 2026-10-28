@@ -36,6 +36,8 @@ import { exigirAlcance } from '#core/acl'
 import CrearServicio from '#core/actions/crear_servicio'
 import EditarServicio from '#core/actions/editar_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
+import ActivarInstalacionServicio from '#core/actions/activar_instalacion_servicio'
+import { rechazarSiPendiente } from '#core/instalacion'
 import VerCredencialesServicio from '#core/actions/ver_credenciales_servicio'
 import CambiarEmpresaServicio from '#core/actions/cambiar_empresa_servicio'
 import { configuracionEfectivaPublica } from '#core/actions/obtener_configuracion_efectiva'
@@ -964,6 +966,29 @@ const servicios: Ruta[] = [
         (entrada, ctx) => new RetirarServicio().execute(entrada, ctx.contextoAccion()),
     ),
     definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/activar-instalacion',
+        operacion: 'serviciosActivarInstalacion',
+        resumen: 'Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)',
+        descripcion:
+            'Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa ' +
+            '`iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija ' +
+            '`instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. ' +
+            '422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre ' +
+            'uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.',
+        etiqueta: 'servicios',
+        permiso: 'servicios.activar_instalacion',
+        cuerpo: v.activarInstalacionValidator,
+        versionada: true,
+        idempotente: 'obligatoria',
+        respuesta: { status: 200, descripcion: 'Servicio activo con instalado_en', esquema: Servicio },
+        handler: async (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new ActivarInstalacionServicio().execute({ ...cuerpo, id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
         metodo: 'get',
         ruta: '/servicios/:id/credenciales',
         operacion: 'serviciosCredenciales',
@@ -1071,6 +1096,8 @@ const servicios: Ruta[] = [
         'servicios.desconectar',
         'Desconectar la sesión PPPoE (Disconnect-Request vía coa; 404 si no hay sesión activa)',
         async (entrada, ctx) => {
+            // un pendiente no tiene sesión: 422 servicio_pendiente_instalacion en vez de 404
+            await rechazarSiPendiente(entrada.id, 'desconectar')
             await new DesconectarServicio().execute(entrada, ctx.contextoAccion())
             return verServicio(entrada.id)
         },

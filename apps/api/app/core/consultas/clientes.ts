@@ -5,7 +5,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { DatabaseQueryBuilderContract } from '@adonisjs/lucid/types/querybuilder'
 import { NoEncontrado } from '#shared/errores'
 import { paginar, type OpcionesPaginacion, type Pagina } from '#shared/paginacion'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { filtrarPorAlcance, type Alcance, type DimensionesRecurso, type FiltrosDimension } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 
@@ -80,7 +80,7 @@ export interface FiltrosClientes extends OpcionesPaginacion {
     q?: string
     zona_id?: number
     /** cliente con al menos un servicio que cumpla a la vez estado, router y plan */
-    estado_servicio?: EstadoServicio
+    estado_servicio?: EstadoServicioConPendiente
     router_id?: number
     plan_id?: number
     /** alguna `billing.facturas` en estado `vencida` (true) o ninguna (false) */
@@ -257,7 +257,7 @@ export interface DependienteVista {
      * Estado resumido de sus servicios: el más grave entre los no retirados
      * (`suspendido` > `limitado` > `activo`); `retirado` si todos lo están; null sin servicios.
      */
-    estado_servicio: EstadoServicio | null
+    estado_servicio: EstadoServicioConPendiente | null
 }
 
 const RESUMEN_SERVICIOS = `
@@ -267,6 +267,7 @@ const RESUMEN_SERVICIOS = `
                 WHEN bool_or(s.estado = 'suspendido') THEN 'suspendido'
                 WHEN bool_or(s.estado = 'limitado') THEN 'limitado'
                 WHEN bool_or(s.estado = 'activo') THEN 'activo'
+                WHEN bool_or(s.estado = 'pendiente_instalacion') THEN 'pendiente_instalacion'
                 WHEN count(*) > 0 THEN 'retirado'
             END
        FROM core.servicios s WHERE s.cliente_id = c.id) AS estado_servicio`
