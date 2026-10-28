@@ -58,8 +58,33 @@ function alEditar(actualizado: Servicio) {
  */
 const acciones = computed(() => ACCIONES_SERVICIO.filter(a => puede(a.permiso) && aplica(a)))
 
-const puedePromesa = computed(() => puede('promesas.crear') && servicio.value !== null && servicio.value.estado !== 'retirado')
-const puedeSimular = computed(() => puede('promesas.ver') && servicio.value !== null && servicio.value.estado !== 'retirado')
+/** Pendiente de instalación (`contratos/instalacion.md`): sin facturas, no hay promesa (422 de A3). */
+const pendiente = computed(() => servicio.value !== null && esPendienteInstalacion(servicio.value))
+const sinPromesas = computed(() => servicio.value === null || servicio.value.estado === 'retirado' || pendiente.value)
+const puedePromesa = computed(() => puede('promesas.crear') && !sinPromesas.value)
+const puedeSimular = computed(() => puede('promesas.ver') && !sinPromesas.value)
+/** «Activar instalación» con su permiso exacto, solo sobre un pendiente (si no, 422 `servicio_no_pendiente`). */
+const puedeActivarInstalacion = computed(() => puede('servicios.activar_instalacion') && pendiente.value)
+const activarAbierto = ref(false)
+const planta = computed(() => (servicio.value ? datosPlanta(servicio.value) : []))
+
+function alActivarInstalacion(actualizado: Servicio) {
+    servicio.value = actualizado
+    toast.add({
+        title: 'Instalación activada',
+        description: `${etiquetaServicio(actualizado)} · ${ESTADOS_SERVICIO[actualizado.estado].etiqueta} desde ${formatearFechaHora(actualizado.instalado_en)}`,
+        icon: 'i-lucide-circle-check',
+        color: 'success',
+    })
+    void cargarSesion()
+    void lineaTiempo.value?.recargar()
+    void configuracionEfectiva.value?.recargar()
+}
+
+/** Tras un 409 en el modal: la ficha toma la versión y el estado actuales. */
+function alRecargarServicio(actualizado: Servicio) {
+    servicio.value = actualizado
+}
 
 /** Multiempresa: la empresa del servicio se ve y se cambia solo si hay más de una. */
 const { conSelector: variasEmpresas, nombre: nombreEmpresa } = useEmpresaActiva()
@@ -386,12 +411,39 @@ onMounted(cargar)
                 </template>
             </UAlert>
 
+            <UAlert
+                v-if="pendiente"
+                color="info"
+                variant="subtle"
+                icon="i-lucide-hard-hat"
+                title="Pendiente de instalación"
+                data-prueba="aviso-pendiente-instalacion"
+            >
+                <template #description>
+                    <p>
+                        Ya tiene usuario PPPoE, router, plan e IP para configurar el equipo, pero no navega ni factura.
+                        La facturación arranca al <strong>activar la instalación</strong>.
+                    </p>
+                    <p>
+                        Mientras tanto no se puede suspender, limitar, reactivar, desconectar ni programar un plan temporal; sí editarlo o retirarlo si la venta se cae.
+                    </p>
+                </template>
+            </UAlert>
+
             <div
-                v-if="acciones.length || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico"
+                v-if="acciones.length || puedeActivarInstalacion || puedePromesa || puedeSimular || puedeCambiarEmpresa || puedeCargoUnico"
                 class="flex flex-wrap gap-2"
                 role="group"
                 aria-label="Acciones del servicio"
             >
+                <UButton
+                    v-if="puedeActivarInstalacion"
+                    label="Activar instalación"
+                    icon="i-lucide-hard-hat"
+                    color="success"
+                    data-prueba="abrir-activar-instalacion"
+                    @click="activarAbierto = true"
+                />
                 <UButton
                     v-for="accion in acciones"
                     :key="accion.accion"
@@ -630,10 +682,37 @@ onMounted(cargar)
                             mono
                         />
                         <DatoFicha
+                            etiqueta="Instalado el (inicio de la facturación)"
+                            :valor="servicio.instalado_en ? formatearFechaHora(servicio.instalado_en) : 'Pendiente: se fija al activar la instalación'"
+                            data-prueba="instalado-en-servicio"
+                        />
+                        <DatoFicha
                             etiqueta="Última modificación"
                             :valor="formatearFechaHora(servicio.updated_at)"
                         />
                     </dl>
+                    <div
+                        v-if="planta.length"
+                        class="mt-4 flex flex-col gap-3 border-t border-default pt-4"
+                        data-prueba="planta-servicio"
+                    >
+                        <p class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                            <UIcon
+                                name="i-lucide-cable"
+                                class="size-3.5 shrink-0"
+                            />
+                            Referencia de planta (solo lectura, llega desde Iris)
+                        </p>
+                        <dl class="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+                            <DatoFicha
+                                v-for="dato in planta"
+                                :key="dato.campo"
+                                :etiqueta="dato.etiqueta"
+                                :valor="dato.valor"
+                                mono
+                            />
+                        </dl>
+                    </div>
                 </UPageCard>
             </div>
 
@@ -792,6 +871,14 @@ onMounted(cargar)
                 v-model:open="cambiarEmpresaAbierto"
                 :servicio="servicio"
                 @hecho="alCambiarEmpresa"
+            />
+
+            <ServicioActivarInstalacionModal
+                v-if="puedeActivarInstalacion"
+                v-model:open="activarAbierto"
+                :servicio="servicio"
+                @hecho="alActivarInstalacion"
+                @recargado="alRecargarServicio"
             />
 
             <ServicioAccionModal

@@ -134,18 +134,22 @@ const hayFiltros = computed(() => busqueda.value.trim() !== ''
     || tipoPlan.value !== TODOS
     || conDeuda.value)
 
-/** Accesos rápidos: "Todos", "Cortados" (suspendido), "Limitados" y "Con deuda" vencida. */
+/**
+ * Accesos rápidos: "Todos", "Cortados" (suspendido), "Limitados", "Por instalar"
+ * (`pendiente_instalacion`) y "Con deuda" vencida.
+ */
 interface AccesoServicios {
     etiqueta: string
     estado: EstadoServicio | typeof TODOS
     deuda: boolean
-    color: 'neutral' | 'error' | 'warning'
+    color: 'neutral' | 'error' | 'warning' | 'info'
 }
 
 const accesos: AccesoServicios[] = [
     { etiqueta: 'Todos', estado: TODOS, deuda: false, color: 'neutral' },
     { etiqueta: 'Cortados', estado: 'suspendido', deuda: false, color: 'error' },
     { etiqueta: 'Limitados', estado: 'limitado', deuda: false, color: 'warning' },
+    { etiqueta: 'Por instalar', estado: 'pendiente_instalacion', deuda: false, color: 'info' },
     { etiqueta: 'Con deuda', estado: TODOS, deuda: true, color: 'warning' },
 ]
 

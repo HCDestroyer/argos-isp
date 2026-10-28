@@ -10,8 +10,13 @@ interface PresentacionEstado {
     icono: string
 }
 
-/** Colores fijos: activo verde, limitado ámbar, suspendido rojo, retirado gris. */
+/**
+ * Colores fijos: activo verde, limitado ámbar, suspendido rojo, retirado gris. Pendiente de
+ * instalación en azul (`contratos/instalacion.md`): vendido, con credenciales e IP, sin navegar ni
+ * facturar hasta «Activar instalación».
+ */
 export const ESTADOS_SERVICIO: Record<EstadoServicio, PresentacionEstado> = {
+    pendiente_instalacion: { etiqueta: 'Pendiente de instalación', color: 'info', icono: 'i-lucide-hard-hat' },
     activo: { etiqueta: 'Activo', color: 'success', icono: 'i-lucide-circle-check' },
     limitado: { etiqueta: 'Limitado', color: 'warning', icono: 'i-lucide-gauge' },
     suspendido: { etiqueta: 'Suspendido', color: 'error', icono: 'i-lucide-circle-x' },
@@ -27,6 +32,7 @@ export function esEstadoServicio(valor: string): valor is EstadoServicio {
  * (pedido del PM); el valor enviado a la API es siempre el del contrato.
  */
 export const ESTADOS_FILTRO: { estado: EstadoServicio, etiqueta: string }[] = [
+    { estado: 'pendiente_instalacion', etiqueta: 'Pendiente de instalación' },
     { estado: 'activo', etiqueta: 'Activo' },
     { estado: 'limitado', etiqueta: 'Limitado' },
     { estado: 'suspendido', etiqueta: 'Cortado (suspendido)' },
