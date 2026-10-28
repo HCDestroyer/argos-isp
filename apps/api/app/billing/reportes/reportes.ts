@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { sqlDiferenciasVigentes } from '#billing/diferencias'
+import { inicioFacturacionSql } from '#billing/configuracion'
 import { filtrarPorAlcance, type Alcance, type FiltrosDimension } from '#core/acl'
 import { aTexto, dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
@@ -720,7 +721,8 @@ export const COLUMNAS_ALTAS = definirColumnas([
 ])
 
 /**
- * Por mes: altas = servicios por fecha de instalación (o de alta en el sistema); bajas,
+ * Por mes: altas = servicios por su primer día facturable (instalación, o alta en el sistema; los
+ * pendientes de instalación no cuentan); bajas,
  * suspensiones, limitaciones y reactivaciones = eventos `servicio.estado_cambiado` del outbox
  * (la historia de estados del servicio).
  */
@@ -730,10 +732,13 @@ export async function altasBajas(
     op: EmpresasReporte = UNA_EMPRESA,
 ): Promise<Reporte> {
     const { desde, hasta } = rangoPorDefecto(filtros)
-    const alta = `coalesce(s.fecha_instalacion, ${diaGt('s.created_at')})`
+    // el primer día facturable: un activado desde pendiente cuenta el día de su instalación y un
+    // `pendiente_instalacion` todavía no es alta (`contratos/instalacion.md`)
+    const alta = inicioFacturacionSql('s')
     const altas = db
         .from('core.servicios as s')
         .join('core.clientes as c', 'c.id', 's.cliente_id')
+        .whereNot('s.estado', 'pendiente_instalacion')
         .whereRaw(`${alta} between ? and ?`, [desde, hasta])
         .if(filtros.zona_id, (q) => q.where('c.zona_id', filtros.zona_id!))
         .if(filtros.router_id, (q) => q.where('s.router_id', filtros.router_id!))

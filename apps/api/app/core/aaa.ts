@@ -2,7 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import env from '#start/env'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { prefijoColas, redis } from '#shared/redis'
 import { codificarCursor, decodificarCursor, type Pagina } from '#shared/paginacion'
 import type { Transaccion } from '#shared/domain_action'
@@ -57,7 +57,7 @@ export interface RegistroAaa {
     user_ppp: string
     /** cifrada v1 tal como está en `core.servicios.pass_ppp`; nunca en claro */
     pass_ppp: string
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     router_id: number
     /** `network.routers.control_velocidad` del router del servicio */
     control_velocidad: ControlVelocidad
@@ -93,7 +93,7 @@ interface FilaAaa {
     version: number
     user_ppp: string
     pass_ppp: string
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     router_id: number
     ipv6_modo: ModoIpv6 | null
     plan_id: number

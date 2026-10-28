@@ -13,6 +13,10 @@
  * Estado en vivo (tarea 6): después de cualquier acción del cliente, cuando la pestaña vuelve a
  * estar visible o si ya tiene una promesa activa, consulta `GET /portal/estado` cada 5 s hasta
  * 2 min; al ver `activo` muestra "Ya tienes servicio".
+ *
+ * Pendiente de instalación (`contratos/instalacion.md` §3): nunca se muestra como cortado. Se ven
+ * «Instalación pendiente» y sus cargos únicos (que se pagan en línea o por depósito), sin promesa ni
+ * espera de reactivación: el servicio se activa cuando el técnico cierra la instalación.
  */
 const { seguirNavegandoUrl } = useRuntimeConfig().public
 /** Los `data-testid` de siempre de `/corte` (pruebas y guía del piloto). */
@@ -35,6 +39,7 @@ const cargando = computed(() => status.value === 'idle' || status.value === 'pen
 const mensaje = computed(() => corte.value ? mensajeCorte(corte.value) : null)
 const identificado = computed(() => corte.value?.identificado === true)
 const retirado = computed(() => corte.value?.estado === 'retirado')
+const pendiente = computed(() => esPendienteInstalacion(corte.value?.estado))
 
 const verDeposito = ref(false)
 const verPromesa = ref(false)
@@ -52,11 +57,15 @@ const promesa = ref<PromesaSolicitada | null>(null)
 const puedePedirPromesa = computed(() => identificado.value
     && !corte.value?.promesa_activa
     && corte.value?.estado !== 'activo'
+    && !pendiente.value
     && promesa.value === null)
 
 const { activo: servicioActivo, vigilando, agotado, sinRespuesta, vigilar, detener } = useEstadoServicio()
-/** Tiene sentido esperar la reactivación: servicio identificado, no retirado y no activo. */
-const puedeVigilar = computed(() => identificado.value && !retirado.value && corte.value?.estado !== 'activo')
+/** Tiene sentido esperar la reactivación: servicio identificado, no retirado, no activo y ya instalado. */
+const puedeVigilar = computed(() => identificado.value
+    && !retirado.value
+    && !pendiente.value
+    && corte.value?.estado !== 'activo')
 
 /** Retorno de la pasarela: `/corte?pago=<id>&estado=<pagado|fallido>` (el estado lo pone el proveedor). */
 const pagoId = ref(idPagoDeLaRuta(route.query.pago))
@@ -334,6 +343,7 @@ async function actualizar() {
             <CorteEstadoEnVivo
                 v-if="pagoId !== null"
                 v-bind="enVivo"
+                :instalacion-pendiente="pendiente"
                 @revisar="vigilarEstado"
                 @descartar-pago="descartarPago"
             />
@@ -344,7 +354,7 @@ async function actualizar() {
                 variant="subtle"
                 icon="i-lucide-file-check"
                 title="Recibimos tu comprobante, lo revisaremos"
-                :description="`${formatearQuetzales(comprobante.monto)} · Ref. ${comprobante.referencia}. Al aprobarlo se reactiva tu servicio.`"
+                :description="`${formatearQuetzales(comprobante.monto)} · Ref. ${comprobante.referencia}. ${pendiente ? 'Al aprobarlo se abona a tus cargos.' : 'Al aprobarlo se reactiva tu servicio.'}`"
                 data-testid="comprobante-recibido"
             />
 

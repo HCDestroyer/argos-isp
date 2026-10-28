@@ -64,6 +64,10 @@ function crearServicio(id: number, cliente: Schema<'Cliente'>, sucursal: boolean
         direccion: sucursal ? 'Sucursal 2, local 4' : cliente.direccion,
         coordenadas: cliente.coordenadas,
         fecha_instalacion: instalado.toISOString().slice(0, 10),
+        // Como la API (A1, instalación): la migración rellenó `instalado_en` con `created_at`; la
+        // planta (OZmap, desde Iris) solo llega al activar una instalación pendiente.
+        instalado_en: instalado.toISOString(),
+        planta: null,
         costo_override: cliente.id === 11 && sucursal ? '299.00' : null,
         excluir_firewall: false,
         ipv4: estado === 'retirado' ? null : (router === 1 ? `100.64.10.${10 + id}` : `100.64.20.${10 + id}`),

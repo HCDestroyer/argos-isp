@@ -51,6 +51,9 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
         ['suspendido', 'limitado', 'disconnect', null],
         ['activo', 'retirado', 'disconnect', null],
         ['suspendido', 'retirado', 'disconnect', null],
+        // `contratos/instalacion.md`: el pendiente no tiene sesión (aaa lo rechaza); sin sesión no se envía nada.
+        ['pendiente_instalacion', 'activo', 'disconnect', null],
+        ['pendiente_instalacion', 'retirado', 'disconnect', null],
     ]
     for (const [de, a, accion, atributos] of casos) {
         it(`${de} → ${a}: ${accion}`, () => {
@@ -295,6 +298,21 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
         assert.equal(r.decision?.accion, 'nada')
         assert.equal(nas.recibidos.length, 0)
         assert.equal(almacen.red.length, 0)
+    })
+
+    it('instalación activada (pendiente_instalacion → activo): evento válido; sin sesión no envía nada', async () => {
+        almacen.servicios.set(101, servicio({ estado: 'activo' }))
+        almacen.sesiones.set(101, [])
+        const r = await dispatcher.procesar({
+            id: 30,
+            evento: 'servicio.estado_cambiado',
+            payload: { servicio_id: 101, de: 'pendiente_instalacion', a: 'activo', motivo: 'instalacion' },
+            requestId: 'req-instalacion',
+        })
+        assert.equal(r.decision?.accion, 'disconnect')
+        assert.equal(nas.recibidos.length, 0)
+        assert.equal(almacen.red.length, 0)
+        assert.equal(almacen.outbox.length, 0)
     })
 
     it('router sin secret: audit.red sin envío y coa.fallido', async () => {

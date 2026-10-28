@@ -3,6 +3,7 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd, siguienteId } from '../bd'
 import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, datosInvalidos, idDe, noEncontrado, paginar, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 import { efectivo } from '../routers/rutas'
+import { pendienteInstalacion } from './instalacion'
 
 type PlanTemporal = Schema<'PlanTemporal'>
 type Servicio = Schema<'Servicio'>
@@ -89,6 +90,9 @@ export const rutasPlanesTemporales: RutasFixture = {
         const servicio = bd.servicios.find(s => s.id === idDe(solicitud))
         if (!servicio) {
             return noEncontrado('el servicio')
+        }
+        if (servicio.estado === 'pendiente_instalacion') {
+            return pendienteInstalacion('programar un plan temporal en')
         }
         const cuerpo = cuerpoObjeto(solicitud)
         const plan = bd.planes.find(p => p.id === cuerpo.plan_id)

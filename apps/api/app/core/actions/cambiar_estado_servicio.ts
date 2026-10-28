@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado, ReglaNegocio } from '#shared/errores'
-import type { EstadoServicio } from '#shared/eventos'
+import { ServicioPendienteInstalacion } from '#core/instalacion'
+import type { EstadoServicio, EstadoServicioConPendiente } from '#shared/eventos'
 import { verServicio } from '#core/consultas/servicios'
 import { refrescarAaaAlConfirmar } from '#core/aaa'
 import { aplicarBloqueoPorEstado } from '#core/adicionales'
@@ -18,7 +19,7 @@ export interface EntradaCambiarEstado {
 
 export interface ResultadoCambiarEstado {
     servicioId: number
-    de: EstadoServicio
+    de: EstadoServicioConPendiente
     a: EstadoServicio
     /** false si el servicio ya estaba en `nuevo`: no se escribe nada ni se emite evento */
     cambiado: boolean
@@ -31,6 +32,8 @@ export interface ResultadoCambiarEstado {
  * - Transiciones válidas: entre `activo`, `limitado` y `suspendido` en cualquier sentido (una
  *   plantilla con `facturas_para_limitar = 0` pasa de activo a suspendido sin limitar).
  * - Desde `retirado` no hay vuelta: 422 `servicio_retirado`. Para retirar se usa `RetirarServicio`.
+ * - Un `pendiente_instalacion` no se mueve aquí: 422 `servicio_pendiente_instalacion`. Solo sale con
+ *   `ActivarInstalacionServicio` o `RetirarServicio` (`contratos/instalacion.md` §1).
  * - Mismo estado: no hace nada (`cambiado: false`), para que los llamadores sean idempotentes.
  * - Bloquea la fila (`FOR UPDATE`) para que dos evaluaciones concurrentes no se pisen.
  * - Emite `servicio.estado_cambiado` por outbox y registra el diff en `audit.cambios`.
@@ -55,12 +58,13 @@ export default class CambiarEstadoServicio extends DomainAction<
             .where('id', input.servicioId)
             .forUpdate()
             .select('estado', 'empresa_id')
-            .first()) as { estado: EstadoServicio; empresa_id: number } | null
+            .first()) as { estado: EstadoServicioConPendiente; empresa_id: number } | null
         if (!fila) throw new NoEncontrado(`El servicio ${input.servicioId} no existe`)
         t.fijarEmpresa(Number(fila.empresa_id))
         if (fila.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado y no cambia de estado', 'servicio_retirado')
         }
+        if (fila.estado === 'pendiente_instalacion') throw new ServicioPendienteInstalacion()
         if (fila.estado === input.nuevo) {
             return { servicioId: input.servicioId, de: fila.estado, a: fila.estado, cambiado: false }
         }

@@ -101,5 +101,28 @@
     },
     "ipv4": { "modo": "pool", "pool": "argos-v4-pppoe" },
     "ipv6": { "modo": "ninguno" }
+  },
+  {
+    "servicio_id": 9006,
+    "version": 1,
+    "user_ppp": "prueba-pendiente",
+    "pass_ppp_claro": "clave-pendiente",
+    "estado": "pendiente_instalacion",
+    "router_id": 1,
+    "plan": {
+      "id": 1,
+      "subida_kbps": 5120,
+      "bajada_kbps": 20480,
+      "subida_limitada_kbps": 1024,
+      "bajada_limitada_kbps": 2048,
+      "rate_limit_override": null,
+      "profile_ppp": null
+    },
+    "ipv4": { "modo": "estatico", "ip": "10.10.1.12" },
+    "ipv6": {
+      "modo": "radius_servicio",
+      "prefijo_enlace": "2001:db8:101:2::/64",
+      "prefijo_delegado": "2001:db8:300:200::/56"
+    }
   }
 ]

@@ -1,8 +1,9 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { Conflicto, NoEncontrado, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { ServicioPendienteInstalacion } from '#core/instalacion'
 import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { usuarioDelActor } from '#shared/contexto'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { obtenerImplementacionPlan } from '#network/actions/obtener_implementacion_plan'
 import {
     exigirPlanCompatible,
@@ -39,7 +40,8 @@ const DIA_MS = 24 * 60 * 60 * 1000
  *
  * - El plan debe estar activo, disponible en el router del servicio, ser otro que el actual y
  *   compatible (mismo `dual_stack` y tamaño de prefijo delegado: no mueve IPs ni corta la sesión;
- *   422 `plan_temporal_incompatible`). Servicio retirado: 422 `servicio_retirado`.
+ *   422 `plan_temporal_incompatible`). Servicio retirado: 422 `servicio_retirado`; pendiente de instalación: 422
+ *   `servicio_pendiente_instalacion`.
  * - Un solo plan temporal programado o activo por servicio: 409 `plan_temporal_existente`.
  * - El mismo `origen` + `origen_id` devuelve el plan temporal ya programado (idempotente).
  * - Si `inicio` ya llegó, lo inicia en la misma transacción (`servicios.iniciar_plan_temporal`);
@@ -61,7 +63,7 @@ export default class ProgramarPlanTemporal extends DomainAction<
             .first()) as {
             plan_id: number
             router_id: number
-            estado: EstadoServicio
+            estado: EstadoServicioConPendiente
             empresa_id: number
         } | null
         if (!servicio) throw new NoEncontrado(`El servicio ${input.servicio_id} no existe`)
@@ -96,6 +98,9 @@ export default class ProgramarPlanTemporal extends DomainAction<
                 'El servicio está retirado: no recibe planes temporales',
                 'servicio_retirado',
             )
+        }
+        if (servicio.estado === 'pendiente_instalacion') {
+            throw new ServicioPendienteInstalacion('programar un plan temporal en')
         }
         const routerId = Number(servicio.router_id)
         const planActualId = Number(servicio.plan_id)

@@ -15,7 +15,8 @@ import {
 
 /**
  * Accounting `Stop`: cierra la sesión (fin, contadores finales, `Acct-Terminate-Cause`) y emite
- * `sesion.terminada`.
+ * `sesion.terminada` y, si el servicio acumula caídas en la ventana, `servicio.caidas_repetidas`
+ * (`caidas.ts`).
  *
  * - Sin Start previo: crea la fila ya cerrada (`inicio = fin − Acct-Session-Time`) y emite solo
  *   `sesion.terminada`.
@@ -38,8 +39,8 @@ export default class TerminarSesion extends DomainAction<RegistroAccounting, Res
         })
         if (creada) {
             t.fijarEntidad('sesion', creada.id)
-            await emitirTerminada(t, creada)
-            return { sesionId: creada.id, efecto: 'creada_cerrada', eventos: ['sesion.terminada'] }
+            const eventos = await emitirTerminada(t, creada)
+            return { sesionId: creada.id, efecto: 'creada_cerrada', eventos }
         }
         const existente = (await buscarSesion(t, r.nas_ip, r.acct_session_id))!
         t.fijarEntidad('sesion', existente.id)
@@ -56,7 +57,7 @@ export default class TerminarSesion extends DomainAction<RegistroAccounting, Res
             return { sesionId: existente.id, efecto: 'corregida', eventos: [] }
         }
         const cerrada = await actualizarSesionAbierta(t, existente.id, r, ctx, { fin: r.evento_en, causa })
-        await emitirTerminada(t, cerrada)
-        return { sesionId: cerrada.id, efecto: 'cerrada', eventos: ['sesion.terminada'] }
+        const eventos = await emitirTerminada(t, cerrada)
+        return { sesionId: cerrada.id, efecto: 'cerrada', eventos }
     }
 }

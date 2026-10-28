@@ -104,6 +104,13 @@ const NO_DISPONIBLE = (motivo: string, extra: Partial<CondicionesPromesa> = {}):
 const CONTACTANOS = 'Comunícate con nosotros para acordar una fecha de pago.'
 
 /**
+ * Servicio `pendiente_instalacion` (`contratos/instalacion.md` §3): no hay corte que evitar ni
+ * servicio que reactivar, así que no hay promesa. Sus cargos únicos se pagan en línea o por depósito.
+ */
+const INSTALACION_PENDIENTE =
+    'Tu servicio aún no está instalado: las promesas de pago no aplican. Puedes pagar tus cargos en línea o por depósito.'
+
+/**
  * Límites que aplican a una promesa del canal `portal` para el servicio, hoy. Solo lectura y sin
  * reglas propias: salen de `limitesPromesa()` de A3 (la misma evaluación que `CrearPromesaPago`).
  * Aquí solo se traducen al cliente:
@@ -122,8 +129,13 @@ export async function condicionesPromesa(
 ): Promise<CondicionesPromesa> {
     const cliente = db.connection()
     const servicio = await leerServicio(cliente, servicioId)
-    if (servicio.estado === 'retirado') {
+    // `ServicioFacturable` de A3 aún no tipa `pendiente_instalacion`, pero en la base puede estarlo.
+    const estado = servicio.estado as EstadoServicio
+    if (estado === 'retirado') {
         return NO_DISPONIBLE('Tu servicio está dado de baja.')
+    }
+    if (estado === 'pendiente_instalacion') {
+        return NO_DISPONIBLE(INSTALACION_PENDIENTE)
     }
 
     const abierta = (await cliente
@@ -371,6 +383,9 @@ export function errorParaCliente(error: unknown): unknown {
             `No podemos registrar promesas para tu servicio desde aquí. ${CONTACTANOS}`,
             'sin_plantilla',
         )
+    }
+    if (error.code === 'E_SERVICIO_PENDIENTE_INSTALACION') {
+        return new ReglaNegocio(INSTALACION_PENDIENTE, 'servicio_pendiente_instalacion')
     }
     if (error.code === 'E_SERVICIO_RETIRADO') {
         return new ReglaNegocio('Tu servicio está dado de baja.', 'servicio_retirado')

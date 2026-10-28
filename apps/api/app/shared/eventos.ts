@@ -9,7 +9,24 @@
  * ("150.00"), fechas como ISO 8601 (UTC para instantes, YYYY-MM-DD para fechas).
  */
 
-export type EstadoServicio = 'activo' | 'limitado' | 'suspendido' | 'retirado'
+/**
+ * Estados del servicio (`core.servicios.estado`). `pendiente_instalacion` (vendido desde Iris, aún sin
+ * instalar; `contratos/instalacion.md`) solo sale con `servicios.activar_instalacion` o `servicios.retirar`.
+ */
+export const ESTADOS_SERVICIO = [
+    'pendiente_instalacion',
+    'activo',
+    'limitado',
+    'suspendido',
+    'retirado',
+] as const
+export type EstadoServicioConPendiente = (typeof ESTADOS_SERVICIO)[number]
+/**
+ * Estados sin `pendiente_instalacion`: los que ven hoy billing, portal y lealtad. Se mantiene
+ * mientras A3 y A5 adoptan el pendiente (`.claude/integration/a1.md`); el núcleo usa
+ * `EstadoServicioConPendiente` donde un pendiente puede aparecer.
+ */
+export type EstadoServicio = Exclude<EstadoServicioConPendiente, 'pendiente_instalacion'>
 /** Métodos de pago (`billing.pagos.metodo`). transferencia, ach y remesa: decisión del PM 2026-10-16. */
 export const METODOS_PAGO = [
     'caja',
@@ -164,9 +181,15 @@ export interface CatalogoEventos {
     'servicio.estado_cambiado': {
         servicio_id: number
         empresa_id: number
-        de: EstadoServicio
+        de: EstadoServicioConPendiente
         a: EstadoServicio
         motivo: string
+        /**
+         * Solo en la activación de la instalación (`motivo: 'instalacion'`, `contratos/instalacion.md`)
+         * cuando viene de otro sistema: p. ej. `iris_orden` y el id de la orden. Aditivo.
+         */
+        origen_tipo?: string
+        origen_id?: string
     }
     /**
      * `tipo_conexion`, `mac` y `amarre_ip_mac` (semana 2, WISP): el dispatcher de RouterOS (A2)
@@ -260,6 +283,28 @@ export interface CatalogoEventos {
      * sesiones colgadas). Agregado en la semana 3; los consumidores que no lo lean no cambian.
      */
     'sesion.terminada': PayloadSesion & { motivo: string | null }
+    /**
+     * Caídas repetidas (A2, pedido A6 de Iris): el servicio acumuló `sesiones` sesiones terminadas
+     * (sin contar las causas ignoradas: Disconnect de Argos, reinicio del router, cierre del cron)
+     * entre `desde` y `hasta`, dentro de `ventana_minutos`, con `umbral` como mínimo. A lo sumo uno
+     * por servicio y ventana. Lo reenvía A6 por webhook a Iris (ticket proactivo).
+     */
+    'servicio.caidas_repetidas': {
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        router_id: number
+        /** Sesión cuyo cierre cruzó el umbral */
+        sesion_id: number
+        sesiones: number
+        /** ISO: fin de la primera sesión contada / de la última (la que cruzó el umbral) */
+        desde: string
+        hasta: string
+        umbral: number
+        ventana_minutos: number
+        /** Sesiones contadas por `causa_fin` (`Lost-Carrier`, `User-Request`, …) */
+        causas: Record<string, number>
+    }
     /** Desconexión manual pedida desde el panel o la API; la ejecuta `coa` (Disconnect-Request). */
     'sesion.desconexion_solicitada': {
         sesion_id: number
@@ -968,6 +1013,7 @@ export const EVENTOS = [
     'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',
+    'servicio.caidas_repetidas',
     'sesion.desconexion_solicitada',
     'coa.fallido',
     'routeros.fallido',

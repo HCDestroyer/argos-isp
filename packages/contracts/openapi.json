@@ -8444,6 +8444,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "pendiente_instalacion",
                 "activo",
                 "limitado",
                 "suspendido",
@@ -49074,7 +49075,7 @@
       "post": {
         "operationId": "portalSolicitarPromesa",
         "summary": "El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)",
-        "description": "Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
+        "description": "Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.",
         "tags": [
           "portal"
         ],
@@ -54877,6 +54878,7 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
@@ -55200,6 +55202,7 @@
                         "routers.editar",
                         "routers.marcar_migrado",
                         "routers.ver",
+                        "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
                         "servicios.agregar_adicional",
                         "servicios.cambiar_empresa",
@@ -57045,6 +57048,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "pendiente_instalacion",
                 "activo",
                 "limitado",
                 "suspendido",
@@ -57457,6 +57461,14 @@
                     "required": [],
                     "additionalProperties": true,
                     "description": "Excepciones a la plantilla: { campo: valor }; null borra la excepción. Campos: dia, prorrateo, dias_gracia, facturas_para_limitar, facturas_para_cortar, mora_tipo, mora_valor, mora_recurrente, hora_corte, certificar_al, reglas_promesa"
+                  },
+                  "estado_inicial": {
+                    "type": "string",
+                    "enum": [
+                      "activo",
+                      "pendiente_instalacion"
+                    ],
+                    "description": "Por defecto activo. pendiente_instalacion: venta desde Iris; no navega ni factura hasta POST /servicios/:id/activar-instalacion"
                   }
                 },
                 "required": [
@@ -57951,6 +57963,195 @@
           }
         },
         "x-permiso": "servicios.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/servicios/{id}/activar-instalacion": {
+      "post": {
+        "operationId": "serviciosActivarInstalacion",
+        "summary": "Activar la instalación de un servicio pendiente (queda activo e inicia la facturación)",
+        "description": "Contrato `.claude/integration/contratos/instalacion.md` §2. Exige `Idempotency-Key` (Iris usa `iris:instalacion:<orden_id>`; repetirla devuelve la misma respuesta) y `version` (409). Fija `instalado_en` (o ahora) y emite `servicio.estado_cambiado` con `motivo: instalacion` y el origen. 422 `servicio_no_pendiente` si el servicio no está `pendiente_instalacion` (una clave nueva sobre uno ya activo); 422 en `instalado_en` si es futura o anterior al alta.",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "instalado_en": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Cuándo quedó instalado (inicio de la facturación). Sin él, ahora. Ni futuro (5 min de tolerancia de reloj) ni anterior al alta del servicio"
+                  },
+                  "origen_tipo": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,39}$",
+                    "description": "Sistema y documento que activa, p. ej. iris_orden (auditoría y evento)"
+                  },
+                  "origen_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Id del documento de origen (la orden de Iris)"
+                  },
+                  "planta": {
+                    "type": "object",
+                    "properties": {
+                      "caja": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "puerto": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "olt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "slot": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "pon": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "potencia_dbm": {
+                        "type": "string",
+                        "pattern": "^-?\\d{1,2}(\\.\\d{1,2})?$",
+                        "description": "Potencia óptica en dBm, decimal como texto (p. ej. \"-19.40\"), entre -60 y 10, hasta 2 decimales"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false,
+                    "description": "Referencia de planta de la instalación (pedido A9 de Iris): solo lectura, no se valida contra nada"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio activo con instalado_en",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servicio"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el header Idempotency-Key (`idempotency_key_requerida`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.activar_instalacion; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.activar_instalacion",
         "x-implementado": true
       }
     },
@@ -59440,7 +59641,7 @@
       "post": {
         "operationId": "serviciosAsignarEquipo",
         "summary": "Prestar una unidad en comodato al servicio (activo fijo 1.2.01.NN / 1.1.14)",
-        "description": "La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.",
+        "description": "La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). La unidad va por `unidad_id` o por `serie` (exactamente uno; la serie se busca en la empresa del servicio, sin distinguir mayúsculas; 422 unidad_o_serie, 404 si no existe). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.",
         "tags": [
           "inventario"
         ],
@@ -59483,7 +59684,13 @@
                 "properties": {
                   "unidad_id": {
                     "type": "integer",
-                    "minimum": 1
+                    "minimum": 1,
+                    "description": "La unidad; o, en su lugar, `serie`"
+                  },
+                  "serie": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "description": "Serie de la unidad en la empresa del servicio, sin distinguir mayúsculas (contrato Iris §3); en lugar de `unidad_id`"
                   },
                   "fecha": {
                     "type": [
@@ -59522,9 +59729,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "unidad_id"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -61953,6 +62158,7 @@
                             "routers.editar",
                             "routers.marcar_migrado",
                             "routers.ver",
+                            "servicios.activar_instalacion",
                             "servicios.adicional_cortesia",
                             "servicios.agregar_adicional",
                             "servicios.cambiar_empresa",
@@ -67168,6 +67374,7 @@
           "estado_servicio": {
             "type": "string",
             "enum": [
+              "pendiente_instalacion",
               "activo",
               "limitado",
               "suspendido",
@@ -73692,12 +73899,13 @@
               "null"
             ],
             "enum": [
+              "pendiente_instalacion",
               "activo",
               "limitado",
               "suspendido",
               "retirado"
             ],
-            "description": "Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); retirado si todos lo están; null sin servicios"
+            "description": "Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo > pendiente_instalacion); retirado si todos lo están; null sin servicios"
           }
         }
       },
@@ -76251,6 +76459,7 @@
       "EstadoServicio": {
         "type": "string",
         "enum": [
+          "pendiente_instalacion",
           "activo",
           "limitado",
           "suspendido",
@@ -78765,6 +78974,7 @@
               "estado": {
                 "type": "string",
                 "enum": [
+                  "pendiente_instalacion",
                   "activo",
                   "limitado",
                   "suspendido",
@@ -80797,6 +81007,7 @@
           "routers.editar",
           "routers.marcar_migrado",
           "routers.ver",
+          "servicios.activar_instalacion",
           "servicios.adicional_cortesia",
           "servicios.agregar_adicional",
           "servicios.cambiar_empresa",
@@ -81013,6 +81224,7 @@
           "Editar routers y sus credenciales",
           "Marcar cuándo un router pasó al nuevo RADIUS (aaa)",
           "Ver routers",
+          "Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)",
           "Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar",
           "Agregar un servicio adicional (streaming, IPTV…) a un servicio: incluido o cobrado",
           "Pasar un servicio sin saldo pendiente a otra empresa (NIT)",
@@ -92656,7 +92868,7 @@
           },
           "servicios": {
             "type": "integer",
-            "description": "Servicios PPPoE no retirados del router (dentro del alcance)"
+            "description": "Servicios PPPoE no retirados ni pendientes de instalación del router (dentro del alcance)"
           },
           "con_sesion_activa": {
             "type": "integer",
@@ -92975,6 +93187,7 @@
               "routers.editar",
               "routers.marcar_migrado",
               "routers.ver",
+              "servicios.activar_instalacion",
               "servicios.adicional_cortesia",
               "servicios.agregar_adicional",
               "servicios.cambiar_empresa",
@@ -93079,6 +93292,7 @@
               "red.ver",
               "redes.ver",
               "routers.ver",
+              "servicios.activar_instalacion",
               "servicios.agregar_adicional",
               "servicios.cancelar_plan_temporal",
               "servicios.crear",
@@ -93124,6 +93338,7 @@
               "routers.editar",
               "routers.marcar_migrado",
               "routers.ver",
+              "servicios.activar_instalacion",
               "servicios.agregar_adicional",
               "servicios.crear",
               "servicios.desconectar",
@@ -93688,6 +93903,8 @@
           "direccion",
           "coordenadas",
           "fecha_instalacion",
+          "instalado_en",
+          "planta",
           "costo_override",
           "excluir_firewall",
           "ipv4",
@@ -93797,6 +94014,49 @@
               "null"
             ],
             "format": "date"
+          },
+          "instalado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Activación de la instalación (inicio de la facturación); null mientras está pendiente_instalacion"
+          },
+          "planta": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [],
+            "properties": {
+              "caja": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "puerto": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "olt": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "slot": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "pon": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "potencia_dbm": {
+                "type": "string",
+                "pattern": "^-?\\d{1,2}\\.\\d{2}$",
+                "description": "Potencia óptica en dBm, decimal con 2 decimales (p. ej. \"-19.40\")"
+              }
+            },
+            "description": "Referencia de planta de la instalación (caja, puerto, OLT, slot, PON, potencia), de solo lectura: la planta vive en OZmap y llega desde Iris al activar la instalación. null sin datos"
           },
           "costo_override": {
             "anyOf": [
@@ -93998,6 +94258,7 @@
           "de": {
             "type": "string",
             "enum": [
+              "pendiente_instalacion",
               "activo",
               "limitado",
               "suspendido",
@@ -94007,6 +94268,7 @@
           "estado": {
             "type": "string",
             "enum": [
+              "pendiente_instalacion",
               "activo",
               "limitado",
               "suspendido",

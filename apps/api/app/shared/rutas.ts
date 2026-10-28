@@ -2,7 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import type { VineValidator } from '@vinejs/vine'
 import type { Infer, SchemaTypes } from '@vinejs/vine/types'
 import type { EsquemaJson } from '#shared/openapi/esquemas'
-import { NoImplementado } from '#shared/errores'
+import { NoImplementado, Problema } from '#shared/errores'
 import type { Permiso } from '#core/permisos'
 
 /**
@@ -99,8 +99,11 @@ export interface DefinicionRuta<
     /** schemas de parámetros de ruta; por defecto `:id` y `:xxxId` son enteros positivos */
     parametros?: Record<string, EsquemaJson>
     respuesta: RespuestaRuta
-    /** acepta `Idempotency-Key` */
-    idempotente?: boolean
+    /**
+     * acepta `Idempotency-Key`; `'obligatoria'`: sin el header responde 400
+     * `idempotency_key_requerida` (operaciones que llaman otros sistemas, p. ej. Iris)
+     */
+    idempotente?: boolean | 'obligatoria'
     /** la edición exige `version` y puede responder 409 */
     versionada?: boolean
     /**
@@ -179,6 +182,14 @@ export function esStatusRedireccion(status: number): boolean {
 
 /** Ejecuta el gancho `antes`, la validación y el handler (o 501) para una ruta montada. */
 export async function despachar(ruta: Ruta, ctx: HttpContext) {
+    if (ruta.idempotente === 'obligatoria' && !ctx.request.header('idempotency-key')) {
+        throw new Problema(
+            400,
+            'idempotency_key_requerida',
+            'Falta Idempotency-Key',
+            'Esta operación exige el header Idempotency-Key',
+        )
+    }
     if (ruta.antes) await ruta.antes(ctx)
     // multipart: `request.body()` trae los campos de texto; los archivos van por `request.file()`
     const cuerpo = ruta.cuerpo ? await ruta.cuerpo.validate(ctx.request.body()) : undefined

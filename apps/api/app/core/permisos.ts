@@ -32,6 +32,8 @@ export const PERMISOS = {
     'servicios.limitar': 'Limitar la velocidad de servicios',
     'servicios.quitar_limite': 'Quitar el límite de velocidad',
     'servicios.retirar': 'Retirar servicios',
+    'servicios.activar_instalacion':
+        'Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
     'servicios.ver_credenciales': 'Ver la contraseña PPPoE de un servicio (queda auditado)',
     'servicios.cambiar_empresa': 'Pasar un servicio sin saldo pendiente a otra empresa (NIT)',
@@ -367,6 +369,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.reactivar',
             'servicios.limitar',
             'servicios.quitar_limite',
+            'servicios.activar_instalacion',
             'servicios.desconectar',
             'servicios.ver_credenciales',
             'servicios.agregar_adicional',
@@ -406,6 +409,8 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.ver',
             'servicios.crear',
             'servicios.editar',
+            // instala lo que vende Iris (contratos/instalacion.md): tiene servicios.crear
+            'servicios.activar_instalacion',
             'servicios.desconectar',
             'servicios.ver_credenciales',
             'servicios.agregar_adicional',

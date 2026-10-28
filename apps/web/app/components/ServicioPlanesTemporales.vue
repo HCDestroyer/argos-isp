@@ -120,7 +120,8 @@ function alCancelar(plan: PlanTemporal) {
     emit('cambiado')
 }
 
-const puedeProgramar = computed(() => puede('servicios.programar_plan_temporal') && props.servicio.estado !== 'retirado')
+/** Retirado o pendiente de instalación: la API rechaza programar (422). */
+const puedeProgramar = computed(() => puede('servicios.programar_plan_temporal') && props.servicio.estado !== 'retirado' && props.servicio.estado !== 'pendiente_instalacion')
 </script>
 
 <template>

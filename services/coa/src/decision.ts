@@ -13,6 +13,7 @@ import type { PerfilSuspendido } from './config.ts'
  * | `limitado` → `activo`                    | CoA        | `Mikrotik-Rate-Limit` del plan                                  |
  * | `suspendido` → `activo` o `limitado`     | Disconnect | (un CoA no quita el corte IPv6; al reconectar `aaa` da el perfil) |
  * | → `retirado`                             | Disconnect | (al reconectar `aaa` lo rechaza)                                |
+ * | `pendiente_instalacion` → `activo`       | Disconnect | (sin sesión no se envía nada: `aaa` rechazaba al pendiente)     |
  * | config: `ips`, `prefijo_v6` o `router`   | Disconnect | (al reconectar trae la IP, el prefijo o el NAS nuevos)          |
  * | config: solo `plan`                      | CoA        | `Mikrotik-Rate-Limit` del estado actual (nada si suspendido)    |
  * | config: `plan` con reuso > 1 (`simple`)  | Disconnect | (al reconectar entra al perfil `plan-<id>` con su cola padre)   |
@@ -26,8 +27,19 @@ import type { PerfilSuspendido } from './config.ts'
  * un reintento puede llegar después).
  */
 
-export type EstadoServicio = 'activo' | 'limitado' | 'suspendido' | 'retirado'
-export const ESTADOS: readonly EstadoServicio[] = ['activo', 'limitado', 'suspendido', 'retirado']
+/**
+ * `pendiente_instalacion` (`contratos/instalacion.md`): solo sale a `activo` (`motivo: instalacion`)
+ * o a `retirado`. `aaa` lo rechaza, así que no tiene sesión; si quedara una (RADIUS anterior a la
+ * migración), el Disconnect la hace reconectar con el perfil del estado nuevo.
+ */
+export type EstadoServicio = 'pendiente_instalacion' | 'activo' | 'limitado' | 'suspendido' | 'retirado'
+export const ESTADOS: readonly EstadoServicio[] = [
+    'pendiente_instalacion',
+    'activo',
+    'limitado',
+    'suspendido',
+    'retirado',
+]
 
 export type CampoConfig = 'plan' | 'ips' | 'prefijo_v6' | 'router'
 
@@ -126,6 +138,12 @@ export function decidir(
         }
         if (evento.a === evento.de) return { accion: 'nada', razon: 'sin cambio de estado' }
         if (evento.a === 'retirado') return { accion: 'disconnect', razon: 'retirado' }
+        if (evento.de === 'pendiente_instalacion') {
+            return {
+                accion: 'disconnect',
+                razon: `instalación activada: pendiente_instalacion → ${evento.a}`,
+            }
+        }
         if (evento.de === 'suspendido') {
             return { accion: 'disconnect', razon: `reactivar: suspendido → ${evento.a}` }
         }

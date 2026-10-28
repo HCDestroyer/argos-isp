@@ -4,7 +4,13 @@
  * Detalle y ejemplos en `.claude/integration/contratos/aaa.md` y `services/aaa/README.md`.
  */
 
-export const ESTADOS = ['activo', 'limitado', 'suspendido', 'retirado'] as const
+/**
+ * `pendiente_instalacion` (vendido desde Iris, aún sin instalar; `contratos/instalacion.md` §3):
+ * registro completo, no lápida, y `aaa` lo rechaza como a un retirado hasta que se activa.
+ */
+export const ESTADOS = ['pendiente_instalacion', 'activo', 'limitado', 'suspendido', 'retirado'] as const
+/** Estados que reciben Access-Reject aunque el registro exista. */
+export const ESTADOS_RECHAZADOS: readonly EstadoServicio[] = ['retirado', 'pendiente_instalacion']
 export type EstadoServicio = (typeof ESTADOS)[number]
 
 export interface PlanAaa {

@@ -20,6 +20,7 @@ import { ReglasPromesa } from '#billing/esquemas'
 import { Advertencia, PlanEfectivo } from '#network/esquemas'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { TIPOS_ACTOR } from '#shared/contexto'
+import { ESTADOS_SERVICIO } from '#shared/eventos'
 import { REGIMENES_ISR } from '#core/empresas'
 import { TIPOS_DOCUMENTO_FISCAL } from '#core/nit_cui'
 import { TIPOS_CAMPO_PERSONALIZADO } from '#core/campos_personalizados'
@@ -376,18 +377,15 @@ export const DependientePago = definirEsquema(
         nit_cui: nulable(texto),
         servicios: { type: 'integer', minimum: 0, description: 'Servicios no retirados' },
         estado_servicio: {
-            ...nulable(enumerado(['activo', 'limitado', 'suspendido', 'retirado'])),
+            ...nulable(enumerado([...ESTADOS_SERVICIO])),
             description:
-                'Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo); ' +
+                'Resumen: el estado más grave de sus servicios no retirados (suspendido > limitado > activo > pendiente_instalacion); ' +
                 'retirado si todos lo están; null sin servicios',
         },
     }),
 )
 
-export const EstadoServicio = definirEsquema(
-    'EstadoServicio',
-    enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
-)
+export const EstadoServicio = definirEsquema('EstadoServicio', enumerado([...ESTADOS_SERVICIO]))
 
 const horaCorte: EsquemaJson = {
     type: 'string',
@@ -418,6 +416,8 @@ export const ExcepcionesServicio = definirEsquema('ExcepcionesServicio', {
     additionalProperties: false,
 })
 
+const textoPlanta: EsquemaJson = { type: 'string', maxLength: 100 }
+
 export const Servicio = definirEsquema(
     'Servicio',
     objeto(
@@ -445,6 +445,34 @@ export const Servicio = definirEsquema(
             direccion: nulable(texto),
             coordenadas: nulable(texto),
             fecha_instalacion: nulable(fecha),
+            instalado_en: {
+                ...nulable(instante),
+                description:
+                    'Activación de la instalación (inicio de la facturación); null mientras está pendiente_instalacion',
+            },
+            planta: {
+                ...nulable(
+                    objeto(
+                        {
+                            caja: textoPlanta,
+                            puerto: textoPlanta,
+                            olt: textoPlanta,
+                            slot: textoPlanta,
+                            pon: textoPlanta,
+                            potencia_dbm: {
+                                type: 'string',
+                                pattern: '^-?\\d{1,2}\\.\\d{2}$',
+                                description:
+                                    'Potencia óptica en dBm, decimal con 2 decimales (p. ej. "-19.40")',
+                            },
+                        },
+                        ['caja', 'puerto', 'olt', 'slot', 'pon', 'potencia_dbm'],
+                    ),
+                ),
+                description:
+                    'Referencia de planta de la instalación (caja, puerto, OLT, slot, PON, potencia), de solo ' +
+                    'lectura: la planta vive en OZmap y llega desde Iris al activar la instalación. null sin datos',
+            },
             costo_override: nulable(Dinero),
             excluir_firewall: booleano,
             ipv4: nulable(texto),
@@ -654,7 +682,7 @@ export const BloqueoAdicional = definirEsquema(
         id,
         asignacion_id: id,
         accion: enumerado(['bloqueado', 'desbloqueado']),
-        estado_servicio: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+        estado_servicio: enumerado([...ESTADOS_SERVICIO]),
         motivo: nulable(texto),
         created_at: instante,
     }),
@@ -767,7 +795,7 @@ export const IpResueltaHorus = definirEsquema(
         servicio: objeto({
             user_ppp: nulable(texto),
             plan: { type: 'string', description: 'Nombre del plan' },
-            estado: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+            estado: enumerado([...ESTADOS_SERVICIO]),
             router_id: id,
         }),
         empresa: objeto({

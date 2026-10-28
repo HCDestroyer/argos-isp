@@ -141,7 +141,7 @@ export interface ResumenSesionesRouter {
     desde: string
     /** Fecha de migración marcada (`routers.marcar_migrado`), null si no está marcada */
     aaa_desde: string | null
-    /** Servicios PPPoE no retirados del router (dentro del alcance de quien consulta) */
+    /** Servicios PPPoE no retirados ni pendientes de instalación del router (dentro del alcance de quien consulta) */
     servicios: number
     /** De esos, cuántos tienen una sesión abierta ahora */
     con_sesion_activa: number
@@ -189,7 +189,8 @@ export async function resumenSesionesRouter(
         .join('core.clientes as c', 'c.id', 's.cliente_id')
         .where('s.router_id', routerId)
         .where('s.tipo_conexion', 'pppoe')
-        .whereNot('s.estado', 'retirado')
+        // Un pendiente de instalación no puede tener sesión (aaa lo rechaza): no cuenta como "sin sesión".
+        .whereNotIn('s.estado', ['retirado', 'pendiente_instalacion'])
         .select(
             cliente.raw('s.id::int AS servicio_id'),
             cliente.raw('s.cliente_id::int AS cliente_id'),

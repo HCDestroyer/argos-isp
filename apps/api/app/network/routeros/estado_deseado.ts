@@ -1,4 +1,4 @@
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { rateLimitServicio, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { conPadreSimple, listaPlan, nombrePadre } from '#network/routeros/velocidad_router'
 import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
@@ -17,8 +17,9 @@ import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
  * | Lease DHCP | Solo en `dhcp_fija` (también suspendido: necesita su IP para llegar a `/corte`) |
  * | ARP estático | Solo con `amarre_ip_mac` y `mac` |
  *
- * Un servicio `retirado`, inexistente o sin IPv4 no tiene nada en el router; uno `pppoe`, solo sus
- * entradas del árbol.
+ * Un servicio `retirado`, `pendiente_instalacion` (`contratos/instalacion.md` §3: nada hasta que se
+ * activa, con `servicio.estado_cambiado` y `motivo: instalacion`), inexistente o sin IPv4 no tiene
+ * nada en el router; uno `pppoe`, solo sus entradas del árbol.
  */
 
 /** Menús donde un servicio puede tener objetos (en este orden se aplican). */
@@ -69,7 +70,7 @@ export type TipoConexion = 'pppoe' | 'ip_estatica' | 'dhcp_fija'
 /** Lo que el dispatcher sabe de un servicio (de `consultas.ts`). */
 export interface ServicioRed {
     servicio_id: number
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     tipo_conexion: TipoConexion
     router_id: number
     plan_id: number
@@ -194,7 +195,7 @@ export function estadoDeseado(
     const vacio = estadoVacio(id)
     const arbol = router.control_velocidad === 'arbol_pcq'
     const cuenta = servicio.estado === 'activo' || servicio.estado === 'limitado'
-    if (servicio.estado === 'retirado') return vacio
+    if (servicio.estado === 'retirado' || servicio.estado === 'pendiente_instalacion') return vacio
     if (servicio.tipo_conexion === 'pppoe') {
         // PPPoE: la cola y el corte vienen de RADIUS. En el árbol, sus direcciones (de la sesión
         // abierta) van a la lista del plan; sin sesión, nada.
