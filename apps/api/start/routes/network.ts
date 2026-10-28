@@ -50,6 +50,16 @@ import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
+import type { HttpContext } from '@adonisjs/core/http'
+import { ConexionRouter, PeerWireguard, RegistroConexion, ResultadoHandshakes } from '#network/esquemas'
+import { parsearAdmin } from '#network/conexion/config'
+import { listarPeers, verConexion } from '#network/conexion/consultas'
+import { limitarRegistro } from '#network/conexion/limite_registro'
+import GenerarScript, { type ScriptConexion } from '#network/conexion/actions/generar_script'
+import RotarConexion from '#network/conexion/actions/rotar_conexion'
+import RegistrarConexion from '#network/conexion/actions/registrar_conexion'
+import ConexionClave from '#network/conexion/actions/conexion_clave'
+import RegistrarHandshakes from '#network/conexion/actions/registrar_handshakes'
 
 // A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
 registrarSeccionMetricas('routeros', leerMetricasRouterOS)
@@ -463,4 +473,170 @@ const red: Ruta[] = [
     }),
 ]
 
-export default [...routers, ...planes, ...sesiones, ...red]
+/** Descarga del `.rsc`: lleva secretos, así que nunca se guarda en caché. */
+function enviarScript(ctx: HttpContext, script: ScriptConexion): void {
+    ctx.response.header('Content-Type', 'text/plain; charset=utf-8')
+    ctx.response.header('Content-Disposition', `attachment; filename="${script.nombre_archivo}"`)
+    ctx.response.header('Cache-Control', 'no-store')
+    ctx.response.header('X-Content-Type-Options', 'nosniff')
+    ctx.response.send(script.script)
+}
+
+const origenPeticion = (ctx: HttpContext) => `${ctx.request.protocol()}://${ctx.request.host()}`
+
+const SOBRE_EL_SCRIPT =
+    'Devuelve el `.rsc` (text/plain, descarga) que crea el túnel WireGuard, el usuario `argosisp-api` con ' +
+    'clave nueva, el cliente RADIUS (secreto del router) y cierra los puertos de gestión ' +
+    '(`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token ' +
+    'de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. ' +
+    '`?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, ' +
+    'perfiles y corte. 422 `radius_secret_requerido` si el router RADIUS no tiene secreto; 503 ' +
+    '`wireguard_no_configurado` si falta la configuración del servidor.'
+
+// Conexión de routers por WireGuard (contratos/conexion-routers.md)
+const conexion: Ruta[] = [
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/script-conexion',
+        operacion: 'routersScriptConexion',
+        resumen: 'Generar el script de conexión del router (.rsc)',
+        descripcion: SOBRE_EL_SCRIPT,
+        etiqueta: 'routers',
+        permiso: 'routers.generar_script',
+        query: v.scriptConexionValidator,
+        respuesta: { status: 200, descripcion: 'Script .rsc', contenido: 'text/plain' },
+        handler: async (ctx, { query, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            const script = await new GenerarScript().execute(
+                {
+                    router_id: id,
+                    admin: parsearAdmin(query.admin),
+                    incluir_servicio: query.incluir === 'servicio',
+                    origen: origenPeticion(ctx),
+                },
+                ctx.contextoAccion(),
+            )
+            enviarScript(ctx, script)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/conexion',
+        operacion: 'routersConexion',
+        resumen: 'Estado de la conexión WireGuard del router',
+        descripcion:
+            'Estado (`sin_configurar`, `pendiente`, `conectado`), IP del túnel, clave pública, último handshake ' +
+            'y vencimiento del token del último script. Nunca trae secretos. 404 si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        respuesta: { status: 200, descripcion: 'Conexión del router', esquema: ConexionRouter },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return verConexion(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/conexion/rotar',
+        operacion: 'routersConexionRotar',
+        resumen: 'Rotar la conexión WireGuard del router y generar un script nuevo (.rsc)',
+        descripcion:
+            'Invalida el peer (borra la clave pública registrada, vuelve a `pendiente`, emite ' +
+            '`router.conexion_rotada`) y responde el script nuevo como `GET /routers/:id/script-conexion` ' +
+            '(mismos `?admin=` e `?incluir=`). La IP del túnel no cambia.',
+        etiqueta: 'routers',
+        permiso: 'routers.rotar_conexion',
+        query: v.scriptConexionValidator,
+        respuesta: { status: 200, descripcion: 'Script .rsc nuevo', contenido: 'text/plain' },
+        handler: async (ctx, { query, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            const script = await new RotarConexion().execute(
+                {
+                    router_id: id,
+                    admin: parsearAdmin(query.admin),
+                    incluir_servicio: query.incluir === 'servicio',
+                    origen: origenPeticion(ctx),
+                },
+                ctx.contextoAccion(),
+            )
+            enviarScript(ctx, script)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/conexion/clave',
+        operacion: 'routersConexionClave',
+        resumen: 'Pegar a mano la clave pública WireGuard del router',
+        descripcion:
+            'Para un router sin internet: la clave que imprimió el script. Mismo efecto que el registro por ' +
+            'token (lo consume): el router queda `pendiente` hasta el primer handshake y `host`/`nas_ip` pasan ' +
+            'a la IP del túnel. 422 `script_no_generado` si nunca se generó el script; 409 `clave_en_uso` si ' +
+            'la clave es de otro router.',
+        etiqueta: 'routers',
+        permiso: 'routers.conexion_clave',
+        cuerpo: v.conexionClaveValidator,
+        respuesta: { status: 200, descripcion: 'Conexión del router', esquema: ConexionRouter },
+        handler: (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new ConexionClave().execute(
+                { router_id: id, public_key: cuerpo.public_key },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/conexion/registrar',
+        operacion: 'routersConexionRegistrar',
+        resumen: 'Registro del router con su token (lo llama el script, sin sesión)',
+        descripcion:
+            'Cuerpo `{ token, public_key }`. Token de un solo uso del último script, 24 h: si venció, se usó o ' +
+            'no existe, 410 `token_invalido`. Responde la clave pública y el endpoint del servidor. Límite ' +
+            'por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. ' +
+            '409 `clave_en_uso` si la clave es de otro router.',
+        etiqueta: 'routers',
+        seguridad: 'publico',
+        permiso: null,
+        cuerpo: v.registrarConexionValidator,
+        limitada: true,
+        antes: limitarRegistro,
+        respuesta: { status: 200, descripcion: 'Router registrado', esquema: RegistroConexion },
+        handler: (ctx, { cuerpo }) => new RegistrarConexion().execute(cuerpo, ctx.contextoAccion('api')),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/internal/routers/conexion/peers',
+        operacion: 'internoRoutersConexionPeers',
+        resumen: 'Peers WireGuard de los routers registrados (servicio wireguard)',
+        descripcion:
+            'Lista completa para `wg syncconf`: los routers con clave pública registrada y su IP del túnel. ' +
+            'El servicio la relee con `router.conexion_registrada` y `router.conexion_rotada`.',
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Peers', esquema: lista(PeerWireguard) },
+        handler: () => listarPeers(),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/internal/routers/conexion/handshakes',
+        operacion: 'internoRoutersConexionHandshakes',
+        resumen: 'Último handshake de cada peer (servicio wireguard)',
+        descripcion:
+            '`peers[]` con `public_key` y `ultimo_handshake` (ISO; null = nunca). Solo avanza el handshake; ' +
+            'el primero de un router `pendiente` lo pasa a `conectado`. Claves desconocidas se ignoran.',
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        cuerpo: v.handshakesValidator,
+        respuesta: { status: 200, descripcion: 'Resultado', esquema: ResultadoHandshakes },
+        handler: (ctx, { cuerpo }) =>
+            new RegistrarHandshakes().execute(cuerpo, ctx.contextoAccion('interno')),
+    }),
+]
+
+export default [...routers, ...conexion, ...planes, ...sesiones, ...red]

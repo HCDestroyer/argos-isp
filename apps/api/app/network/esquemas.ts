@@ -441,3 +441,58 @@ export const VistaPreviaVelocidad = definirEsquema(
         }),
     }),
 )
+
+/*
+|--------------------------------------------------------------------------
+| Conexión de routers por WireGuard (contratos/conexion-routers.md)
+|--------------------------------------------------------------------------
+*/
+
+export const ConexionRouter = definirEsquema(
+    'ConexionRouter',
+    objeto({
+        router_id: id,
+        estado: {
+            ...enumerado(['sin_configurar', 'pendiente', 'conectado']),
+            description:
+                'sin_configurar: nunca se generó el script; pendiente: sin handshake desde el registro ' +
+                '(o sin registrar); conectado: el servidor vio su handshake',
+        },
+        ip_tunel: { ...nulable(texto), description: 'IP del router en el túnel (/32 de ARGOSISP_WG_RED)' },
+        public_key: { ...nulable(texto), description: 'Clave pública WireGuard del router (no es secreta)' },
+        ultimo_handshake: nulable(instante),
+        handshake_reciente: {
+            ...booleano,
+            description: 'Hubo handshake en los últimos 180 s (el túnel está vivo)',
+        },
+        registrado_en: nulable(instante),
+        token_vence: {
+            ...nulable(instante),
+            description: 'Vencimiento del token del último script; null si ya se usó o no hay',
+        },
+        version: { ...entero, description: '0 sin configurar' },
+    }),
+)
+
+export const RegistroConexion = definirEsquema(
+    'RegistroConexion',
+    objeto({
+        router_id: id,
+        ip_tunel: texto,
+        ip_tunel_cidr: { ...texto, description: 'Dirección para la interfaz wg-argos del router' },
+        servidor_ip: { ...texto, description: 'IP del servidor en el túnel (RADIUS, API)' },
+        servidor_public_key: texto,
+        servidor_endpoint: { ...texto, description: 'Host o IP pública del servidor WireGuard' },
+        servidor_puerto: entero,
+    }),
+)
+
+export const PeerWireguard = definirEsquema(
+    'PeerWireguard',
+    objeto({ router_id: id, public_key: texto, ip_tunel: texto }),
+)
+
+export const ResultadoHandshakes = definirEsquema(
+    'ResultadoHandshakes',
+    objeto({ actualizados: entero, conectados: lista(id) }),
+)

@@ -62,6 +62,14 @@ export const PERMISOS = {
     'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
         'Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin',
+    'routers.generar_script':
+        'Generar el script de conexión del router (WireGuard, usuario de la API, RADIUS); rota su token',
+    'routers.rotar_conexion':
+        'Rotar la conexión WireGuard de un router (invalida el peer y genera un script nuevo)',
+    'routers.conexion_clave': 'Pegar a mano la clave pública WireGuard de un router',
+    'routers.probar_conexion':
+        'Probar la conexión con un router (túnel, API REST, datos del equipo y RADIUS)',
+    'routers.reconciliar': 'Reconciliar ahora la configuración de RouterOS de un router',
     'redes.ver': 'Ver redes IPv4',
     'redes.crear': 'Crear redes IPv4',
     'ipv6.ver': 'Ver bloques y pools IPv6',
@@ -378,6 +386,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.ver_credencial_adicional',
             'adicionales.ver',
             'routers.ver',
+            'routers.probar_conexion',
             'redes.ver',
             'ipv6.ver',
             'planes.ver',
@@ -422,6 +431,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'routers.crear',
             'routers.editar',
             'routers.marcar_migrado',
+            'routers.generar_script',
+            'routers.conexion_clave',
+            'routers.probar_conexion',
+            'routers.reconciliar',
             'redes.ver',
             'redes.crear',
             'ipv6.ver',

@@ -236,6 +236,33 @@ export interface CatalogoEventos {
         motivo: string | null
     }
     /**
+     * Se generó un script de conexión del router (`routers.generar_script`, también al rotar):
+     * nuevo token de registro, el anterior deja de valer (`contratos/conexion-routers.md`). Nunca
+     * lleva el token, la clave de la API ni el secreto RADIUS.
+     */
+    'router.conexion_generada': {
+        router_id: number
+        /** empresa sugerida del router; null si es compartido */
+        empresa_id: number | null
+        actor: { tipo: string; id: number | null }
+    }
+    /**
+     * El router registró su clave pública WireGuard (por token o pegada a mano). El servicio
+     * `wireguard` (A6) relee los peers (`GET /internal/routers/conexion/peers`) y aplica `wg syncconf`.
+     * Desde aquí `host` y `nas_ip` del router son `ip_tunel` (RADIUS y CoA por el túnel).
+     */
+    'router.conexion_registrada': {
+        router_id: number
+        empresa_id: number | null
+        ip_tunel: string
+    }
+    /** Se invalidó el peer del router (`routers.rotar_conexion`): `wireguard` lo quita. */
+    'router.conexion_rotada': {
+        router_id: number
+        empresa_id: number | null
+        ip_tunel: string
+    }
+    /**
      * Servicios adicionales de un servicio (decisión del PM, 19 oct; `contratos/adicionales.md`):
      * streaming, IPTV… Nunca llevan la credencial. A3 factura los `cobrado`; A5 los muestra en el
      * portal. No cambian nada en la red (`aaa-cache` y `routeros` los ignoran).
@@ -1000,6 +1027,9 @@ export const EVENTOS = [
     'adicional.desbloqueado',
     'plan.velocidad_cambiada',
     'router.control_cambiado',
+    'router.conexion_generada',
+    'router.conexion_registrada',
+    'router.conexion_rotada',
     'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',

@@ -376,3 +376,62 @@ export const desconectarSesionValidator = vine.compile(
 
 /** `GET /routers/:id/vista-previa-control?a=` (A2): modo al que se cambiaría. */
 export const vistaPreviaControlValidator = vine.compile(vine.object({ a: vine.enum(CONTROLES_VELOCIDAD) }))
+
+/*
+|--------------------------------------------------------------------------
+| Conexión de routers por WireGuard (contratos/conexion-routers.md)
+|--------------------------------------------------------------------------
+*/
+
+/** Clave pública WireGuard: 32 bytes en base64 (44 caracteres). */
+const clavePublicaWg = () =>
+    vine
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$/)
+        .meta({ description: 'Clave pública WireGuard del router (base64, 44 caracteres)' })
+
+/** `GET /routers/:id/script-conexion?admin=&incluir=` */
+export const scriptConexionValidator = vine.compile(
+    vine.object({
+        admin: vine
+            .string()
+            .trim()
+            .maxLength(2000)
+            .optional()
+            .meta({
+                description:
+                    'IPs o redes IPv4 separadas por coma para la lista argosisp-admin (winbox y ssh). ' +
+                    'Vacía: gestión solo por el túnel',
+            }),
+        incluir: vine
+            .enum(['servicio'])
+            .optional()
+            .meta({ description: '`servicio`: suma PPPoE, perfiles y corte; por defecto solo conexión' }),
+    }),
+)
+
+/** `POST /routers/conexion/registrar` (lo manda el script del router). */
+export const registrarConexionValidator = vine.compile(
+    vine.object({
+        token: vine.string().trim().minLength(16).maxLength(128),
+        public_key: clavePublicaWg(),
+    }),
+)
+
+/** `POST /routers/:id/conexion/clave`: pegar la clave a mano. */
+export const conexionClaveValidator = vine.compile(vine.object({ public_key: clavePublicaWg() }))
+
+/** `POST /internal/routers/conexion/handshakes` (servicio wireguard). */
+export const handshakesValidator = vine.compile(
+    vine.object({
+        peers: vine
+            .array(
+                vine.object({
+                    public_key: clavePublicaWg(),
+                    ultimo_handshake: instanteIso().nullable(),
+                }),
+            )
+            .maxLength(10000),
+    }),
+)
