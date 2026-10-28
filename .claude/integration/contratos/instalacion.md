@@ -14,7 +14,8 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 `POST /api/v1/servicios/:id/activar-instalacion` con el permiso `servicios.activar_instalacion`, `Idempotency-Key` y `version`.
 
 ```
-{ "version": 3, "instalado_en": "2026-11-03T15:20:00Z"?, "origen_tipo": "iris_orden"?, "origen_id": "…"? }
+{ "version": 3, "instalado_en": "2026-11-03T15:20:00Z"?, "origen_tipo": "iris_orden"?, "origen_id": "…"?,
+  "planta": { "caja": "…"?, "puerto": "…"?, "olt": "…"?, "slot": "…"?, "pon": "…"?, "potencia_dbm": "-19.40"? }? }
 → 200 Servicio (estado activo, instalado_en)
 → 409 version · 422 servicio_no_pendiente (estado distinto de pendiente_instalacion)
 ```
@@ -26,6 +27,7 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 - **Reintento:** con la misma `Idempotency-Key` devuelve la misma respuesta. Una clave nueva sobre un servicio ya activo devuelve 422 `servicio_no_pendiente`.
 - **Fecha:** `instalado_en` no puede ser futura ni anterior a la creación del servicio (422).
 - **Origen:** `origen_tipo` y `origen_id` quedan en la auditoría y en el evento, para enlazar con la orden de Iris.
+- **Planta (pedido A9 de Iris, contrato 0.2.0):** `planta` es opcional y todos sus campos también. Los textos van hasta 100 caracteres y `potencia_dbm` es decimal (numeric(6,2), entre −60 y 10). Se guarda tal cual en `core.servicios.planta jsonb null` y se muestra en la ficha del servicio. Es solo una referencia de lectura: la planta de fibra vive en OZmap, que Iris integra, y Argos no la valida ni la recalcula.
 
 ## 3. Qué hace cada parte con un servicio pendiente
 
@@ -42,6 +44,6 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 
 ## 4. Migración
 
-- **Columna nueva:** `core.servicios.instalado_en timestamptz null`.
+- **Columnas nuevas:** `core.servicios.instalado_en timestamptz null` y `core.servicios.planta jsonb null` (A9).
 - **Servicios existentes:** se rellena con la fecha en que se creó cada uno, así que nada cambia para ellos.
 - **Constraint de `estado`:** suma `pendiente_instalacion`.
