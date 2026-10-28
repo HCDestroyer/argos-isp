@@ -8,8 +8,12 @@
 # - El 80 sirve el portal con cualquier Host: el MikroTik hace dst-nat de TCP/80 de los suspendidos a
 #   este servidor y la página de corte no puede ir por HTTPS. En los dominios del panel y la API, el
 #   80 redirige a HTTPS; en el del portal, solo /entrar y /cuenta.
-# - IP real del cliente: Caddy recibe la conexión con la IP de origen y la pone en X-Forwarded-For;
-#   la API confía en la red de compose (PORTAL_PROXIES_CONFIABLES).
+# - IP real del cliente: Caddy pone en X-Forwarded-For la IP del cliente ({client_ip}) y descarta
+#   la que traiga la petición; la API confía en la red de compose (PORTAL_PROXIES_CONFIABLES).
+#   Detrás de otro proxy (Nginx Proxy Manager…): ARGOSISP_PROXIES_CONFIABLES = sus redes (CIDR
+#   separados por espacio). Solo de esas conexiones se lee X-Forwarded-For (de derecha a izquierda,
+#   trusted_proxies_strict) o X-Real-IP; de cualquier otra, {client_ip} es la IP del socket. Vacía =
+#   no se confía en nadie (`static` sin rangos). docs/runbooks/detras-de-proxy.md.
 # - API del portal (ARGOSISP_API_PORTAL, `argosisp`): el navegador del cliente llama a
 #   /api/v1/portal/** en el host del portal y Nitro (servicio portal) lo reenvía a api-portal; aquí
 #   no se toca para no saltarse su control de origen (CSRF) ni X-Canal. En el host de la API,
@@ -23,10 +27,22 @@
 	# Sin la redirección automática HTTP → HTTPS: /corte debe responder por HTTP.
 	auto_https disable_redirects
 	storage_clean_interval {$PROXY_LIMPIEZA_ALMACEN:24h}
+	servers {
+		trusted_proxies static {$ARGOSISP_PROXIES_CONFIABLES}
+		trusted_proxies_strict
+		client_ip_headers X-Forwarded-For X-Real-IP
+	}
+}
+
+# X-Forwarded-For hacia arriba = solo la IP del cliente ya resuelta (sin la cadena del proxy de
+# delante): la API la toma porque Caddy está en la red de compose.
+(ip_cliente) {
+	header_up X-Forwarded-For {client_ip}
 }
 
 (portal) {
 	reverse_proxy portal:3001 {
+		import ip_cliente
 		header_up X-Forwarded-Proto {scheme}
 	}
 }
@@ -39,6 +55,7 @@
 			max_size 1MB
 		}
 		reverse_proxy api:3333 {
+			import ip_cliente
 			flush_interval -1
 		}
 	}
@@ -46,18 +63,24 @@
 	@portalApi path /api/v1/portal/*
 	handle @portalApi {
 		encode zstd gzip
-		reverse_proxy {$API_PORTAL_DESTINO:api:3333}
+		reverse_proxy {$API_PORTAL_DESTINO:api:3333} {
+			import ip_cliente
+		}
 	}
 
 	handle {
 		encode zstd gzip
-		reverse_proxy api:3333
+		reverse_proxy api:3333 {
+			import ip_cliente
+		}
 	}
 }
 
 {$DOMINIO_PANEL} {
 	encode zstd gzip
-	reverse_proxy web:3000
+	reverse_proxy web:3000 {
+		import ip_cliente
+	}
 }
 
 {$DOMINIO_PORTAL} {
