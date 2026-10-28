@@ -121,7 +121,7 @@ async function enviar(evento: FormSubmitEvent<SalidaExtracto>) {
 
                 <UFormField
                     label="Archivo"
-                    :help="huella ? `sha256 ${huella.slice(0, 16)}…` : 'Los formatos propios de cada banco los convierte el adaptador (A6).'"
+                    :help="huella ? `sha256 ${huella.slice(0, 16)}…` : 'CSV o Excel del banco con fecha, descripción y monto de cada movimiento.'"
                 >
                     <UFileUpload
                         v-model="archivo"

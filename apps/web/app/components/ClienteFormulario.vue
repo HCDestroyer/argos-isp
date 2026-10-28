@@ -321,7 +321,7 @@ onMounted(async () => {
 
         <UPageCard
             title="Datos fiscales"
-            description="Para el aviso de cobro y, desde la semana 5, la factura FEL."
+            description="Se usa en el aviso de cobro y en la factura electrónica (FEL)."
             variant="subtle"
         >
             <UAlert

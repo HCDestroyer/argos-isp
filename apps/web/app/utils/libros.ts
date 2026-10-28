@@ -33,8 +33,8 @@ export const LIBROS: Record<LibroHabilitable, { etiqueta: string, legal: string,
     mayor: { etiqueta: 'Mayor', legal: 'Libro Mayor', descripcion: 'Por cuenta: saldo inicial, movimientos con su saldo y saldo final.', icono: 'i-lucide-library' },
     ventas: { etiqueta: 'Ventas', legal: 'Libro de Ventas y Servicios Prestados', descripcion: 'DTE certificados y, sin FEL, facturas y notas de crédito del mes.', icono: 'i-lucide-receipt-text' },
     compras: { etiqueta: 'Compras', legal: 'Libro de Compras y Servicios Recibidos', descripcion: 'Compras por mes del IVA y anulaciones en el mes de su reverso.', icono: 'i-lucide-shopping-cart' },
-    inventarios: { etiqueta: 'Inventarios', legal: 'Libro de Inventarios', descripcion: 'Se habilita ya; la emisión llega en otra fase.', icono: 'i-lucide-boxes' },
-    estados_financieros: { etiqueta: 'Estados financieros', legal: 'Libro de Estados Financieros', descripcion: 'Se habilita ya; la emisión llega en otra fase.', icono: 'i-lucide-scale' },
+    inventarios: { etiqueta: 'Inventarios', legal: 'Libro de Inventarios', descripcion: 'Se puede habilitar; la emisión desde el panel no está disponible.', icono: 'i-lucide-boxes' },
+    estados_financieros: { etiqueta: 'Estados financieros', legal: 'Libro de Estados Financieros', descripcion: 'Se puede habilitar; la emisión desde el panel no está disponible.', icono: 'i-lucide-scale' },
 }
 
 /** Los que la API ya emite (404 para los demás). */
