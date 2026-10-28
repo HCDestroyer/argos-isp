@@ -10,6 +10,7 @@ import {
     servicioDe,
     unidadVista,
 } from '#inventario/comodato'
+import { origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * `inventario.declarar_perdida_comodato` (`POST /servicios/:id/equipos/:unidad_id/perdida`): el
@@ -17,6 +18,8 @@ import {
  * da de baja a pérdida con `activos.dar_de_baja` tipo `retiro` (deprecia lo pendiente y asienta
  * `1.2.02 + 5.3.06 Pérdida en baja de activos / 1.2.01`). La unidad queda `dada_de_baja` (con su
  * servicio, para la historia). Cobrarlo al cliente es aparte: un cargo único «equipo no devuelto».
+ * `origen_tipo`/`origen_id` (orden de Iris) se validan en pareja y quedan en la auditoría de la acción;
+ * no cambian el asiento ni su descripción.
  */
 
 export interface EntradaPerdidaComodato {
@@ -24,12 +27,17 @@ export interface EntradaPerdidaComodato {
     unidad_id: number
     motivo: string
     fecha?: string | null
+    /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
+    origen_tipo?: OrigenExternoTipo | null
+    origen_id?: string | null
 }
 
 export default class DeclararPerdidaComodato extends DomainAction<EntradaPerdidaComodato, UnidadVista> {
     readonly nombre = 'inventario.declarar_perdida_comodato'
 
     protected async handle(input: EntradaPerdidaComodato, t: Transaccion): Promise<UnidadVista> {
+        // sin kardex ni evento propio: la orden de Iris queda en la auditoría (`audit.acciones.entrada`)
+        origenExternoDe(input)
         const motivo = input.motivo?.trim() ?? ''
         if (motivo.length < 3) {
             throw new ValidacionFallida([
