@@ -53,3 +53,22 @@ con `destinoWebhooksIris()` (`{ url, secreto, conector_id }` o null si está apa
 firmados con `cabecerasFirmadas` de `#integraciones/horus/firma`. El receptor Iris → Argos
 (`/api/v1/integraciones/iris/webhook`) está reservado: el canje entrega su URL y secreto, pero el
 contrato aún no define eventos de Iris hacia Argos.
+
+## Webhooks Argos → Iris (A6)
+
+Contrato §1.3 y §2.3. `node ace iris:worker` (servicio `iris-worker` del compose) consume el grupo
+`iris` del bus y entrega cada 5 s, con el motor común con Horus (`../webhooks_salientes.ts`).
+
+| Archivo | Qué hace |
+| --- | --- |
+| `envios.ts` | Eventos `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar` y `servicio.caidas_repetidas` → tabla `integraciones.iris_envios`. Payload con lista cerrada de campos y `empresa_id` (nunca `user_ppp`, contraseñas ni secretos); `id = argos-evt-<outbox>` estable; reintentos 1 min, 5 min, 30 min, 2 h, 12 h y luego `fallido` |
+| `consumidor.ts` | `ConsumidorIris` (grupo `iris`) |
+| `envios_panel.ts` | `GET /integraciones/iris/envios` y `GET /integraciones/iris/envios/resumen` (`iris.ver`): estado, pendientes, fallidos, último error, destino y alcance |
+
+- Solo con `destinoWebhooksIris()` (conector activo con receptor). Un pendiente que encuentra el
+  conector apagado queda `descartado`.
+- **Alcance:** solo eventos de las empresas del usuario técnico «Iris» (`core.usuarios_empresas` o
+  alcance global); sin usuario técnico activo no se envía nada. `cliente.actualizado` no trae
+  empresa: se usan las de los servicios no retirados del cliente (`empresas[]`, y `empresa_id` = la
+  primera), recortadas al alcance. Un cambio de empresa (`campos: ['empresa']`) sale si la nueva o
+  la anterior está en el alcance.

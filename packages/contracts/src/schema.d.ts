@@ -3551,6 +3551,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integraciones/iris/envios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Webhooks enviados a Iris: estado, intentos y próximo reintento
+         * @description Contrato Iris §2.3. Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`. `descartado`: el conector se apagó antes de enviarlo.
+         */
+        get: operations["irisEnviosListar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integraciones/iris/envios/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estado de los webhooks a Iris: destino, alcance, pendientes, fallidos y último error */
+        get: operations["irisEnviosResumen"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integraciones/iris/estado": {
         parameters: {
             query?: never;
@@ -11906,6 +11943,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        EnvioIris: {
+            id: number;
+            /** @description `id` del webhook (`argos-evt-<id>`, estable entre reintentos) */
+            evento_id: string;
+            evento: string;
+            empresa_id: number | null;
+            /** @enum {string} */
+            estado: "pendiente" | "enviado" | "fallido" | "descartado";
+            intentos: number;
+            /** Format: date-time */
+            proximo_intento_en: string | null;
+            ultimo_status: number | null;
+            ultimo_error: string | null;
+            /** Format: date-time */
+            enviado_en: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         EnvioNotificacion: {
             id: number;
             cliente_id: number | null;
@@ -16057,6 +16114,29 @@ export interface components {
                 /** Format: date-time */
                 resumen_promesas: string | null;
             };
+        };
+        ResumenEnviosIris: {
+            /** @description Conector activo con URL y secreto del receptor de Iris; sin él no se envía nada */
+            destino_configurado: boolean;
+            /** @description Empresas del usuario técnico «Iris» cuyos eventos se envían; null sin usuario técnico activo (no se envía nada) */
+            alcance: {
+                global: boolean;
+                empresas: number[];
+            } | null;
+            pendientes: number;
+            fallidos: number;
+            /** Format: date-time */
+            ultimo_enviado_en: string | null;
+            ultimo_fallo: {
+                evento_id: string;
+                evento: string;
+                /** @enum {string} */
+                estado: "pendiente" | "fallido";
+                intentos: number;
+                ultimo_error: string | null;
+                /** Format: date-time */
+                en: string;
+            } | null;
         };
         ResumenFondosEnTransito: {
             empresa_id: number;
@@ -31187,6 +31267,101 @@ export interface operations {
                 };
             };
             /** @description Sin el permiso iris.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisEnviosListar: {
+        parameters: {
+            query?: {
+                /** @description Cursor opaco de la página anterior */
+                cursor?: string;
+                /** @description Tamaño de página (por defecto 50) */
+                limit?: number;
+                estado?: "pendiente" | "enviado" | "fallido" | "descartado";
+                evento?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de envíos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EnvioIris"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.ver */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Datos inválidos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    irisEnviosResumen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenEnviosIris"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sin el permiso iris.ver */
             403: {
                 headers: {
                     [name: string]: unknown;

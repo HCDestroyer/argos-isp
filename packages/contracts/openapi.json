@@ -25967,6 +25967,183 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/iris/envios": {
+      "get": {
+        "operationId": "irisEnviosListar",
+        "summary": "Webhooks enviados a Iris: estado, intentos y próximo reintento",
+        "description": "Contrato Iris §2.3. Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`. `descartado`: el conector se apagó antes de enviarlo.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "enviado",
+                "fallido",
+                "descartado"
+              ]
+            }
+          },
+          {
+            "name": "evento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de envíos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EnvioIris"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/envios/resumen": {
+      "get": {
+        "operationId": "irisEnviosResumen",
+        "summary": "Estado de los webhooks a Iris: destino, alcance, pendientes, fallidos y último error",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenEnviosIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/integraciones/iris/estado": {
       "get": {
         "operationId": "irisEstado",
@@ -76537,6 +76714,89 @@
           }
         }
       },
+      "EnvioIris": {
+        "type": "object",
+        "required": [
+          "id",
+          "evento_id",
+          "evento",
+          "empresa_id",
+          "estado",
+          "intentos",
+          "proximo_intento_en",
+          "ultimo_status",
+          "ultimo_error",
+          "enviado_en",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evento_id": {
+            "type": "string",
+            "description": "`id` del webhook (`argos-evt-<id>`, estable entre reintentos)"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido",
+              "descartado"
+            ]
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "proximo_intento_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ultimo_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EnvioNotificacion": {
         "type": "object",
         "required": [
@@ -93690,6 +93950,101 @@
               }
             },
             "description": "Último refresco de cada vista (por evento)"
+          }
+        }
+      },
+      "ResumenEnviosIris": {
+        "type": "object",
+        "required": [
+          "destino_configurado",
+          "alcance",
+          "pendientes",
+          "fallidos",
+          "ultimo_enviado_en",
+          "ultimo_fallo"
+        ],
+        "properties": {
+          "destino_configurado": {
+            "type": "boolean",
+            "description": "Conector activo con URL y secreto del receptor de Iris; sin él no se envía nada"
+          },
+          "alcance": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "global",
+              "empresas"
+            ],
+            "properties": {
+              "global": {
+                "type": "boolean"
+              },
+              "empresas": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "description": "Empresas del usuario técnico «Iris» cuyos eventos se envían; null sin usuario técnico activo (no se envía nada)"
+          },
+          "pendientes": {
+            "type": "integer"
+          },
+          "fallidos": {
+            "type": "integer"
+          },
+          "ultimo_enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ultimo_fallo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "evento_id",
+              "evento",
+              "estado",
+              "intentos",
+              "ultimo_error",
+              "en"
+            ],
+            "properties": {
+              "evento_id": {
+                "type": "string"
+              },
+              "evento": {
+                "type": "string"
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "pendiente",
+                  "fallido"
+                ]
+              },
+              "intentos": {
+                "type": "integer"
+              },
+              "ultimo_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "en": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           }
         }
       },
