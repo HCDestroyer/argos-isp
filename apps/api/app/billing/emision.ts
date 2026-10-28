@@ -1,3 +1,4 @@
+import { columnasOrigenExterno, type OrigenExterno } from '#inventario/origen_externo'
 import type { Transaccion } from '#shared/domain_action'
 import { CERO, aTexto, dec, type Dec } from '#ledger/dinero'
 import { CUENTAS } from '#ledger/plan_cuentas'
@@ -93,6 +94,8 @@ export interface DatosEmision {
     descripcion: string
     /** receptor corregido (sustitución) */
     receptor?: ReceptorFiscal | null
+    /** orden de Iris del cargo único (solo trazabilidad: no cambia el asiento) */
+    origen_externo?: OrigenExterno | null
 }
 
 export interface ResultadoEmision {
@@ -149,6 +152,7 @@ export async function emitirDocumento(t: Transaccion, entrada: DatosEmision): Pr
                 id: receptorFactura.id,
                 nombre: receptorFactura.nombre,
             }),
+            ...columnasOrigenExterno(datos.origen_externo),
         })
         .onConflict('clave_unica')
         .ignore()
