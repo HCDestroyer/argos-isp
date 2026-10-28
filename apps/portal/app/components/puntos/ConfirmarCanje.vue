@@ -129,6 +129,8 @@ async function confirmar(evento: FormSubmitEvent<Datos>) {
                     v-if="opciones.length > 1"
                     label="¿A qué servicio lo aplicamos?"
                     name="servicio_id"
+                    help="El premio se aplica a un solo servicio."
+                    required
                 >
                     <USelect
                         v-model="estado.servicio_id"

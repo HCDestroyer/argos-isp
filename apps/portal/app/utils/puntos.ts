@@ -59,7 +59,7 @@ export function textoNoCanjeable(premio: Premio): string {
         case 'no_disponible_en_portal':
             return 'Canjéalo en nuestras oficinas'
         case 'canje_desactivado':
-            return 'El canje en línea aún no está activo'
+            return 'Canjéalo en nuestras oficinas'
         default:
             return ''
     }

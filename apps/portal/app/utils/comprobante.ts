@@ -73,13 +73,13 @@ export function esquemaComprobante(hoy: string) {
         banco_origen_id: z.number().int().positive().optional(),
         referencia: z.string().trim()
             .min(1, 'Escribe el número de referencia o de boleta')
-            .max(100, 'La referencia es demasiado larga'),
+            .max(100, 'Escribe la referencia con 100 caracteres o menos'),
         monto: z.string().trim()
             .regex(DINERO, 'Escribe el monto con hasta 2 decimales, sin la Q')
-            .refine(monto => !DINERO.test(monto) || new Decimal(monto).greaterThan(0), 'El monto debe ser mayor que 0'),
+            .refine(monto => !DINERO.test(monto) || new Decimal(monto).greaterThan(0), 'Escribe un monto mayor que Q 0.00'),
         fecha_deposito: z.string()
-            .regex(FECHA, 'Elige la fecha del depósito')
-            .refine(fecha => fecha <= hoy, 'La fecha del depósito no puede ser posterior a hoy'),
+            .regex(FECHA, 'Elige la fecha en que pagaste')
+            .refine(fecha => fecha <= hoy, 'La fecha del pago no puede ser posterior a hoy: elige hoy o un día anterior'),
         archivo: z.instanceof(File, { error: 'Adjunta la foto o el PDF del comprobante' })
             .superRefine((archivo, ctx) => {
                 const problema = problemaArchivo(archivo)

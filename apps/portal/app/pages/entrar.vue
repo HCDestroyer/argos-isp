@@ -141,7 +141,8 @@ const destinoTexto = computed(() => solicitud.value?.destino
                 <UFormField
                     label="NIT, CUI o usuario de conexión"
                     name="identificador"
-                    help="Aparece en tu aviso de cobro o en tu contrato."
+                    help="Aparece en tu aviso de cobro. Con él buscamos tu cuenta para enviarte el código."
+                    required
                 >
                     <UInput
                         v-model="pedir.identificador"
@@ -173,6 +174,8 @@ const destinoTexto = computed(() => solicitud.value?.destino
                 <UFormField
                     label="Código de 6 dígitos"
                     name="codigo"
+                    help="Confirma que eres el titular antes de mostrarte tus facturas y pagos."
+                    required
                 >
                     <UPinInput
                         v-model="codigo"

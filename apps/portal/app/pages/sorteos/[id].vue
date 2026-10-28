@@ -49,7 +49,7 @@ const bases = computed(() => {
             variant="subtle"
             icon="i-lucide-search-x"
             title="No encontramos este sorteo"
-            description="El sorteo no existe o todavía no publica sus bases."
+            description="Ese sorteo no está disponible. Revisa los sorteos vigentes en tu cuenta."
             :actions="[{ label: 'Ir al inicio', icon: 'i-lucide-house', color: 'neutral', variant: 'outline', to: '/' }]"
             data-testid="sorteo-no-existe"
         />
