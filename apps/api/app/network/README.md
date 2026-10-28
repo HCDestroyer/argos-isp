@@ -9,6 +9,38 @@ Routers, IPAM IPv4 e IPv6, planes y su implementación por router.
 - Conexión de la API REST de RouterOS (`api_url`, `api_tls_verificar`, `api_ca`, `dhcp_servidor`, `interfaz_clientes`): columnas y precedencias en `.claude/integration/contratos/routeros.md`, "Conexión del router". La CA nunca sale por la API (fila 57 de `a4.md`): la vista solo trae `tiene_api_ca`; el dispatcher la lee de su propia consulta. En `audit.cambios` va como `***`, también cuando se reemplaza por otra.
 - En línea y último contacto (`contacto_router.ts`, pedido de A4): `Router.ultimo_contacto` = lo más reciente entre `network.routers_contacto` (fuentes periódicas: accounting del NAS y sondeo de RouterOS, escritas con `registrarContactoRouter(trx, { routerId } | { nasIp }, fuente, en?)` dentro de la acción que las recibe; nunca retrocede y reescribe a lo sumo cada 30 s; sin auditoría, es telemetría) y la última respuesta buena del router en `audit.red` (CoA/Disconnect con ACK, comando de RouterOS con `ok`). `Router.en_linea`: null si ninguna fuente periódica lo mide (sin fila: no se sabe); si no, `ultimo_contacto` dentro de `SESIONES_COLGADAS_INTERVALOS` × `AAA_INTERIM_SEGUNDOS` (15 min). Quién escribe las fuentes periódicas (A2): `.claude/integration/a1.md`.
 
+- Edición desde el panel (`PUT /routers/:id`, pedido del PM 28 oct): nombre, `host`, `api_url` (`https://host:puerto`; null = `https://<host>`), `api_usuario`, `api_password`, `radius_secret`, `zona_id` (opcional; 422 en `zona_id` si no existe; no cambia el alcance del ACL), `empresa_sugerida_id` y capacidad. En la edición una credencial vacía o null **no cambia** (el bodyparser convierte `""` en null); se borra con `quitar_api_password` / `quitar_radius_secret` (422 si llega también el valor).
+
+## Conexión por WireGuard (`conexion/`, `contratos/conexion-routers.md`)
+
+Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosisp-api` (grupo con `read,write,api,rest-api`), cliente RADIUS y puertos de gestión cerrados.
+
+- `network.routers_conexion`: una fila por router con `ip_tunel` (/32 de `ARGOSISP_WG_RED`, única y estable: `ipam_tunel.ts`, salta la `.1` del servidor y las `nas_ip` de otros routers), `public_key`, `estado` (`pendiente`/`conectado`), `ultimo_handshake`, token de registro (hash sha256, 24 h, un uso) y `api_password_pendiente` (cifrada).
+- **Generar** (`GET /routers/:id/script-conexion?admin=&incluir=servicio`, `routers.generar_script`): rota el token y crea una clave aleatoria de 32 caracteres para la API, que queda pendiente hasta que el router se registra con ese script (un script generado y no ejecutado no deja a la API sin acceso). El secreto RADIUS es el `radius_secret` del router, el mismo de `pnpm aaa:clients`; sin él, 422 `radius_secret_requerido`. Sin configuración del servidor, 503 `wireguard_no_configurado`.
+- **Registrar** (`POST /routers/conexion/registrar`, público): `{ token, public_key }`; 410 `token_invalido` si venció, se usó o fue reemplazado; 409 `clave_en_uso`; límite por IP (`ROUTERS_REGISTRO_LIMITE`, `ROUTERS_REGISTRO_VENTANA_S`). Al registrarse, `host` y `nas_ip` del router pasan a la IP del túnel, `api_usuario` a `argosisp-api`, `api_url` a null y la clave pendiente a `api_password`.
+- **Pegar la clave** (`POST /routers/:id/conexion/clave`, `routers.conexion_clave`): igual que el registro, para un router sin internet. 422 `script_no_generado` sin script previo.
+- **Rotar** (`POST /routers/:id/conexion/rotar`, `routers.rotar_conexion`): borra la clave registrada, vuelve a `pendiente` y responde un script nuevo. La IP no cambia.
+- **Estado** (`GET /routers/:id/conexion`, `routers.ver`): `sin_configurar`, `pendiente` o `conectado`, IP del túnel, clave pública, último handshake, `handshake_reciente` (< 180 s) y vencimiento del token.
+- **Servicio `wireguard` (A6)**: `GET /internal/routers/conexion/peers` (lista para `wg syncconf`) y `POST /internal/routers/conexion/handshakes` (`routers.registrar_handshakes`: solo avanza el handshake; el primero de un `pendiente` lo pasa a `conectado` y solo entonces deja fila en `audit.acciones`).
+- Render (`render.ts`): `{{variable}}` va escapada para un string de RouterOS entre comillas (`\`, `"`, `$`, `?` y controles como `\HH`; un valor nunca agrega líneas), `{{lista:x}}` arma `{"a";"b"}` y `{{#x}}…{{/x}}` / `{{^x}}…{{/x}}` son secciones. Un marcador desconocido es error. Plantilla: `ROUTERS_PLANTILLA_CONEXION`, si no `infra/mikrotik/conexion.rsc` (A6), si no `plantilla_minima.ts`.
+- Variables: `ARGOSISP_WG_RED` (10.255.0.0/16), `ARGOSISP_WG_PUERTO` (51820), `ARGOSISP_WG_ENDPOINT` (si no, el host de `API_PUBLIC_URL`), `ARGOSISP_WG_CLAVE_PUBLICA` o `ARGOSISP_WG_CLAVE_PUBLICA_ARCHIVO`, `API_PUBLIC_URL` (URL de registro).
+- Ni la auditoría ni los eventos llevan el token, la clave de la API ni el secreto RADIUS; el script no se guarda.
+
+## Probar conexión y reconciliar (pedido del PM, 28 oct)
+
+- `POST /routers/:id/probar-conexion` (`routers.probar_conexion`: admin, técnico, soporte): chequeos `{ clave, ok, detalle, ms, motivo?, datos? }` en este orden: `tunel` (solo con conexión WireGuard), `api` (`GET /rest/system/resource`; `motivo` = `sin_credenciales`, `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (`datos`: `version`, `modelo`, `uptime`, `cpu_pct`; exige RouterOS 7) y `radius` (modo radius: un `/radius` con servicio `ppp` hacia la IP del servidor en el túnel o `ROUTERS_RADIUS_DIRECCIONES`; el secreto se compara solo si el router lo devuelve y nunca sale). Reutiliza `sondearRouter` (`routeros/actions/sondear_routers.ts`): cada GET va a `audit.red` y una respuesta buena actualiza `en_linea`/`ultimo_contacto` (fuente `sondeo`). `ok: null` = no se pudo comprobar.
+- `POST /routers/:id/reconciliar` (`routers.reconciliar`: admin, técnico): 202 `{ router_id, job_id, encolado }`. Job `reconciliar_router` en la cola `routeros-cron` (worker de concurrencia 1, lock por router de la acción); `jobId = reconciliar-<id>`: mientras uno espera, otro pedido devuelve `encolado: false`.
+
+| Acción | Permiso | Eventos |
+| --- | --- | --- |
+| `GenerarScript` | `routers.generar_script` | `router.conexion_generada` |
+| `RegistrarConexion` | público con token | `router.conexion_registrada` |
+| `ConexionClave` | `routers.conexion_clave` | `router.conexion_registrada` |
+| `RotarConexion` | `routers.rotar_conexion` | `router.conexion_rotada`, `router.conexion_generada` |
+| `RegistrarHandshakes` | interno | — |
+| `ProbarConexion` | `routers.probar_conexion` | — (`audit.red`) |
+| `ReconciliarAhora` | `routers.reconciliar` | — (encola `routeros.reconciliar`) |
+
 ## IPAM IPv4 (`ipam_v4.ts`)
 
 - `asignarIpv4(trx, { servicioId, routerId, ip?, redId? })`: la IP pedida (debe estar en una red del router, no ser red/broadcast/gateway y estar libre: 422/409) o la primera libre, prefiriendo redes `estatico` sobre `pool`. Con `redId`, solo de esa red: 422 en `red_ipv4_id` si no es del router o está llena (`rule: llena`), y 422 en `ipv4` si la IP pedida no es de esa red. Advisory lock por router.

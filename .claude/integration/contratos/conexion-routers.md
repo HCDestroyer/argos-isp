@@ -48,3 +48,29 @@ Pedido del PM (28 oct): conectar un MikroTik a Argos con un script generado desd
 - En la ficha del router, la sección «Conexión» muestra el estado (pendiente o conectado, último handshake, IP del túnel).
 - El botón «Script de conexión» abre un modal: IPs de administración, «incluir configuración de servicio», descargar o copiar, y los pasos en lenguaje simple (abrir Winbox → New Terminal → pegar → verificar).
 - Los botones «Rotar» y «Pegar clave pública» llevan sus permisos.
+
+## 6. API de A1 (hecho en `a1/conexion-routers`)
+
+| Endpoint | Permiso | Respuesta |
+| --- | --- | --- |
+| `GET /api/v1/routers/:id/script-conexion?admin=&incluir=servicio` | `routers.generar_script` | `text/plain` (descarga `argosisp-router-<id>.rsc`, `Cache-Control: no-store`). 422 `radius_secret_requerido`, 422 `red_tunel_llena`, 503 `wireguard_no_configurado` |
+| `GET /api/v1/routers/:id/conexion` | `routers.ver` | `ConexionRouter`: `estado` (`sin_configurar`, `pendiente`, `conectado`), `ip_tunel`, `public_key`, `ultimo_handshake`, `handshake_reciente` (< 180 s), `registrado_en`, `token_vence`, `version` |
+| `POST /api/v1/routers/conexion/registrar` | público, token | `RegistroConexion`: `ip_tunel`, `ip_tunel_cidr`, `servidor_ip`, `servidor_public_key`, `servidor_endpoint`, `servidor_puerto`. 410 `token_invalido`, 409 `clave_en_uso`, 429 |
+| `POST /api/v1/routers/:id/conexion/clave` `{ public_key }` | `routers.conexion_clave` | `ConexionRouter`. 422 `script_no_generado` |
+| `POST /api/v1/routers/:id/conexion/rotar?admin=&incluir=` | `routers.rotar_conexion` | `text/plain` (script nuevo) |
+| `GET /api/v1/internal/routers/conexion/peers` | `INTERNAL_TOKEN` | `[{ router_id, public_key, ip_tunel }]` para `wg syncconf` (allowed-ips = `ip_tunel/32`) |
+| `POST /api/v1/internal/routers/conexion/handshakes` `{ peers: [{ public_key, ultimo_handshake }] }` | `INTERNAL_TOKEN` | `{ actualizados, conectados[] }` |
+
+- La clave nueva de `argosisp-api` se guarda cifrada como pendiente al generar y pasa a `api_password` cuando el router se registra con ese script. Al registrarse, `host` y `nas_ip` del router pasan a la IP del túnel (`src-address` del RADIUS y destino del CoA).
+- El secreto RADIUS del script es `network.routers.radius_secret` (el que usa `pnpm aaa:clients`); nunca se genera otro.
+- Variables: `ARGOSISP_WG_RED`, `ARGOSISP_WG_PUERTO`, `ARGOSISP_WG_ENDPOINT`, `ARGOSISP_WG_CLAVE_PUBLICA` o `ARGOSISP_WG_CLAVE_PUBLICA_ARCHIVO`, `ROUTERS_PLANTILLA_CONEXION`, `ROUTERS_REGISTRO_LIMITE`, `ROUTERS_REGISTRO_VENTANA_S` (`apps/api/.env.example`).
+
+### Formato de la plantilla `.rsc` (A1 ↔ A6)
+
+- `{{nombre}}`: valor escapado para ir dentro de comillas dobles (`:local x "{{nombre}}"`); también vale en comentarios (los saltos de línea salen como `\0A`).
+- `{{lista:admin_ips}}`: arreglo literal `{"a";"b"}` (o `{}`), sin comillas alrededor.
+- `{{#seccion}}…{{/seccion}}` y `{{^seccion}}…{{/seccion}}`.
+- Variables: `router_id`, `router_nombre`, `generado_en`, `token_vence`, `ip_tunel`, `ip_tunel_cidr`, `red_tunel`, `servidor_ip`, `servidor_public_key`, `servidor_endpoint`, `servidor_puerto`, `registro_url`, `registro_token`, `api_usuario`, `api_grupo`, `api_password`, `radius_secret`. Lista: `admin_ips`. Secciones: `radius` (router en modo radius), `incluir_servicio` (`?incluir=servicio`), `admin` (hay IPs de administración).
+- Un marcador desconocido es error 500 al generar: la plantilla y la API cambian juntas.
+- La API busca la plantilla en `ROUTERS_PLANTILLA_CONEXION`, luego en `infra/mikrotik/conexion.rsc` y si no usa la mínima (`apps/api/app/network/conexion/plantilla_minima.ts`). En la imagen de la API, A6 copia su `.rsc` y define `ROUTERS_PLANTILLA_CONEXION`.
+- El registro desde el router: `POST` JSON `{"token":"…","public_key":"…"}` a `registro_url` (`/tool fetch … http-method=post`).
