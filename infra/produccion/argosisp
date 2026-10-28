@@ -737,8 +737,9 @@ cmd_admin_clave() {
     [[ "$correo" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || morir "uso: argosisp admin-clave <correo> [--stdin]"
     local -a ace=(node ace.js usuarios:clave "$correo")
     $stdin && ace+=(--stdin)
+    # exec no pasa por docker-entrypoint.sh (que hace cd /app/build): el directorio va con -w.
     local -a modo=(run --rm -T api)
-    if [ -n "$(dc ps -q --status running api 2> /dev/null)" ]; then modo=(exec -T api); fi
+    if [ -n "$(dc ps -q --status running api 2> /dev/null)" ]; then modo=(exec -T -w /app/build api); fi
     if $stdin; then
         DC_CON_STDIN=1 dc "${modo[@]}" "${ace[@]}"
     else
