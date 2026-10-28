@@ -4,10 +4,14 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 import * as z from 'zod'
 
 /**
- * Direccionamiento del router (A1, brief tarea 6): redes IPv4 (`redes.ver`, agregar con
+ * Direccionamiento del router: redes IPv4 (`redes.ver`, agregar con
  * `redes.crear`) y bloques IPv6 con sus pools de enlace y de delegación (`ipv6.ver`, agregar con
  * `ipv6.crear`). La API valida que una red no se solape y que un pool caiga dentro de su bloque
  * (422 junto al campo). Quien lo monta ya comprobó `routers.ver`.
+ *
+ * Para que IPv6 se entienda: una explicación con el ejemplo real de los pools (`Ipv6Explicacion`),
+ * cada bloque dibujado a escala con sus pools y cuántos clientes caben en cada uno, y al agregar un
+ * pool una vista previa de lo que recibe cada cliente y un prefijo libre sugerido.
  */
 const props = defineProps<{
     routerId: number
@@ -76,7 +80,7 @@ const CIDR_V4 = /^(\d{1,3}\.){3}\d{1,3}\/([0-9]|[12][0-9]|3[0-2])$/
 const IPV4 = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
 const CIDR_V6 = /^[0-9a-fA-F:]+\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/
 
-/** Espejos de los validadores de red IPv4, bloque y pool IPv6 (A1). */
+/** Espejos de los validadores de red IPv4, bloque y pool IPv6. */
 const esquemaRed = z.object({
     cidr: z.string().trim().regex(CIDR_V4, 'Red en CIDR (ej. 100.64.10.0/24)'),
     gateway: z.string().trim().refine(v => v === '' || IPV4.test(v), 'Escribe una IPv4'),
@@ -171,6 +175,70 @@ async function enviarPool(evento: FormSubmitEvent<z.output<typeof esquemaPool>>)
     await terminar(resultado, `Pool ${evento.data.prefijo} agregado`, () => cargarPools(f.bloque.id))
 }
 
+/** Vista previa del pool que se está agregando: cuántos caben y qué recibe cada cliente. */
+const previaPool = computed(() => {
+    const f = actual.value
+    const prefijo = prefijoV6(pool.prefijo)
+    if (f.tipo !== 'pool' || !prefijo) {
+        return null
+    }
+    const bloqueActual = prefijoV6(f.bloque.prefijo)
+    const fuera = bloqueActual ? !contiene(bloqueActual, prefijo) : false
+    const solapado = (pools.value[f.bloque.id] ?? []).find((p) => {
+        const otro = prefijoV6(p.prefijo)
+        return otro ? seSolapan(otro, prefijo) : false
+    })
+    const caben = cuantosCaben(prefijo.largo, pool.tamano_entrega)
+    return {
+        fuera,
+        solapado: solapado?.prefijo ?? null,
+        caben,
+        ejemplos: [0n, 1n].filter(i => i < caben).map(i => textoPrefijo(subprefijo(prefijo, pool.tamano_entrega, i))),
+    }
+})
+
+function sugerir() {
+    const f = actual.value
+    if (f.tipo !== 'pool') {
+        return
+    }
+    const sugerido = sugerirPool(f.bloque.prefijo, (pools.value[f.bloque.id] ?? []).map(p => p.prefijo), pool.tipo, pool.tamano_entrega)
+    if (sugerido) {
+        pool.prefijo = sugerido
+        formulario.value?.clear('prefijo')
+    }
+    else {
+        toast.add({ title: 'No hay espacio libre en el bloque', description: 'Todos los prefijos de ese tamaño ya están en otro pool.', color: 'warning', icon: 'i-lucide-triangle-alert' })
+    }
+}
+
+/** Pools de un bloque dibujados a escala (al menos un 2 % para que se vean). */
+function tramos(b: Ipv6Bloque) {
+    const bloqueActual = prefijoV6(b.prefijo)
+    if (!bloqueActual) {
+        return []
+    }
+    return (pools.value[b.id] ?? []).map((p) => {
+        const prefijo = prefijoV6(p.prefijo)
+        const fraccion = prefijo ? fraccionDelBloque(bloqueActual, prefijo) : 0
+        return { id: p.id, tipo: p.tipo, ancho: `${Math.max(2, fraccion * 100)}%`, etiqueta: `${TIPOS_POOL[p.tipo]} ${p.prefijo}` }
+    })
+}
+
+function cabenEnPool(p: Ipv6Pool): string {
+    const prefijo = prefijoV6(p.prefijo)
+    return prefijo ? cantidadPrefijos(cuantosCaben(prefijo.largo, p.tamano_entrega)) : '—'
+}
+
+function resumenBloque(b: Ipv6Bloque) {
+    return resumenIpv6(pools.value[b.id] ?? [])
+}
+
+function capacidadRed(r: RedIpv4): string {
+    const cantidad = capacidadIpv4(r.cidr, r.gateway !== null)
+    return cantidad === null ? '' : `${cantidad.toLocaleString('es-GT')} ${cantidad === 1 ? 'IP utilizable' : 'IP utilizables'}`
+}
+
 const TIPOS_RED: Record<RedIpv4['tipo'], string> = { pool: 'Pool', estatico: 'Estático' }
 const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegacion: 'Delegación' }
 </script>
@@ -224,7 +292,13 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                     :key="r.id"
                     class="flex flex-wrap items-center justify-between gap-2 py-2"
                 >
-                    <span class="font-mono text-sm text-highlighted">{{ r.cidr }}</span>
+                    <span class="flex flex-col">
+                        <span class="font-mono text-sm text-highlighted">{{ r.cidr }}</span>
+                        <span
+                            class="text-xs text-muted"
+                            :data-prueba="`capacidad-red-${r.id}`"
+                        >{{ capacidadRed(r) }}</span>
+                    </span>
                     <span class="flex items-center gap-2 text-xs text-muted">
                         <span v-if="r.gateway">gw <span class="font-mono">{{ r.gateway }}</span></span>
                         <UBadge
@@ -270,7 +344,7 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                 v-else-if="!bloques.length"
                 class="text-sm text-muted"
             >
-                Sin bloques IPv6: los servicios de este router solo reciben IPv4.
+                Sin bloques IPv6: los servicios de este router solo reciben IPv4. Abajo verás cómo funcionaría con un bloque de ejemplo.
             </p>
             <div
                 v-else
@@ -297,6 +371,33 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                             @click="abrir({ tipo: 'pool', bloque: b })"
                         />
                     </div>
+                    <div
+                        v-if="(pools[b.id] ?? []).length"
+                        class="flex h-3 w-full overflow-hidden rounded-full bg-elevated"
+                        role="img"
+                        :aria-label="`Uso del bloque ${b.prefijo}: ${tramos(b).map(t => t.etiqueta).join(', ')}; el resto, libre`"
+                        :data-prueba="`barra-bloque-${b.id}`"
+                    >
+                        <span
+                            v-for="t in tramos(b)"
+                            :key="t.id"
+                            class="h-full border-r border-default last:border-r-0"
+                            :class="t.tipo === 'enlace' ? 'bg-info' : 'bg-primary'"
+                            :style="{ width: t.ancho }"
+                        />
+                    </div>
+                    <p
+                        v-if="(pools[b.id] ?? []).length"
+                        class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
+                    >
+                        <span class="flex items-center gap-1"><span class="size-2 rounded-full bg-primary" />Delegación</span>
+                        <span class="flex items-center gap-1"><span class="size-2 rounded-full bg-info" />Enlace</span>
+                        <span class="flex items-center gap-1"><span class="size-2 rounded-full bg-elevated ring-1 ring-default" />Libre</span>
+                        <span
+                            class="ms-auto"
+                            :data-prueba="`clientes-bloque-${b.id}`"
+                        >{{ resumenBloque(b).clientes > 0n ? `Caben ${cantidadPrefijos(resumenBloque(b).clientes)} clientes` : 'Falta un pool de enlace o de delegación' }}</span>
+                    </p>
                     <ProblemaAlerta
                         v-if="problemaPools[b.id]"
                         :problema="problemaPools[b.id]!"
@@ -320,6 +421,7 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                         >
                             <span class="font-mono text-highlighted">{{ p.prefijo }}</span>
                             <span class="flex items-center gap-2 text-muted">
+                                <span :data-prueba="`caben-pool-${p.id}`">{{ cabenEnPool(p) }} × /{{ p.tamano_entrega }}</span>
                                 <span v-if="p.nombre_en_router">«{{ p.nombre_en_router }}»</span>
                                 <UBadge
                                     :label="`${TIPOS_POOL[p.tipo]} · /${p.tamano_entrega}`"
@@ -333,6 +435,13 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                 </div>
             </div>
         </UPageCard>
+
+        <Ipv6Explicacion
+            v-if="!problemaBloques && !(cargando && !bloques.length)"
+            :bloques="bloques"
+            :pools="pools"
+            class="lg:col-span-2"
+        />
 
         <UModal
             v-model:open="abierto"
@@ -395,10 +504,15 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                     class="flex flex-col gap-4"
                     @submit="enviarBloque"
                 >
+                    <p class="text-sm text-muted">
+                        El bloque es el rango IPv6 que te asignó tu proveedor para este router (por ejemplo un /40 o un /48).
+                        Después lo repartes en un pool de enlace y uno de delegación. Si tienes otro rango, agrégalo como otro bloque.
+                    </p>
                     <UFormField
                         label="Prefijo (CIDR)"
                         name="prefijo"
                         required
+                        help="Tal como te lo dio el proveedor, con su tamaño: 2001:db8:100::/40."
                     >
                         <UInput
                             v-model="bloque.prefijo"
@@ -421,18 +535,33 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                     class="flex flex-col gap-4"
                     @submit="enviarPool"
                 >
+                    <p class="text-sm text-muted">
+                        {{ pool.tipo === 'enlace'
+                            ? 'Pool de enlace: de aquí sale el /64 de la conexión PPPoE de cada cliente.'
+                            : 'Pool de delegación: de aquí sale el prefijo (PD) que cada cliente usa en su propia red.' }}
+                    </p>
                     <UFormField
                         label="Prefijo del pool (CIDR)"
                         name="prefijo"
-                        help="Dentro del bloque."
+                        :help="actual.tipo === 'pool' ? `Debe caer dentro del bloque ${actual.bloque.prefijo} sin pisar otro pool.` : undefined"
                         required
                     >
-                        <UInput
-                            v-model="pool.prefijo"
-                            placeholder="2001:db8:100:8000::/44"
-                            class="w-full font-mono"
-                            data-prueba="pool-prefijo"
-                        />
+                        <UFieldGroup class="w-full">
+                            <UInput
+                                v-model="pool.prefijo"
+                                placeholder="2001:db8:100:8000::/44"
+                                class="w-full font-mono"
+                                data-prueba="pool-prefijo"
+                            />
+                            <UButton
+                                label="Sugerir"
+                                icon="i-lucide-wand-sparkles"
+                                color="neutral"
+                                variant="outline"
+                                data-prueba="pool-sugerir"
+                                @click="sugerir"
+                            />
+                        </UFieldGroup>
                     </UFormField>
                     <div class="grid gap-4 sm:grid-cols-2">
                         <UFormField
@@ -458,6 +587,29 @@ const TIPOS_POOL: Record<Ipv6Pool['tipo'], string> = { enlace: 'Enlace', delegac
                             />
                         </UFormField>
                     </div>
+                    <UAlert
+                        v-if="previaPool"
+                        :color="previaPool.fuera || previaPool.solapado ? 'warning' : 'info'"
+                        variant="subtle"
+                        :icon="previaPool.fuera || previaPool.solapado ? 'i-lucide-triangle-alert' : 'i-lucide-info'"
+                        :title="previaPool.fuera ? 'Este prefijo no cae dentro del bloque' : previaPool.solapado ? `Se pisa con el pool ${previaPool.solapado}` : `Caben ${cantidadPrefijos(previaPool.caben)} clientes`"
+                        data-prueba="pool-vista-previa"
+                    >
+                        <template
+                            v-if="!previaPool.fuera && !previaPool.solapado && previaPool.ejemplos.length"
+                            #description
+                        >
+                            <p>Cada cliente recibe un /{{ pool.tamano_entrega }}:</p>
+                            <ul class="font-mono text-xs break-all">
+                                <li
+                                    v-for="(ejemplo, indice) in previaPool.ejemplos"
+                                    :key="ejemplo"
+                                >
+                                    Cliente {{ indice + 1 }}: {{ ejemplo }}
+                                </li>
+                            </ul>
+                        </template>
+                    </UAlert>
                     <UFormField
                         label="Nombre en el router"
                         name="nombre_en_router"
