@@ -1,5 +1,6 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
+import { sqlLimitesRedV4 } from '#network/ocupacion'
 
 /**
  * IPAM IPv4: asignación de IPs de las redes de un router a servicios, con historial en
@@ -7,8 +8,10 @@ import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
  * a un solo servicio (índice único) y un servicio tiene a lo sumo una IPv4 vigente.
  *
  * Se usa dentro de las acciones de servicios (misma transacción). La asignación automática toma
- * la primera IP libre del router, primero en redes `estatico` y luego en `pool`, sin la dirección
- * de red, broadcast ni gateway. Un advisory lock por router serializa asignaciones concurrentes.
+ * la primera IP libre del router, primero en redes `estatico` y luego en `pool`, dentro del rango
+ * de la red (`rango_inicio`–`rango_fin`; sin rango, toda la red) y sin la dirección de red,
+ * broadcast ni gateway. Una IP pedida a mano también debe caer dentro del rango. Un advisory lock
+ * por router serializa asignaciones concurrentes.
  */
 
 export interface Ipv4Asignada {
@@ -78,11 +81,24 @@ export async function asignarIpv4(
         const { rows } = (await trx.rawQuery(
             `SELECT r.id, masklen(r.cidr) < 31 AND host(network(r.cidr)) = host(?::inet) AS es_red,
                     masklen(r.cidr) < 31 AND host(broadcast(r.cidr)) = host(?::inet) AS es_broadcast,
-                    r.gateway IS NOT NULL AND host(r.gateway) = host(?::inet) AS es_gateway
+                    r.gateway IS NOT NULL AND host(r.gateway) = host(?::inet) AS es_gateway,
+                    r.rango_inicio IS NOT NULL
+                        AND NOT (?::inet BETWEEN r.rango_inicio AND r.rango_fin) AS fuera_de_rango,
+                    host(r.rango_inicio) AS rango_inicio, host(r.rango_fin) AS rango_fin
                FROM network.redes_ipv4 r
               WHERE r.router_id = ? AND r.cidr >>= ?::inet`,
-            [entrada.ip, entrada.ip, entrada.ip, entrada.routerId, entrada.ip],
-        )) as { rows: Array<{ id: number; es_red: boolean; es_broadcast: boolean; es_gateway: boolean }> }
+            [entrada.ip, entrada.ip, entrada.ip, entrada.ip, entrada.routerId, entrada.ip],
+        )) as {
+            rows: Array<{
+                id: number
+                es_red: boolean
+                es_broadcast: boolean
+                es_gateway: boolean
+                fuera_de_rango: boolean
+                rango_inicio: string | null
+                rango_fin: string | null
+            }>
+        }
         const red = rows[0]
         if (!red) {
             throw new ValidacionFallida(
@@ -95,11 +111,11 @@ export async function asignarIpv4(
                 [
                     {
                         field: 'ipv4',
-                        message: 'La IP no pertenece a la red indicada en red_ipv4_id',
+                        message: 'La IP no pertenece a la red IPv4 elegida',
                         rule: 'red',
                     },
                 ],
-                'La IP no pertenece a la red indicada en red_ipv4_id',
+                'La IP no pertenece a la red IPv4 elegida',
             )
         }
         const reservada = red.es_red || red.es_broadcast || red.es_gateway
@@ -114,6 +130,10 @@ export async function asignarIpv4(
                 ],
                 'La IP es la dirección de red, broadcast o gateway',
             )
+        }
+        if (red.fuera_de_rango) {
+            const mensaje = `La IP está fuera del rango que entrega la red (${red.rango_inicio} – ${red.rango_fin})`
+            throw new ValidacionFallida([{ field: 'ipv4', message: mensaje, rule: 'rango' }], mensaje)
         }
         if (actual && actual.ip === entrada.ip && actual.red_id === red.id) return actual
 
@@ -148,19 +168,16 @@ export async function asignarIpv4(
     }
 
     const { rows } = (await trx.rawQuery(
-        `SELECT r.id AS red_id, host(set_masklen(network(r.cidr)::inet, 32) + g.n) AS ip
+        `SELECT r.id AS red_id, host(k.base + g.n) AS ip
            FROM network.redes_ipv4 r
-           CROSS JOIN LATERAL generate_series(
-                CASE WHEN masklen(r.cidr) >= 31 THEN 0 ELSE 1 END::bigint,
-                CASE WHEN masklen(r.cidr) >= 31 THEN (2::bigint ^ (32 - masklen(r.cidr)))::bigint - 1
-                     ELSE (2::bigint ^ (32 - masklen(r.cidr)))::bigint - 2 END
-           ) AS g(n)
+           CROSS JOIN LATERAL ${sqlLimitesRedV4('r')} k
+           CROSS JOIN LATERAL generate_series(k.ini, k.fin) AS g(n)
           WHERE r.router_id = ?
             AND (?::bigint = 0 OR r.id = ?::bigint)
-            AND (r.gateway IS NULL OR set_masklen(network(r.cidr)::inet, 32) + g.n <> set_masklen(r.gateway, 32))
+            AND (r.gateway IS NULL OR k.base + g.n <> set_masklen(r.gateway, 32))
             AND NOT EXISTS (
                 SELECT 1 FROM network.ipv4_asignaciones a
-                 WHERE a.fin IS NULL AND a.ip = set_masklen(network(r.cidr)::inet, 32) + g.n
+                 WHERE a.fin IS NULL AND a.ip = k.base + g.n
             )
           ORDER BY (r.tipo = 'estatico') DESC, r.id, g.n
           LIMIT 1`,

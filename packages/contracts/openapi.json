@@ -9151,7 +9151,7 @@
       "get": {
         "operationId": "clientesDependientes",
         "summary": "Clientes de los que es responsable de pago",
-        "description": "Dependientes con su número de servicios no retirados y el estado resumido. El cobro (A4) muestra sus facturas debajo del pagador.",
+        "description": "Dependientes con su número de servicios no retirados y el estado resumido. El panel de cobro muestra sus facturas debajo del pagador.",
         "tags": [
           "clientes"
         ],
@@ -28217,6 +28217,360 @@
         "x-implementado": true
       }
     },
+    "/api/v1/ipv6-bloques/{id}": {
+      "get": {
+        "operationId": "ipv6BloquesVer",
+        "summary": "Ver bloque IPv6",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bloque IPv6",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ipv6Bloque"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ipv6.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ipv6.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "ipv6BloquesEditar",
+        "summary": "Editar bloque IPv6: nombre, proveedor y prefijo",
+        "description": "Achicar el prefijo dejando fuera algún pool: 422 `pools_fuera_del_bloque` con la lista; traslape con otro bloque: 409 `bloque_traslapado`; `version` distinta: 409 (contratos/pools.md §1).",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "prefijo": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
+                    "description": "Agrandar o achicar el bloque; 422 con la lista si algún pool quedaría fuera"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Nombre para reconocer el bloque en el panel"
+                  },
+                  "proveedor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Proveedor que asignó el bloque (un router puede tener bloques de varios proveedores)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bloque actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ipv6Bloque"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ipv6.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ipv6.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/ipv6-bloques/{id}/migrar": {
+      "post": {
+        "operationId": "ipv6BloquesMigrar",
+        "summary": "Pasar el bloque IPv6 (con todos sus pools) a otro router",
+        "description": "Un pool se muda con su bloque. Sin `mover_servicios`, si algún servicio usa prefijos del bloque responde 422 `pool_con_servicios` con la lista. Con `mover_servicios: true` (pide además `servicios.editar`) cada servicio pasa al router de destino conservando sus prefijos; su IPv4 se vuelve a asignar en el destino salvo que su red se mude también (`redes_ipv4`, pide `redes.migrar`). Si un servicio no puede pasar, 422 `servicio_no_migrable` y no cambia nada. `simular: true` devuelve lo que pasaría sin guardar (contratos/pools.md §3).",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "router_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Router de destino"
+                  },
+                  "mover_servicios": {
+                    "description": "false (por defecto): si algún servicio usa direcciones del pool responde 422 con la lista. true: los servicios pasan al router de destino conservando sus direcciones del pool",
+                    "type": "boolean"
+                  },
+                  "simular": {
+                    "description": "true = no guarda nada: devuelve lo que pasaría (servicios y direcciones antes y después)",
+                    "type": "boolean"
+                  },
+                  "redes_ipv4": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 50,
+                    "uniqueItems": true,
+                    "description": "Redes IPv4 del mismo router que se mudan junto con el bloque (así los servicios conservan también su IPv4)"
+                  }
+                },
+                "required": [
+                  "version",
+                  "router_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Migración (o su simulación)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigracionPools"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ipv6.migrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ipv6.migrar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/ipv6-bloques/{id}/pools": {
       "get": {
         "operationId": "ipv6PoolsListar",
@@ -28343,12 +28697,21 @@
                     ],
                     "type": "integer"
                   },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Nombre para reconocer el pool en el panel"
+                  },
                   "nombre_en_router": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "maxLength": 100
+                    "maxLength": 100,
+                    "description": "Nombre del pool en RouterOS (modo radius_pool)"
                   }
                 },
                 "required": [
@@ -28414,6 +28777,420 @@
           }
         },
         "x-permiso": "ipv6.crear",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/ipv6-bloques/vista-previa": {
+      "post": {
+        "operationId": "ipv6BloquesVistaPrevia",
+        "summary": "Vista previa de un bloque IPv6: cuántos clientes caben y qué recibe cada uno (no guarda)",
+        "description": "Sugiere la división del bloque: la segunda mitad para el pool de delegación (`tamano_delegado` por cliente) y, al inicio de la primera, el pool de enlace /64 para la misma cantidad de clientes. Incluye lo que recibirían los dos primeros servicios. 422 si el bloque es muy chico (contratos/pools.md §4).",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prefijo": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
+                    "description": "Prefijo IPv6 en notación CIDR"
+                  },
+                  "tamano_delegado": {
+                    "enum": [
+                      64,
+                      56,
+                      48
+                    ],
+                    "type": "integer",
+                    "description": "Prefijo delegado por cliente (el del plan: /56 por defecto)"
+                  }
+                },
+                "required": [
+                  "prefijo",
+                  "tamano_delegado"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaBloqueIpv6"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ipv6.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ipv6.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/ipv6-pools/{id}": {
+      "get": {
+        "operationId": "ipv6PoolsVer",
+        "summary": "Ver pool IPv6 (con su ocupación y lo que entrega)",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pool IPv6",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ipv6Pool"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ipv6.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ipv6.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "ipv6PoolsEditar",
+        "summary": "Editar pool IPv6: nombre, nombre en el router, prefijo, tipo y tamaño de entrega",
+        "description": "Achicar o mover el prefijo dejando fuera prefijos asignados: 422 `prefijos_asignados_fuera` con la lista. `tipo` y `tamano_entrega` solo cambian en un pool sin asignaciones (422 `pool_con_asignaciones`). Traslape: 409 `pool_traslapado`; `version` distinta: 409 (contratos/pools.md §1).",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "prefijo": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
+                    "description": "Agrandar o achicar el pool; 422 con la lista si algún prefijo asignado quedaría fuera"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "enlace",
+                      "delegacion"
+                    ],
+                    "description": "Solo se cambia si el pool no tiene prefijos asignados"
+                  },
+                  "tamano_entrega": {
+                    "enum": [
+                      64,
+                      56,
+                      48
+                    ],
+                    "type": "integer",
+                    "description": "Solo se cambia si el pool no tiene prefijos asignados"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Nombre para reconocer el pool en el panel"
+                  },
+                  "nombre_en_router": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Nombre del pool en RouterOS (modo radius_pool)"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pool actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ipv6Pool"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ipv6.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ipv6.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/ipv6-pools/vista-previa": {
+      "post": {
+        "operationId": "ipv6PoolsVistaPrevia",
+        "summary": "Vista previa de un pool IPv6: cuántos clientes caben y qué recibe cada uno (no guarda)",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prefijo": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
+                    "description": "Prefijo IPv6 en notación CIDR"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "enlace",
+                      "delegacion"
+                    ]
+                  },
+                  "tamano_entrega": {
+                    "enum": [
+                      64,
+                      56,
+                      48
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "prefijo",
+                  "tipo",
+                  "tamano_entrega"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vista previa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaPoolIpv6"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ipv6.ver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ipv6.ver",
         "x-implementado": true
       }
     },
@@ -52524,6 +53301,398 @@
         "x-implementado": true
       }
     },
+    "/api/v1/redes-ipv4/{id}": {
+      "get": {
+        "operationId": "redesIpv4Ver",
+        "summary": "Ver red IPv4 (con su ocupación)",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Red IPv4",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedIpv4"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso redes.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "redes.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "redesIpv4Editar",
+        "summary": "Editar red IPv4: nombre, red, gateway, rango, DNS y tipo",
+        "description": "Agrandar o achicar la red, mover el gateway o cambiar el rango: 422 `ips_asignadas_fuera` con la lista en `errors[]` si alguna IP asignada quedaría fuera; 409 `red_traslapada` si se traslapa con otra red; 409 `conflicto_version` si la `version` no coincide (contratos/pools.md §1).",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "cidr": {
+                    "type": "string",
+                    "pattern": "^(\\d{1,3}\\.){3}\\d{1,3}\\/([0-9]|[12][0-9]|3[0-2])$",
+                    "description": "Agrandar o achicar la red; 422 con la lista si alguna IP asignada quedaría fuera"
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "estatico",
+                      "pool"
+                    ]
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Nombre para reconocer la red en el panel («Clientes zona norte»)"
+                  },
+                  "gateway": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "Puerta de enlace de los clientes; no se asigna a ningún servicio"
+                  },
+                  "rango_inicio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "Primera IP que el sistema entrega a servicios; null (con rango_fin) = toda la red. Fuera del rango las IPs quedan reservadas"
+                  },
+                  "rango_fin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "Última IP que el sistema entrega a servicios"
+                  },
+                  "dns_primario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "DNS para los clientes de la red"
+                  },
+                  "dns_secundario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Red actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedIpv4"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso redes.editar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "redes.editar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/redes-ipv4/{id}/migrar": {
+      "post": {
+        "operationId": "redesIpv4Migrar",
+        "summary": "Pasar la red IPv4 a otro router",
+        "description": "Sin `mover_servicios`, si algún servicio usa IPs de la red responde 422 `pool_con_servicios` con la lista. Con `mover_servicios: true` (pide además `servicios.editar`) cada servicio pasa al router de destino conservando su IPv4; su IPv6 se vuelve a reservar en el destino salvo que sus bloques se muden también (`bloques_ipv6`, pide `ipv6.migrar`). Si un servicio no puede pasar, 422 `servicio_no_migrable` y no cambia nada. `simular: true` devuelve lo que pasaría sin guardar (contratos/pools.md §3).",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "router_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Router de destino"
+                  },
+                  "mover_servicios": {
+                    "description": "false (por defecto): si algún servicio usa direcciones del pool responde 422 con la lista. true: los servicios pasan al router de destino conservando sus direcciones del pool",
+                    "type": "boolean"
+                  },
+                  "simular": {
+                    "description": "true = no guarda nada: devuelve lo que pasaría (servicios y direcciones antes y después)",
+                    "type": "boolean"
+                  },
+                  "bloques_ipv6": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 50,
+                    "uniqueItems": true,
+                    "description": "Bloques IPv6 del mismo router que se mudan junto con la red (así los servicios conservan también sus prefijos)"
+                  }
+                },
+                "required": [
+                  "version",
+                  "router_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Migración (o su simulación)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigracionPools"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso redes.migrar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "redes.migrar",
+        "x-implementado": true
+      }
+    },
     "/api/v1/reportes/altas-bajas": {
       "get": {
         "operationId": "reportesAltasBajas",
@@ -54753,6 +55922,8 @@
                         "inventario.ver",
                         "ip.resolver",
                         "ipv6.crear",
+                        "ipv6.editar",
+                        "ipv6.migrar",
                         "ipv6.ver",
                         "lealtad.ajustar",
                         "lealtad.canjear",
@@ -54803,6 +55974,8 @@
                         "proveedores.ver",
                         "red.ver",
                         "redes.crear",
+                        "redes.editar",
+                        "redes.migrar",
                         "redes.ver",
                         "reportes.ver",
                         "roles.crear",
@@ -55077,6 +56250,8 @@
                         "inventario.ver",
                         "ip.resolver",
                         "ipv6.crear",
+                        "ipv6.editar",
+                        "ipv6.migrar",
                         "ipv6.ver",
                         "lealtad.ajustar",
                         "lealtad.canjear",
@@ -55127,6 +56302,8 @@
                         "proveedores.ver",
                         "red.ver",
                         "redes.crear",
+                        "redes.editar",
+                        "redes.migrar",
                         "redes.ver",
                         "reportes.ver",
                         "roles.crear",
@@ -56052,6 +57229,79 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/direccionamiento": {
+      "get": {
+        "operationId": "routersDireccionamiento",
+        "summary": "Direccionamiento del router: pools con ocupación y qué recibe cada servicio",
+        "description": "Redes IPv4 y bloques IPv6 (con sus pools) del router, cada uno con su ocupación; totales por familia y, por cada plan disponible en el router, de dónde sale la IPv4, qué prefijos IPv6 recibe un servicio nuevo (modo radius_servicio) y avisos si faltan pools o direcciones libres (contratos/pools.md §2 y §4). 404 si el router no existe.",
+        "tags": [
+          "ipam"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Direccionamiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DireccionamientoRouter"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/ipv6-bloques": {
       "get": {
         "operationId": "ipv6BloquesListar",
@@ -56162,6 +57412,22 @@
                     "type": "string",
                     "pattern": "^[0-9a-fA-F:]+\\/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$",
                     "description": "Prefijo IPv6 en notación CIDR"
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Nombre para reconocer el bloque en el panel"
+                  },
+                  "proveedor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Proveedor que asignó el bloque (un router puede tener bloques de varios proveedores)"
                   }
                 },
                 "required": [
@@ -56623,19 +57889,59 @@
                     "pattern": "^(\\d{1,3}\\.){3}\\d{1,3}\\/([0-9]|[12][0-9]|3[0-2])$",
                     "description": "Red IPv4 en notación CIDR"
                   },
-                  "gateway": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "format": "ipv4"
-                  },
                   "tipo": {
                     "type": "string",
                     "enum": [
                       "estatico",
                       "pool"
                     ]
+                  },
+                  "nombre": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Nombre para reconocer la red en el panel («Clientes zona norte»)"
+                  },
+                  "gateway": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "Puerta de enlace de los clientes; no se asigna a ningún servicio"
+                  },
+                  "rango_inicio": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "Primera IP que el sistema entrega a servicios; null (con rango_fin) = toda la red. Fuera del rango las IPs quedan reservadas"
+                  },
+                  "rango_fin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "Última IP que el sistema entrega a servicios"
+                  },
+                  "dns_primario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4",
+                    "description": "DNS para los clientes de la red"
+                  },
+                  "dns_secundario": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "ipv4"
                   }
                 },
                 "required": [
@@ -58003,7 +59309,7 @@
                     },
                     "required": [],
                     "additionalProperties": false,
-                    "description": "Referencia de planta de la instalación (pedido A9 de Iris): solo lectura, no se valida contra nada"
+                    "description": "Referencia de planta de la instalación (la envía Iris): solo lectura, no se valida contra nada"
                   }
                 },
                 "required": [
@@ -61948,6 +63254,8 @@
                             "inventario.ver",
                             "ip.resolver",
                             "ipv6.crear",
+                            "ipv6.editar",
+                            "ipv6.migrar",
                             "ipv6.ver",
                             "lealtad.ajustar",
                             "lealtad.canjear",
@@ -61998,6 +63306,8 @@
                             "proveedores.ver",
                             "red.ver",
                             "redes.crear",
+                            "redes.editar",
+                            "redes.migrar",
                             "redes.ver",
                             "reportes.ver",
                             "roles.crear",
@@ -74184,6 +75494,225 @@
           "150.00"
         ]
       },
+      "DireccionamientoRouter": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "redes_ipv4",
+          "bloques_ipv6",
+          "ocupacion",
+          "planes"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "redes_ipv4": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RedIpv4"
+            }
+          },
+          "bloques_ipv6": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Ipv6Bloque"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "pools"
+                  ],
+                  "properties": {
+                    "pools": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Ipv6Pool"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "ocupacion": {
+            "type": "object",
+            "required": [
+              "ipv4",
+              "ipv6"
+            ],
+            "properties": {
+              "ipv4": {
+                "$ref": "#/components/schemas/OcupacionPool"
+              },
+              "ipv6": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "tipo",
+                    "tamano_entrega",
+                    "ocupacion"
+                  ],
+                  "properties": {
+                    "tipo": {
+                      "type": "string",
+                      "enum": [
+                        "enlace",
+                        "delegacion"
+                      ]
+                    },
+                    "tamano_entrega": {
+                      "type": "integer",
+                      "enum": [
+                        64,
+                        56,
+                        48
+                      ]
+                    },
+                    "ocupacion": {
+                      "$ref": "#/components/schemas/OcupacionPool"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "planes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "plan_id",
+                "nombre",
+                "dual_stack",
+                "ipv4",
+                "ipv6",
+                "avisos"
+              ],
+              "properties": {
+                "plan_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "dual_stack": {
+                  "type": "string",
+                  "enum": [
+                    "ambos",
+                    "v4",
+                    "v6"
+                  ]
+                },
+                "ipv4": {
+                  "type": "object",
+                  "required": [
+                    "origen",
+                    "pool",
+                    "libres"
+                  ],
+                  "properties": {
+                    "origen": {
+                      "type": "string",
+                      "enum": [
+                        "redes",
+                        "pool_router",
+                        "ninguna"
+                      ],
+                      "description": "redes: IP fija de las redes del router; pool_router: la asigna el router (Framed-Pool); ninguna: plan solo IPv6 o sin origen"
+                    },
+                    "pool": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "libres": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "ipv6": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "prefijo_enlace",
+                    "prefijo_delegado",
+                    "redes_lan_por_cliente",
+                    "enlaces_libres",
+                    "delegados_libres"
+                  ],
+                  "properties": {
+                    "prefijo_enlace": {
+                      "type": "integer",
+                      "enum": [
+                        64
+                      ]
+                    },
+                    "prefijo_delegado": {
+                      "type": "integer",
+                      "enum": [
+                        64,
+                        56,
+                        48
+                      ]
+                    },
+                    "redes_lan_por_cliente": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "enlaces_libres": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "delegados_libres": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "avisos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "codigo",
+                      "mensaje"
+                    ],
+                    "properties": {
+                      "codigo": {
+                        "type": "string",
+                        "enum": [
+                          "sin_ipv4",
+                          "sin_ipv4_libres",
+                          "sin_pool_enlace",
+                          "sin_pool_delegacion",
+                          "sin_prefijos_enlace_libres",
+                          "sin_prefijos_delegados_libres"
+                        ]
+                      },
+                      "mensaje": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Qué recibe un servicio nuevo de cada plan disponible en el router (modo IPv6 radius_servicio)"
+          }
+        }
+      },
       "Dte": {
         "type": "object",
         "required": [
@@ -75374,6 +76903,50 @@
           "vence_en": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "EntregaPoolIpv6": {
+        "type": "object",
+        "required": [
+          "atributo_radius",
+          "redes_lan_por_cliente",
+          "clientes_maximos",
+          "primer_prefijo",
+          "segundo_prefijo",
+          "ultimo_prefijo"
+        ],
+        "properties": {
+          "atributo_radius": {
+            "type": "string",
+            "enum": [
+              "Framed-IPv6-Prefix",
+              "Delegated-IPv6-Prefix"
+            ],
+            "description": "Atributo RADIUS con el que viaja el prefijo (enlace: Framed; delegación: Delegated)"
+          },
+          "redes_lan_por_cliente": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "/64 que el router del cliente puede repartir en su LAN (1 en un pool de enlace)"
+          },
+          "clientes_maximos": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Servicios que caben en el pool"
+          },
+          "primer_prefijo": {
+            "type": "string",
+            "description": "Lo que recibe el primer servicio"
+          },
+          "segundo_prefijo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ultimo_prefijo": {
+            "type": "string"
           }
         }
       },
@@ -78839,7 +80412,10 @@
         "required": [
           "id",
           "router_id",
+          "nombre",
+          "proveedor",
           "prefijo",
+          "espacio",
           "version",
           "created_at",
           "updated_at"
@@ -78853,8 +80429,39 @@
             "type": "integer",
             "minimum": 1
           },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "proveedor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Proveedor que asignó el bloque"
+          },
           "prefijo": {
             "type": "string"
+          },
+          "espacio": {
+            "type": "object",
+            "required": [
+              "pools",
+              "porcentaje_en_pools"
+            ],
+            "properties": {
+              "pools": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "porcentaje_en_pools": {
+                "type": "number",
+                "description": "Parte del bloque ya repartida en pools, con un decimal"
+              }
+            },
+            "description": "Cuánto del bloque está repartido en pools"
           },
           "version": {
             "type": "integer",
@@ -78876,10 +80483,14 @@
         "required": [
           "id",
           "bloque_id",
+          "router_id",
+          "nombre",
           "prefijo",
           "tipo",
           "tamano_entrega",
           "nombre_en_router",
+          "ocupacion",
+          "entrega",
           "version",
           "created_at",
           "updated_at"
@@ -78893,6 +80504,16 @@
             "type": "integer",
             "minimum": 1
           },
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "prefijo": {
             "type": "string"
           },
@@ -78901,7 +80522,8 @@
             "enum": [
               "enlace",
               "delegacion"
-            ]
+            ],
+            "description": "enlace: un /64 por servicio para la conexión PPPoE; delegacion: el prefijo que el router del cliente reparte en su red"
           },
           "tamano_entrega": {
             "type": "integer",
@@ -78915,7 +80537,14 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Nombre del pool en RouterOS (modo radius_pool)"
+          },
+          "ocupacion": {
+            "$ref": "#/components/schemas/OcupacionPool"
+          },
+          "entrega": {
+            "$ref": "#/components/schemas/EntregaPoolIpv6"
           },
           "version": {
             "type": "integer",
@@ -79853,6 +81482,136 @@
           }
         }
       },
+      "MigracionPools": {
+        "type": "object",
+        "required": [
+          "router_origen_id",
+          "router_destino_id",
+          "redes_ipv4",
+          "bloques_ipv6",
+          "servicios",
+          "simulado"
+        ],
+        "properties": {
+          "router_origen_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_destino_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "redes_ipv4": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RedIpv4"
+            }
+          },
+          "bloques_ipv6": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Ipv6Bloque"
+            }
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio_id",
+                "user_ppp",
+                "antes",
+                "despues"
+              ],
+              "properties": {
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "user_ppp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "antes": {
+                  "type": "object",
+                  "required": [
+                    "router_id",
+                    "ipv4",
+                    "prefijo_enlace_v6",
+                    "prefijo_delegado_v6"
+                  ],
+                  "properties": {
+                    "router_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "ipv4": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "prefijo_enlace_v6": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "prefijo_delegado_v6": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "description": "Router y direcciones antes de migrar"
+                },
+                "despues": {
+                  "type": "object",
+                  "required": [
+                    "router_id",
+                    "ipv4",
+                    "prefijo_enlace_v6",
+                    "prefijo_delegado_v6"
+                  ],
+                  "properties": {
+                    "router_id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "ipv4": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "prefijo_enlace_v6": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "prefijo_delegado_v6": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "description": "Router y direcciones después de migrar"
+                }
+              }
+            },
+            "description": "Servicios que pasaron (o pasarían, con simular) al router de destino"
+          },
+          "simulado": {
+            "type": "boolean",
+            "description": "true = vista previa: no se guardó nada"
+          }
+        }
+      },
       "MotivoCortesia": {
         "type": "object",
         "required": [
@@ -80745,6 +82504,8 @@
           "inventario.ver",
           "ip.resolver",
           "ipv6.crear",
+          "ipv6.editar",
+          "ipv6.migrar",
           "ipv6.ver",
           "lealtad.ajustar",
           "lealtad.canjear",
@@ -80795,6 +82556,8 @@
           "proveedores.ver",
           "red.ver",
           "redes.crear",
+          "redes.editar",
+          "redes.migrar",
           "redes.ver",
           "reportes.ver",
           "roles.crear",
@@ -80962,6 +82725,8 @@
           "Ver productos, bodegas, existencias y el kardex",
           "Resolver una IP a su servicio",
           "Crear bloques y pools IPv6",
+          "Editar bloques y pools IPv6",
+          "Pasar bloques IPv6 a otro router (con sus servicios, si además tiene servicios.editar)",
           "Ver bloques y pools IPv6",
           "Ajustar puntos a mano (con motivo) y rechazar referidos",
           "Canjear puntos de un cliente por un premio (panel o caja)",
@@ -81012,6 +82777,8 @@
           "Ver proveedores",
           "Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)",
           "Crear redes IPv4",
+          "Editar redes IPv4: nombre, red, gateway, rango y DNS",
+          "Pasar redes IPv4 a otro router (con sus servicios, si además tiene servicios.editar)",
           "Ver redes IPv4",
           "Ver reportes (cartera, ingresos, IVA, cobranza…), exportarlos y el dashboard",
           "Crear roles",
@@ -81402,6 +83169,45 @@
             "format": "date-time"
           }
         }
+      },
+      "OcupacionPool": {
+        "type": "object",
+        "required": [
+          "total",
+          "asignadas",
+          "libres",
+          "reservadas",
+          "porcentaje"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "IPv4: hosts utilizables. IPv6: prefijos que caben"
+          },
+          "asignadas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "En uso por servicios"
+          },
+          "libres": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Las que el sistema todavía puede entregar"
+          },
+          "reservadas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "No se entregan: IPv4, el gateway y las que quedan fuera del rango; IPv6, las ocupadas por prefijos de otro tamaño (estáticos)"
+          },
+          "porcentaje": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "asignadas / (asignadas + libres) × 100, con un decimal"
+          }
+        },
+        "description": "Ocupación del pool (contratos/pools.md §2); total = asignadas + libres + reservadas"
       },
       "PaginaCanjesLealtad": {
         "type": "object",
@@ -86846,9 +88652,15 @@
         "required": [
           "id",
           "router_id",
+          "nombre",
           "cidr",
           "gateway",
           "tipo",
+          "rango_inicio",
+          "rango_fin",
+          "dns_primario",
+          "dns_secundario",
+          "ocupacion",
           "version",
           "created_at",
           "updated_at"
@@ -86862,6 +88674,12 @@
             "type": "integer",
             "minimum": 1
           },
+          "nombre": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "cidr": {
             "type": "string"
           },
@@ -86869,7 +88687,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Puerta de enlace de los clientes; nunca se asigna"
           },
           "tipo": {
             "type": "string",
@@ -86877,6 +88696,35 @@
               "estatico",
               "pool"
             ]
+          },
+          "rango_inicio": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Primera IP que se entrega a servicios; null = toda la red"
+          },
+          "rango_fin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Última IP que se entrega a servicios; null = toda la red"
+          },
+          "dns_primario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dns_secundario": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ocupacion": {
+            "$ref": "#/components/schemas/OcupacionPool"
           },
           "version": {
             "type": "integer",
@@ -92925,6 +94773,8 @@
               "inventario.ver",
               "ip.resolver",
               "ipv6.crear",
+              "ipv6.editar",
+              "ipv6.migrar",
               "ipv6.ver",
               "lealtad.ajustar",
               "lealtad.canjear",
@@ -92975,6 +94825,8 @@
               "proveedores.ver",
               "red.ver",
               "redes.crear",
+              "redes.editar",
+              "redes.migrar",
               "redes.ver",
               "reportes.ver",
               "roles.crear",
@@ -93127,10 +94979,14 @@
               "inventario.ver",
               "ip.resolver",
               "ipv6.crear",
+              "ipv6.editar",
+              "ipv6.migrar",
               "ipv6.ver",
               "planes.ver",
               "red.ver",
               "redes.crear",
+              "redes.editar",
+              "redes.migrar",
               "redes.ver",
               "routers.crear",
               "routers.editar",
@@ -96745,6 +98601,108 @@
           }
         }
       },
+      "VistaPreviaBloqueIpv6": {
+        "type": "object",
+        "required": [
+          "prefijo",
+          "tamano_delegado",
+          "clientes",
+          "redes_lan_por_cliente",
+          "pools_sugeridos",
+          "ejemplos",
+          "traslapa_con"
+        ],
+        "properties": {
+          "prefijo": {
+            "type": "string"
+          },
+          "tamano_delegado": {
+            "type": "integer",
+            "enum": [
+              64,
+              56,
+              48
+            ]
+          },
+          "clientes": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Servicios que caben con la división sugerida (un /64 de enlace y un delegado cada uno)"
+          },
+          "redes_lan_por_cliente": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "/64 que cada cliente reparte en su LAN"
+          },
+          "pools_sugeridos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "tipo",
+                "prefijo",
+                "tamano_entrega",
+                "clientes"
+              ],
+              "properties": {
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "enlace",
+                    "delegacion"
+                  ]
+                },
+                "prefijo": {
+                  "type": "string"
+                },
+                "tamano_entrega": {
+                  "type": "integer",
+                  "enum": [
+                    64,
+                    56,
+                    48
+                  ]
+                },
+                "clientes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "ejemplos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio",
+                "prefijo_enlace",
+                "prefijo_delegado"
+              ],
+              "properties": {
+                "servicio": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "1 = el primer servicio"
+                },
+                "prefijo_enlace": {
+                  "type": "string"
+                },
+                "prefijo_delegado": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "traslapa_con": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bloque existente con el que se traslaparía (no se podría crear); null si no hay"
+          }
+        }
+      },
       "VistaPreviaControl": {
         "type": "object",
         "required": [
@@ -96936,6 +98894,79 @@
               "type": "string"
             },
             "description": "Variables que la plantilla usa y el evento no trae: se renderizan vacías"
+          }
+        }
+      },
+      "VistaPreviaPoolIpv6": {
+        "type": "object",
+        "required": [
+          "prefijo",
+          "tipo",
+          "tamano_entrega",
+          "atributo_radius",
+          "redes_lan_por_cliente",
+          "clientes_maximos",
+          "primer_prefijo",
+          "segundo_prefijo",
+          "ultimo_prefijo",
+          "traslapa_con"
+        ],
+        "properties": {
+          "prefijo": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "enlace",
+              "delegacion"
+            ]
+          },
+          "tamano_entrega": {
+            "type": "integer",
+            "enum": [
+              64,
+              56,
+              48
+            ]
+          },
+          "atributo_radius": {
+            "type": "string",
+            "enum": [
+              "Framed-IPv6-Prefix",
+              "Delegated-IPv6-Prefix"
+            ],
+            "description": "Atributo RADIUS con el que viaja el prefijo (enlace: Framed; delegación: Delegated)"
+          },
+          "redes_lan_por_cliente": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "/64 que el router del cliente puede repartir en su LAN (1 en un pool de enlace)"
+          },
+          "clientes_maximos": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Servicios que caben en el pool"
+          },
+          "primer_prefijo": {
+            "type": "string",
+            "description": "Lo que recibe el primer servicio"
+          },
+          "segundo_prefijo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ultimo_prefijo": {
+            "type": "string"
+          },
+          "traslapa_con": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pool existente con el que se traslaparía (no se podría crear); null si no hay"
           }
         }
       },

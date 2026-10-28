@@ -6,7 +6,7 @@
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#network/validators'
-import { exigirAlcance } from '#core/acl'
+import { alcanceDePermiso, exigirAlcance } from '#core/acl'
 import CrearRouter from '#network/actions/crear_router'
 import EditarRouter from '#network/actions/editar_router'
 import CambiarControlVelocidad from '#network/actions/cambiar_control_velocidad'
@@ -27,10 +27,29 @@ import {
     ResumenSesionesRouter,
     MigracionAaaRouter,
     VistaPreviaControl,
+    DireccionamientoRouter,
+    MigracionPools,
+    VistaPreviaBloqueIpv6,
+    VistaPreviaPoolIpv6,
 } from '#network/esquemas'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
 import CrearPoolIpv6 from '#network/actions/crear_pool_ipv6'
-import { listarBloques, listarPools, verBloque } from '#network/consultas/ipv6'
+import EditarRedIpv4 from '#network/actions/editar_red_ipv4'
+import EditarBloqueIpv6 from '#network/actions/editar_bloque_ipv6'
+import EditarPoolIpv6 from '#network/actions/editar_pool_ipv6'
+import MigrarRedIpv4 from '#network/actions/migrar_red_ipv4'
+import MigrarBloqueIpv6 from '#network/actions/migrar_bloque_ipv6'
+import { listarBloques, listarPools, verBloque, verPool } from '#network/consultas/ipv6'
+import { verRedIpv4 } from '#network/consultas/routers'
+import {
+    direccionamientoRouter,
+    vistaPreviaBloqueIpv6,
+    vistaPreviaPoolIpv6,
+} from '#network/consultas/direccionamiento'
+import { alcancesDelToken } from '#middleware/autorizar_middleware'
+import { Prohibido } from '#shared/errores'
+import type { HttpContext } from '@adonisjs/core/http'
+import type { Permiso } from '#core/permisos'
 import CrearPlan, { exigirVelocidadValida } from '#network/actions/crear_plan'
 import EditarPlan from '#network/actions/editar_plan'
 import ImplementarPlan from '#network/actions/implementar_plan'
@@ -50,6 +69,35 @@ import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
+
+/** 403 si el actor no tiene además `permiso` (la ruta ya exigió el suyo). */
+async function exigirPermisoExtra(ctx: HttpContext, permiso: Permiso, motivo: string) {
+    const usuario = ctx.auth.user
+    const alcance = usuario ? await alcanceDePermiso(usuario.id, permiso, alcancesDelToken(ctx)) : null
+    if (!alcance) throw new Prohibido(`Para ${motivo} necesitas además el permiso ${permiso}`)
+    return alcance
+}
+
+/**
+ * Migrar pools (`contratos/pools.md` §3): alcance sobre el router de origen y el de destino;
+ * mudar también bloques o redes pide el permiso de esa familia, y mover servicios pide
+ * `servicios.editar` con alcance sobre el destino.
+ */
+async function exigirMigracion(
+    ctx: HttpContext,
+    origen: number,
+    cuerpo: { router_id: number; mover_servicios?: boolean },
+    extra: { permiso: Permiso; ids: number[] | undefined; motivo: string },
+) {
+    exigirAlcance(ctx.alcance, { router: [origen] })
+    exigirAlcance(ctx.alcance, { router: [cuerpo.router_id] })
+    if (extra.ids?.length) await exigirPermisoExtra(ctx, extra.permiso, extra.motivo)
+    if (cuerpo.mover_servicios) {
+        const alcance = await exigirPermisoExtra(ctx, 'servicios.editar', 'mover los servicios del pool')
+        exigirAlcance(alcance, { router: [origen] })
+        exigirAlcance(alcance, { router: [cuerpo.router_id] })
+    }
+}
 
 // A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
 registrarSeccionMetricas('routeros', leerMetricasRouterOS)
@@ -233,6 +281,217 @@ const routers: Ruta[] = [
             const bloque = await verBloque(Number(params.id))
             exigirAlcance(ctx.alcance, { router: [bloque.router_id] })
             return new CrearPoolIpv6().execute({ ...cuerpo, bloque_id: bloque.id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/direccionamiento',
+        operacion: 'routersDireccionamiento',
+        resumen: 'Direccionamiento del router: pools con ocupación y qué recibe cada servicio',
+        descripcion:
+            'Redes IPv4 y bloques IPv6 (con sus pools) del router, cada uno con su ocupación; totales por ' +
+            'familia y, por cada plan disponible en el router, de dónde sale la IPv4, qué prefijos IPv6 recibe ' +
+            'un servicio nuevo (modo radius_servicio) y avisos si faltan pools o direcciones libres ' +
+            '(contratos/pools.md §2 y §4). 404 si el router no existe.',
+        etiqueta: 'ipam',
+        permiso: 'routers.ver',
+        respuesta: { status: 200, descripcion: 'Direccionamiento', esquema: DireccionamientoRouter },
+        handler: (ctx, { params }) => {
+            exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
+            return direccionamientoRouter(Number(params.id))
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/redes-ipv4/:id',
+        operacion: 'redesIpv4Ver',
+        resumen: 'Ver red IPv4 (con su ocupación)',
+        etiqueta: 'ipam',
+        permiso: 'redes.ver',
+        respuesta: { status: 200, descripcion: 'Red IPv4', esquema: RedIpv4 },
+        handler: async (ctx, { params }) => {
+            const red = await verRedIpv4(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [red.router_id] })
+            return red
+        },
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/redes-ipv4/:id',
+        operacion: 'redesIpv4Editar',
+        resumen: 'Editar red IPv4: nombre, red, gateway, rango, DNS y tipo',
+        descripcion:
+            'Agrandar o achicar la red, mover el gateway o cambiar el rango: 422 `ips_asignadas_fuera` con la ' +
+            'lista en `errors[]` si alguna IP asignada quedaría fuera; 409 `red_traslapada` si se traslapa con ' +
+            'otra red; 409 `conflicto_version` si la `version` no coincide (contratos/pools.md §1).',
+        etiqueta: 'ipam',
+        permiso: 'redes.editar',
+        cuerpo: v.editarRedIpv4Validator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Red actualizada', esquema: RedIpv4 },
+        handler: async (ctx, { cuerpo, params }) => {
+            const red = await verRedIpv4(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [red.router_id] })
+            return new EditarRedIpv4().execute({ ...cuerpo, id: red.id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/redes-ipv4/:id/migrar',
+        operacion: 'redesIpv4Migrar',
+        resumen: 'Pasar la red IPv4 a otro router',
+        descripcion:
+            'Sin `mover_servicios`, si algún servicio usa IPs de la red responde 422 `pool_con_servicios` con ' +
+            'la lista. Con `mover_servicios: true` (pide además `servicios.editar`) cada servicio pasa al router ' +
+            'de destino conservando su IPv4; su IPv6 se vuelve a reservar en el destino salvo que sus bloques ' +
+            'se muden también (`bloques_ipv6`, pide `ipv6.migrar`). Si un servicio no puede pasar, 422 ' +
+            '`servicio_no_migrable` y no cambia nada. `simular: true` devuelve lo que pasaría sin guardar ' +
+            '(contratos/pools.md §3).',
+        etiqueta: 'ipam',
+        permiso: 'redes.migrar',
+        cuerpo: v.migrarRedIpv4Validator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Migración (o su simulación)', esquema: MigracionPools },
+        handler: async (ctx, { cuerpo, params }) => {
+            const red = await verRedIpv4(Number(params.id))
+            await exigirMigracion(ctx, red.router_id, cuerpo, {
+                permiso: 'ipv6.migrar',
+                ids: cuerpo.bloques_ipv6,
+                motivo: 'mudar también bloques IPv6',
+            })
+            const { simular, ...entrada } = cuerpo
+            const datos = { ...entrada, id: red.id }
+            return simular
+                ? MigrarRedIpv4.simular(datos, ctx.contextoAccion())
+                : new MigrarRedIpv4().execute(datos, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/ipv6-bloques/vista-previa',
+        operacion: 'ipv6BloquesVistaPrevia',
+        resumen: 'Vista previa de un bloque IPv6: cuántos clientes caben y qué recibe cada uno (no guarda)',
+        descripcion:
+            'Sugiere la división del bloque: la segunda mitad para el pool de delegación (`tamano_delegado` por ' +
+            'cliente) y, al inicio de la primera, el pool de enlace /64 para la misma cantidad de clientes. ' +
+            'Incluye lo que recibirían los dos primeros servicios. 422 si el bloque es muy chico ' +
+            '(contratos/pools.md §4).',
+        etiqueta: 'ipam',
+        permiso: 'ipv6.ver',
+        cuerpo: v.vistaPreviaBloqueIpv6Validator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaBloqueIpv6 },
+        handler: (_ctx, { cuerpo }) => vistaPreviaBloqueIpv6(cuerpo),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/ipv6-bloques/:id',
+        operacion: 'ipv6BloquesVer',
+        resumen: 'Ver bloque IPv6',
+        etiqueta: 'ipam',
+        permiso: 'ipv6.ver',
+        respuesta: { status: 200, descripcion: 'Bloque IPv6', esquema: Ipv6Bloque },
+        handler: async (ctx, { params }) => {
+            const bloque = await verBloque(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [bloque.router_id] })
+            return bloque
+        },
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/ipv6-bloques/:id',
+        operacion: 'ipv6BloquesEditar',
+        resumen: 'Editar bloque IPv6: nombre, proveedor y prefijo',
+        descripcion:
+            'Achicar el prefijo dejando fuera algún pool: 422 `pools_fuera_del_bloque` con la lista; traslape ' +
+            'con otro bloque: 409 `bloque_traslapado`; `version` distinta: 409 (contratos/pools.md §1).',
+        etiqueta: 'ipam',
+        permiso: 'ipv6.editar',
+        cuerpo: v.editarBloqueIpv6Validator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Bloque actualizado', esquema: Ipv6Bloque },
+        handler: async (ctx, { cuerpo, params }) => {
+            const bloque = await verBloque(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [bloque.router_id] })
+            return new EditarBloqueIpv6().execute({ ...cuerpo, id: bloque.id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/ipv6-bloques/:id/migrar',
+        operacion: 'ipv6BloquesMigrar',
+        resumen: 'Pasar el bloque IPv6 (con todos sus pools) a otro router',
+        descripcion:
+            'Un pool se muda con su bloque. Sin `mover_servicios`, si algún servicio usa prefijos del bloque ' +
+            'responde 422 `pool_con_servicios` con la lista. Con `mover_servicios: true` (pide además ' +
+            '`servicios.editar`) cada servicio pasa al router de destino conservando sus prefijos; su IPv4 se ' +
+            'vuelve a asignar en el destino salvo que su red se mude también (`redes_ipv4`, pide `redes.migrar`). ' +
+            'Si un servicio no puede pasar, 422 `servicio_no_migrable` y no cambia nada. `simular: true` ' +
+            'devuelve lo que pasaría sin guardar (contratos/pools.md §3).',
+        etiqueta: 'ipam',
+        permiso: 'ipv6.migrar',
+        cuerpo: v.migrarBloqueIpv6Validator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Migración (o su simulación)', esquema: MigracionPools },
+        handler: async (ctx, { cuerpo, params }) => {
+            const bloque = await verBloque(Number(params.id))
+            await exigirMigracion(ctx, bloque.router_id, cuerpo, {
+                permiso: 'redes.migrar',
+                ids: cuerpo.redes_ipv4,
+                motivo: 'mudar también redes IPv4',
+            })
+            const { simular, ...entrada } = cuerpo
+            const datos = { ...entrada, id: bloque.id }
+            return simular
+                ? MigrarBloqueIpv6.simular(datos, ctx.contextoAccion())
+                : new MigrarBloqueIpv6().execute(datos, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/ipv6-pools/vista-previa',
+        operacion: 'ipv6PoolsVistaPrevia',
+        resumen: 'Vista previa de un pool IPv6: cuántos clientes caben y qué recibe cada uno (no guarda)',
+        etiqueta: 'ipam',
+        permiso: 'ipv6.ver',
+        cuerpo: v.vistaPreviaPoolIpv6Validator,
+        respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaPoolIpv6 },
+        handler: (_ctx, { cuerpo }) => vistaPreviaPoolIpv6(cuerpo),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/ipv6-pools/:id',
+        operacion: 'ipv6PoolsVer',
+        resumen: 'Ver pool IPv6 (con su ocupación y lo que entrega)',
+        etiqueta: 'ipam',
+        permiso: 'ipv6.ver',
+        respuesta: { status: 200, descripcion: 'Pool IPv6', esquema: Ipv6Pool },
+        handler: async (ctx, { params }) => {
+            const pool = await verPool(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [pool.router_id] })
+            return pool
+        },
+    }),
+    definirRuta({
+        metodo: 'put',
+        ruta: '/ipv6-pools/:id',
+        operacion: 'ipv6PoolsEditar',
+        resumen: 'Editar pool IPv6: nombre, nombre en el router, prefijo, tipo y tamaño de entrega',
+        descripcion:
+            'Achicar o mover el prefijo dejando fuera prefijos asignados: 422 `prefijos_asignados_fuera` con la ' +
+            'lista. `tipo` y `tamano_entrega` solo cambian en un pool sin asignaciones (422 ' +
+            '`pool_con_asignaciones`). Traslape: 409 `pool_traslapado`; `version` distinta: 409 ' +
+            '(contratos/pools.md §1).',
+        etiqueta: 'ipam',
+        permiso: 'ipv6.editar',
+        cuerpo: v.editarPoolIpv6Validator,
+        versionada: true,
+        respuesta: { status: 200, descripcion: 'Pool actualizado', esquema: Ipv6Pool },
+        handler: async (ctx, { cuerpo, params }) => {
+            const pool = await verPool(Number(params.id))
+            exigirAlcance(ctx.alcance, { router: [pool.router_id] })
+            return new EditarPoolIpv6().execute({ ...cuerpo, id: pool.id }, ctx.contextoAccion())
         },
     }),
     definirRuta({
