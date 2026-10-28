@@ -12,6 +12,9 @@
  * `estadoProveedor` es lo que dijo el proveedor en la URL de retorno (`?estado=pagado|fallido`):
  * se muestra de inmediato ("Tu pago fue aprobado" / "Tu pago no se completó") mientras llega el
  * webhook. Lo que diga el cobro en la API (`pago.estado` distinto de `pendiente`) manda siempre.
+ *
+ * `instalacionPendiente`: el pago fue de los cargos de un servicio aún sin instalar. No hay nada que
+ * reactivar: al confirmarse se dice que quedó abonado, sin esperar `activo`.
  */
 const props = withDefaults(defineProps<{
     vigilando?: boolean
@@ -26,6 +29,8 @@ const props = withDefaults(defineProps<{
     pagoNoEncontrado?: boolean
     /** Las últimas consultas de estado (o del pago) fallaron: sin red, API caída o 429. */
     sinRespuesta?: boolean
+    /** El servicio está pendiente de instalación: el pago abona sus cargos, no reactiva nada. */
+    instalacionPendiente?: boolean
 }>(), {
     vigilando: false,
     agotado: false,
@@ -34,6 +39,7 @@ const props = withDefaults(defineProps<{
     estadoProveedor: null,
     pagoNoEncontrado: false,
     sinRespuesta: false,
+    instalacionPendiente: false,
 })
 
 const emit = defineEmits<{
@@ -107,6 +113,17 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
         />
 
         <UAlert
+            v-else-if="instalacionPendiente && estadoPago === 'pagado'"
+            :color="ESTADOS_PAGO_EN_LINEA.pagado.color"
+            variant="subtle"
+            :icon="ESTADOS_PAGO_EN_LINEA.pagado.icono"
+            :title="`Recibimos tu pago de ${montoEnTexto(pago?.monto)}`"
+            description="Lo abonamos a tus cargos. Tu servicio empezará a funcionar cuando el técnico termine la instalación."
+            :actions="accionDescartar"
+            data-testid="pago-recibido-instalacion"
+        />
+
+        <UAlert
             v-else-if="vigilando && sinRespuesta"
             color="warning"
             variant="subtle"
@@ -146,7 +163,9 @@ const accionDescartar = [{ label: 'Entendido', color: 'neutral' as const, varian
             variant="subtle"
             icon="i-lucide-loader-circle"
             title="Tu pago fue aprobado"
-            description="Estamos registrándolo y reactivando tu servicio. No cierres esta página: se actualiza sola."
+            :description="instalacionPendiente
+                ? 'Estamos registrándolo. No cierres esta página: se actualiza sola.'
+                : 'Estamos registrándolo y reactivando tu servicio. No cierres esta página: se actualiza sola.'"
             :ui="{ icon: 'animate-spin' }"
             data-testid="pago-aprobado"
         />

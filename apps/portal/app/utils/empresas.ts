@@ -83,8 +83,18 @@ export function urlManifiesto(empresaId: number | null | undefined): string {
     return empresaId ? `/manifest.webmanifest?empresa=${empresaId}` : '/manifest.webmanifest'
 }
 
-/** Estado más urgente entre los servicios (lo que se muestra en el encabezado compacto). */
-const URGENCIA: Record<EstadoServicio, number> = { suspendido: 3, limitado: 2, activo: 1, retirado: 0 }
+/**
+ * Estado más urgente entre los servicios (lo que se muestra en el encabezado compacto), con el
+ * mismo orden que la API (`estado_servicio` del cliente): suspendido > limitado > activo >
+ * pendiente de instalación > retirado.
+ */
+const URGENCIA: Record<EstadoServicio, number> = {
+    suspendido: 4,
+    limitado: 3,
+    activo: 2,
+    pendiente_instalacion: 1,
+    retirado: 0,
+}
 
 export function estadoMasUrgente(servicios: readonly { estado: EstadoServicio }[]): EstadoServicio | null {
     let peor: EstadoServicio | null = null

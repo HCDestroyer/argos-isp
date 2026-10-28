@@ -46,6 +46,15 @@ export function mensajeCorte(corte: Schema<'QuienSoy'>): MensajeCorte {
                 titulo: 'Tu servicio está dado de baja',
                 descripcion: 'Comunícate con nosotros si quieres reactivarlo.',
             }
+        case 'pendiente_instalacion':
+            // Nunca como cortado: aún no se instala, así que no hay corte ni promesa (`instalacion.md` §3).
+            return {
+                titulo: 'Tu instalación está pendiente',
+                descripcion: hayMonto(corte.monto_adeudado)
+                    ? 'Tu servicio empezará a funcionar cuando el técnico termine la instalación. '
+                    + 'Mientras tanto puedes pagar tus cargos pendientes.'
+                    : 'Tu servicio empezará a funcionar cuando el técnico termine la instalación.',
+            }
         case 'activo':
             return {
                 titulo: 'Tu servicio está activo',
