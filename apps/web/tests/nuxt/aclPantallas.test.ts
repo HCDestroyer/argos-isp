@@ -238,6 +238,11 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'UnidadInventarioDetalle.vue': { permisos: ['inventario.ver'], desde: ['pages/inventario/unidades.vue'] },
     'CampoPersonalizadoFormulario.vue': { permisos: ['campos_personalizados.crear', 'campos_personalizados.editar'], desde: ['pages/campos-personalizados.vue'] },
     'CanjeLealtadModal.vue': { permisos: ['lealtad.canjear', 'lealtad.ver'], desde: ['pages/lealtad/canjes.vue'] },
+    // Alta de servicio: la página tiene `servicios.crear`; el panel lateral lo abre la ficha del cliente, que lo comprueba.
+    'ServicioAltaFormulario.vue': { permisos: ['servicios.crear'], desde: ['pages/servicios/nuevo.vue', 'components/ServicioAltaSlideover.vue'], exentos: { 'components/ServicioAltaSlideover.vue': ['servicios.crear'] } },
+    'ServicioAltaSlideover.vue': { permisos: ['servicios.crear'], desde: ['pages/clientes/[id]/index.vue'] },
+    // Alta desde la lista (`clientes.crear`) y edición desde la ficha (`clientes.editar`).
+    'ClienteSlideover.vue': { permisos: ['clientes.crear', 'clientes.editar'], desde: ['pages/clientes/index.vue', 'pages/clientes/[id]/index.vue'], exentos: { 'pages/clientes/index.vue': ['clientes.editar'], 'pages/clientes/[id]/index.vue': ['clientes.crear'] } },
 }
 
 describe('semana 3 · ACL por pantalla (revisión estática)', () => {

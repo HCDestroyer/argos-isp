@@ -13,7 +13,7 @@ async function alGuardar(cliente: Cliente) {
         color: 'success',
         icon: 'i-lucide-circle-check',
         actions: puede('servicios.crear')
-            ? [{ label: 'Agregar servicio', to: `/servicios/nuevo?cliente=${cliente.id}`, color: 'neutral', variant: 'outline' }]
+            ? [{ label: 'Agregar servicio', to: `/clientes/${cliente.id}?tab=servicios&nuevo_servicio=1`, color: 'neutral', variant: 'outline' }]
             : undefined,
     })
     await navigateTo(destinoPermitido(`/clientes/${cliente.id}`))
