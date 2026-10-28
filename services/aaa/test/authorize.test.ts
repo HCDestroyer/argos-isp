@@ -22,6 +22,8 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
     const redis = redisDePrueba()
     const prefijo = prefijoDePrueba()
     const api = new ApiFalsa()
+    /** Log de `aaa` en memoria (nivel info): las pruebas leen el motivo del rechazo. */
+    const lineas: Array<Record<string, unknown>> = []
     let app: ReturnType<typeof crearApp>
 
     before(async () => {
@@ -35,7 +37,8 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
             }),
             claveSecretos: CLAVE,
             perfil: PERFIL,
-            logLevel: 'silent',
+            logLevel: 'info',
+            logStream: { write: (l) => void lineas.push(JSON.parse(l) as Record<string, unknown>) },
             redisListo: () => redis.status === 'ready',
         })
         await app.ready()
@@ -207,6 +210,25 @@ describe('POST /aaa/authorize (Redis real + API simulada)', () => {
         const { status, cuerpo } = await autorizar('u-retirado')
         assert.equal(status, 401)
         assert.equal(cuerpo, null)
+    })
+
+    it('pendiente_instalacion → 401 (reject) con el motivo en el log; al activarse, el siguiente acepta', async () => {
+        const pendiente = servicio({ user_ppp: 'u-pendiente', estado: 'pendiente_instalacion' })
+        await guardar(pendiente)
+        const r1 = await autorizar('u-pendiente')
+        assert.equal(r1.status, 401)
+        assert.equal(r1.cuerpo, null)
+        const linea = lineas.find((l) => l.usuario === 'u-pendiente' && l.msg === 'authorize')
+        assert.equal(linea?.resultado, 'pendiente_instalacion')
+        assert.equal(linea?.motivo, 'servicio pendiente de instalación')
+
+        // `servicios.activar_instalacion` reescribe el registro (write-through de A1): sin TTL ni caché
+        // local, la siguiente autorización ya lo ve activo.
+        await guardar({ ...pendiente, estado: 'activo', version: pendiente.version + 1 })
+        const r2 = await autorizar('u-pendiente')
+        assert.equal(r2.status, 200)
+        assert.equal(r2.cuerpo?.['reply:Mikrotik-Rate-Limit'], '5120k/20480k')
+        assert.equal(api.llamadas.length, 0)
     })
 
     it('inexistente (no está en Redis y la API da 404) → 404 y no se cachea', async () => {

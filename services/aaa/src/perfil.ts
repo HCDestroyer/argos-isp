@@ -80,7 +80,8 @@ export function construirReply(servicio: ServicioAaa, op: OpcionesPerfil): Resul
             reply['Filter-Id'] = op.suspendido.filterId
             break
         case 'retirado':
-            throw new Error('un servicio retirado no tiene perfil: se rechaza antes')
+        case 'pendiente_instalacion':
+            throw new Error(`un servicio ${servicio.estado} no tiene perfil: se rechaza antes`)
     }
     // `arbol_pcq`: sin cola simple por servicio. La velocidad la ponen el PCQ y el árbol del plan,
     // con las direcciones de la sesión en `argosisp-plan-<id>[-limitado]` (dispatcher de RouterOS).

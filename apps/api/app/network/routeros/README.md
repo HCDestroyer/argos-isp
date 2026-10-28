@@ -34,7 +34,7 @@ Comando: `node ace routeros:worker` (consumidor + crons; `--una-vez reconciliar|
 | `/ip/dhcp-server/lease`     | `address`, `mac-address`, `server` (del router o `ROUTEROS_DHCP_SERVIDOR`, por defecto `all`)                                                                 | Solo `dhcp_fija`                                                                     |
 | `/ip/arp`                   | `address`, `mac-address`, `interface` (del router o `ROUTEROS_INTERFAZ_CLIENTES`)                                                                             | Solo con `amarre_ip_mac` y `mac`; sin interfaz se avisa y no se crea                 |
 
-Un servicio `pppoe`, `retirado` o sin IPv4 no tiene nada. Nunca se identifica un objeto por nombre o IP; lo que no lleva `comment = argosisp:servicio:<id>` no se toca (en particular las reglas fijas de `lab.rsc`, `argosisp: …` y `argosisp:top …`). El `target` lleva la IPv4 y el prefijo delegado propio del servicio, nunca el /64 del segmento WISP (compartido con RA).
+Un servicio `pppoe`, `retirado`, `pendiente_instalacion` o sin IPv4 no tiene nada. El pendiente (`contratos/instalacion.md` §3) tampoco cuenta para el padre del plan ni para el árbol: `routeros.aplicar_servicio` no le crea cola, address-list, lease ni ARP, `routeros.reconciliar` borra lo que encuentre suyo (huérfano), y todo se crea con `servicio.estado_cambiado` (`de: pendiente_instalacion`, `motivo: instalacion`) o en la siguiente reconciliación si ese evento se perdiera. Nunca se identifica un objeto por nombre o IP; lo que no lleva `comment = argosisp:servicio:<id>` no se toca (en particular las reglas fijas de `lab.rsc`, `argosisp: …` y `argosisp:top …`). El `target` lleva la IPv4 y el prefijo delegado propio del servicio, nunca el /64 del segmento WISP (compartido con RA).
 
 ## Control de velocidad (`contratos/velocidad.md`)
 
@@ -119,4 +119,5 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 ## Pruebas
 
 - `tests/network/routeros_cliente.spec.ts`: cliente contra el RouterOS falso (idempotencia, normalización, 401, 400, 5xx, timeout, router caído, PUT con respuesta perdida, HTTPS con y sin CA).
+- `tests/network/routeros_pendiente.spec.ts`: pendiente de instalación sin nada en el router (sin escrituras ni fila de auditoría), activación por la API → cola, lease y ARP; reconciliador que no crea y borra lo suyo, y repone tras activar; el pendiente fuera de los planes del router.
 - `tests/network/routeros_dispatcher.spec.ts`: servicios creados por la API y eventos del outbox: activo → limitado → suspendido → activo, evento duplicado y fuera de orden, `dhcp_fija` con amarre → `ip_estatica` → retirado, PPPoE sin tocar el router, reconciliador (cola borrada a mano, editada, huérfana) y router caído → `routeros.fallido` → `recuperar`.

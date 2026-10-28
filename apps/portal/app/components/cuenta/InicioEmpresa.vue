@@ -40,6 +40,15 @@ const aFavor = computed(() => {
     return saldo && new Decimal(saldo).greaterThan(0) ? saldo : null
 })
 
+/**
+ * Cargos de un servicio pendiente de instalación (`contratos/instalacion.md` §3): sus facturas
+ * pendientes, que solo pueden ser cargos únicos (instalación, equipo…) porque la mensualidad
+ * empieza el día de la instalación.
+ */
+function cargosDe(servicioId: number) {
+    return (props.grupo.cuenta?.facturas_pendientes ?? []).filter(f => f.servicio_id === servicioId)
+}
+
 const accesos = computed(() => {
     const permisos = props.grupo.servicios.map(s => props.promesaPorServicio[s.id] ?? null)
     const promesaDisponible = permisos.includes(true) ? true : permisos.includes(null) ? null : false
@@ -187,6 +196,39 @@ const accesos = computed(() => {
                                 @click="emit('pedirPromesa', servicio.id)"
                             />
                         </div>
+                    </div>
+                    <UAlert
+                        v-if="esPendienteInstalacion(servicio.estado)"
+                        :color="ESTADOS_SERVICIO.pendiente_instalacion.color"
+                        variant="subtle"
+                        :icon="ESTADOS_SERVICIO.pendiente_instalacion.icono"
+                        title="Tu instalación está pendiente"
+                        description="Tu servicio empezará a funcionar cuando el técnico termine la instalación. La mensualidad se cobra desde ese día."
+                        data-testid="instalacion-pendiente"
+                    />
+                    <div
+                        v-if="esPendienteInstalacion(servicio.estado) && cargosDe(servicio.id).length > 0"
+                        class="space-y-1"
+                        data-testid="cargos-instalacion"
+                    >
+                        <p class="text-xs font-medium text-muted">
+                            Cargos pendientes
+                        </p>
+                        <ul class="space-y-1">
+                            <li
+                                v-for="cargo in cargosDe(servicio.id)"
+                                :key="cargo.id"
+                                class="flex items-center justify-between gap-3 text-sm"
+                                data-testid="cargo-instalacion"
+                            >
+                                <span class="min-w-0 truncate text-default">
+                                    Cargo {{ cargo.numero }} · vence {{ formatearFecha(cargo.vence_en) }}
+                                </span>
+                                <span class="shrink-0 font-medium tabular-nums text-highlighted">
+                                    {{ formatearQuetzales(cargo.saldo) }}
+                                </span>
+                            </li>
+                        </ul>
                     </div>
                     <CuentaAdicionales :adicionales="servicio.adicionales" />
                 </li>

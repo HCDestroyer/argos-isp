@@ -4,6 +4,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { resolverIp } from '#network/consultas/ip'
 import { marcaDeEmpresa, type MarcaEmpresa } from '#portal/marca'
 import { ESTADOS_PENDIENTES, type EstadoFactura } from '#billing/facturas'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 
 /**
  * Lecturas públicas del portal por IP de origen (`quien-soy` y `estado`). Son de solo lectura;
@@ -13,7 +14,12 @@ import { ESTADOS_PENDIENTES, type EstadoFactura } from '#billing/facturas'
  * completo, contacto, NIT, dirección ni usuario PPPoE.
  */
 
-export type EstadoServicio = 'activo' | 'limitado' | 'suspendido' | 'retirado'
+/**
+ * Estado del servicio tal como lo ve el cliente, incluido `pendiente_instalacion`
+ * (`contratos/instalacion.md` §3): vendido y aún sin instalar. El portal lo muestra como
+ * «Instalación pendiente», con sus cargos únicos y sin corte, promesa ni velocidad.
+ */
+export type EstadoServicio = EstadoServicioConPendiente
 
 /** Espejo del schema `QuienSoy` (`app/portal/esquemas.ts`). */
 export interface QuienSoy {

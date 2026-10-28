@@ -58,7 +58,8 @@ export interface ResultadoAplicarRed {
  * (`estado_deseado.ts`). Lo llama el consumidor `routeros` del bus de eventos; no decide estados.
  *
  * - Router actual: crea, corrige o borra la cola, la address-list `suspendidos`, el lease y el ARP.
- *   Un servicio `pppoe` o `retirado` no tiene nada.
+ *   Un servicio `pppoe`, `retirado` o `pendiente_instalacion` no tiene nada (el pendiente, hasta que
+ *   `servicio.estado_cambiado` con `motivo: instalacion` lo pasa a activo).
  * - Routers anteriores (donde `audit.red` dice que el dispatcher escribió): se limpian los objetos
  *   del servicio (cambio de router o de tipo de conexión).
  * - Cada escritura queda en `audit.red` en el acto (`bitacoraRed`).

@@ -15,7 +15,7 @@ import {
     type PlanRouter,
     type RouterVelocidad,
 } from '#network/routeros/velocidad_router'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 
 /**
  * Lecturas del dispatcher de RouterOS. Todo sale de Postgres en el momento de aplicar (nunca del
@@ -24,7 +24,7 @@ import type { EstadoServicio } from '#shared/eventos'
 
 interface FilaServicio {
     servicio_id: number
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     tipo_conexion: TipoConexion
     router_id: number
     plan_id: number
@@ -126,7 +126,13 @@ export async function servicioRed(
     return fila ? aServicio(fila) : null
 }
 
-/** Servicios sin PPPoE y no retirados de un router: lo que el reconciliador debe ver en él. */
+/**
+ * Estados que no tienen nada en el router: retirado y pendiente de instalación
+ * (`contratos/instalacion.md` §3). El reconciliador borra lo que encuentre de ellos (huérfanos).
+ */
+export const ESTADOS_SIN_RED = ['retirado', 'pendiente_instalacion'] as const
+
+/** Servicios sin PPPoE, no retirados ni pendientes, de un router: lo que el reconciliador debe ver en él. */
 export async function serviciosRedDeRouter(
     routerId: number,
     cliente: QueryClientContract = db.connection(),
@@ -134,19 +140,23 @@ export async function serviciosRedDeRouter(
     const filas = (await consultaServicios(cliente)
         .where('s.router_id', routerId)
         .whereNot('s.tipo_conexion', 'pppoe')
-        .whereNot('s.estado', 'retirado')
+        .whereNotIn('s.estado', [...ESTADOS_SIN_RED])
         .orderBy('s.id')) as FilaServicio[]
     return filas.map(aServicio)
 }
 
-/** Servicios no retirados de un router, de cualquier tipo (también PPPoE): base del control de velocidad. */
+/**
+ * Servicios no retirados ni pendientes de instalación de un router, de cualquier tipo (también
+ * PPPoE): base del control de velocidad. Un pendiente no cuenta para el padre del plan ni crea el
+ * perfil `plan-<id>` hasta que se activa.
+ */
 export async function serviciosVigentesDeRouter(
     routerId: number,
     cliente: QueryClientContract = db.connection(),
 ): Promise<ServicioRed[]> {
     const filas = (await consultaServicios(cliente)
         .where('s.router_id', routerId)
-        .whereNot('s.estado', 'retirado')
+        .whereNotIn('s.estado', [...ESTADOS_SIN_RED])
         .orderBy('s.id')) as FilaServicio[]
     return filas.map(aServicio)
 }
@@ -159,7 +169,7 @@ export async function serviciosVigentesDeRouter(
 export function planesDeRouter(router: RouterVelocidad, servicios: ServicioRed[]): PlanRouter[] {
     const planes = new Map<number, PlanRouter>()
     for (const s of servicios) {
-        if (s.estado === 'retirado') continue
+        if (s.estado === 'retirado' || s.estado === 'pendiente_instalacion') continue
         let plan = planes.get(s.plan_id)
         if (!plan) {
             plan = {

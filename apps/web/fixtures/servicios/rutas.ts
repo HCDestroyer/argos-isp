@@ -24,6 +24,7 @@ import {
 import { nuevaSesion } from '../sesiones/datos'
 import { asignarIncluidos, aplicarBloqueoPorEstado, bajaPorRetiro, bloqueoCambioEmpresa, reconciliarIncluidos } from '../adicionales/rutas'
 import { advertenciasServicio, TIPOS_PLAN } from '../planes/tipos'
+import { pendienteInstalacion } from './instalacion'
 import { planTemporalDe } from './planesTemporales'
 
 type Servicio = Schema<'Servicio'>
@@ -149,6 +150,9 @@ function validarAlta(cuerpo: Record<string, unknown>): Errores {
     if (typeof usuario === 'string' && bd.servicios.some(s => s.user_ppp === usuario)) {
         errores.push({ field: 'user_ppp', message: 'Ese usuario PPP ya existe', rule: 'unique' })
     }
+    if (cuerpo.estado_inicial !== undefined && cuerpo.estado_inicial !== 'activo' && cuerpo.estado_inicial !== 'pendiente_instalacion') {
+        errores.push({ field: 'estado_inicial', message: 'Debe ser activo o pendiente_instalacion', rule: 'enum' })
+    }
     const redId = cuerpo.red_ipv4_id
     if (redId !== undefined && !bd.redesIpv4.some(r => r.id === redId && r.router_id === routerId)) {
         errores.push({ field: 'red_ipv4_id', message: 'La red no existe o no es del router', rule: 'red_router' })
@@ -196,6 +200,7 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
     const modo = (cuerpo.ipv6_modo as Servicio['ipv6_modo'] | undefined) ?? (tipo === 'pppoe' ? 'radius_servicio' : 'ninguno')
     const conV6 = modo === 'radius_servicio' && plan?.dual_stack !== 'v4' && bd.ipv6Bloques.some(b => b.router_id === routerId)
     const momento = ahora()
+    const pendiente = cuerpo.estado_inicial === 'pendiente_instalacion'
     return {
         id,
         cliente_id: Number(cuerpo.cliente_id),
@@ -206,7 +211,8 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         plantilla_facturacion_id: 'plantilla_facturacion_id' in cuerpo
             ? (typeof cuerpo.plantilla_facturacion_id === 'number' ? cuerpo.plantilla_facturacion_id : null)
             : (bd.plantillas[0]?.id ?? null),
-        estado: 'activo',
+        // `estado_inicial` (A1, `contratos/instalacion.md` §1): `activo` por defecto.
+        estado: pendiente ? 'pendiente_instalacion' : 'activo',
         promesa_activa: false,
         tipo_conexion: tipo,
         amarre_ip_mac: tipo !== 'pppoe' && cuerpo.amarre_ip_mac === true,
@@ -215,6 +221,9 @@ function crearServicio(solicitud: SolicitudFixture): Servicio | Errores {
         direccion: texto(cuerpo.direccion),
         coordenadas: texto(cuerpo.coordenadas),
         fecha_instalacion: texto(cuerpo.fecha_instalacion),
+        // Un pendiente no tiene fecha de activación hasta `activar-instalacion`.
+        instalado_en: pendiente ? null : momento,
+        planta: null,
         costo_override: texto(cuerpo.costo_override),
         excluir_firewall: cuerpo.excluir_firewall === true,
         ipv4,
@@ -293,7 +302,8 @@ const REGLAS: Record<string, ReglaAccion> = {
     },
     'retirar': {
         permiso: 'servicios.retirar',
-        desde: ['activo', 'limitado', 'suspendido'],
+        // Desde un pendiente también: la venta se cae antes de instalar (`contratos/instalacion.md` §1).
+        desde: ['pendiente_instalacion', 'activo', 'limitado', 'suspendido'],
         a: 'retirado',
         rechazo: () => 'El servicio ya está retirado',
     },
@@ -303,6 +313,103 @@ const REGLAS: Record<string, ReglaAccion> = {
         a: null,
         rechazo: () => 'El servicio está retirado y no tiene sesión',
     },
+}
+
+/** Verbo del 422 `servicio_pendiente_instalacion`, como `ServicioPendienteInstalacion` de A1. */
+const VERBOS_PENDIENTE: Record<string, string> = {
+    'suspender': 'suspender',
+    'reactivar': 'reactivar',
+    'limitar': 'limitar',
+    'quitar-limite': 'quitar el límite de',
+    'desconectar': 'desconectar',
+}
+
+/** Tolerancia de reloj de `instalado_en` (`TOLERANCIA_RELOJ_MS` de A1). */
+const TOLERANCIA_RELOJ_MS = 5 * 60 * 1000
+const CAMPOS_PLANTA = ['caja', 'puerto', 'olt', 'slot', 'pon', 'potencia_dbm'] as const
+
+/**
+ * Como `ActivarInstalacionServicio` (A1, `contratos/instalacion.md` §2): `Idempotency-Key`
+ * obligatoria (400), 422 `servicio_no_pendiente` antes que la versión (409), `instalado_en` ni
+ * futuro (5 min de tolerancia) ni anterior al alta, y la planta normalizada (potencia a 2 decimales).
+ */
+const activarInstalacion: ManejadorFixture = (solicitud) => {
+    const indice = bd.servicios.findIndex(s => s.id === idDe(solicitud))
+    const actual = bd.servicios[indice]
+    if (!actual) {
+        return noEncontrado('el servicio')
+    }
+    if (actual.estado !== 'pendiente_instalacion') {
+        return problemaTipado(422, 'servicio_no_pendiente', 'Regla de negocio', `El servicio ${actual.id} no está pendiente de instalación (está ${actual.estado})`)
+    }
+    const cuerpo = cuerpoObjeto(solicitud)
+    if (cuerpo.version !== actual.version) {
+        return versionCambiada()
+    }
+    const errores: Errores = []
+    const momento = Date.now()
+    let instaladoEn = momento
+    if (cuerpo.instalado_en !== undefined) {
+        const fecha = typeof cuerpo.instalado_en === 'string' ? Date.parse(cuerpo.instalado_en) : Number.NaN
+        if (Number.isNaN(fecha)) {
+            errores.push({ field: 'instalado_en', message: 'Fecha y hora ISO 8601', rule: 'instante' })
+        }
+        else if (fecha > momento + TOLERANCIA_RELOJ_MS) {
+            errores.push({ field: 'instalado_en', message: 'La fecha de instalación no puede ser futura', rule: 'no_futura' })
+        }
+        else if (fecha < Date.parse(actual.created_at)) {
+            errores.push({ field: 'instalado_en', message: 'La fecha de instalación no puede ser anterior a la creación del servicio', rule: 'posterior_al_alta' })
+        }
+        else {
+            instaladoEn = Math.min(fecha, momento)
+        }
+    }
+    const entrada = typeof cuerpo.planta === 'object' && cuerpo.planta !== null ? (cuerpo.planta as Record<string, unknown>) : null
+    const planta: NonNullable<Servicio['planta']> = {}
+    for (const campo of CAMPOS_PLANTA) {
+        const valor = entrada?.[campo]
+        if (valor === undefined) {
+            continue
+        }
+        if (typeof valor !== 'string' || !valor.trim()) {
+            errores.push({ field: `planta.${campo}`, message: 'Texto de 1 a 100 caracteres', rule: 'string' })
+            continue
+        }
+        if (campo === 'potencia_dbm') {
+            if (!/^-?\d{1,2}(\.\d{1,2})?$/.test(valor.trim()) || new Decimal(valor).lt(-60) || new Decimal(valor).gt(10)) {
+                errores.push({ field: 'planta.potencia_dbm', message: 'La potencia debe estar entre -60 y 10 dBm', rule: 'rango' })
+                continue
+            }
+            planta.potencia_dbm = new Decimal(valor).toFixed(2)
+            continue
+        }
+        planta[campo] = valor.trim()
+    }
+    if (errores.length) {
+        return datosInvalidos(errores)
+    }
+    const instalado = new Date(instaladoEn).toISOString()
+    const despues: Servicio = {
+        ...actual,
+        estado: 'activo',
+        instalado_en: instalado,
+        ...(entrada ? { planta } : {}),
+        // Si estaba vacía, el día de `instalado_en` en Guatemala (UTC-6, sin horario de verano).
+        fecha_instalacion: actual.fecha_instalacion ?? new Date(instaladoEn - 6 * 3600 * 1000).toISOString().slice(0, 10),
+        version: actual.version + 1,
+        updated_at: ahora(),
+    }
+    bd.servicios[indice] = despues
+    registrarAccion(solicitud, 'servicios.activar_instalacion', { tipo: 'servicio', id: actual.id }, cuerpo)
+    return { status: 200, cuerpo: vista(despues) }
+}
+
+/** Sin `Idempotency-Key`: 400 `idempotency_key_requerida` (`idempotente: 'obligatoria'` de A1). */
+function conIdempotenciaObligatoria(manejador: ManejadorFixture): ManejadorFixture {
+    const conClave = conIdempotencia(manejador)
+    return solicitud => (solicitud.headers.get('Idempotency-Key')
+        ? conClave(solicitud)
+        : problemaTipado(400, 'idempotency_key_requerida', 'Falta Idempotency-Key', 'Esta operación exige la cabecera Idempotency-Key'))
 }
 
 function terminarSesiones(servicioId: number, causa: string): void {
@@ -326,6 +433,9 @@ const rutasAcciones: RutasFixture = Object.fromEntries(Object.entries(REGLAS).ma
         const motivo = texto(cuerpoObjeto(solicitud).motivo)
         if (!motivo || motivo.length < 3) {
             return datosInvalidos([{ field: 'motivo', message: 'El motivo debe tener al menos 3 caracteres', rule: 'minLength' }])
+        }
+        if (actual.estado === 'pendiente_instalacion' && ruta !== 'retirar') {
+            return pendienteInstalacion(VERBOS_PENDIENTE[ruta])
         }
         if (actual.suspension_manual && (ruta === 'limitar' || ruta === 'quitar-limite')) {
             const rechazo: Problem = {
@@ -430,6 +540,7 @@ const cambiarEmpresa: ManejadorFixture = (solicitud) => {
 }
 
 export const rutasServicios: RutasFixture = {
+    'POST /api/v1/servicios/:id/activar-instalacion': conPermiso('servicios.activar_instalacion', conIdempotenciaObligatoria(activarInstalacion)),
     'POST /api/v1/servicios/:id/cambiar-empresa': conPermiso('servicios.cambiar_empresa', conIdempotencia(cambiarEmpresa)),
     'GET /api/v1/servicios': conPermiso('servicios.ver', (solicitud) => {
         const q = normalizar(solicitud.query.get('q')?.trim())

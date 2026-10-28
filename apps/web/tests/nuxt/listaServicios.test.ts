@@ -74,7 +74,7 @@ describe('lista de servicios · filtros del contrato', () => {
     })
 
     it('los filtros de estado usan los valores del contrato', () => {
-        expect(ESTADOS_FILTRO.map(e => e.estado)).toEqual(['activo', 'limitado', 'suspendido', 'retirado'])
+        expect(ESTADOS_FILTRO.map(e => e.estado)).toEqual(['pendiente_instalacion', 'activo', 'limitado', 'suspendido', 'retirado'])
         expect(ESTADOS_FILTRO.find(e => e.estado === 'suspendido')?.etiqueta).toContain('Cortado')
         expect(esEstadoServicio('suspendido')).toBe(true)
         expect(esEstadoServicio('cortado')).toBe(false)

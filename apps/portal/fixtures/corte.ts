@@ -38,6 +38,21 @@ export const QUIEN_SOY_DESCONOCIDO: Schema<'QuienSoy'> = {
     empresa: null,
 }
 
+/**
+ * Vendido y aún sin instalar (`contratos/instalacion.md`): no navega ni se factura la mensualidad;
+ * solo debe el cargo de instalación, ya vencido. Nunca se muestra como cortado.
+ */
+export const QUIEN_SOY_PENDIENTE: Schema<'QuienSoy'> = {
+    identificado: true,
+    ip: '198.51.100.77',
+    nombre_parcial: 'Ana L.',
+    estado: 'pendiente_instalacion',
+    promesa_activa: false,
+    monto_adeudado: '250.00',
+    facturas_vencidas: { cantidad: 1, total: '250.00' },
+    empresa: MARCA_FIXTURE,
+}
+
 /** Suspendido con promesa aprobada: `/portal/estado` pasa a `activo` (escenario `reactivacion`). */
 export const QUIEN_SOY_CON_PROMESA: Schema<'QuienSoy'> = {
     ...QUIEN_SOY_SUSPENDIDO,
@@ -49,6 +64,7 @@ export const ESCENARIOS_CORTE = {
     activo: QUIEN_SOY_ACTIVO,
     desconocido: QUIEN_SOY_DESCONOCIDO,
     reactivacion: QUIEN_SOY_CON_PROMESA,
+    pendiente: QUIEN_SOY_PENDIENTE,
 }
 
 /** Respuesta de `GET /api/v1/portal/estado` que corresponde a una de `quien-soy`. */

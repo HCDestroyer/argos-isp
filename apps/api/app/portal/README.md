@@ -215,6 +215,12 @@ La pasarela es una sola: `pago_en_linea` es igual para todas las empresas. Prueb
 - La respuesta no lleva `cliente_id`, reglas, historial ni deuda detallada. El 409 `promesa_abierta` de A3
   (que nombra ids) se reescribe como "Ya tienes una promesa de pago en curso."
 - `Idempotency-Key` (middleware común) y límite por IP propio (`promesas`, `promesas-condiciones`).
+- **Pendiente de instalación** (`contratos/instalacion.md` §3): sin corte no hay promesa. Las condiciones
+  responden `disponible: false` con el motivo, y `POST /portal/promesas` responde 422
+  `servicio_pendiente_instalacion` (en palabras del cliente) antes de llamar a A3 (`rechazarSiPendiente`
+  de `#core/instalacion`; respaldo hasta que `CrearPromesaPago` lo rechace, y `errorParaCliente` ya
+  traduce ese código). `quien-soy`, `estado` y `GET /portal/cuenta` devuelven el estado tal cual y el
+  saldo de sus cargos únicos (`EstadoServicio` del portal = `EstadoServicioConPendiente`).
 
 ### Comprobante de depósito desde el portal (tarea 5)
 

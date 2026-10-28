@@ -26,12 +26,13 @@ const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
 
 export const rutasProcesosFacturacion: RutasFixture = {
     /**
-     * Como `EjecutarCorte` (A3), simplificado: evalúa los servicios no retirados (o solo `servicio_id`)
+     * Como `EjecutarCorte` (A3), simplificado: evalúa los servicios no retirados ni pendientes de
+     * instalación (o solo `servicio_id`)
      * y no cambia ninguno; la evaluación real la prueba la API.
      */
     'POST /api/v1/facturas/corte': conPermiso('facturas.generar', conIdempotencia((solicitud) => {
         const servicioId = cuerpoObjeto(solicitud).servicio_id
-        const servicios = bd.servicios.filter(s => s.estado !== 'retirado' && (typeof servicioId !== 'number' || s.id === servicioId))
+        const servicios = bd.servicios.filter(s => s.estado !== 'retirado' && s.estado !== 'pendiente_instalacion' && (typeof servicioId !== 'number' || s.id === servicioId))
         const horas = typeof servicioId === 'number' ? ['*'] : [...new Set(bd.plantillas.map(p => p.hora_corte.slice(0, 5)))].sort()
         const resultado: Schema<'ResultadoCorte'> = { horas, evaluados: servicios.length, cambiados: 0, errores: 0, vencimiento: { vencidas: 0, moras: 0, errores: 0, bloqueados: 0, bloqueos: [] } }
         registrarAccion(solicitud, 'servicios.corte', { tipo: 'servicio', id: typeof servicioId === 'number' ? servicioId : 0 }, { servicio_id: servicioId ?? null })

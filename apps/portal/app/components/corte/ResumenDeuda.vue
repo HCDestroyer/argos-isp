@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import type { Schema } from '@argosisp/contracts'
 
-/** Monto adeudado, estado y facturas vencidas (cantidad y total) del servicio identificado por IP. */
+/**
+ * Monto adeudado, estado y facturas vencidas (cantidad y total) del servicio identificado por IP.
+ *
+ * Pendiente de instalación (`contratos/instalacion.md` §3): solo sus cargos únicos. Sin facturas
+ * vencidas en rojo ni promesa: no hay corte que evitar.
+ */
 const props = defineProps<{
     corte: Schema<'QuienSoy'>
 }>()
 
+const pendiente = computed(() => esPendienteInstalacion(props.corte.estado))
+
 const vencidas = computed(() => props.corte.facturas_vencidas)
-const tieneVencidas = computed(() => (vencidas.value?.cantidad ?? 0) > 0)
+const tieneVencidas = computed(() => !pendiente.value && (vencidas.value?.cantidad ?? 0) > 0)
 const etiquetaVencidas = computed(() => {
     const cantidad = vencidas.value?.cantidad ?? 0
     return cantidad === 1 ? '1 factura vencida' : `${cantidad} facturas vencidas`
@@ -19,7 +26,7 @@ const etiquetaVencidas = computed(() => {
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <p class="text-sm text-muted">
-                    Monto pendiente
+                    {{ pendiente ? 'Cargos pendientes' : 'Monto pendiente' }}
                 </p>
                 <p
                     class="mt-1 text-3xl font-bold tabular-nums text-highlighted"
@@ -36,8 +43,19 @@ const etiquetaVencidas = computed(() => {
         </div>
 
         <template #footer>
+            <p
+                v-if="pendiente"
+                class="flex items-center gap-2 text-sm text-muted"
+                data-testid="instalacion-pendiente"
+            >
+                <UIcon
+                    name="i-lucide-calendar-clock"
+                    class="size-4 shrink-0"
+                />
+                Tu mensualidad empieza a cobrarse el día de la instalación.
+            </p>
             <div
-                v-if="tieneVencidas"
+                v-else-if="tieneVencidas"
                 class="flex items-center justify-between gap-3 text-sm"
                 data-testid="facturas-vencidas"
             >
@@ -65,7 +83,7 @@ const etiquetaVencidas = computed(() => {
             </p>
 
             <UAlert
-                v-if="corte.promesa_activa"
+                v-if="corte.promesa_activa && !pendiente"
                 class="mt-3"
                 color="info"
                 variant="subtle"

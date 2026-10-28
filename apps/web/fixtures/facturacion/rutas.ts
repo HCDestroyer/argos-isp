@@ -266,6 +266,11 @@ function evaluarServicios(servicioIds: number[]): ServicioEvaluado[] {
         if (!servicio) {
             continue
         }
+        // `evaluarEstadoServicio` no toca un pendiente de instalación (`contratos/instalacion.md` §1):
+        // no tiene facturas de periodo y ni el pago ni la promesa lo mueven.
+        if (servicio.estado === 'pendiente_instalacion') {
+            continue
+        }
         const base = { servicio_id: servicio.id, de: servicio.estado, estado: servicio.estado, cambiado: false }
         if (servicio.estado === 'retirado') {
             evaluados.push({ ...base, motivo: 'servicio retirado' })

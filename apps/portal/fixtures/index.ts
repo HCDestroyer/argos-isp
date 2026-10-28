@@ -15,6 +15,7 @@ import {
     CONTACTO_FIXTURE,
     CUENTA_DOS_EMPRESAS_FIXTURE,
     CUENTA_FIXTURE,
+    CUENTA_PENDIENTE_FIXTURE,
     FACTURAS_FIXTURE,
     NOTAS_CREDITO_FIXTURE,
     PAGOS_FIXTURE,
@@ -43,7 +44,7 @@ import {
 } from './promesas'
 
 /**
- * Escenario de `/corte` en fixtures: `?fixture=activo|suspendido|desconocido` en la URL del
+ * Escenario de `/corte` en fixtures: `?fixture=activo|suspendido|desconocido|pendiente` en la URL del
  * portal (solo desarrollo). Por defecto, suspendido. En `reactivacion`, `/portal/estado` responde
  * `activo` desde la segunda consulta.
  */
@@ -267,7 +268,8 @@ export function fijarCuentaFixture(respuesta: Schema<'PortalCuenta'> | null): vo
 }
 
 /**
- * Desarrollo: `?cuenta=dos_empresas` en la URL muestra un cliente con servicios en dos empresas. Se
+ * Desarrollo: `?cuenta=dos_empresas` en la URL muestra un cliente con servicios en dos empresas y
+ * `?cuenta=pendiente`, uno con el servicio pendiente de instalación. Se
  * recuerda en la pestaña (`sessionStorage`): entrar con el código navega a `/cuenta` sin la query.
  */
 const CLAVE_CUENTA = 'argos:fixture:cuenta'
@@ -286,6 +288,9 @@ function cuentaDeLaUrl(): Schema<'PortalCuenta'> | null {
     }
     catch {
         // Sin almacenamiento: solo cuenta la URL.
+    }
+    if (pedido === 'pendiente') {
+        return CUENTA_PENDIENTE_FIXTURE
     }
     return pedido === 'dos_empresas' ? CUENTA_DOS_EMPRESAS_FIXTURE : null
 }

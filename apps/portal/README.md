@@ -155,7 +155,7 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 | Pieza | Dónde |
 | --- | --- |
 | Identificación por IP: `GET /api/v1/portal/quien-soy` (`Schema<'QuienSoy'>` del contrato), solo en el navegador | `app/composables/useCorte.ts` |
-| Título y texto según estado (`activo`, `limitado`, `suspendido`, `retirado`, no identificado) | `app/utils/corte.ts` |
+| Título y texto según estado (`activo`, `limitado`, `suspendido`, `retirado`, `pendiente_instalacion`, no identificado) | `app/utils/corte.ts` |
 | Monto adeudado, badge de estado, facturas vencidas (cantidad y total), promesa activa | `app/components/corte/ResumenDeuda.vue` |
 | Datos de depósito: cuentas de A3 e instrucciones de pago del panel (`GET /portal/empresa`) | `app/components/corte/DatosDeposito.vue` |
 | Acciones: "Pagar en línea" es la principal si hay pasarela (`pago_en_linea` de `GET /portal/empresa`); si no, se ve apagado en neutro y "Ver datos de depósito" pasa a primario; "Subir comprobante de pago"; "Solicitar promesa de pago" si el servicio está identificado, no activo y sin promesa activa; contacto por teléfono o correo | `app/pages/corte.vue` |
@@ -174,6 +174,17 @@ La página de corte se abre con el servicio suspendido, así que todo sale de es
 | Fixtures: `?promesa=` (`aprobada`, `rechazada`, `pendiente_aprobacion`, `con_promesa`, `con_pago_previo`) (por defecto aprobada; `fijarPromesaFixture` en pruebas) | `fixtures/promesas.ts`, `fixtures/index.ts` |
 
 Desde la IP solo se muestran nombre parcial, estado y montos; nunca datos personales completos.
+
+### Servicio pendiente de instalación
+
+Contrato `.claude/integration/contratos/instalacion.md` §3: un servicio vendido desde Iris nace `pendiente_instalacion` y se activa cuando el técnico cierra la instalación. El cliente ve «Instalación pendiente» (badge azul `info` con `i-lucide-calendar-clock`) y sus cargos únicos; nunca se muestra como cortado.
+
+| Pieza | Dónde |
+| --- | --- |
+| Presentación del estado y `esPendienteInstalacion()`; urgencia: suspendido > limitado > activo > pendiente > retirado (igual que la API) | `app/utils/estadoServicio.ts`, `app/utils/empresas.ts` |
+| `/corte`: «Tu instalación está pendiente», «Cargos pendientes» con el monto, sin facturas vencidas en rojo, sin promesa ni estado en vivo; pagar en línea, depósito y comprobante sí (abonan los cargos: «Lo abonamos a tus cargos», nunca «reactivando») | `app/pages/corte.vue`, `app/components/corte/ResumenDeuda.vue`, `app/components/corte/EstadoEnVivo.vue` |
+| `/cuenta`: aviso «Tu instalación está pendiente» en la tarjeta del servicio con sus cargos pendientes (facturas pendientes de ese servicio: solo pueden ser cargos únicos); sin «Pedir promesa» ni aviso de reactivar | `app/components/cuenta/InicioEmpresa.vue`, `app/pages/cuenta.vue` |
+| Fixtures: `?fixture=pendiente` en `/corte` y `?cuenta=pendiente` en `/cuenta` | `fixtures/corte.ts`, `fixtures/cuenta.ts` |
 
 ## Mi cuenta: entrada con código (`/entrar`) y portal autenticado (`/cuenta`)
 

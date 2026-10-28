@@ -27,6 +27,7 @@ Eventos: `sesion.iniciada` y `sesion.terminada` los emite el worker de accountin
 | `limitado`                 | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `plan.rate_limit_limitado`; `Mikrotik-Group` como en activo                                                              |
 | `suspendido`               | 200  | updated → Accept      | `Mikrotik-Rate-Limit` = `256k/256k`, `Mikrotik-Group` = `suspendido`, `Mikrotik-Address-List` = `suspendidos`, `Filter-Id` = `argos-corte.in`    |
 | `retirado`                 | 401  | reject → Reject       | —                                                                                                                                                |
+| `pendiente_instalacion`    | 401  | reject → Reject       | — (`contratos/instalacion.md` §3; motivo en el log; al activarse, el siguiente authorize acepta)                                                 |
 | inexistente o lápida       | 404  | notfound → Reject     | —                                                                                                                                                |
 | Redis y respaldo sin datos | —    | modo degradado        | último perfil conocido: mismo estado y atributos que la última vez (ver "Modo degradado")                                                        |
 | … y sin perfil conocido    | 503  | fail → Reject         | —                                                                                                                                                |
@@ -104,12 +105,12 @@ Cómo se ve:
 
 `GET /metrics` (texto Prometheus 0.0.4; con `METRICS_TOKEN` exige `Authorization: Bearer <token>`, vacío = abierto en la red interna):
 
-| Métrica                                       | Tipo                    | Etiquetas                                                                               |
-| --------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------- |
-| `argosisp_aaa_autorizaciones_total`           | counter                 | `resultado` = `accept` (200), `reject` (401, retirado), `notfound` (404), `error` (5xx) |
-| `argosisp_aaa_autorizacion_duracion_segundos` | histogram (0,005 a 1 s) | `resultado`                                                                             |
-| `argosisp_aaa_accounting_total`               | counter                 | `tipo`, `resultado` = `encolado`, `descartado`, `error`                                 |
-| `argosisp_aaa_redis_arriba`                   | gauge                   | —                                                                                       |
+| Métrica                                       | Tipo                    | Etiquetas                                                                                          |
+| --------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `argosisp_aaa_autorizaciones_total`           | counter                 | `resultado` = `accept` (200), `reject` (401, retirado, pendiente), `notfound` (404), `error` (5xx) |
+| `argosisp_aaa_autorizacion_duracion_segundos` | histogram (0,005 a 1 s) | `resultado`                                                                                        |
+| `argosisp_aaa_accounting_total`               | counter                 | `tipo`, `resultado` = `encolado`, `descartado`, `error`                                            |
+| `argosisp_aaa_redis_arriba`                   | gauge                   | —                                                                                                  |
 
 Modo degradado: `argosisp_aaa_degradado`, `argosisp_aaa_degradado_total{resultado}`, `argosisp_aaa_ultimo_conocido_registros` y `argosisp_aaa_ultimo_conocido_espejo_timestamp_seconds` (ver "Modo degradado").
 
@@ -180,6 +181,7 @@ Resultado (2026-10-20, idéntico en PAP y CHAP; todas las respuestas traen `Mess
 | `prueba-suspendido`  | Access-Accept | `Mikrotik-Rate-Limit = "256k/256k"`, `Mikrotik-Group = "suspendido"`, `Mikrotik-Address-List = "suspendidos"`, `Filter-Id = "argos-corte.in"`, `Framed-IP-Address = 10.10.1.11`, /64, /56, `Acct-Interim-Interval = 300` |
 | `prueba-burst`       | Access-Accept | `Mikrotik-Rate-Limit = "5M/20M 10M/40M 4M/16M 16/16 8 1M/4M"`, `Mikrotik-Group = "plan-20m"`, `Framed-Pool = "argos-v4-pppoe"`, `Acct-Interim-Interval = 300`                                                            |
 | `prueba-retirado`    | Access-Reject | —                                                                                                                                                                                                                        |
+| `prueba-pendiente`   | Access-Reject | —                                                                                                                                                                                                                        |
 | `prueba-inexistente` | Access-Reject | —                                                                                                                                                                                                                        |
 | clave errónea        | Access-Reject | —                                                                                                                                                                                                                        |
 
@@ -199,13 +201,13 @@ CambiarEstadoServicio / DesconectarSesion → audit.outbox → stream → servic
   → el mismo FreeRADIUS como NAS (listen type=coa, 3799) → CoA-ACK / CoA-NAK / Disconnect-ACK → audit.red
 ```
 
-| Prueba     | Qué comprueba                                                                                                                                                               |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| authorize  | PAP y CHAP: activo (plan, IPv4, /64, /56), limitado (velocidad reducida), suspendido (perfil de corte + IPs), retirado, inexistente y clave errónea → Reject; caché sin TTL |
-| accounting | Start, Interim-Update (gigawords) y Stop → fila abierta, contadores, cierre con causa, /56 de la asignación, eventos; el Interim de contadores no se audita                 |
-| CoA ACK    | suspender → CoA-ACK en < 5 s; el NAS devuelve en `Reply-Message` los atributos que decodificó (`256k/256k`, `suspendidos`, `argos-corte.in`); reactivar → Disconnect-ACK    |
-| CoA NAK    | limitar un `User-Name` `nak-*` → CoA-NAK con `Error-Cause = Session-Context-Not-Found`, sin reintento, `coa.fallido`                                                        |
-| Disconnect | `DesconectarSesion` → Disconnect-ACK con `razon = manual: …`; el Stop del NAS cierra la sesión                                                                              |
+| Prueba     | Qué comprueba                                                                                                                                                                                         |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| authorize  | PAP y CHAP: activo (plan, IPv4, /64, /56), limitado (velocidad reducida), suspendido (perfil de corte + IPs), retirado, pendiente de instalación, inexistente y clave errónea → Reject; caché sin TTL |
+| accounting | Start, Interim-Update (gigawords) y Stop → fila abierta, contadores, cierre con causa, /56 de la asignación, eventos; el Interim de contadores no se audita                                           |
+| CoA ACK    | suspender → CoA-ACK en < 5 s; el NAS devuelve en `Reply-Message` los atributos que decodificó (`256k/256k`, `suspendidos`, `argos-corte.in`); reactivar → Disconnect-ACK                              |
+| CoA NAK    | limitar un `User-Name` `nak-*` → CoA-NAK con `Error-Cause = Session-Context-Not-Found`, sin reintento, `coa.fallido`                                                                                  |
+| Disconnect | `DesconectarSesion` → Disconnect-ACK con `razon = manual: …`; el Stop del NAS cierra la sesión                                                                                                        |
 
 Cómo correrla (Docker, Postgres y Redis locales; imagen `freeradius/freeradius-server` de `infra/docker-compose.yml`, se descarga si falta):
 

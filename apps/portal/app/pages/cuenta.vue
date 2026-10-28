@@ -51,9 +51,15 @@ function contactoActualizado(contacto: ContactoPortal) {
     }
 }
 
-/** Servicios a los que tiene sentido preguntarles por una promesa: con saldo, sin promesa y no retirados. */
-function admitePromesa(servicio: { estado: string, promesa_activa: boolean, monto_adeudado: string }) {
-    return servicio.estado !== 'retirado' && !servicio.promesa_activa && new Decimal(servicio.monto_adeudado).greaterThan(0)
+/**
+ * Servicios a los que tiene sentido preguntarles por una promesa: con saldo, sin promesa, no
+ * retirados y ya instalados (un pendiente de instalación no tiene corte: `instalacion.md` §3).
+ */
+function admitePromesa(servicio: { estado: EstadoServicio, promesa_activa: boolean, monto_adeudado: string }) {
+    return servicio.estado !== 'retirado'
+        && !esPendienteInstalacion(servicio.estado)
+        && !servicio.promesa_activa
+        && new Decimal(servicio.monto_adeudado).greaterThan(0)
 }
 
 /**
