@@ -123,6 +123,7 @@ Si el régimen vigente de la empresa en la fecha del documento es `pequeno_contr
 - Catálogos: `GET/POST/PUT /conceptos-cargo[/:id]` (`facturas.configurar_conceptos`; la cuenta debe ser de ingreso, imputable y global o de la empresa) y `GET/POST/PUT /motivos-sin-costo[/:id]` (`facturas.configurar_motivos`). Lectura con `facturas.ver`. `version` (409), nombre único por empresa, `audit.cambios`, se desactivan (`activo`), nunca se borran. Un trigger los siembra con cada empresa nueva.
 - Notas de crédito: por línea y por monto debitan la cuenta de la línea (`cuentaIngresoDeLinea`) y el neto de sus descuentos.
 - Reporte `GET /reportes/bonificaciones` (`reportes.ver`): bonificaciones por mes, motivo y origen, con `valor_bruto` y `base`.
+- **Origen Iris** (pedido A4, `contratos/iris.md` §5.1): `origen_tipo = iris_orden` + `origen_id` (la orden de trabajo; 422 si falta uno) se guardan en `billing.facturas` o `billing.bonificaciones` (`origen_externo_tipo`, `origen_externo_id`) y salen en `Factura` y `Bonificacion`. Solo trazabilidad: el asiento no cambia. Iris manda `Idempotency-Key: iris:cargo:<orden_id>`.
 
 ## Importación (para A6, sin endpoint)
 

@@ -21,6 +21,7 @@ import { registrarBonificacion, type BonificacionVista } from '#billing/bonifica
 import { configuracionFel, modoEmision, type CertificarAl } from '#fiscal/fel/configuracion'
 import type { TipoConceptoCargo } from '#billing/cargos_unicos'
 import { prepararVentas, registrarVentas } from '#inventario/ventas'
+import { origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * `facturas.emitir_cargo_unico` (`POST /facturas/cargo-unico`): factura manual de un cargo que no es
@@ -51,6 +52,10 @@ import { prepararVentas, registrarVentas } from '#inventario/ventas'
  *   `existencia_insuficiente`, `unidad_en_comodato`; un cargo en Q0 con producto: 422 `producto_sin_costo`.
  * - FEL activa con un concepto exento (`gravable: false`) → 422 `concepto_exento_con_fel`: el DTE aún no
  *   lleva la frase de exención (pendiente del contador).
+ * - **Origen** (pedido A4 de Iris, `contratos/iris.md` §5.1): `origen_tipo = iris_orden` + `origen_id`
+ *   (la orden de trabajo) se guardan en la factura o la bonificación (`origen_externo_*`) y salen en la
+ *   respuesta y en la auditoría. Solo trazabilidad: el asiento no cambia. Iris manda
+ *   `Idempotency-Key: iris:cargo:<orden_id>` (la ruta es idempotente).
  */
 
 export interface LineaCargoUnico {
@@ -77,6 +82,9 @@ export interface EntradaEmitirCargoUnico {
     lineas: LineaCargoUnico[]
     motivo_sin_costo_id?: number | null
     motivo_sin_costo_texto?: string | null
+    /** orden de Iris (`iris_orden`); con origen_tipo, origen_id es obligatorio */
+    origen_tipo?: OrigenExternoTipo | null
+    origen_id?: string | null
 }
 
 interface ConceptoFila {
@@ -99,6 +107,7 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
     readonly nombre = 'facturas.emitir_cargo_unico'
 
     protected async handle(input: EntradaEmitirCargoUnico, t: Transaccion) {
+        const origenExterno = origenExternoDe(input)
         const hoy = hoyGuatemala()
         let servicio: ServicioFacturable | null = null
         let clienteId: number
@@ -365,6 +374,7 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
                 motivo_id: sinCosto.motivo_id,
                 motivo_texto: sinCosto.texto,
                 reglas_snapshot: { ...MORA_NINGUNA, cargo_unico: true, sin_costo: true },
+                origen_externo: origenExterno,
             })
             t.fijarEntidad('bonificacion', bonificacion.id)
             return { ...bonificacion, documento: 'bonificacion' as const }
@@ -385,6 +395,7 @@ export default class EmitirCargoUnico extends DomainAction<EntradaEmitirCargoUni
             },
             certificar_al: certificarAl,
             descripcion: `cargo único ${servicio ? `servicio ${servicio.id}` : `cliente ${clienteId}`}`,
+            origen_externo: origenExterno,
         })
         const facturaId = emision.factura_id!
         await registrarVentas(t, ventas, {
