@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { registrarContactoRouter } from '#network/contacto_router'
 import { routerDispatcher } from '#network/routeros/consultas'
+import type { RouterApi } from '#network/routeros/router'
 import {
     bitacoraRed,
     fabricaPorDefecto,
@@ -69,47 +70,64 @@ export default class SondearRouters extends DomainAction<EntradaSondear, Resulta
             const router = await routerDispatcher(id, t.trx)
             if (!router) continue
             resultado.sondeados.push(id)
-            let cliente
-            const comando = {
-                operacion: 'sondear',
-                metodo: 'GET',
-                ruta: '/system/resource',
-                request_id: t.ctx.requestId,
-            }
-            const inicio = performance.now()
-            try {
-                // Sin el aviso de contacto del cliente: aquí se anota con fuente `sondeo`.
-                cliente = this.#clientes(router.api, { sinContacto: true })
-                await cliente.probar()
-                await registrarContactoRouter(t.trx, { routerId: id }, 'sondeo')
-                resultado.respondieron.push(id)
-                await bitacoraRed.registrar({
-                    tipo: 'routeros',
-                    router_id: id,
-                    servicio_id: null,
-                    comando: { ...comando, host: cliente.host },
-                    respuesta: { status: 200, rtt_ms: Math.round(performance.now() - inicio) },
-                    ok: true,
-                })
-            } catch (error) {
-                const e = error as Error & { status?: number | null; tipo?: string }
-                resultado.sin_respuesta.push({ router_id: id, error: e.message })
-                await bitacoraRed.registrar({
-                    tipo: 'routeros',
-                    router_id: id,
-                    servicio_id: null,
-                    comando: { ...comando, host: cliente?.host ?? null },
-                    respuesta: {
-                        status: e.status ?? null,
-                        error: e.message,
-                        tipo_error: e.tipo ?? 'inalcanzable',
-                    },
-                    ok: false,
-                })
-            } finally {
-                cliente?.cerrar()
-            }
+            const sondeo = await sondearRouter(t, router.api, this.#clientes, 'sondear')
+            if (sondeo.ok) resultado.respondieron.push(id)
+            else resultado.sin_respuesta.push({ router_id: id, error: sondeo.error.message })
         }
         return resultado
+    }
+}
+
+export type ResultadoSondeo =
+    | { ok: true; recurso: Record<string, unknown>; ms: number; host: string }
+    | {
+          ok: false
+          error: Error & { status?: number | null; tipo?: string; codigo?: string | null }
+          ms: number
+      }
+
+/**
+ * Un `GET /rest/system/resource` al router (sondeo de contacto y `routers.probar_conexion`): si
+ * responde, anota el contacto con fuente `sondeo` (`Router.en_linea`, `ultimo_contacto`) en la
+ * transacción de la acción. El GET queda en `audit.red` con su respuesta o error, fuera de la
+ * transacción. Nunca lanza: devuelve el error del cliente.
+ */
+export async function sondearRouter(
+    t: Transaccion,
+    api: RouterApi,
+    clientes: FabricaClientes,
+    operacion: string,
+): Promise<ResultadoSondeo> {
+    let cliente
+    const comando = { operacion, metodo: 'GET', ruta: '/system/resource', request_id: t.ctx.requestId }
+    const inicio = performance.now()
+    try {
+        // Sin el aviso de contacto del cliente: aquí se anota con fuente `sondeo`.
+        cliente = clientes(api, { sinContacto: true })
+        const recurso = await cliente.probar()
+        const ms = Math.round(performance.now() - inicio)
+        await registrarContactoRouter(t.trx, { routerId: api.id }, 'sondeo')
+        await bitacoraRed.registrar({
+            tipo: 'routeros',
+            router_id: api.id,
+            servicio_id: null,
+            comando: { ...comando, host: cliente.host },
+            respuesta: { status: 200, rtt_ms: ms },
+            ok: true,
+        })
+        return { ok: true, recurso, ms, host: cliente.host }
+    } catch (error) {
+        const e = error as Error & { status?: number | null; tipo?: string; codigo?: string | null }
+        await bitacoraRed.registrar({
+            tipo: 'routeros',
+            router_id: api.id,
+            servicio_id: null,
+            comando: { ...comando, host: cliente?.host ?? null },
+            respuesta: { status: e.status ?? null, error: e.message, tipo_error: e.tipo ?? 'inalcanzable' },
+            ok: false,
+        })
+        return { ok: false, error: e, ms: Math.round(performance.now() - inicio) }
+    } finally {
+        cliente?.cerrar()
     }
 }

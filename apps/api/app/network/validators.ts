@@ -70,6 +70,18 @@ const camposConexionApi = {
     }),
 }
 
+/** Credencial del router en el alta (vacía o null = sin ella); en auditoría siempre `***`. */
+const credencialRouter = (descripcion: string) =>
+    vine
+        .string()
+        .maxLength(200)
+        .nullable()
+        .optional()
+        .meta({ description: `${descripcion}. Vacía o null = sin credencial` })
+
+const zonaRouter = () =>
+    idEntidad().nullable().optional().meta({ description: 'Zona del router (opcional); 422 si no existe' })
+
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     host: vine
@@ -79,21 +91,14 @@ const camposRouter = {
         .maxLength(255)
         .meta({ description: 'Host o IP de la API REST de RouterOS' }),
     api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
-    api_password: vine
-        .string()
-        .maxLength(200)
-        .nullable()
-        .optional()
-        .meta({ description: 'Se guarda cifrada' }),
-    radius_secret: vine
-        .string()
-        .maxLength(200)
-        .nullable()
-        .optional()
-        .meta({ description: 'Se guarda cifrado' }),
+    api_password: credencialRouter('Clave del usuario de la API REST. Se guarda cifrada'),
+    radius_secret: credencialRouter(
+        'Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado',
+    ),
     nas_ip: ipv4(),
     modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
     empresa_sugerida_id: empresaSugerida(),
+    zona_id: zonaRouter(),
     control_velocidad: vine.enum(CONTROLES_VELOCIDAD).optional().meta({
         description:
             'simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad',
@@ -112,11 +117,27 @@ export const editarRouterValidator = vine.compile(
         nombre: camposRouter.nombre.optional(),
         host: vine.string().trim().minLength(1).maxLength(255).optional(),
         api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
-        api_password: vine.string().maxLength(200).nullable().optional(),
-        radius_secret: vine.string().maxLength(200).nullable().optional(),
+        api_password: vine
+            .string()
+            .maxLength(200)
+            .nullable()
+            .optional()
+            .meta({ description: 'Clave nueva de la API REST (cifrada). Vacía o null = no cambiar' }),
+        radius_secret: vine.string().maxLength(200).nullable().optional().meta({
+            description: 'Secreto RADIUS nuevo (cifrado; el de FreeRADIUS). Vacío o null = no cambiar',
+        }),
+        quitar_api_password: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Borra la clave de la API (422 si además llega api_password)' }),
+        quitar_radius_secret: vine
+            .boolean()
+            .optional()
+            .meta({ description: 'Borra el secreto RADIUS (422 si además llega radius_secret)' }),
         nas_ip: ipv4().optional(),
         modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
         empresa_sugerida_id: empresaSugerida(),
+        zona_id: zonaRouter(),
         capacidad_bajada_kbps: capacidad(),
         capacidad_subida_kbps: capacidad(),
         ...camposConexionApi,

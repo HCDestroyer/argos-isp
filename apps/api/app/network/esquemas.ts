@@ -25,66 +25,80 @@ const kbpsNulable = (descripcion: string): EsquemaJson => ({ ...nulable(entero),
 
 export const Router = definirEsquema(
     'Router',
-    objeto({
-        id,
-        nombre: texto,
-        host: texto,
-        api_usuario: nulable(texto),
-        tiene_api_password: booleano,
-        tiene_radius_secret: booleano,
-        nas_ip: texto,
-        modo_seguridad: enumerado(['radius', 'api']),
-        control_velocidad: {
-            ...enumerado(['simple', 'arbol_pcq']),
-            description:
-                'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            host: texto,
+            api_usuario: nulable(texto),
+            tiene_api_password: booleano,
+            tiene_radius_secret: booleano,
+            nas_ip: texto,
+            modo_seguridad: enumerado(['radius', 'api']),
+            control_velocidad: {
+                ...enumerado(['simple', 'arbol_pcq']),
+                description:
+                    'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
+            },
+            capacidad_bajada_kbps: kbpsNulable(
+                'Capacidad del enlace (techo del padre global); null = sin techo',
+            ),
+            capacidad_subida_kbps: kbpsNulable(
+                'Capacidad del enlace (techo del padre global); null = sin techo',
+            ),
+            api_url: {
+                ...nulable(texto),
+                description: 'https://host:puerto de la API REST; null = https://<host>',
+            },
+            api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
+            tiene_api_ca: {
+                ...booleano,
+                description:
+                    'Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con ' +
+                    'PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla)',
+            },
+            dhcp_servidor: {
+                ...nulable(texto),
+                description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
+            },
+            interfaz_clientes: {
+                ...nulable(texto),
+                description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
+            },
+            modo_velocidad: {
+                ...enumerado(['simple', 'pcq']),
+                deprecated: true,
+                description:
+                    'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
+            },
+            empresa_sugerida_id: {
+                ...nulable(id),
+                description:
+                    'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
+            },
+            activo: booleano,
+            en_linea: {
+                ...nulable(booleano),
+                description:
+                    'Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) ' +
+                    'dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el ' +
+                    'umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)',
+            },
+            ultimo_contacto: {
+                ...nulable(instante),
+                description:
+                    'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
+                    'comando de RouterOS (`audit.red` con ok); null si nunca',
+            },
+            zona_id: {
+                ...nulable(id),
+                description:
+                    'Zona del router (opcional; no cambia el alcance del ACL). La API siempre la envía',
+            },
+            ...auditable,
         },
-        capacidad_bajada_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
-        capacidad_subida_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
-        api_url: {
-            ...nulable(texto),
-            description: 'https://host:puerto de la API REST; null = https://<host>',
-        },
-        api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
-        tiene_api_ca: {
-            ...booleano,
-            description:
-                'Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con ' +
-                'PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla)',
-        },
-        dhcp_servidor: {
-            ...nulable(texto),
-            description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
-        },
-        interfaz_clientes: {
-            ...nulable(texto),
-            description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
-        },
-        modo_velocidad: {
-            ...enumerado(['simple', 'pcq']),
-            deprecated: true,
-            description: 'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
-        },
-        empresa_sugerida_id: {
-            ...nulable(id),
-            description: 'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
-        },
-        activo: booleano,
-        en_linea: {
-            ...nulable(booleano),
-            description:
-                'Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) ' +
-                'dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el ' +
-                'umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)',
-        },
-        ultimo_contacto: {
-            ...nulable(instante),
-            description:
-                'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
-                'comando de RouterOS (`audit.red` con ok); null si nunca',
-        },
-        ...auditable,
-    }),
+        ['zona_id'],
+    ),
 )
 
 export const RedIpv4 = definirEsquema(
@@ -495,4 +509,59 @@ export const PeerWireguard = definirEsquema(
 export const ResultadoHandshakes = definirEsquema(
     'ResultadoHandshakes',
     objeto({ actualizados: entero, conectados: lista(id) }),
+)
+
+export const ChequeoConexion = definirEsquema(
+    'ChequeoConexion',
+    objeto(
+        {
+            clave: enumerado(['tunel', 'api', 'equipo', 'radius']),
+            ok: {
+                ...nulable(booleano),
+                description: 'null = no se pudo comprobar (falló otro chequeo antes)',
+            },
+            detalle: { ...texto, description: 'Explicación en lenguaje simple; nunca trae secretos' },
+            ms: entero,
+            motivo: {
+                ...nulable(
+                    enumerado([
+                        'sin_credenciales',
+                        'no_responde',
+                        'credenciales',
+                        'certificado',
+                        'respuesta',
+                    ]),
+                ),
+                description: 'Solo en `api`: por qué falló',
+            },
+            datos: {
+                ...nulable(jsonLibre),
+                description:
+                    '`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }',
+            },
+        },
+        ['motivo', 'datos'],
+    ),
+)
+
+export const PruebaConexion = definirEsquema(
+    'PruebaConexion',
+    objeto({
+        router_id: id,
+        ok: { ...booleano, description: 'Todos los chequeos salieron bien' },
+        probado_en: instante,
+        chequeos: lista(ChequeoConexion),
+    }),
+)
+
+export const ReconciliacionEncolada = definirEsquema(
+    'ReconciliacionEncolada',
+    objeto({
+        router_id: id,
+        job_id: texto,
+        encolado: {
+            ...booleano,
+            description: 'false: ya había una esperando o en curso (no se encoló otra)',
+        },
+    }),
 )

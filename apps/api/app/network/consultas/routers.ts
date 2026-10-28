@@ -40,6 +40,8 @@ export interface RouterVista {
     modo_velocidad: 'simple' | 'pcq'
     /** empresa por defecto de los servicios nuevos (multiempresa) */
     empresa_sugerida_id: number | null
+    /** zona del router (opcional; no cambia el alcance del ACL) */
+    zona_id: number | null
     activo: boolean
     /** null = ninguna fuente periódica lo mide (`app/network/contacto_router.ts`) */
     en_linea: boolean | null
@@ -89,6 +91,7 @@ const COLUMNAS_ROUTER = [
     'interfaz_clientes',
     db.raw(`CASE control_velocidad WHEN 'arbol_pcq' THEN 'pcq' ELSE 'simple' END AS modo_velocidad`),
     'empresa_sugerida_id',
+    'zona_id',
     'activo',
     'version',
     'created_at',

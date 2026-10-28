@@ -51,7 +51,16 @@ import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
 import type { HttpContext } from '@adonisjs/core/http'
-import { ConexionRouter, PeerWireguard, RegistroConexion, ResultadoHandshakes } from '#network/esquemas'
+import {
+    ConexionRouter,
+    PeerWireguard,
+    PruebaConexion,
+    ReconciliacionEncolada,
+    RegistroConexion,
+    ResultadoHandshakes,
+} from '#network/esquemas'
+import ProbarConexion from '#network/conexion/actions/probar_conexion'
+import ReconciliarAhora from '#network/conexion/actions/reconciliar_ahora'
 import { parsearAdmin } from '#network/conexion/config'
 import { listarPeers, verConexion } from '#network/conexion/consultas'
 import { limitarRegistro } from '#network/conexion/limite_registro'
@@ -495,6 +504,45 @@ const SOBRE_EL_SCRIPT =
 
 // Conexión de routers por WireGuard (contratos/conexion-routers.md)
 const conexion: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/probar-conexion',
+        operacion: 'routersProbarConexion',
+        resumen: 'Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)',
+        descripcion:
+            'Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake ' +
+            'en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, ' +
+            '`motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, ' +
+            'uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara ' +
+            'solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, ' +
+            'actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.',
+        etiqueta: 'routers',
+        permiso: 'routers.probar_conexion',
+        respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaConexion },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new ProbarConexion().execute({ router_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/reconciliar',
+        operacion: 'routersReconciliar',
+        resumen: 'Reconciliar ahora la configuración de RouterOS del router',
+        descripcion:
+            'Encola `routeros.reconciliar` (`motivo: manual`) en el worker de routeros, con lock: si ya hay uno ' +
+            'esperando o en curso para el router, responde el mismo `job_id` con `encolado: false`. Lo corregido ' +
+            'queda en `audit.red`. 404 si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.reconciliar',
+        respuesta: { status: 202, descripcion: 'Reconciliación encolada', esquema: ReconciliacionEncolada },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new ReconciliarAhora().execute({ router_id: id }, ctx.contextoAccion())
+        },
+    }),
     definirRuta({
         metodo: 'get',
         ruta: '/routers/:id/script-conexion',
