@@ -305,4 +305,21 @@ cli_nodo estado > /dev/null
 if cli_nodo actualizar --version "$V2" --si; then fallar "el nodo se actualizó a $V2 con el central en $V1"; fi
 [ "$(cli_nodo version)" = "$V1" ] || fallar "el nodo dejó de estar en $V1"
 
+# ---------------------------------------------------------------------------
+paso "argosisp desinstalar --borrar-datos --si: no queda nada de los dos proyectos"
+cli_nodo desinstalar --borrar-datos --si
+# El enlace /usr/local/bin/argosisp era del nodo (se instaló al final) y ya no está: el script propio
+sudo env ARGOSISP_DIR="$DIR" "$DIR/actual/argosisp" desinstalar --borrar-datos --si
+for p in argosisp argosisp-portal; do
+    [ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan contenedores de $p"
+    [ -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan volúmenes de $p"
+    [ -z "$(docker network ls -q --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan redes de $p"
+done
+for puerto in 80 443 8080 8443; do
+    if ss -Hltn "sport = :$puerto" | grep -q .; then fallar "el puerto TCP $puerto sigue ocupado"; fi
+done
+if sudo test -e "$DIR" || sudo test -e "$DIR_NODO"; then fallar "quedó la carpeta de la instalación"; fi
+[ ! -e /usr/local/bin/argosisp ] || fallar "quedó /usr/local/bin/argosisp"
+[ ! -e /etc/systemd/system/argosisp-actualizar.timer ] || fallar "quedó el timer de systemd"
+
 paso "listo: instalar → actualizar → reversión automática → revertir → nodo portal"

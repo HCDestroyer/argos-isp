@@ -101,6 +101,7 @@ Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para 
 | `sudo argosisp levantar` | Levanta la versión instalada y espera a que esté sana (después de editar el `.env`) |
 | `sudo argosisp logs [servicio]` | Registros en vivo |
 | `sudo argosisp admin-clave <correo> [--stdin]` | Clave nueva para ese usuario del panel (si no existe, lo crea con el rol `admin`) y la muestra **una sola vez**; con `--stdin` la toma de la entrada estándar (`echo 'clave' \| sudo argosisp admin-clave …`). Cierra sus sesiones y queda en la auditoría (actor sistema, canal consola, la clave como `***`) |
+| `sudo argosisp desinstalar [--borrar-datos] [--si]` | Baja todo el proyecto y quita el comando y el timer. Sin `--borrar-datos` conserva volúmenes y `/opt/argosisp` (se vuelve con `/opt/argosisp/actual/argosisp levantar`); con él borra todo, previa confirmación y respaldo final |
 | `sudo argosisp respaldar` | Respaldo ahora (el mismo del diario) |
 | `sudo argosisp compose …` | `docker compose` del proyecto con la versión instalada (`compose ps`, `compose exec api …`) |
 | `sudo argosisp actualizar` / `revertir` / `auto …` | `docs/runbooks/actualizacion.md` |
@@ -113,7 +114,7 @@ Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para 
 | Instalaste la 1.1.0 con `curl … \| sudo bash` y la salida terminó en "arriba y sano", sin la clave ni `credenciales-iniciales.txt` | Error de esa versión: un comando del instalador leyó el resto del script de la entrada estándar (corregido en la siguiente). La instalación quedó completa: la clave inicial del admin es `SEED_ADMIN_PASSWORD` en `/opt/argosisp/.env` (`sudo grep ^SEED_ADMIN_PASSWORD= /opt/argosisp/.env`); el usuario, `SEED_ADMIN_EMAIL`. Cámbiala al entrar |
 | "ArgosIsp no quedó sano" | `sudo argosisp logs migrate api`. El `.env` ya quedó escrito: corrige y corre `sudo argosisp levantar` (no reinstales: el instalador se niega si hay `.env`) |
 | El navegador avisa de certificado inválido | Los registros DNS aún no apuntan al servidor o el 443 no es alcanzable desde internet. `sudo argosisp logs proxy`; Caddy reintenta solo |
-| Reinstalar desde cero (borra **todos** los datos) | `sudo argosisp compose down -v && sudo rm -rf /opt/argosisp /usr/local/bin/argosisp` |
+| Reinstalar desde cero (borra **todos** los datos) | `sudo argosisp desinstalar --borrar-datos` (pide escribir BORRAR y ofrece un respaldo final en `/var/backups/argosisp-final-<fecha>/` con el `.env`; `--si` no pregunta nada) y después el comando de instalación. Baja todos los servicios (también `api-portal` y los huérfanos de otra versión), borra volúmenes, red y `/opt/argosisp`, y quita el comando y el timer. En la 1.1.0, `argosisp compose down -v` dejaba vivos `api-portal` y otros contenedores (y el proxy en el 80): si te pasó, `docker ps -aq --filter label=com.docker.compose.project=argosisp \| xargs -r docker rm -f` |
 | Servidor sin internet | Copia el paquete (`argosisp-<v>.tar.gz`, `.sha256`) y un archivo `estable` con la versión a una carpeta, carga las imágenes con `docker load`, y corre `sudo ARGOSISP_FUENTE=/carpeta ARGOSISP_SIN_DESCARGA=1 bash instalar.sh …` |
 
 ## Cómo se prueba

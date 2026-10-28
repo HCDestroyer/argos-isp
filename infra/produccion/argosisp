@@ -22,6 +22,11 @@
 #   argosisp nodo-portal crear <nombre> | listar | revocar <nombre>
 #                                         nodos portal remotos (servidor principal): el token de
 #                                         `crear` se muestra una sola vez
+#   argosisp desinstalar [--borrar-datos] [--si]
+#                                         baja todo el proyecto (todos los perfiles y huérfanos) y
+#                                         quita el comando y el timer; --borrar-datos además borra
+#                                         volúmenes, red y la carpeta (con confirmación y respaldo
+#                                         final, salvo --si)
 #   argosisp logs [servicio...]           últimos registros (docker compose logs -f)
 #   argosisp compose <args...>            docker compose del proyecto con la versión instalada
 #
@@ -233,6 +238,9 @@ dc_v() {
     local version="$1"
     shift
     entorno_compose
+    # Bajar siempre con todos los perfiles: sin el de api-portal, `down` lo deja vivo y con él la
+    # red y el volumen comprobantes («in use»)
+    [ "${1:-}" != down ] || export COMPOSE_PROFILES='*'
     if [ "${DC_CON_STDIN:-0}" = 1 ]; then
         docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$version")" "$@"
     else
@@ -796,6 +804,86 @@ cmd_nodo_portal() {
     esac
 }
 
+# Quita la instalación. Sin --borrar-datos los volúmenes (base, comprobantes, certificados) y
+# $ARGOSISP_DIR (.env, respaldos) quedan: se vuelve con `$ARGOSISP_DIR/actual/argosisp levantar`.
+cmd_desinstalar() {
+    local borrar=false si=false p
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --borrar-datos) borrar=true; shift ;;
+            --si) si=true; shift ;;
+            *) morir "uso: argosisp desinstalar [--borrar-datos] [--si]" ;;
+        esac
+    done
+    [ "$(id -u)" = 0 ] || morir "corre como root (sudo argosisp desinstalar)"
+    command -v docker > /dev/null || morir "falta docker"
+    p="$(proyecto)"
+    if $borrar && ! $si; then
+        confirmar "Se borran TODOS los datos de ArgosIsp (base, comprobantes, certificados, $ARGOSISP_DIR). Escribe BORRAR para seguir:" BORRAR ||
+            morir "cancelado (sin preguntar: --si)"
+        if [ -f "$ENV_FILE" ] && ! es_nodo_portal && confirmar "¿Respaldo final antes de borrar? [s/N]"; then
+            respaldo_final
+        fi
+    fi
+
+    if [ -f "$ENV_FILE" ] && [ -f "$(compose_de "$(version_instalada)")" ]; then
+        log "bajando el proyecto $p (todos los perfiles y huérfanos)"
+        if $borrar; then
+            dc down --remove-orphans --volumes || log "aviso: docker compose down falló; sigo por etiqueta"
+        else
+            dc down --remove-orphans || log "aviso: docker compose down falló; sigo por etiqueta"
+        fi
+    fi
+    # Respaldo por etiqueta: contenedores de otra versión del compose o que down no vio
+    local -a ids
+    mapfile -t ids < <(docker ps -aq --filter "label=com.docker.compose.project=$p")
+    [ "${#ids[@]}" = 0 ] || docker rm -f "${ids[@]}" > /dev/null
+    mapfile -t ids < <(docker network ls -q --filter "label=com.docker.compose.project=$p")
+    [ "${#ids[@]}" = 0 ] || docker network rm "${ids[@]}" > /dev/null || true
+    if $borrar; then
+        mapfile -t ids < <(docker volume ls -q --filter "label=com.docker.compose.project=$p")
+        [ "${#ids[@]}" = 0 ] || docker volume rm -f "${ids[@]}" > /dev/null
+    fi
+
+    if command -v systemctl > /dev/null && [ -d /run/systemd/system ]; then
+        systemctl disable --now argosisp-actualizar.timer < /dev/null > /dev/null 2>&1 || true
+        rm -f /etc/systemd/system/argosisp-actualizar.timer /etc/systemd/system/argosisp-actualizar.service
+        systemctl daemon-reload < /dev/null || true
+    fi
+    # El comando solo si es de esta instalación (otro proyecto en el mismo servidor puede usarlo)
+    case "$(readlink -f /usr/local/bin/argosisp 2> /dev/null || true)" in
+        "$(readlink -f "$ARGOSISP_DIR")"/*) rm -f /usr/local/bin/argosisp ;;
+    esac
+
+    if $borrar; then
+        rm -rf "${ARGOSISP_DIR:?}"
+        log "ArgosIsp desinstalado y datos borrados (proyecto $p, $ARGOSISP_DIR)"
+    else
+        log "ArgosIsp desinstalado. Datos conservados: volúmenes de $p y $ARGOSISP_DIR (.env, respaldos)."
+        log "Para volver: $ARGOSISP_DIR/actual/argosisp levantar. Para borrarlos: $ARGOSISP_DIR/actual/argosisp desinstalar --borrar-datos"
+    fi
+}
+
+# Respaldo de la base y los comprobantes, y copia del .env, fuera de $ARGOSISP_DIR (se va a borrar)
+respaldo_final() {
+    local destino origen marca
+    destino="/var/backups/argosisp-final-$(date -u +%Y%m%dT%H%M%SZ)"
+    origen="$(leer_env BACKUP_HOST_DIR)"
+    origen="${origen:-$ARGOSISP_DIR/respaldos}"
+    marca="$(mktemp)"
+    dc up -d --wait postgres backup > /dev/null || morir "no pude levantar postgres y backup para el respaldo final"
+    dc exec -T backup respaldar.sh || morir "el respaldo final falló: no borro nada"
+    mkdir -p "$destino"
+    chmod 700 "$destino"
+    # Lo que dejó esta corrida (dump, suma, conteos y comprobantes) y el .env
+    find "$origen" -maxdepth 1 -type f -newer "$marca" -exec cp -a {} "$destino/" \;
+    rm -f "$marca"
+    [ -n "$(find "$destino" -maxdepth 1 -name '*.dump*' -print -quit)" ] ||
+        morir "no encuentro el respaldo final en $origen: no borro nada"
+    cp -a "$ENV_FILE" "$destino/env"
+    log "respaldo final y copia del .env en $destino (guárdalo: AAA_PPP_KEY descifra las contraseñas PPPoE)"
+}
+
 principal() {
     local comando="${1:-}"
     [ $# -gt 0 ] && shift
@@ -809,6 +897,7 @@ principal() {
         auto) cmd_auto "$@" ;;
         radius-clientes) cmd_radius_clientes ;;
         admin-clave) cmd_admin_clave "$@" ;;
+        desinstalar) cmd_desinstalar "$@" ;;
         nodo-portal) cmd_nodo_portal "$@" ;;
         logs) requiere_instalacion; dc logs -f --tail 100 "$@" ;;
         compose) requiere_instalacion; DC_CON_STDIN=1 dc "$@" ;;
