@@ -6,7 +6,13 @@ import { exigirAccesoEmpresa, filtrarPorEmpresa } from '#shared/empresa_activa'
 import { paginar, type OpcionesPaginacion } from '#shared/paginacion'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import type { NombreEvento } from '#shared/eventos'
-import { ultimaFechaDeUnidad, verUnidad, type UnidadFila, type UnidadVista } from '#inventario/unidades'
+import {
+    normalizarSerie,
+    ultimaFechaDeUnidad,
+    verUnidad,
+    type UnidadFila,
+    type UnidadVista,
+} from '#inventario/unidades'
 
 /**
  * Comodato (`contratos/inventario.md` §5, fase B): lo común de asignar, devolver, declarar pérdida y
@@ -41,6 +47,40 @@ export async function servicioDe(
         empresa_id: Number(fila.empresa_id),
         cliente_id: Number(fila.cliente_id),
     }
+}
+
+/**
+ * Unidad de `POST /servicios/:id/equipos`: `unidad_id` o `serie` (contrato Iris §3: la orden de
+ * instalación trae la serie leída en campo), exactamente uno. La serie se busca sin distinguir
+ * mayúsculas entre las unidades vivas de la empresa del servicio (única por empresa, como el índice
+ * `unidades_serie`); si no existe, 404 (como un `unidad_id` que no existe).
+ */
+export async function unidadParaComodato(
+    servicioId: number,
+    entrada: { unidad_id?: number; serie?: string },
+): Promise<number> {
+    const conId = entrada.unidad_id !== undefined
+    const serie = normalizarSerie(entrada.serie)
+    if (conId === (serie !== null)) {
+        throw new ValidacionFallida([
+            {
+                field: conId ? 'serie' : 'unidad_id',
+                rule: 'unidad_o_serie',
+                message: 'Indica unidad_id o serie (solo uno)',
+            },
+        ])
+    }
+    if (serie === null) return entrada.unidad_id!
+    const fila = (await db
+        .from('inventario.unidades as u')
+        .join('core.servicios as s', 's.empresa_id', 'u.empresa_id')
+        .where('s.id', servicioId)
+        .whereRaw('upper(u.serie) = ?', [serie])
+        .whereNotIn('u.estado', ['anulada', 'devuelta_proveedor'])
+        .select('u.id')
+        .first()) as { id: number } | null
+    if (!fila) throw new NoEncontrado(`No hay una unidad con la serie ${serie} en la empresa del servicio`)
+    return Number(fila.id)
 }
 
 /** Empresa de una unidad (404). */

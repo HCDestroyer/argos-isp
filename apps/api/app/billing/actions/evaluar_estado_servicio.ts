@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { ZONA_NEGOCIO } from '#ledger/fechas'
 import CambiarEstadoServicio, { type EstadoOperativo } from '#core/actions/cambiar_estado_servicio'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
@@ -12,6 +12,10 @@ import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
  * alrededor, así el cambio de estado y su evento quedan en la misma transacción que el pago.
  *
  * Reglas, con la configuración efectiva (plantilla + excepciones del servicio):
+ *  0. `pendiente_instalacion`: sale temprano sin tocar nada (`contratos/instalacion.md` §1). No tiene
+ *     facturas de servicio y solo lo mueven `servicios.activar_instalacion` o `servicios.retirar`;
+ *     así el pago de un cargo único anticipado (p. ej. la instalación) no choca con el 422
+ *     `servicio_pendiente_instalacion` de `CambiarEstadoServicio`.
  *  1. Retirado, suspendido a mano por un operador (`suspension_manual`, decisión del PM) o sin
  *     plantilla: no se toca. La suspensión manual solo la quita `reactivar`.
  *  2. Promesa de pago activa → `activo` (la promesa no corta).
@@ -38,12 +42,12 @@ export interface EntradaEvaluarEstado {
 export interface ResultadoEvaluarEstado {
     servicio_id: number
     /** estado en que queda el servicio */
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     motivo: string
-    de: EstadoServicio
+    de: EstadoServicioConPendiente
     cambiado: boolean
     /** estado que corresponde por reglas (difiere de `estado` si espera la hora de corte) */
-    deseado: EstadoServicio
+    deseado: EstadoServicioConPendiente
     vencidas: number
     promesa_activa: boolean
 }
@@ -77,6 +81,9 @@ export default class EvaluarEstadoServicio extends DomainAction<
             cambiado: false,
             vencidas: 0,
             promesa_activa: false,
+        }
+        if (servicio.estado === 'pendiente_instalacion') {
+            return { ...base, motivo: 'servicio pendiente de instalación' }
         }
         if (servicio.estado === 'retirado') return { ...base, motivo: 'servicio retirado' }
         if (servicio.suspension_manual) return { ...base, motivo: 'suspensión manual' }

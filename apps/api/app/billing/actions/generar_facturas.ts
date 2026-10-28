@@ -2,7 +2,7 @@ import logger from '@adonisjs/core/services/logger'
 import db from '@adonisjs/lucid/services/db'
 import type { ContextoAccion } from '#shared/contexto'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
-import { configuracionDeServicio } from '#billing/configuracion'
+import { configuracionDeServicio, inicioFacturacionSql } from '#billing/configuracion'
 import { claveFactura, periodosHasta } from '#billing/periodos'
 import EmitirFactura from '#billing/actions/emitir_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
@@ -14,7 +14,9 @@ import { BloqueosDeCorrida, ContadoresPorEmpresa, type BloqueoCorrida } from '#b
  * (por defecto hoy en Guatemala), nunca "lo de hoy".
  *
  * Recorre por lotes de 500 (keyset por id) los servicios `activo`/`limitado`/`suspendido` con
- * plantilla, calcula sus periodos desde la instalación y llama `EmitirFactura` (una transacción
+ * plantilla (un `pendiente_instalacion` no se factura por periodo: `contratos/instalacion.md` §3),
+ * calcula sus periodos desde el primer día facturable (`inicioFacturacionSql`: el día de
+ * `instalado_en` si se activó desde pendiente; si no, la instalación o el alta) y llama `EmitirFactura` (una transacción
  * auditada por factura) para cada periodo ya iniciado que no tenga factura con su `clave_unica`.
  * Correrla dos veces no duplica nada. Un servicio que falla no detiene la corrida: se cuenta en
  * `errores` y se registra en el log.
@@ -55,8 +57,8 @@ interface FilaCandidato {
     id: number
     empresa_id: number
     plantilla_facturacion_id: number
-    fecha_instalacion: string | null
-    alta: string
+    /** primer día facturable (`inicioFacturacionSql`) */
+    inicio: string
 }
 
 export default class GenerarFacturas {
@@ -98,8 +100,7 @@ export default class GenerarFacturas {
                     'id',
                     'empresa_id',
                     'plantilla_facturacion_id',
-                    db.raw(`to_char(fecha_instalacion, 'YYYY-MM-DD') as fecha_instalacion`),
-                    db.raw(`to_char(created_at AT TIME ZONE 'America/Guatemala', 'YYYY-MM-DD') as alta`),
+                    db.raw(`to_char(${inicioFacturacionSql('core.servicios')}, 'YYYY-MM-DD') as inicio`),
                 )) as FilaCandidato[]
             if (lote.length === 0) break
             cursor = lote.at(-1)!.id
@@ -162,7 +163,7 @@ export default class GenerarFacturas {
             plantilla_id: servicio.plantilla_facturacion_id,
         })
         if (!config) return
-        const periodos = periodosHasta(config, servicio.fecha_instalacion ?? servicio.alta, hasta)
+        const periodos = periodosHasta(config, servicio.inicio, hasta)
         for (const periodo of periodos) {
             if (existentes.has(claveFactura(servicio.id, periodo.periodo))) {
                 resultado.omitidas += 1

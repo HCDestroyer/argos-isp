@@ -17,6 +17,9 @@ import { BloqueosDeCorrida, ContadoresPorEmpresa, type BloqueoCorrida } from '#b
  * 2. Facturas ya vencidas a las que les falta un recargo de mora (`mora_recurrente`: uno por
  *    mes vencido) → `VencerFactura` crea los que falten.
  *
+ * Las facturas de un servicio `pendiente_instalacion` (sus cargos únicos anticipados) no se tocan:
+ * ni vencen, ni mora, ni `factura.vencida` mientras no se active (`contratos/instalacion.md` §3).
+ *
  * No cambia estados de servicio: el cron de corte los evalúa a la hora de cada plantilla.
  *
  * Bloqueos del libro (fase 6): una mora cuyo asiento cae bajo un bloqueo no se crea (la factura
@@ -149,16 +152,26 @@ export default class VencerFacturas {
 }
 
 function consultaBase() {
-    return db
-        .from('billing.facturas as f')
-        .where('f.tipo', 'servicio')
-        .select(
-            'f.id',
-            'f.empresa_id',
-            db.raw(`to_char(f.vence_en, 'YYYY-MM-DD') as vence_en`),
-            'f.reglas_snapshot',
-            db.raw(
-                `(SELECT count(*) FROM billing.facturas m WHERE m.factura_origen_id = f.id AND m.tipo = 'mora')::int AS moras`,
-            ),
-        )
+    return (
+        db
+            .from('billing.facturas as f')
+            .where('f.tipo', 'servicio')
+            // un pendiente de instalación no vence ni recibe mora (`contratos/instalacion.md` §3): su cargo
+            // único anticipado espera a la activación y la siguiente corrida lo vence si ya pasó la fecha
+            .whereNotExists((q) =>
+                q
+                    .from('core.servicios as s')
+                    .whereRaw('s.id = f.servicio_id')
+                    .where('s.estado', 'pendiente_instalacion'),
+            )
+            .select(
+                'f.id',
+                'f.empresa_id',
+                db.raw(`to_char(f.vence_en, 'YYYY-MM-DD') as vence_en`),
+                'f.reglas_snapshot',
+                db.raw(
+                    `(SELECT count(*) FROM billing.facturas m WHERE m.factura_origen_id = f.id AND m.tipo = 'mora')::int AS moras`,
+                ),
+            )
+    )
 }

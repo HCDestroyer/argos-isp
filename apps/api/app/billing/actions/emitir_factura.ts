@@ -74,7 +74,7 @@ export interface ResultadoEmitirFactura {
     /** el periodo quedó en cero y se registró como bonificación (nunca una factura de Q0) */
     bonificacion_id?: number | null
     creada: boolean
-    /** por qué no se creó (ya existía, sin plantilla, retirado, monto cero) */
+    /** por qué no se creó (ya existía, sin plantilla, retirado, pendiente de instalación, monto cero) */
     motivo: string | null
 }
 
@@ -108,6 +108,10 @@ export default class EmitirFactura extends DomainAction<EntradaEmitirFactura, Re
             }
         }
         if (servicio.estado === 'retirado') return { factura_id: null, creada: false, motivo: 'retirado' }
+        // sin instalar no hay periodo que cobrar (`contratos/instalacion.md` §3); los cargos únicos sí
+        if (servicio.estado === 'pendiente_instalacion') {
+            return { factura_id: null, creada: false, motivo: 'pendiente_instalacion' }
+        }
         const config = await configuracionDeServicio(t.trx, servicio)
         if (!config) return { factura_id: null, creada: false, motivo: 'sin_plantilla' }
 
