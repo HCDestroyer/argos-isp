@@ -25,6 +25,10 @@ reporte valorizado, salida por premio, `marcar_reparada` y fechas pasadas en con
 
 ## Reglas
 
+- `POST /servicios/:id/equipos` acepta `{ unidad_id }` o `{ serie }` (contrato Iris §3; `unidadParaComodato` de
+  `comodato.ts`): exactamente uno (422 `unidad_o_serie`); la serie se busca sin distinguir mayúsculas en la
+  empresa del servicio (404 si no existe). Un servicio `pendiente_instalacion` sí recibe comodatos.
+
 - `inventario.movimientos` es solo inserción (trigger y `REVOKE`). `inventario.saldos` es la
   proyección por producto × bodega que mantiene un trigger; `cantidad >= 0`, `valor >= 0` y sin valor
   sin existencia.

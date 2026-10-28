@@ -59576,7 +59576,7 @@
       "post": {
         "operationId": "serviciosAsignarEquipo",
         "summary": "Prestar una unidad en comodato al servicio (activo fijo 1.2.01.NN / 1.1.14)",
-        "description": "La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.",
+        "description": "La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). La unidad va por `unidad_id` o por `serie` (exactamente uno; la serie se busca en la empresa del servicio, sin distinguir mayúsculas; 422 unidad_o_serie, 404 si no existe). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.",
         "tags": [
           "inventario"
         ],
@@ -59619,7 +59619,13 @@
                 "properties": {
                   "unidad_id": {
                     "type": "integer",
-                    "minimum": 1
+                    "minimum": 1,
+                    "description": "La unidad; o, en su lugar, `serie`"
+                  },
+                  "serie": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "description": "Serie de la unidad en la empresa del servicio, sin distinguir mayúsculas (contrato Iris §3); en lugar de `unidad_id`"
                   },
                   "fecha": {
                     "type": [
@@ -59631,9 +59637,7 @@
                     "description": "Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)"
                   }
                 },
-                "required": [
-                  "unidad_id"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -94056,6 +94060,7 @@
           "de": {
             "type": "string",
             "enum": [
+              "pendiente_instalacion",
               "activo",
               "limitado",
               "suspendido",
@@ -94065,6 +94070,7 @@
           "estado": {
             "type": "string",
             "enum": [
+              "pendiente_instalacion",
               "activo",
               "limitado",
               "suspendido",
