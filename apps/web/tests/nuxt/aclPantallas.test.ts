@@ -193,8 +193,11 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'ReciboCobro.vue': { permisos: ['pagos.ver'], desde: ['pages/cobro/index.vue'] },
     'PromesaCrearModal.vue': { permisos: ['promesas.crear'], desde: ['pages/servicios/[id].vue'] },
     'PromesaSimularModal.vue': { permisos: ['promesas.ver'], desde: ['pages/servicios/[id].vue', 'pages/promesas/index.vue'] },
-    'RouterConexion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue'] },
-    'RouterVelocidad.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue'] },
+    'RouterConexion.vue': { permisos: ['routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
+    'RouterVelocidad.vue': { permisos: ['routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
+    // Menú de acciones del router: lo montan la lista y la ficha (las dos con `routers.ver`).
+    'RouterAcciones.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue', 'pages/routers/[id].vue'] },
+    'RouterEditarModal.vue': { permisos: ['routers.editar', 'routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
     'ServicioCambiarEmpresaModal.vue': { permisos: ['servicios.cambiar_empresa'], desde: ['pages/servicios/[id].vue'] },
     // Solo se monta con `puedeActivarInstalacion` (servicios.activar_instalacion); recarga con el servicios.ver de la página.
     'ServicioActivarInstalacionModal.vue': { permisos: ['servicios.activar_instalacion', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },

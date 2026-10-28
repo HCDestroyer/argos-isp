@@ -130,7 +130,18 @@ export const rutasRouters: RutasFixture = {
             const valor = campo in cuerpo ? cuerpo[campo] : router[campo]
             return (typeof valor === 'string' ? valor.trim() : valor) as Schema<'Router'>[K]
         }
+        // Datos generales, como `editarRouterValidator`: sin el campo se conserva. Los secretos nunca
+        // vuelven: solo `tiene_api_password` / `tiene_radius_secret`.
+        const texto = (campo: 'nombre' | 'host' | 'nas_ip'): string => (typeof cuerpo[campo] === 'string' ? (cuerpo[campo] as string).trim() : router[campo])
         Object.assign(router, {
+            nombre: texto('nombre'),
+            host: texto('host'),
+            nas_ip: texto('nas_ip'),
+            modo_seguridad: cuerpo.modo_seguridad === 'radius' || cuerpo.modo_seguridad === 'api' ? cuerpo.modo_seguridad : router.modo_seguridad,
+            api_usuario: 'api_usuario' in cuerpo ? (cuerpo.api_usuario as string | null) : router.api_usuario,
+            tiene_api_password: 'api_password' in cuerpo ? typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '' : router.tiene_api_password,
+            tiene_radius_secret: 'radius_secret' in cuerpo ? typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '' : router.tiene_radius_secret,
+            activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             capacidad_bajada_kbps: capacidad('capacidad_bajada_kbps'),
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
             api_url: conexion('api_url'),
@@ -145,7 +156,8 @@ export const rutasRouters: RutasFixture = {
             updated_at: ahora(),
         })
         // Como la API: la CA se audita como `***`.
-        registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, typeof cuerpo.api_ca === 'string' ? { ...cuerpo, api_ca: '***' } : cuerpo)
+        const auditado = { ...cuerpo, ...(typeof cuerpo.api_ca === 'string' ? { api_ca: '***' } : {}), ...('api_password' in cuerpo ? { api_password: '***' } : {}), ...('radius_secret' in cuerpo ? { radius_secret: '***' } : {}) }
+        registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, auditado)
         return { status: 200, cuerpo: router }
     }),
 
