@@ -517,6 +517,9 @@ services:
       # `email <correo>` (Let's Encrypt avisa vencimientos) o `local_certs` (CA interna: pruebas)
       PROXY_TLS_GLOBAL: ${PROXY_TLS_GLOBAL:-}
       PORTAL_HSTS_MAX_AGE: ${PORTAL_HSTS_MAX_AGE:-300}
+      # Proxy de delante (Nginx Proxy Manager…): CIDR separados por espacio de los que Caddy acepta
+      # X-Forwarded-For / X-Real-IP. Vacía = ninguno (docs/runbooks/detras-de-proxy.md)
+      ARGOSISP_PROXIES_CONFIABLES: ${ARGOSISP_PROXIES_CONFIABLES:-}
       # /api/v1/portal/* del host de la API: api-portal si está activo, si no api.
       # API_PORTAL_UPSTREAM (.env, host:puerto) lo fija a mano (nodo portal remoto, futuro).
       API_PORTAL_DESTINO: ${API_PORTAL_UPSTREAM:-${ARGOSISP_API_PORTAL_DESTINO:-api}:3333}

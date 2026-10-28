@@ -1,7 +1,8 @@
 import { DateTime } from 'luxon'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
-import type { EstadoServicio } from '#shared/eventos'
-import { ZONA_NEGOCIO } from '#ledger/fechas'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
+import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
+import { venceEfectivoSql } from '#billing/vencimiento'
 import CambiarEstadoServicio, { type EstadoOperativo } from '#core/actions/cambiar_estado_servicio'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 
@@ -12,10 +13,16 @@ import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
  * alrededor, así el cambio de estado y su evento quedan en la misma transacción que el pago.
  *
  * Reglas, con la configuración efectiva (plantilla + excepciones del servicio):
+ *  0. `pendiente_instalacion`: sale temprano sin tocar nada (`contratos/instalacion.md` §1). No tiene
+ *     facturas de servicio y solo lo mueven `servicios.activar_instalacion` o `servicios.retirar`;
+ *     así el pago de un cargo único anticipado (p. ej. la instalación) no choca con el 422
+ *     `servicio_pendiente_instalacion` de `CambiarEstadoServicio`.
  *  1. Retirado, suspendido a mano por un operador (`suspension_manual`, decisión del PM) o sin
  *     plantilla: no se toca. La suspensión manual solo la quita `reactivar`.
  *  2. Promesa de pago activa → `activo` (la promesa no corta).
- *  3. Facturas de servicio vencidas ≥ `facturas_para_cortar` → `suspendido`.
+ *  3. Facturas de servicio vencidas ≥ `facturas_para_cortar` → `suspendido`. Una factura emitida
+ *     con el servicio pendiente de instalación no cuenta antes de su vencimiento efectivo
+ *     (`venceEfectivoSql`: día de instalado_en + gracia): instalar nunca limita el mismo día.
  *  4. Vencidas ≥ `facturas_para_limitar` (> 0) → `limitado`, solo si el plan tiene velocidad
  *     limitada > 0 en bajada y subida; si no, sigue `activo`.
  *  5. Si no → `activo`.
@@ -38,12 +45,12 @@ export interface EntradaEvaluarEstado {
 export interface ResultadoEvaluarEstado {
     servicio_id: number
     /** estado en que queda el servicio */
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     motivo: string
-    de: EstadoServicio
+    de: EstadoServicioConPendiente
     cambiado: boolean
     /** estado que corresponde por reglas (difiere de `estado` si espera la hora de corte) */
-    deseado: EstadoServicio
+    deseado: EstadoServicioConPendiente
     vencidas: number
     promesa_activa: boolean
 }
@@ -78,16 +85,24 @@ export default class EvaluarEstadoServicio extends DomainAction<
             vencidas: 0,
             promesa_activa: false,
         }
+        if (servicio.estado === 'pendiente_instalacion') {
+            return { ...base, motivo: 'servicio pendiente de instalación' }
+        }
         if (servicio.estado === 'retirado') return { ...base, motivo: 'servicio retirado' }
         if (servicio.suspension_manual) return { ...base, motivo: 'suspensión manual' }
         const config = await configuracionDeServicio(t.trx, servicio)
         if (!config) return { ...base, motivo: 'sin plantilla de facturación' }
 
+        // una factura emitida con el servicio pendiente no cuenta antes de su vencimiento efectivo
+        // (`venceEfectivoSql`: día de la instalación + gracia); las demás, como siempre, por su estado
+        const hoy = hoyGuatemala(input.ahora)
+        const efectivo = venceEfectivoSql('f')
         const { vencidas } = (await t.trx
-            .from('billing.facturas')
-            .where('servicio_id', servicio.id)
-            .where('tipo', 'servicio')
-            .where('estado', 'vencida')
+            .from('billing.facturas as f')
+            .where('f.servicio_id', servicio.id)
+            .where('f.tipo', 'servicio')
+            .where('f.estado', 'vencida')
+            .whereRaw(`NOT (${efectivo} > f.vence_en AND ${efectivo} >= ?)`, [hoy])
             .count('* as vencidas')
             .first()) as { vencidas: string | number }
         const totalVencidas = Number(vencidas)

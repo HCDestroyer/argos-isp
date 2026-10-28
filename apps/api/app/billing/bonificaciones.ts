@@ -10,6 +10,7 @@ import { hoyGuatemala } from '#ledger/fechas'
 import RegistrarAsiento from '#ledger/actions/registrar_asiento'
 import { movimientosFactura } from '#billing/emision'
 import { dimensionesFactura, type LineaCalculada } from '#billing/facturas'
+import type { OrigenExterno, OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * Bonificaciones (decisión del PM, 19 oct): **una factura de valor 0 nunca se genera**. Lo que antes
@@ -46,6 +47,8 @@ export interface DatosBonificacion {
     motivo_texto: string
     canje_id?: number | null
     reglas_snapshot?: Record<string, unknown>
+    /** orden de Iris del cargo único sin costo */
+    origen_externo?: OrigenExterno | null
 }
 
 export interface BonificacionVista {
@@ -70,6 +73,8 @@ export interface BonificacionVista {
     motivo_texto: string
     canje_id: number | null
     asiento_id: number
+    origen_externo_tipo: OrigenExternoTipo | null
+    origen_externo_id: string | null
     created_at: Date
 }
 
@@ -155,9 +160,10 @@ export async function registrarBonificacion(
     await t.trx.rawQuery(
         `INSERT INTO billing.bonificaciones
                 (id, empresa_id, cliente_id, servicio_id, periodo, clave_unica, concepto, origen, bruto, base,
-                 lineas, motivo_id, motivo_texto, canje_id, asiento_id, reglas_snapshot, creado_por)
+                 lineas, motivo_id, motivo_texto, canje_id, asiento_id, reglas_snapshot, creado_por,
+                 origen_externo_tipo, origen_externo_id)
          OVERRIDING SYSTEM VALUE VALUES (?, ?, ?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, NULLIF(?, 0), ?, ?::jsonb,
-                 NULLIF(?, 0))`,
+                 NULLIF(?, 0), NULLIF(?, ''), NULLIF(?, ''))`,
         [
             bonificacionId,
             datos.empresa_id,
@@ -176,6 +182,8 @@ export async function registrarBonificacion(
             asiento.id,
             JSON.stringify(datos.reglas_snapshot ?? {}),
             usuarioDelActor(t.ctx.actor) ?? 0,
+            datos.origen_externo?.tipo ?? '',
+            datos.origen_externo?.id ?? '',
         ],
     )
     const vista = await verBonificacion(bonificacionId, t.trx)
@@ -218,6 +226,8 @@ const COLUMNAS = [
     'b.motivo_texto',
     'b.canje_id',
     'b.asiento_id',
+    'b.origen_externo_tipo',
+    'b.origen_externo_id',
     'b.created_at',
 ]
 

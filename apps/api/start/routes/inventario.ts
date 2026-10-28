@@ -29,7 +29,7 @@ import {
 import { lista } from '#shared/openapi/esquemas'
 import { exigirServicio } from '#core/acceso_empresa'
 import { empresaDeUnidad, historialUnidad, listarUnidades } from '#inventario/unidades'
-import { equiposDelServicio, equiposPorRecuperar } from '#inventario/comodato'
+import { equiposDelServicio, equiposPorRecuperar, unidadParaComodato } from '#inventario/comodato'
 import AsignarComodato from '#inventario/actions/asignar_comodato'
 import DevolverComodato from '#inventario/actions/devolver_comodato'
 import DeclararPerdidaComodato from '#inventario/actions/declarar_perdida_comodato'
@@ -445,13 +445,23 @@ const comodato: Ruta[] = [
         cuerpo: v.asignarComodatoValidator,
         idempotente: true,
         descripcion:
-            'La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.',
+            'La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). La unidad va por `unidad_id` o por `serie` (exactamente uno; la serie se busca en la empresa del servicio, sin distinguir mayúsculas; 422 unidad_o_serie, 404 si no existe). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.',
         respuesta: { status: 201, descripcion: 'Unidad en comodato', esquema: Unidad },
         handler: async (ctx, { cuerpo, params }) => {
             const id = Number(params.id)
             await exigirServicio(ctx, id)
-            await exigirUnidad(ctx, cuerpo.unidad_id)
-            return new AsignarComodato().execute({ ...cuerpo, servicio_id: id }, ctx.contextoAccion())
+            const unidadId = await unidadParaComodato(id, cuerpo)
+            await exigirUnidad(ctx, unidadId)
+            return new AsignarComodato().execute(
+                {
+                    unidad_id: unidadId,
+                    fecha: cuerpo.fecha,
+                    servicio_id: id,
+                    origen_tipo: cuerpo.origen_tipo,
+                    origen_id: cuerpo.origen_id,
+                },
+                ctx.contextoAccion(),
+            )
         },
     }),
     definirRuta({

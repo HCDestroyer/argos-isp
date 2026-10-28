@@ -29,6 +29,7 @@ import {
     servicioDe,
     unidadVista,
 } from '#inventario/comodato'
+import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * `inventario.devolver_comodato` (`POST /servicios/:id/equipos/:unidad_id/devolver`): la unidad en
@@ -43,6 +44,8 @@ import {
  * - La unidad queda `disponible` (o `en_reparacion`), `usado` por defecto, en la bodega, con costo =
  *   valor en libros.
  * - Emite `inventario.comodato_devuelto`, `activo.dado_de_baja` e `inventario.movimiento_registrado`.
+ * - `origen_tipo` = `iris_orden` + `origen_id` (orden de Iris, `#inventario/origen_externo`): se guardan
+ *   en el movimiento (`origen_externo_*`) y salen en el kardex y en los eventos; solo trazabilidad.
  */
 
 export interface EntradaDevolverComodato {
@@ -53,12 +56,16 @@ export interface EntradaDevolverComodato {
     en_reparacion?: boolean | null
     fecha?: string | null
     motivo?: string | null
+    /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
+    origen_tipo?: OrigenExternoTipo | null
+    origen_id?: string | null
 }
 
 export default class DevolverComodato extends DomainAction<EntradaDevolverComodato, UnidadVista> {
     readonly nombre = 'inventario.devolver_comodato'
 
     protected async handle(input: EntradaDevolverComodato, t: Transaccion): Promise<UnidadVista> {
+        const origenExterno = origenExternoDe(input)
         t.fijarEntidad('unidad', input.unidad_id)
         const empresaId = await empresaDeLaUnidad(t, input.unidad_id)
         t.fijarEmpresa(empresaId)
@@ -128,6 +135,7 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
                 unidadId: unidad!.id,
                 servicioId: servicio.id,
                 motivo,
+                origenExterno,
             },
             {
                 descripcion: `Devolución de ${producto.sku} ${nombre} del servicio ${servicio.id} · baja del activo ${activoId} sin resultado`,
@@ -196,6 +204,7 @@ export default class DevolverComodato extends DomainAction<EntradaDevolverComoda
         await emitirComodato(t, 'inventario.comodato_devuelto', unidad!, servicio, {
             condicion,
             bodega_id: bodega.id,
+            ...columnasOrigenExterno(origenExterno),
         })
         return unidadVista(unidad!.id, t)
     }

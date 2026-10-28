@@ -14,8 +14,9 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
-import { METODOS_PAGO } from '#shared/eventos'
+import { ESTADOS_SERVICIO, METODOS_PAGO } from '#shared/eventos'
 import { NOMBRES_REGLA } from '#billing/promesas'
+import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 
 /**
  * Schemas de respuesta del módulo billing. Dinero siempre como string decimal (`Dinero`).
@@ -210,6 +211,15 @@ export const Factura = definirEsquema(
                     'Sistema de origen de una factura importada (mikrowisp, smartisp…); null si la emitió ArgosIsp',
             },
             id_externo: { ...nulable(texto), description: 'Id de la factura en su sistema de origen' },
+            origen_externo_tipo: {
+                ...nulable(enumerado(ORIGENES_EXTERNOS)),
+                description:
+                    'Sistema externo que originó el cargo: iris_orden = orden de trabajo de Iris (POST /facturas/cargo-unico con origen_tipo)',
+            },
+            origen_externo_id: {
+                ...nulable(texto),
+                description: 'Id en el sistema externo (UUID de la orden de Iris)',
+            },
             sustituida_por: {
                 ...nulable(id),
                 description:
@@ -224,6 +234,8 @@ export const Factura = definirEsquema(
         [
             'sustituida_por',
             'sustituye_a',
+            'origen_externo_tipo',
+            'origen_externo_id',
             'tipo',
             'factura_origen_id',
             'vencida_en',
@@ -444,43 +456,55 @@ const camposBloqueo = {
  */
 export const Bonificacion = definirEsquema(
     'Bonificacion',
-    objeto({
-        id,
-        empresa_id: id,
-        cliente_id: id,
-        servicio_id: nulable(id),
-        periodo: fecha,
-        clave_unica: {
-            ...texto,
-            description:
-                'servicio_id-periodo (ocupa el periodo: el cron no lo vuelve a facturar) o cargo-<uuid>',
-        },
-        concepto: texto,
-        origen: enumerado(['mes_gratis', 'descuento_100', 'cargo_sin_costo', 'canje']),
-        bruto: { ...Dinero, description: 'Valor con IVA de lo entregado sin cobrar' },
-        base: { ...Dinero, description: 'Sin IVA: monto del asiento 5.1.01 / ingreso' },
-        lineas: lista(
-            objeto(
-                {
-                    concepto: texto,
-                    tipo: texto,
-                    cantidad: texto,
-                    precio_unitario: Dinero,
-                    gravable: booleano,
-                    iva: Dinero,
-                    total: Dinero,
-                    cuenta_codigo: texto,
-                },
-                ['cuenta_codigo'],
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            cliente_id: id,
+            servicio_id: nulable(id),
+            periodo: fecha,
+            clave_unica: {
+                ...texto,
+                description:
+                    'servicio_id-periodo (ocupa el periodo: el cron no lo vuelve a facturar) o cargo-<uuid>',
+            },
+            concepto: texto,
+            origen: enumerado(['mes_gratis', 'descuento_100', 'cargo_sin_costo', 'canje']),
+            bruto: { ...Dinero, description: 'Valor con IVA de lo entregado sin cobrar' },
+            base: { ...Dinero, description: 'Sin IVA: monto del asiento 5.1.01 / ingreso' },
+            lineas: lista(
+                objeto(
+                    {
+                        concepto: texto,
+                        tipo: texto,
+                        cantidad: texto,
+                        precio_unitario: Dinero,
+                        gravable: booleano,
+                        iva: Dinero,
+                        total: Dinero,
+                        cuenta_codigo: texto,
+                    },
+                    ['cuenta_codigo'],
+                ),
             ),
-        ),
-        motivo_id: id,
-        motivo_nombre: texto,
-        motivo_texto: texto,
-        canje_id: nulable(id),
-        asiento_id: id,
-        created_at: instante,
-    }),
+            motivo_id: id,
+            motivo_nombre: texto,
+            motivo_texto: texto,
+            canje_id: nulable(id),
+            asiento_id: id,
+            origen_externo_tipo: {
+                ...nulable(enumerado(ORIGENES_EXTERNOS)),
+                description:
+                    'Sistema externo que originó el cargo: iris_orden = orden de trabajo de Iris (POST /facturas/cargo-unico con origen_tipo)',
+            },
+            origen_externo_id: {
+                ...nulable(texto),
+                description: 'Id en el sistema externo (UUID de la orden de Iris)',
+            },
+            created_at: instante,
+        },
+        ['origen_externo_tipo', 'origen_externo_id'],
+    ),
 )
 
 export const CargoUnicoEmitido = definirEsquema(
@@ -582,8 +606,9 @@ export const ServicioEvaluado = definirEsquema(
     'ServicioEvaluado',
     objeto({
         servicio_id: id,
-        de: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
-        estado: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+        // un pendiente de instalación sale tal cual (p. ej. al pagar su cargo único anticipado)
+        de: enumerado([...ESTADOS_SERVICIO]),
+        estado: enumerado([...ESTADOS_SERVICIO]),
         cambiado: booleano,
         motivo: texto,
     }),

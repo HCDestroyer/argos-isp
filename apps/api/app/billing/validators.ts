@@ -13,6 +13,7 @@ import { reglasPromesaSchema } from '#billing/reglas_promesa'
 import { ORIGENES_BONIFICACION } from '#billing/bonificaciones'
 import { METODOS_PAGO } from '#shared/eventos'
 import { CLAVES_CATEGORIA_EGRESO_CONSULTA } from '#ledger/plan_cuentas'
+import { reglasOrigenExterno } from '#inventario/origen_externo'
 
 /*
 |--------------------------------------------------------------------------
@@ -695,6 +696,7 @@ export const cargoUnicoValidator = vine.compile(
         motivo_sin_costo_texto: vine.string().trim().maxLength(500).nullable().optional().meta({
             description: 'Explicación del Q0 (obligatoria con motivo_sin_costo_id)',
         }),
+        ...reglasOrigenExterno(),
     }),
 )
 

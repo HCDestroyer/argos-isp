@@ -3,6 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { ContextoAccion } from '#shared/contexto'
 import { fechaValida, hoyGuatemala } from '#ledger/fechas'
 import { morasDebidas, reglaMora, type ReglaMora } from '#billing/mora'
+import { venceEfectivoSql } from '#billing/vencimiento'
 import VencerFactura from '#billing/actions/vencer_factura'
 import RegistrarCorrida from '#billing/actions/registrar_corrida'
 import { TAMANO_LOTE } from '#billing/actions/generar_facturas'
@@ -13,9 +14,14 @@ import { BloqueosDeCorrida, ContadoresPorEmpresa, type BloqueoCorrida } from '#b
  * `facturas.vencer_pendientes` (cron y `POST /facturas/vencer`): todo lo pendiente hasta `hasta`
  * (hoy en Guatemala por defecto), por lotes de 500.
  *
- * 1. Facturas de servicio `emitida`/`parcial` con `vence_en < hoy` → `VencerFactura`.
+ * 1. Facturas de servicio `emitida`/`parcial` con vencimiento efectivo < hoy → `VencerFactura`.
+ *    Vencimiento efectivo (`venceEfectivoSql`): `vence_en`, salvo una factura emitida con el servicio
+ *    pendiente de instalación, que vence en `max(vence_en, día de instalado_en + dias_gracia)`.
  * 2. Facturas ya vencidas a las que les falta un recargo de mora (`mora_recurrente`: uno por
  *    mes vencido) → `VencerFactura` crea los que falten.
+ *
+ * Las facturas de un servicio `pendiente_instalacion` (sus cargos únicos anticipados) no se tocan:
+ * ni vencen, ni mora, ni `factura.vencida` mientras no se active (`contratos/instalacion.md` §3).
  *
  * No cambia estados de servicio: el cron de corte los evalúa a la hora de cada plantilla.
  *
@@ -44,7 +50,8 @@ export interface ResultadoVencimiento {
 interface Candidata {
     id: number
     empresa_id: number
-    vence_en: string
+    /** `venceEfectivoSql`: el `vence_en` o, si se emitió con el servicio pendiente, el de la instalación */
+    vence_efectivo: string
     reglas_snapshot: Partial<ReglaMora> | null
     moras: number
 }
@@ -67,7 +74,8 @@ export default class VencerFacturas {
 
         // 1. por vencer
         await this.recorrer(
-            (q) => q.whereIn('f.estado', ['emitida', 'parcial']).where('f.vence_en', '<', hoy),
+            (q) =>
+                q.whereIn('f.estado', ['emitida', 'parcial']).whereRaw(`${venceEfectivoSql('f')} < ?`, [hoy]),
             { ...input, empresas },
             async (factura) => this.vencer(factura, hoy, resultado, bloqueos, porEmpresa, ctx),
         )
@@ -79,7 +87,7 @@ export default class VencerFacturas {
                     .whereRaw(`coalesce(f.reglas_snapshot->>'mora_tipo', 'ninguna') <> 'ninguna'`),
             { ...input, empresas },
             async (factura) => {
-                const debidas = morasDebidas(reglaMora(factura.reglas_snapshot), factura.vence_en, hoy)
+                const debidas = morasDebidas(reglaMora(factura.reglas_snapshot), factura.vence_efectivo, hoy)
                 if (debidas > factura.moras) {
                     await this.vencer(factura, hoy, resultado, bloqueos, porEmpresa, ctx)
                 }
@@ -149,16 +157,26 @@ export default class VencerFacturas {
 }
 
 function consultaBase() {
-    return db
-        .from('billing.facturas as f')
-        .where('f.tipo', 'servicio')
-        .select(
-            'f.id',
-            'f.empresa_id',
-            db.raw(`to_char(f.vence_en, 'YYYY-MM-DD') as vence_en`),
-            'f.reglas_snapshot',
-            db.raw(
-                `(SELECT count(*) FROM billing.facturas m WHERE m.factura_origen_id = f.id AND m.tipo = 'mora')::int AS moras`,
-            ),
-        )
+    return (
+        db
+            .from('billing.facturas as f')
+            .where('f.tipo', 'servicio')
+            // un pendiente de instalación no vence ni recibe mora (`contratos/instalacion.md` §3): su cargo
+            // único anticipado espera a la activación y la siguiente corrida lo vence si ya pasó la fecha
+            .whereNotExists((q) =>
+                q
+                    .from('core.servicios as s')
+                    .whereRaw('s.id = f.servicio_id')
+                    .where('s.estado', 'pendiente_instalacion'),
+            )
+            .select(
+                'f.id',
+                'f.empresa_id',
+                db.raw(`to_char(${venceEfectivoSql('f')}, 'YYYY-MM-DD') as vence_efectivo`),
+                'f.reglas_snapshot',
+                db.raw(
+                    `(SELECT count(*) FROM billing.facturas m WHERE m.factura_origen_id = f.id AND m.tipo = 'mora')::int AS moras`,
+                ),
+            )
+    )
 }
