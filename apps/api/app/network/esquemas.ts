@@ -308,7 +308,11 @@ export const ResumenSesionesRouter = definirEsquema(
         router_id: id,
         desde: { ...instante, description: 'El usado: el de la consulta o, si no vino, `aaa_desde`' },
         aaa_desde: { ...nulable(instante), description: 'Fecha de migración marcada del router (o null)' },
-        servicios: { ...entero, description: 'Servicios PPPoE no retirados del router (dentro del alcance)' },
+        servicios: {
+            ...entero,
+            description:
+                'Servicios PPPoE no retirados ni pendientes de instalación del router (dentro del alcance)',
+        },
         con_sesion_activa: { ...entero, description: 'De esos servicios, los que tienen sesión abierta' },
         sesiones_activas: {
             ...entero,

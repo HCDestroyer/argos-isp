@@ -92666,7 +92666,7 @@
           },
           "servicios": {
             "type": "integer",
-            "description": "Servicios PPPoE no retirados del router (dentro del alcance)"
+            "description": "Servicios PPPoE no retirados ni pendientes de instalación del router (dentro del alcance)"
           },
           "con_sesion_activa": {
             "type": "integer",

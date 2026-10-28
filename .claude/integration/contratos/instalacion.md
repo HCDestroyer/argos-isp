@@ -36,7 +36,7 @@ Este contrato cubre el pedido A1 de Iris (`contratos/iris.md` §5.1). Decisión 
 | Parte | Regla |
 | --- | --- |
 | AAA (A2) | El registro de Redis lleva `estado: "pendiente_instalacion"` y `aaa` responde **Access-Reject**, igual que con un servicio retirado. El servicio no navega aunque el CPE ya esté configurado. |
-| RouterOS (A2) | `routeros.aplicar_servicio` no crea colas, amarres ni address-list hasta que el servicio esté `activo`. |
+| RouterOS (A2) | `routeros.aplicar_servicio` y `routeros.reconciliar` no crean colas, amarres, leases ni address-list (tampoco entradas del árbol ni cuenta para el padre del plan) hasta que el servicio esté `activo`; el reconciliador borra lo que encuentre de un pendiente. Se crean con `servicio.estado_cambiado` (`motivo: instalacion`). `coa` acepta `de: pendiente_instalacion` (Disconnect si quedara una sesión; normalmente no hay). |
 | Facturación (A3) | La generación por periodo omite los servicios pendientes. El primer periodo se cuenta desde `instalado_en`: con prorrateo, se prorratea desde ese día; en ciclo aniversario, el aniversario es `instalado_en`. Los cargos únicos sí se pueden emitir mientras está pendiente (por ejemplo, el cobro de instalación anticipado). |
 | Corte, mora y recordatorios (A3/A6) | No aplican mientras está pendiente. |
 | Promesas (A3) | No se pueden crear sobre un pendiente (422). |

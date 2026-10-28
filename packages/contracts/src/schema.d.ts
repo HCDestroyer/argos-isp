@@ -15856,7 +15856,7 @@ export interface components {
              * @description Fecha de migración marcada del router (o null)
              */
             aaa_desde: string | null;
-            /** @description Servicios PPPoE no retirados del router (dentro del alcance) */
+            /** @description Servicios PPPoE no retirados ni pendientes de instalación del router (dentro del alcance) */
             servicios: number;
             /** @description De esos servicios, los que tienen sesión abierta */
             con_sesion_activa: number;

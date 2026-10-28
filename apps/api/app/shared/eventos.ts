@@ -283,6 +283,28 @@ export interface CatalogoEventos {
      * sesiones colgadas). Agregado en la semana 3; los consumidores que no lo lean no cambian.
      */
     'sesion.terminada': PayloadSesion & { motivo: string | null }
+    /**
+     * Caídas repetidas (A2, pedido A6 de Iris): el servicio acumuló `sesiones` sesiones terminadas
+     * (sin contar las causas ignoradas: Disconnect de Argos, reinicio del router, cierre del cron)
+     * entre `desde` y `hasta`, dentro de `ventana_minutos`, con `umbral` como mínimo. A lo sumo uno
+     * por servicio y ventana. Lo reenvía A6 por webhook a Iris (ticket proactivo).
+     */
+    'servicio.caidas_repetidas': {
+        servicio_id: number
+        empresa_id: number
+        cliente_id: number
+        router_id: number
+        /** Sesión cuyo cierre cruzó el umbral */
+        sesion_id: number
+        sesiones: number
+        /** ISO: fin de la primera sesión contada / de la última (la que cruzó el umbral) */
+        desde: string
+        hasta: string
+        umbral: number
+        ventana_minutos: number
+        /** Sesiones contadas por `causa_fin` (`Lost-Carrier`, `User-Request`, …) */
+        causas: Record<string, number>
+    }
     /** Desconexión manual pedida desde el panel o la API; la ejecuta `coa` (Disconnect-Request). */
     'sesion.desconexion_solicitada': {
         sesion_id: number
@@ -981,6 +1003,7 @@ export const EVENTOS = [
     'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',
+    'servicio.caidas_repetidas',
     'sesion.desconexion_solicitada',
     'coa.fallido',
     'routeros.fallido',

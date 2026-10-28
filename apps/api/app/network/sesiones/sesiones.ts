@@ -1,5 +1,6 @@
 import type { Transaccion } from '#shared/domain_action'
 import type { RegistroAccounting } from '#network/sesiones/registro'
+import { detectarCaidasRepetidas } from '#network/sesiones/caidas'
 
 /**
  * Escritura de `network.sesiones` compartida por las acciones de accounting
@@ -260,9 +261,18 @@ export async function emitirIniciada(t: Transaccion, sesion: FilaSesion): Promis
     await t.emit('sesion.iniciada', payload(sesion))
 }
 
-/** `motivo` = `causa_fin` de la sesión (Acct-Terminate-Cause, `NAS-Reboot`, `Sesion-Reemplazada`, `sin_interim`). */
-export async function emitirTerminada(t: Transaccion, sesion: FilaSesion): Promise<void> {
+/**
+ * `motivo` = `causa_fin` de la sesión (Acct-Terminate-Cause, `NAS-Reboot`, `Sesion-Reemplazada`, `sin_interim`).
+ * Después revisa las caídas repetidas del servicio (`caidas.ts`). Devuelve los eventos emitidos.
+ */
+export async function emitirTerminada(
+    t: Transaccion,
+    sesion: FilaSesion,
+): Promise<Array<'sesion.terminada' | 'servicio.caidas_repetidas'>> {
     await t.emit('sesion.terminada', { ...payload(sesion), motivo: sesion.causa_fin })
+    return (await detectarCaidasRepetidas(t, sesion))
+        ? ['sesion.terminada', 'servicio.caidas_repetidas']
+        : ['sesion.terminada']
 }
 
 /** Quita el cierre `sin_interim` de una sesión (llegó un Interim-Update: seguía viva). */
@@ -362,7 +372,7 @@ export interface ResultadoAccounting {
     sesionId: number | null
     /** qué pasó con la fila */
     efecto: 'abierta' | 'actualizada' | 'cerrada' | 'creada_cerrada' | 'ignorada' | 'reabierta' | 'corregida'
-    eventos: Array<'sesion.iniciada' | 'sesion.terminada'>
+    eventos: Array<'sesion.iniciada' | 'sesion.terminada' | 'servicio.caidas_repetidas'>
     /** El paquete trajo un prefijo IPv6 que la sesión no tenía (modo `radius_pool`) */
     prefijoNuevo?: boolean
 }

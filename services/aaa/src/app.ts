@@ -5,7 +5,7 @@ import { ErrorSinFuentes, type ResolutorServicios } from './fuentes.ts'
 import { construirReply, type OpcionesPerfil } from './perfil.ts'
 import { leerAtributos } from './radius.ts'
 import { idDerivado, idEntrante, idNuevo } from './request_id.ts'
-import { esLapida } from './servicio.ts'
+import { esLapida, ESTADOS_RECHAZADOS } from './servicio.ts'
 import { MetricasAaa, scrapeAutorizado, type ResultadoAutorizacion } from './metricas.ts'
 import type { UltimoConocido } from './ultimo_conocido.ts'
 
@@ -15,7 +15,7 @@ import type { UltimoConocido } from './ultimo_conocido.ts'
  * Código HTTP → rcode de rlm_rest: 200 con JSON → updated; 204 → ok; 401 → reject; 404 → notfound;
  * 5xx → fail. `sites-enabled/default` rechaza en notfound/fail, así que:
  *   activo / limitado / suspendido → 200 con `control:Cleartext-Password` + atributos `reply:`
- *   retirado                       → 401
+ *   retirado, pendiente_instalacion → 401 (el log dice el motivo; `contratos/instalacion.md` §3)
  *   inexistente (o lápida)         → 404
  *   error de Redis y del respaldo  → modo degradado: 200/401/404 con el último perfil conocido
  *                                    (`ultimo_conocido.ts`); sin él, o con AAA_DEGRADADO=rechazar → 503
@@ -210,9 +210,22 @@ export function crearApp(deps: DependenciasApp): FastifyInstance {
             req.log.info({ usuario, nas, origen, resultado: 'inexistente', ms }, 'authorize')
             return reply.code(404).send()
         }
-        if (registro.estado === 'retirado') {
+        if (ESTADOS_RECHAZADOS.includes(registro.estado)) {
+            // Retirado, o pendiente de instalación: el CPE ya puede estar configurado, pero no navega
+            // hasta que `servicios.activar_instalacion` reescribe el registro como activo.
             req.log.info(
-                { usuario, nas, origen, servicio_id: registro.servicio_id, resultado: 'retirado', ms },
+                {
+                    usuario,
+                    nas,
+                    origen,
+                    servicio_id: registro.servicio_id,
+                    resultado: registro.estado,
+                    motivo:
+                        registro.estado === 'pendiente_instalacion'
+                            ? 'servicio pendiente de instalación'
+                            : 'servicio retirado',
+                    ms,
+                },
                 'authorize',
             )
             return reply.code(401).send()

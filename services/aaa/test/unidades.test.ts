@@ -107,6 +107,13 @@ describe('contrato del registro', () => {
         assert.throws(() => parsearRegistro({ ...base, pass_ppp: '' }), ErrorContrato)
     })
 
+    it('acepta pendiente_instalacion como registro completo (no lápida) y construirReply no le da perfil', () => {
+        const base = JSON.parse(JSON.stringify(servicio({ user_ppp: 'x' }))) as Record<string, unknown>
+        const r = parsearRegistro({ ...base, estado: 'pendiente_instalacion' }) as ServicioAaa
+        assert.equal(r.estado, 'pendiente_instalacion')
+        assert.throws(() => construirReply(r, PERFIL), /pendiente_instalacion no tiene perfil/)
+    })
+
     it('ipv6 null equivale a ninguno', () => {
         const base = JSON.parse(JSON.stringify(servicio({ user_ppp: 'x' }))) as Record<string, unknown>
         assert.deepEqual((parsearRegistro({ ...base, ipv6: null }) as ServicioAaa).ipv6, { modo: 'ninguno' })
@@ -114,7 +121,7 @@ describe('contrato del registro', () => {
 })
 
 describe('fixtures', () => {
-    it('cargan, cifran pass_ppp_claro y cubren los cuatro estados', async () => {
+    it('cargan, cifran pass_ppp_claro y cubren los cinco estados', async () => {
         const ruta = fileURLToPath(new URL('../fixtures/servicios.json', import.meta.url))
         const f = await FuenteFixtures.desdeArchivo(ruta, CLAVE)
         const estados = new Set<string>()
@@ -124,13 +131,20 @@ describe('fixtures', () => {
             'prueba-suspendido',
             'prueba-retirado',
             'prueba-burst',
+            'prueba-pendiente',
         ]) {
             const r = await f.obtener(u)
             assert.ok(r && !esLapida(r), u)
             assert.equal(descifrar(r.pass_ppp, CLAVE), u.replace('prueba-', 'clave-'))
             estados.add(r.estado)
         }
-        assert.deepEqual([...estados].sort(), ['activo', 'limitado', 'retirado', 'suspendido'])
+        assert.deepEqual([...estados].sort(), [
+            'activo',
+            'limitado',
+            'pendiente_instalacion',
+            'retirado',
+            'suspendido',
+        ])
         assert.equal(await f.obtener('prueba-inexistente'), null)
     })
 })

@@ -16,18 +16,19 @@ Consumo según `.claude/integration/contratos/eventos.md`: `XREADGROUP` + `XACK`
 
 Decisión del PM, probada en RouterOS 7.24.5 (`infra/mikrotik/README.md`). Código en `src/decision.ts`.
 
-| Cambio                                           | Paquete    | Atributos además de `User-Name` y `Acct-Session-Id` de la sesión                                       |
-| ------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `activo` o `limitado` → `suspendido`             | CoA        | `Mikrotik-Rate-Limit = 256k/256k`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in` |
-| `activo` → `limitado`                            | CoA        | `Mikrotik-Rate-Limit` = velocidad limitada del plan                                                    |
-| `limitado` → `activo`                            | CoA        | `Mikrotik-Rate-Limit` del plan (o `rate_limit_override` del router)                                    |
-| `suspendido` → `activo` o `limitado` (reactivar) | Disconnect | — (un CoA deja el IPv6 cortado; al reconectar `aaa` entrega el perfil normal)                          |
-| → `retirado`                                     | Disconnect | — (al reconectar `aaa` lo rechaza)                                                                     |
-| config con `ips`, `prefijo_v6` o `router`        | Disconnect | — (al reconectar trae la IP, el prefijo o el NAS nuevos)                                               |
-| config solo con `plan`                           | CoA        | `Mikrotik-Rate-Limit` del estado actual; nada si está suspendido (se aplica al reactivar)              |
-| config con `plan`, reuso > 1 en `simple`         | Disconnect | — (el perfil `plan-<id>` con la cola padre solo se asigna al conectar)                                 |
-| velocidad o plan con el router en `arbol_pcq`    | —          | nada: sin cola por sesión, el dispatcher de RouterOS mueve sus direcciones entre las listas del plan   |
-| `sesion.desconexion_solicitada` (panel o API)    | Disconnect | — a esa sesión, solo si sigue abierta (`network.sesiones.fin IS NULL`); `razon` = `manual: <motivo>`   |
+| Cambio                                                     | Paquete    | Atributos además de `User-Name` y `Acct-Session-Id` de la sesión                                                                                   |
+| ---------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `activo` o `limitado` → `suspendido`                       | CoA        | `Mikrotik-Rate-Limit = 256k/256k`, `Mikrotik-Address-List = suspendidos`, `Filter-Id = argos-corte.in`                                             |
+| `activo` → `limitado`                                      | CoA        | `Mikrotik-Rate-Limit` = velocidad limitada del plan                                                                                                |
+| `limitado` → `activo`                                      | CoA        | `Mikrotik-Rate-Limit` del plan (o `rate_limit_override` del router)                                                                                |
+| `suspendido` → `activo` o `limitado` (reactivar)           | Disconnect | — (un CoA deja el IPv6 cortado; al reconectar `aaa` entrega el perfil normal)                                                                      |
+| → `retirado`                                               | Disconnect | — (al reconectar `aaa` lo rechaza)                                                                                                                 |
+| `pendiente_instalacion` → `activo` (`motivo: instalacion`) | Disconnect | — (`aaa` rechazaba al pendiente: normalmente no hay sesión y no se envía nada; si quedó una del RADIUS anterior, reconecta con el perfil del plan) |
+| config con `ips`, `prefijo_v6` o `router`                  | Disconnect | — (al reconectar trae la IP, el prefijo o el NAS nuevos)                                                                                           |
+| config solo con `plan`                                     | CoA        | `Mikrotik-Rate-Limit` del estado actual; nada si está suspendido (se aplica al reactivar)                                                          |
+| config con `plan`, reuso > 1 en `simple`                   | Disconnect | — (el perfil `plan-<id>` con la cola padre solo se asigna al conectar)                                                                             |
+| velocidad o plan con el router en `arbol_pcq`              | —          | nada: sin cola por sesión, el dispatcher de RouterOS mueve sus direcciones entre las listas del plan                                               |
+| `sesion.desconexion_solicitada` (panel o API)              | Disconnect | — a esa sesión, solo si sigue abierta (`network.sesiones.fin IS NULL`); `razon` = `manual: <motivo>`                                               |
 
 - Suspender una sesión con IPv6 depende de `COA_SUSPENDER_CON_IPV6`: `coa` (por defecto) manda el CoA de la tabla; `disconnect` manda Disconnect-Request a las sesiones con /64 o /56 para que reconecten con el perfil `suspendido` (address-list IPv6 y redirect a `/corte`, ver `infra/mikrotik/README.md`, "Corte IPv6 hacia `/corte`"). Las sesiones solo IPv4 van siempre por CoA.
 - `coa` no decide estados: un `servicio.estado_cambiado` cuyo `a` ya no es el estado actual del servicio se ignora (llegó tarde; otro evento describe el estado vigente).

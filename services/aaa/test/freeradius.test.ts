@@ -220,6 +220,11 @@ describe('FreeRADIUS en Docker → aaa (radtest PAP/CHAP)', { skip: motivo ?? fa
             assert.deepEqual(r, { tipo: 'Access-Reject', atributos: {}, messageAuthenticator: true })
         })
 
+        it(`${metodo}: pendiente_instalacion → Reject sin atributos`, async () => {
+            const r = await radtest('prueba-pendiente', 'clave-pendiente', metodo)
+            assert.deepEqual(r, { tipo: 'Access-Reject', atributos: {}, messageAuthenticator: true })
+        })
+
         it(`${metodo}: inexistente → Reject`, async () => {
             const r = await radtest('prueba-inexistente', 'cualquiera', metodo)
             assert.deepEqual(r, { tipo: 'Access-Reject', atributos: {}, messageAuthenticator: true })

@@ -2,12 +2,12 @@
 
 Sesiones PPPoE a partir del accounting RADIUS. `services/aaa` recibe el accounting de FreeRADIUS y lo encola en BullMQ (`aaa-accounting`, contrato en `.claude/integration/contratos/accounting.md`); el proceso `node ace sesiones:worker` (`commands/sesiones_worker.ts`, `cola.ts`) llama a la acción que corresponde.
 
-| Paquete                            | Acción              | Permiso (nombre)      | Efecto en `network.sesiones`                                                                              | Evento                                                       |
-| ---------------------------------- | ------------------- | --------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `Start`                            | `IniciarSesion`     | `sesiones.iniciar`    | abre la fila; cierra otras abiertas más viejas del mismo `user_ppp` (`Sesion-Reemplazada`)                | `sesion.iniciada` (y `sesion.terminada` de las reemplazadas) |
-| `Interim-Update`                   | `ActualizarSesion`  | `sesiones.actualizar` | contadores (`GREATEST`), IPv4 y prefijos si llegan; sin Start previo abre la fila                         | `sesion.iniciada` solo si la abre                            |
-| `Stop`                             | `TerminarSesion`    | `sesiones.terminar`   | `fin`, contadores finales, `causa_fin` = `Acct-Terminate-Cause`; sin Start previo crea la fila ya cerrada | `sesion.terminada`                                           |
-| `Accounting-On` / `Accounting-Off` | `CerrarSesionesNas` | `sesiones.cerrar_nas` | cierra todas las abiertas de ese `nas_ip` (`NAS-Reboot`)                                                  | `sesion.terminada` por cada una                              |
+| Paquete                            | Acción              | Permiso (nombre)      | Efecto en `network.sesiones`                                                                              | Evento                                                                |
+| ---------------------------------- | ------------------- | --------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `Start`                            | `IniciarSesion`     | `sesiones.iniciar`    | abre la fila; cierra otras abiertas más viejas del mismo `user_ppp` (`Sesion-Reemplazada`)                | `sesion.iniciada` (y `sesion.terminada` de las reemplazadas)          |
+| `Interim-Update`                   | `ActualizarSesion`  | `sesiones.actualizar` | contadores (`GREATEST`), IPv4 y prefijos si llegan; sin Start previo abre la fila                         | `sesion.iniciada` solo si la abre                                     |
+| `Stop`                             | `TerminarSesion`    | `sesiones.terminar`   | `fin`, contadores finales, `causa_fin` = `Acct-Terminate-Cause`; sin Start previo crea la fila ya cerrada | `sesion.terminada` (y `servicio.caidas_repetidas` si cruza el umbral) |
+| `Accounting-On` / `Accounting-Off` | `CerrarSesionesNas` | `sesiones.cerrar_nas` | cierra todas las abiertas de ese `nas_ip` (`NAS-Reboot`)                                                  | `sesion.terminada` por cada una                                       |
 
 Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_ip`, `acct_session_id`, `ipv4`, `prefijos_v6` (`[enlace, delegado]` sin nulos).
 
@@ -30,6 +30,15 @@ Cron `cerrar_colgadas` en la cola `sesiones-cron`, dentro de `node ace sesiones:
 - **Salvaguarda**: solo se cierran sesiones de NAS que siguen mandando accounting (alguna sesión abierta suya se actualizó o empezó después del corte). Si `aaa`, Redis o el worker se caen, ningún NAS tiene accounting reciente y no se cierra nada; esos NAS salen en `nas_silenciosos` del log. Un NAS que se apagó cierra las suyas con su `Accounting-On`.
 - Si después llega un Interim-Update de una sesión cerrada por `sin_interim` (y el usuario no abrió otra), la sesión se reabre (`fin` y causa a null, auditado) y se emite `sesion.iniciada`; si llega su Stop, se corrigen `fin`, causa y contadores sin repetir `sesion.terminada`. Una sesión cerrada por el NAS sigue sin reabrirse con un Interim tardío.
 - Auditoría: `audit.acciones` solo cuando la corrida cerró algo (`auditarExito`): el cron corre cada 5 min y casi siempre no encuentra nada (excepción de la regla 9 pedida al líder en `a2.md`). Los errores se auditan siempre.
+
+## Caídas repetidas (pedido A6 de Iris)
+
+`caidas.ts` (`detectarCaidasRepetidas`), llamada desde `emitirTerminada` en la misma transacción que cierra la sesión: si el servicio acumula `CAIDAS_REPETIDAS_SESIONES` (5) sesiones terminadas en `CAIDAS_REPETIDAS_VENTANA_MIN` (120) minutos, emite **`servicio.caidas_repetidas`** `{ servicio_id, empresa_id, cliente_id, router_id, sesion_id, sesiones, desde, hasta, umbral, ventana_minutos, causas }` por outbox. A6 lo reenvía por webhook a Iris (ticket proactivo).
+
+- Ventana: `(hasta − ventana, hasta]`, con `hasta` = `fin` de la sesión que se cerró; `desde` = `fin` de la primera contada. `causas` cuenta por `causa_fin`.
+- No cuentan las causas de `CAIDAS_REPETIDAS_CAUSAS_IGNORADAS` (por defecto `Admin-Reset`: CoA/Disconnect de Argos por corte, reactivación o desconexión manual; `Admin-Reboot` y `NAS-Reboot`: el router entero; `NAS-Request`; `sin_interim`: cierre del cron sin dato del NAS). `Sesion-Reemplazada` sí cuenta (el CPE volvió a entrar sin Stop). Una causa ignorada ni siquiera consulta.
+- A lo sumo una vez por ventana: cada emisión deja fila en `network.caidas_repetidas` (solo inserción) y no se emite otra mientras la última del servicio tenga `hasta` dentro de la ventana; así las sesiones de un aviso nuevo son todas posteriores al anterior. `pg_advisory_xact_lock(4105, servicio_id)` ordena dos Stop concurrentes del mismo servicio. Un Stop repetido no hace nada (la sesión ya estaba cerrada).
+- `CAIDAS_REPETIDAS_SESIONES=0` lo apaga. Sin auditoría propia: queda en la fila de la acción que cerró la sesión (`sesiones.terminar`, `sesiones.iniciar` con reemplazadas) y su evento en el mismo outbox.
 
 ## Contacto de los routers (`Router.en_linea`)
 
@@ -108,7 +117,8 @@ Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
 
 ## Pruebas
 
-- `tests/network/sesiones_resumen.spec.ts`: `desde`/`hasta` de `GET /sesiones` y `GET /routers/:id/resumen-sesiones` (conteos, retirados fuera, 404/422/403, alcance).
+- `tests/network/sesiones_resumen.spec.ts`: `desde`/`hasta` de `GET /sesiones` y `GET /routers/:id/resumen-sesiones` (conteos, retirados y pendientes de instalación fuera, 404/422/403, alcance).
+- `tests/network/caidas_repetidas.spec.ts`: la quinta caída en 120 min emite el aviso con su fila y el payload completo; una vez por ventana y otra pasada la ventana; causas ignoradas y caídas espaciadas no cuentan.
 - `tests/network/sesiones_colgadas.spec.ts`: cierre con `sin_interim`, evento con `motivo`, auditoría, idempotencia, NAS silencioso, lotes, lock, reapertura por Interim, corrección por Stop y programación del job.
 - `tests/network/migracion_aaa.spec.ts`: marcar, volver a marcar, desmarcar, auditoría, 409/422/404/403, alcance, `Idempotency-Key` y `desde` por defecto del resumen.
 - `tests/network/eventos_red.spec.ts`: `GET /red/eventos` (filtros, fechas, cursor, credenciales como `***`, permiso y alcance).

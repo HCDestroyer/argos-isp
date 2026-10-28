@@ -110,6 +110,8 @@ test.group('network · resumen de sesiones por router (semana 3, tarea 2)', () =
         await sesion({ servicioId: soloAntes, routerId, nasIp, inicio: hace(50), fin: finSoloAntes })
         const nunca = await servicio(routerId)
         const retirado = await servicio(routerId, { estado: 'retirado' })
+        // Pendiente de instalación: aaa lo rechaza, no puede tener sesión; no cuenta (`contratos/instalacion.md`)
+        const pendiente = await servicio(routerId, { estado: 'pendiente_instalacion', instalado_en: null })
         // sesión de un user_ppp desconocido: cuenta en sesiones_activas, no en servicios
         await sesion({ servicioId: null, routerId, nasIp, inicio: hace(1) })
 
@@ -137,6 +139,10 @@ test.group('network · resumen de sesiones por router (semana 3, tarea 2)', () =
         assert.notInclude(
             sin.map((x) => x.servicio_id),
             retirado,
+        )
+        assert.notInclude(
+            sin.map((x) => x.servicio_id),
+            pendiente,
         )
         assert.deepEqual(Object.keys(sin[0]!).sort(), [
             'cliente_id',
