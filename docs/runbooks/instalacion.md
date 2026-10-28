@@ -51,7 +51,7 @@ ArgosIsp corre en un Raspberry Pi con las mismas imágenes (todas son amd64 y ar
 
 ## Después de instalar
 
-1. Entra a `https://panel.<dominio>` con el correo y la clave mostrados, **cambia la clave** y borra `credenciales-iniciales.txt`.
+1. Entra a `https://panel.<dominio>` con el correo y la clave mostrados, **cambia la clave** y borra `credenciales-iniciales.txt`. Si pierdes la clave de un administrador: `sudo argosisp admin-clave <correo>` (abajo, "Comandos").
 2. **Copia `/opt/argosisp/.env` fuera del servidor** (gestor de contraseñas o bóveda). `AAA_PPP_KEY` cifra las contraseñas PPPoE y los secrets RADIUS: sin ella un respaldo no sirve.
 3. Configuración → Notificaciones: SMTP y bot de Telegram (no van en el `.env`).
 4. Respaldos: `BACKUP_HOST_DIR` (por defecto `/opt/argosisp/respaldos`) debería ser un disco externo o NFS; cifrado con age y copia remota con rclone en `infra/README.md`, "Respaldos". Después de editar el `.env`: `sudo argosisp levantar`.
@@ -100,6 +100,7 @@ Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para 
 | `sudo argosisp estado` | Versión instalada, última publicada, parches automáticos y estado de cada servicio |
 | `sudo argosisp levantar` | Levanta la versión instalada y espera a que esté sana (después de editar el `.env`) |
 | `sudo argosisp logs [servicio]` | Registros en vivo |
+| `sudo argosisp admin-clave <correo> [--stdin]` | Clave nueva para ese usuario del panel (si no existe, lo crea con el rol `admin`) y la muestra **una sola vez**; con `--stdin` la toma de la entrada estándar (`echo 'clave' \| sudo argosisp admin-clave …`). Cierra sus sesiones y queda en la auditoría (actor sistema, canal consola, la clave como `***`) |
 | `sudo argosisp respaldar` | Respaldo ahora (el mismo del diario) |
 | `sudo argosisp compose …` | `docker compose` del proyecto con la versión instalada (`compose ps`, `compose exec api …`) |
 | `sudo argosisp actualizar` / `revertir` / `auto …` | `docs/runbooks/actualizacion.md` |

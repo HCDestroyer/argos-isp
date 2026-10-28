@@ -15,6 +15,10 @@
 #   argosisp auto activar|desactivar|estado
 #                                         parches automáticos (timer de systemd, apagado por defecto)
 #   argosisp radius-clientes              regenera los clientes de FreeRADIUS desde network.routers
+#   argosisp admin-clave <correo> [--stdin]
+#                                         clave nueva para ese usuario (si no existe, lo crea con el
+#                                         rol admin) y la muestra una sola vez; --stdin la lee de la
+#                                         entrada estándar. Pasa por la acción usuarios.editar/crear
 #   argosisp nodo-portal crear <nombre> | listar | revocar <nombre>
 #                                         nodos portal remotos (servidor principal): el token de
 #                                         `crear` se muestra una sola vez
@@ -708,6 +712,32 @@ cmd_radius_clientes() {
     dc restart freeradius
 }
 
+# Clave nueva para un usuario del panel (`node ace usuarios:clave`, acciones usuarios.editar o
+# usuarios.crear con el rol admin; auditado como sistema/consola y la clave como ***). Nunca escribe
+# en la base directamente. Con la API arriba, `exec`; si no, un contenedor de una vez (`run --rm`).
+cmd_admin_clave() {
+    requiere_instalacion
+    requiere_principal
+    local correo="" stdin=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --stdin) stdin=true; shift ;;
+            -*) morir "opción desconocida: $1 (uso: argosisp admin-clave <correo> [--stdin])" ;;
+            *) [ -z "$correo" ] || morir "uso: argosisp admin-clave <correo> [--stdin]"; correo="$1"; shift ;;
+        esac
+    done
+    [[ "$correo" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || morir "uso: argosisp admin-clave <correo> [--stdin]"
+    local -a ace=(node ace.js usuarios:clave "$correo")
+    $stdin && ace+=(--stdin)
+    local -a modo=(run --rm -T api)
+    if [ -n "$(dc ps -q --status running api 2> /dev/null)" ]; then modo=(exec -T api); fi
+    if $stdin; then
+        DC_CON_STDIN=1 dc "${modo[@]}" "${ace[@]}"
+    else
+        dc "${modo[@]}" "${ace[@]}"
+    fi
+}
+
 # api_interna <método> <ruta bajo /api/v1/internal> [cuerpo JSON]: llamada a la API desde su propio
 # contenedor con el token interno (INTERNAL_TOKEN, nunca sale del servidor). Imprime el cuerpo;
 # sale con 4 si la ruta no existe en esta versión de la API.
@@ -778,6 +808,7 @@ principal() {
         levantar) cmd_levantar ;;
         auto) cmd_auto "$@" ;;
         radius-clientes) cmd_radius_clientes ;;
+        admin-clave) cmd_admin_clave "$@" ;;
         nodo-portal) cmd_nodo_portal "$@" ;;
         logs) requiere_instalacion; dc logs -f --tail 100 "$@" ;;
         compose) requiere_instalacion; DC_CON_STDIN=1 dc "$@" ;;

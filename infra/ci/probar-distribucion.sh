@@ -213,6 +213,22 @@ cli estado > /dev/null
 [ "$(sudo grep -E '^ARGOSISP_API_PORTAL=' "$DIR/.env" | cut -d= -f2)" = si ] || fallar "instalar.sh no dejó ARGOSISP_API_PORTAL=si"
 probar_api_portal
 
+paso "argosisp admin-clave: crea un admin nuevo, cambia su clave por --stdin y entra con ella"
+# Otro correo: esperar_version entra con SEED_ADMIN_PASSWORD y esa clave no debe cambiar
+OTRO=soporte-ci@argosisp.test
+login_ok() {
+    api -X POST "https://api.$DOMINIO/api/v1/auth/login" -H 'content-type: application/json' \
+        -d "{\"email\":\"$1\",\"password\":\"$2\"}" | jq -e '.token' > /dev/null
+}
+clave="$(cli admin-clave "$OTRO" | tail -n 1)"
+[[ "$clave" =~ ^[A-Za-z0-9]{20}$ ]] || fallar "admin-clave no imprimió una clave ('$clave')"
+login_ok "$OTRO" "$clave" || fallar "no se pudo entrar con la clave de admin-clave"
+echo 'Otra-Clave-De-CI-1' | sudo env ARGOSISP_DIR="$DIR" /usr/local/bin/argosisp admin-clave "$OTRO" --stdin > /dev/null
+login_ok "$OTRO" 'Otra-Clave-De-CI-1' || fallar "admin-clave --stdin no cambió la clave"
+if login_ok "$OTRO" "$clave"; then fallar "la clave anterior sigue sirviendo"; fi
+[ "$(psql_ci -c "SELECT count(*) FROM audit.acciones WHERE accion IN ('usuarios.crear','usuarios.editar') AND canal = 'consola' AND actor_tipo = 'sistema' AND entrada->>'password' = '***'")" -ge 2 ] ||
+    fallar "admin-clave no dejó la auditoría (sistema, consola, clave ***)"
+
 psql_ci -c 'CREATE TABLE public.marca_ci (n int); INSERT INTO public.marca_ci VALUES (1)' > /dev/null
 cli compose exec -T api sh -c 'echo uno > /comprobantes/marca-ci-1.txt'
 
