@@ -4,7 +4,14 @@ import { contextoSistema } from '#shared/contexto'
 import ProgramarRecordatorios from '#notify/actions/programar_recordatorios'
 import { ConsumidorNotify } from '#notify/consumidor'
 import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
-import { CanalFalso, ColaFalsa, crearCliente, crearFactura, crearServicio, eventoOutbox } from '#tests/notify/ayudas_notify'
+import {
+    CanalFalso,
+    ColaFalsa,
+    crearCliente,
+    crearFactura,
+    crearServicio,
+    eventoOutbox,
+} from '#tests/notify/ayudas_notify'
 
 /**
  * Servicio `pendiente_instalacion` (`contratos/instalacion.md` §3, pedido de A3): ni recordatorios
@@ -20,7 +27,10 @@ async function pendiente(servicioId: number) {
 }
 
 async function activar(servicioId: number) {
-    await db.from('core.servicios').where('id', servicioId).update({ estado: 'activo', instalado_en: new Date() })
+    await db
+        .from('core.servicios')
+        .where('id', servicioId)
+        .update({ estado: 'activo', instalado_en: new Date() })
 }
 
 async function cargoUnico(vence: string) {
@@ -79,7 +89,8 @@ test.group('notify · servicio pendiente de instalación', (group) => {
         }
         assert.lengthOf(await consumir('factura.vencida', payload), 0)
         // sin servicio_id en el payload se toma el de la factura
-        const { servicio_id: _, ...sinServicio } = payload
+        const sinServicio: Record<string, unknown> = { ...payload }
+        delete sinServicio.servicio_id
         assert.lengthOf(await consumir('factura.vencida', sinServicio), 0)
 
         const emitida = await consumir('factura.emitida', payload)

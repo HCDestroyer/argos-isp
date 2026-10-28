@@ -143,6 +143,8 @@ Hay hasta tres recordatorios, configurables en `notify.recordatorios`. Cada uno 
 
 Variables extra: `recordatorio.orden`, `recordatorio.dias` y `factura.vence_relativo` ("vence en 3 días", "vence hoy", "venció hace 4 días").
 
+**Servicio `pendiente_instalacion`** (`contratos/instalacion.md` §3, `instalacion.ts`): sin recordatorios ni aviso de `factura.vencida` para sus facturas (el cargo único anticipado de la instalación sí avisa al emitirse), y sin «servicio reactivado» al activar la instalación (`de: pendiente_instalacion`, `a: activo`).
+
 ## Alertas internas al equipo (tarea 7)
 
 Avisos por Telegram al chat del equipo (`TELEGRAM_CHAT_EQUIPO`), no a clientes. Cada problema es un **incidente** en `notify.incidentes` identificado por `clave`; mientras está abierto, repetir el evento solo suma `eventos`. Resultado: una alerta por incidente y, cuando aplica, un "RESUELTO" al cerrarse.

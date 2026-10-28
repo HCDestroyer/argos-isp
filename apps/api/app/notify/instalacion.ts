@@ -28,7 +28,11 @@ async function servicioDelAviso(
     if (Number.isInteger(directo) && directo > 0) return directo
     const facturaId = Number(payload.factura_id)
     if (!Number.isInteger(facturaId) || facturaId <= 0) return null
-    const fila = (await trx.from('billing.facturas').where('id', facturaId).select('servicio_id').first()) as {
+    const fila = (await trx
+        .from('billing.facturas')
+        .where('id', facturaId)
+        .select('servicio_id')
+        .first()) as {
         servicio_id: number | null
     } | null
     return fila?.servicio_id ? Number(fila.servicio_id) : null
