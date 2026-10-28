@@ -227,7 +227,7 @@ El detalle de cada payload vive en `.claude/integration/contratos/eventos.md`.
 
 ## Estados del servicio
 
-`activo` → `limitado` → `suspendido` → `retirado`, más `promesa_activa` como bandera, no como estado. La función `evaluarEstadoServicio(servicio_id)` en `billing/actions` es la **única** que decide el estado a partir de facturas vencidas, reglas de la plantilla y promesas. La llaman el cron de corte, `registrarPago`, `crearPromesaPago` e `incumplirPromesa`.
+`pendiente_instalacion` → `activo` → `limitado` → `suspendido` → `retirado`, más `promesa_activa` como bandera, no como estado. `pendiente_instalacion` (servicio vendido desde Iris, aún sin instalar) no navega, no factura y no se corta; solo sale con `servicios.activar_instalacion` o `servicios.retirar` (`contratos/instalacion.md`). La función `evaluarEstadoServicio(servicio_id)` en `billing/actions` es la **única** que decide el estado a partir de facturas vencidas, reglas de la plantilla y promesas. La llaman el cron de corte, `registrarPago`, `crearPromesaPago` e `incumplirPromesa`.
 
 ## Convenciones generales
 
