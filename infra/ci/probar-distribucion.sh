@@ -192,10 +192,15 @@ cmp -s "$FUENTE/argosisp-$V1.tar.gz" "$TMP/otra/argosisp-$V1.tar.gz" || fallar "
 echo "$V1" > "$FUENTE/estable"
 
 # ---------------------------------------------------------------------------
-paso "instalar.sh (un comando, sin preguntas)"
-sudo env ARGOSISP_FUENTE="$FUENTE" ARGOSISP_SIN_DESCARGA=1 ARGOSISP_TLS=interno \
+paso "instalar.sh (un comando, sin preguntas, por pipe como curl … | sudo bash -s --)"
+# Por pipe, igual que en un servidor: bash lee el script de stdin y un hijo que lea stdin se traga
+# el resto (1.1.0 terminaba en "arriba y sano" sin clave ni credenciales-iniciales.txt).
+# shellcheck disable=SC2002
+cat "$FUENTE/instalar.sh" | sudo env ARGOSISP_FUENTE="$FUENTE" ARGOSISP_SIN_DESCARGA=1 ARGOSISP_TLS=interno \
     ARGOSISP_ESPERA_S="${ARGOSISP_ESPERA_S:-420}" ARGOSISP_REGISTRO="$REG" \
-    bash "$FUENTE/instalar.sh" --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR" --si
+    bash -s -- --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR" --si | tee "$TMP/instalar.log"
+grep -q "ArgosIsp $V1 instalado" "$TMP/instalar.log" || fallar "instalar.sh por pipe no llegó al resumen final"
+sudo test -s "$DIR/credenciales-iniciales.txt" || fallar "instalar.sh por pipe no escribió credenciales-iniciales.txt"
 [ "$(sudo stat -c %a "$DIR/.env")" = 600 ] || fallar ".env no tiene permisos 600"
 [ "$(sudo stat -c %U "$DIR/.env")" = root ] || fallar ".env no es de root"
 [ "$(readlink "$DIR/actual")" = "versiones/$V1" ] || fallar "actual no apunta a $V1"
@@ -207,6 +212,22 @@ codigo="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: cualquiera.example' h
 cli estado > /dev/null
 [ "$(sudo grep -E '^ARGOSISP_API_PORTAL=' "$DIR/.env" | cut -d= -f2)" = si ] || fallar "instalar.sh no dejó ARGOSISP_API_PORTAL=si"
 probar_api_portal
+
+paso "argosisp admin-clave: crea un admin nuevo, cambia su clave por --stdin y entra con ella"
+# Otro correo: esperar_version entra con SEED_ADMIN_PASSWORD y esa clave no debe cambiar
+OTRO=soporte-ci@argosisp.test
+login_ok() {
+    api -X POST "https://api.$DOMINIO/api/v1/auth/login" -H 'content-type: application/json' \
+        -d "{\"email\":\"$1\",\"password\":\"$2\"}" | jq -e '.token' > /dev/null
+}
+clave="$(cli admin-clave "$OTRO" | tail -n 1)"
+[[ "$clave" =~ ^[A-Za-z0-9]{20}$ ]] || fallar "admin-clave no imprimió una clave ('$clave')"
+login_ok "$OTRO" "$clave" || fallar "no se pudo entrar con la clave de admin-clave"
+echo 'Otra-Clave-De-CI-1' | sudo env ARGOSISP_DIR="$DIR" /usr/local/bin/argosisp admin-clave "$OTRO" --stdin > /dev/null
+login_ok "$OTRO" 'Otra-Clave-De-CI-1' || fallar "admin-clave --stdin no cambió la clave"
+if login_ok "$OTRO" "$clave"; then fallar "la clave anterior sigue sirviendo"; fi
+[ "$(psql_ci -c "SELECT count(*) FROM audit.acciones WHERE accion IN ('usuarios.crear','usuarios.editar') AND canal = 'consola' AND actor_tipo = 'sistema' AND entrada->>'password' = '***'")" -ge 2 ] ||
+    fallar "admin-clave no dejó la auditoría (sistema, consola, clave ***)"
 
 psql_ci -c 'CREATE TABLE public.marca_ci (n int); INSERT INTO public.marca_ci VALUES (1)' > /dev/null
 cli compose exec -T api sh -c 'echo uno > /comprobantes/marca-ci-1.txt'
@@ -283,5 +304,22 @@ cli_nodo estado > /dev/null
 # Nunca más nuevo que el central
 if cli_nodo actualizar --version "$V2" --si; then fallar "el nodo se actualizó a $V2 con el central en $V1"; fi
 [ "$(cli_nodo version)" = "$V1" ] || fallar "el nodo dejó de estar en $V1"
+
+# ---------------------------------------------------------------------------
+paso "argosisp desinstalar --borrar-datos --si: no queda nada de los dos proyectos"
+cli_nodo desinstalar --borrar-datos --si
+# El enlace /usr/local/bin/argosisp era del nodo (se instaló al final) y ya no está: el script propio
+sudo env ARGOSISP_DIR="$DIR" "$DIR/actual/argosisp" desinstalar --borrar-datos --si
+for p in argosisp argosisp-portal; do
+    [ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan contenedores de $p"
+    [ -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan volúmenes de $p"
+    [ -z "$(docker network ls -q --filter "label=com.docker.compose.project=$p")" ] || fallar "quedan redes de $p"
+done
+for puerto in 80 443 8080 8443; do
+    if ss -Hltn "sport = :$puerto" | grep -q .; then fallar "el puerto TCP $puerto sigue ocupado"; fi
+done
+if sudo test -e "$DIR" || sudo test -e "$DIR_NODO"; then fallar "quedó la carpeta de la instalación"; fi
+[ ! -e /usr/local/bin/argosisp ] || fallar "quedó /usr/local/bin/argosisp"
+[ ! -e /etc/systemd/system/argosisp-actualizar.timer ] || fallar "quedó el timer de systemd"
 
 paso "listo: instalar → actualizar → reversión automática → revertir → nodo portal"
