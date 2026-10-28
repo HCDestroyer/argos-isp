@@ -72,6 +72,13 @@ const depositoAbierto = ref(false)
 const ultimoDeposito = shallowRef<Deposito | null>(null)
 
 const aperturaAbierta = ref(false)
+
+/** Cómo funciona la caja, en el estado cerrado. */
+const PASOS_CAJA = [
+    { titulo: 'Abrir caja', detalle: 'Con el fondo inicial para dar vuelto.' },
+    { titulo: 'Cobrar', detalle: 'El efectivo de cada cobro entra a esta caja.' },
+    { titulo: 'Cerrar caja', detalle: 'Cuentas el efectivo y se calcula la diferencia.' },
+]
 const altaAbierta = ref(false)
 
 /** Con varias empresas, cada tarjeta dice de cuál es la caja. */
@@ -299,6 +306,16 @@ onMounted(cargar)
                 @click="altaAbierta = true"
             />
             <UButton
+                v-if="caja && caja.turno_abierto_id === null && puede('cajas.abrir')"
+                icon="i-lucide-lock-open"
+                label="Abrir caja"
+                class="glow-brand"
+                :ui="{ label: 'hidden sm:inline' }"
+                aria-label="Abrir caja"
+                data-prueba="abrir-caja-barra"
+                @click="aperturaAbierta = true"
+            />
+            <UButton
                 v-if="puede('pagos.registrar')"
                 to="/cobro"
                 icon="i-lucide-hand-coins"
@@ -410,11 +427,15 @@ onMounted(cargar)
                     <div class="flex flex-col gap-4">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="flex flex-col">
-                                <h2 class="text-lg font-semibold text-highlighted">
-                                    Turno #{{ turnoAbierto.id }} abierto
+                                <h2 class="flex items-center gap-2 text-lg font-semibold text-highlighted">
+                                    <UIcon
+                                        name="i-lucide-lock-open"
+                                        class="size-5 text-success"
+                                    />
+                                    {{ caja.nombre }} abierta
                                 </h2>
                                 <p class="text-sm text-muted">
-                                    Desde {{ formatearFechaHora(turnoAbierto.abierto_en) }}
+                                    Turno #{{ turnoAbierto.id }} abierto · desde {{ formatearFechaHora(turnoAbierto.abierto_en) }}
                                 </p>
                             </div>
                             <div class="flex flex-wrap gap-2">
@@ -429,7 +450,7 @@ onMounted(cargar)
                                 />
                                 <UButton
                                     v-if="puede('cajas.cerrar')"
-                                    label="Cerrar turno"
+                                    label="Cerrar caja"
                                     class="glow-brand"
                                     icon="i-lucide-lock"
                                     @click="cierreAbierto = true"
@@ -539,21 +560,50 @@ onMounted(cargar)
                 <UPageCard
                     v-else
                     variant="subtle"
+                    data-prueba="caja-cerrada"
                 >
                     <UEmpty
                         icon="i-lucide-lock"
                         :title="`${caja.nombre} está cerrada`"
-                        description="Abre un turno con el fondo inicial para empezar a cobrar en efectivo."
+                        :description="puede('cajas.abrir')
+                            ? 'Para cobrar en efectivo, primero abre la caja con el dinero con el que empiezas (el fondo para dar vuelto).'
+                            : 'Para cobrar en efectivo la caja debe estar abierta. Pide a un supervisor que la abra.'"
                         variant="naked"
+                        size="lg"
                     >
                         <template #actions>
                             <UButton
                                 v-if="puede('cajas.abrir')"
-                                label="Abrir turno"
+                                label="Abrir caja"
+                                size="lg"
                                 class="glow-brand"
                                 icon="i-lucide-lock-open"
+                                data-prueba="abrir-caja"
                                 @click="aperturaAbierta = true"
                             />
+                        </template>
+                        <template #footer>
+                            <ol
+                                class="mx-auto grid max-w-xl gap-3 text-left text-sm sm:grid-cols-3"
+                                aria-label="Cómo funciona la caja"
+                            >
+                                <li
+                                    v-for="(pasoCaja, indice) in PASOS_CAJA"
+                                    :key="pasoCaja.titulo"
+                                    class="flex gap-2"
+                                >
+                                    <UBadge
+                                        :label="String(indice + 1)"
+                                        color="neutral"
+                                        variant="soft"
+                                        class="h-6 shrink-0 justify-center rounded-full"
+                                    />
+                                    <span class="flex flex-col">
+                                        <span class="font-medium text-highlighted">{{ pasoCaja.titulo }}</span>
+                                        <span class="text-muted">{{ pasoCaja.detalle }}</span>
+                                    </span>
+                                </li>
+                            </ol>
                         </template>
                     </UEmpty>
                 </UPageCard>

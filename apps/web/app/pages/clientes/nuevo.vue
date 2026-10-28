@@ -12,7 +12,7 @@ async function alGuardar(cliente: Cliente) {
         description: cliente.nombre,
         color: 'success',
         icon: 'i-lucide-circle-check',
-        actions: puede('servicios.crear')
+        actions: puede('servicios.crear') && puede('clientes.ver')
             ? [{ label: 'Agregar servicio', to: `/clientes/${cliente.id}?tab=servicios&nuevo_servicio=1`, color: 'neutral', variant: 'outline' }]
             : undefined,
     })
