@@ -13,6 +13,9 @@
 #   --correo C        correo del administrador (usuario inicial del panel y avisos de Let's Encrypt)
 #   --version X.Y.Z   versión a instalar (por defecto, la última del canal estable)
 #   --dir RUTA        carpeta de la instalación (/opt/argosisp)
+#   --wireguard si|no los MikroTik se conectan por un túnel WireGuard (script de conexión del panel):
+#                     se abre solo el UDP de WireGuard y RADIUS queda en la IP del túnel. Sin la
+#                     opción, pregunta (con --si: no). También ARGOSISP_WIREGUARD=1|0
 #   --si              no preguntar nada (requiere --dominio y --correo)
 #
 # Nodo portal remoto (solo el portal y su proxy; habla únicamente con la API central por HTTPS):
@@ -25,7 +28,9 @@
 # (certificados de la CA interna de Caddy en lugar de Let's Encrypt), ARGOSISP_REPO, ARGOSISP_REGISTRO,
 # ARGOSISP_API_PORTAL=si|no (API del portal; por defecto si, no con menos de 3 GB de RAM),
 # ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), ARGOSISP_PROXIES_CONFIABLES (IP o
-# CIDR del proxy de delante, p. ej. Nginx Proxy Manager: docs/runbooks/detras-de-proxy.md), y para un nodo portal de prueba
+# CIDR del proxy de delante, p. ej. Nginx Proxy Manager: docs/runbooks/detras-de-proxy.md),
+# ARGOSISP_WG_RED, ARGOSISP_WG_PUERTO y ARGOSISP_WG_ENDPOINT (túnel WireGuard: red, puerto UDP y
+# nombre o IP pública para los routers; infra/wireguard/README.md), y para un nodo portal de prueba
 # ARGOSISP_NODO_CENTRAL_DIRECCION (host:puerto al que se conecta) y ARGOSISP_NODO_CENTRAL_TLS=inseguro.
 set -Eeuo pipefail
 
@@ -51,6 +56,10 @@ RAM_MINIMA_MB=1900
 HTTP_PORT="${ARGOSISP_HTTP_PORT:-80}"
 HTTPS_PORT="${ARGOSISP_HTTPS_PORT:-443}"
 PROXIES="${ARGOSISP_PROXIES_CONFIABLES:-}"
+WIREGUARD="${ARGOSISP_WIREGUARD:-}"
+WG_RED="${ARGOSISP_WG_RED:-10.255.0.0/16}"
+WG_PUERTO="${ARGOSISP_WG_PUERTO:-51820}"
+WG_ENDPOINT="${ARGOSISP_WG_ENDPOINT:-}"
 DISCO_MINIMO_GB=10
 DOCKER_MINIMO=25
 COMPOSE_MINIMO=2.24
@@ -69,6 +78,7 @@ while [ $# -gt 0 ]; do
         --rol) ROL="${2:-}"; shift 2 ;;
         --central) CENTRAL="${2:-}"; shift 2 ;;
         --token) TOKEN="${2:-}"; shift 2 ;;
+        --wireguard) WIREGUARD="${2:-}"; shift 2 ;;
         -h | --help) sed -n '2,/^set -E/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) morir "opción desconocida: $1 (--help)" ;;
     esac
@@ -242,6 +252,37 @@ DOMINIO_PANEL="${ARGOSISP_DOMINIO_PANEL:-panel.$DOMINIO}"
 DOMINIO_API="${ARGOSISP_DOMINIO_API:-api.$DOMINIO}"
 DOMINIO_PORTAL="${ARGOSISP_DOMINIO_PORTAL:-portal.$DOMINIO}"
 
+# WireGuard de los routers (solo el servidor principal)
+case "${WIREGUARD,,}" in
+    1 | si | sí | s | yes) WIREGUARD=1 ;;
+    0 | no | n) WIREGUARD=0 ;;
+    '')
+        if [ "$ROL" = portal ] || $SI || ! { : < /dev/tty; } 2> /dev/null; then
+            WIREGUARD=0
+        else
+            r="$(preguntar '¿Los MikroTik se conectan por un túnel WireGuard? Recomendado si no están en la misma red que este servidor [S/n]')"
+            case "${r,,}" in n | no) WIREGUARD=0 ;; *) WIREGUARD=1 ;; esac
+        fi
+        ;;
+    *) morir "--wireguard debe ser si o no (es '$WIREGUARD')" ;;
+esac
+[ "$ROL" = completo ] || WIREGUARD=0
+RADIUS_IP=0.0.0.0
+if [ "$WIREGUARD" = 1 ]; then
+    if ! [[ "$WG_RED" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\.0/([0-9]{1,2})$ ]] ||
+        [ "${BASH_REMATCH[2]}" -lt 8 ] || [ "${BASH_REMATCH[2]}" -gt 30 ]; then
+        morir "ARGOSISP_WG_RED inválida: '$WG_RED' (una red IPv4 que termina en .0, de /8 a /30)"
+    fi
+    RADIUS_IP="${BASH_REMATCH[1]}.1"
+    if ! [[ "$WG_PUERTO" =~ ^[0-9]{1,5}$ ]] || [ "$WG_PUERTO" -lt 1 ] || [ "$WG_PUERTO" -gt 65535 ]; then
+        morir "ARGOSISP_WG_PUERTO inválido: '$WG_PUERTO'"
+    fi
+    [ -z "$WG_ENDPOINT" ] || [[ "$WG_ENDPOINT" =~ ^[A-Za-z0-9.-]{1,253}$ ]] || morir "ARGOSISP_WG_ENDPOINT inválido: '$WG_ENDPOINT'"
+    if ss -Hlun "sport = :$WG_PUERTO" | grep -q .; then
+        morir "el puerto UDP $WG_PUERTO ya está en uso (WireGuard de los routers): usa otro con ARGOSISP_WG_PUERTO"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # 4. Paquete de la versión
 # ---------------------------------------------------------------------------
@@ -384,8 +425,18 @@ BACKUP_RETENCION_DIAS=14
 BACKUP_AGE_RECIPIENTS=
 BACKUP_RCLONE_DESTINO=
 
-# RADIUS: IP del servidor por la que llegan los MikroTik (LAN o túnel WireGuard). 0.0.0.0 = todas
-RADIUS_BIND_IP=0.0.0.0
+# WireGuard de los routers (infra/wireguard/README.md): 1 = los MikroTik se conectan por el túnel
+# con el script de conexión del panel. Red del túnel (el servidor es la .1), puerto UDP público y
+# nombre o IP pública que reciben los routers (vacío = DOMINIO_API; si ese dominio pasa por un proxy
+# HTTP como Cloudflare, pon la IP pública del servidor). Después de cambiarlo: argosisp levantar
+ARGOSISP_WIREGUARD=$WIREGUARD
+ARGOSISP_WG_RED=$WG_RED
+ARGOSISP_WG_PUERTO=$WG_PUERTO
+ARGOSISP_WG_ENDPOINT=$WG_ENDPOINT
+
+# RADIUS: IP del servidor por la que llegan los MikroTik. Con WireGuard, la .1 del túnel (no se
+# publica hacia internet); sin él, la IP de la LAN de los routers (0.0.0.0 = todas)
+RADIUS_BIND_IP=$RADIUS_IP
 # Vacía: coa corre en red bridge y el NAT del servidor pone la IP de origen de los CoA (la que el
 # router tiene en /radius). Con la IP del servidor aquí el bind falla dentro del contenedor
 COA_ORIGEN_IP=
@@ -417,15 +468,34 @@ if command -v systemctl > /dev/null && [ -d /run/systemd/system ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Imágenes y arranque
+# 7. WireGuard en el host
+# ---------------------------------------------------------------------------
+if [ "$WIREGUARD" = 1 ]; then
+    # RADIUS se publica en la .1 del túnel: al reiniciar el servidor, Docker puede levantar
+    # FreeRADIUS antes de que exista wg-argos. ip_nonlocal_bind deja publicar el puerto igual.
+    printf '# ArgosIsp (instalar.sh): RADIUS en la IP del túnel WireGuard antes de que exista la interfaz\nnet.ipv4.ip_nonlocal_bind = 1\n' \
+        > /etc/sysctl.d/90-argosisp-wireguard.conf
+    sysctl -q -p /etc/sysctl.d/90-argosisp-wireguard.conf < /dev/null || aviso "no pude aplicar net.ipv4.ip_nonlocal_bind (sysctl)"
+    if ! modprobe wireguard < /dev/null 2> /dev/null && [ ! -c /dev/net/tun ]; then
+        morir "este kernel no tiene WireGuard ni /dev/net/tun: no se puede crear el túnel (instala con --wireguard no)"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 8. Imágenes y arranque
 # ---------------------------------------------------------------------------
 export ARGOSISP_DIR="$DIR"
-# Igual que `argosisp` (entorno_compose): perfil y destino de la API del portal
+# Igual que `argosisp` (entorno_compose): perfiles y destino de la API del portal
+perfiles=()
 if [ "$API_PORTAL" = si ]; then
-    export COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal
+    perfiles+=(api-portal)
+    export ARGOSISP_API_PORTAL_DESTINO=api-portal
 else
-    export COMPOSE_PROFILES='' ARGOSISP_API_PORTAL_DESTINO=api
+    export ARGOSISP_API_PORTAL_DESTINO=api
 fi
+[ "$WIREGUARD" = 1 ] && perfiles+=(wireguard)
+COMPOSE_PROFILES="$(IFS=,; printf '%s' "${perfiles[*]:-}")"
+export COMPOSE_PROFILES
 if [ "$ROL" = portal ]; then
     compose=(docker compose -p argosisp-portal --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.nodo-portal.yml")
 else
@@ -473,6 +543,15 @@ else
     nota="  Los tres dominios deben apuntar a este servidor para que Let's Encrypt emita los certificados."
 fi
 
+if [ "$WIREGUARD" = 1 ]; then
+    nota_wg="  WireGuard de los routers activo: abre UDP $WG_PUERTO en el firewall del proveedor (es el único
+  puerto nuevo). RADIUS escucha en $RADIUS_IP, dentro del túnel. Para conectar un MikroTik: panel →
+  Routers → el router → «Script de conexión» (infra/mikrotik/README.md, «Conectar un router»)."
+else
+    nota_wg="  Sin WireGuard: los MikroTik llegan por la LAN; pon en RADIUS_BIND_IP la IP de este servidor en
+  esa LAN (ahora 0.0.0.0, todas) y argosisp levantar. Para activar el túnel: ARGOSISP_WIREGUARD=1."
+fi
+
 cat > "$DIR/credenciales-iniciales.txt" << EOF
 Panel:    https://$DOMINIO_PANEL$sufijo
 Usuario:  $CORREO
@@ -491,6 +570,7 @@ ArgosIsp $VERSION instalado.
   Clave:    $admin_password   (también en $DIR/credenciales-iniciales.txt; cámbiala al entrar y borra el archivo)
 
 $nota
+$nota_wg
   Guarda una copia de $DIR/.env fuera del servidor: AAA_PPP_KEY descifra las contraseñas PPPoE.
 
   argosisp estado        versión y salud

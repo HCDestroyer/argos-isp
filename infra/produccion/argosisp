@@ -3,7 +3,8 @@
 # Lo instala instalar.sh en /usr/local/bin/argosisp (enlace a /opt/argosisp/actual/argosisp).
 # Runbooks: docs/runbooks/instalacion.md y docs/runbooks/actualizacion.md.
 #
-#   argosisp estado                       versión instalada, última publicada y salud de los servicios
+#   argosisp estado                       versión instalada, última publicada, salud de los servicios,
+#                                         túnel WireGuard y avisos de puertos abiertos de más
 #   argosisp version                      versión instalada
 #   argosisp actualizar [--version X.Y.Z] [--si] [--auto]
 #                                         respaldo → imágenes → migraciones → verificación; si algo
@@ -183,12 +184,106 @@ fijar_api_portal() {
     fijar_env ARGOSISP_API_PORTAL "$valor"
 }
 
-# Perfil y destino del portal para docker compose (el entorno manda sobre el .env)
+# ---------------------------------------------------------------------------
+# WireGuard de los routers (perfil `wireguard`; infra/wireguard/README.md)
+# ---------------------------------------------------------------------------
+wireguard_activo() { ! es_nodo_portal && [ "$(leer_env ARGOSISP_WIREGUARD)" = 1 ]; }
+
+# La .1 de ARGOSISP_WG_RED (10.255.0.0/16 → 10.255.0.1)
+wg_ip_servidor() {
+    local red
+    red="$(leer_env ARGOSISP_WG_RED)"
+    red="${red:-10.255.0.0/16}"
+    red="${red%/*}"
+    printf '%s.1' "${red%.*}"
+}
+
+# Perfiles y destino del portal para docker compose (el entorno manda sobre el .env)
 entorno_compose() {
+    local perfiles=()
     if api_portal_activo; then
-        export COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal
+        perfiles+=(api-portal)
+        export ARGOSISP_API_PORTAL_DESTINO=api-portal
     else
-        export COMPOSE_PROFILES='' ARGOSISP_API_PORTAL_DESTINO=api
+        export ARGOSISP_API_PORTAL_DESTINO=api
+    fi
+    wireguard_activo && perfiles+=(wireguard)
+    COMPOSE_PROFILES="$(IFS=,; printf '%s' "${perfiles[*]:-}")"
+    export COMPOSE_PROFILES
+}
+
+# Puertos publicados (contratos/conexion-routers.md §2): hacia fuera solo 80/443 (proxy), el UDP de
+# WireGuard y RADIUS en RADIUS_BIND_IP (con WireGuard, la .1 del túnel). Imprime un aviso por cada
+# puerto de más; nada si todo está bien. Lo de 127.0.0.1/::1 no cuenta (no sale del servidor).
+avisos_puertos() {
+    local http https wgp ip_wg nombre puertos p dir puerto proto ip
+    http="$(leer_env ARGOSISP_HTTP_PORT)"
+    https="$(leer_env ARGOSISP_HTTPS_PORT)"
+    wgp="$(leer_env ARGOSISP_WG_PUERTO)"
+    http="${http:-80}" https="${https:-443}" wgp="${wgp:-51820}"
+    ip_wg="$(wg_ip_servidor)"
+    while IFS=$'\t' read -r nombre puertos; do
+        [ -n "$puertos" ] || continue
+        IFS=',' read -ra lista <<< "$puertos"
+        for p in "${lista[@]}"; do
+            p="${p# }"
+            [[ "$p" == *"->"* ]] || continue
+            dir="${p%%->*}" proto="${p##*/}"
+            puerto="${dir##*:}" ip="${dir%:*}"
+            ip="${ip#[}" ip="${ip%]}"
+            case "$ip" in 127.* | ::1) continue ;; esac
+            if [ "$proto" = tcp ] && { [ "$puerto" = "$http" ] || [ "$puerto" = "$https" ]; }; then
+                continue
+            fi
+            if [ "$proto" = udp ] && { [ "$puerto" = 1812 ] || [ "$puerto" = 1813 ]; }; then
+                if wireguard_activo && [ "$ip" != "$ip_wg" ]; then
+                    echo "AVISO: RADIUS $puerto/udp está publicado en $ip; con WireGuard debe ir solo en $ip_wg (RADIUS_BIND_IP=$ip_wg y argosisp levantar)"
+                elif ! wireguard_activo && { [ "$ip" = 0.0.0.0 ] || [ "$ip" = :: ]; }; then
+                    echo "AVISO: RADIUS $puerto/udp está abierto en todas las IP del servidor; ponlo en la IP de la LAN de los routers (RADIUS_BIND_IP) o activa WireGuard (ARGOSISP_WIREGUARD=1)"
+                fi
+                continue
+            fi
+            echo "AVISO: $nombre publica $ip:$puerto/$proto, que no hace falta hacia fuera"
+        done
+    done < <(docker ps --filter "label=com.docker.compose.project=$(proyecto)" --format '{{.Names}}	{{.Ports}}' 2> /dev/null || true)
+    # Fuera de Docker: lo que escucha el host en IPs que no son de loopback ni la .1 del túnel
+    # (sin docker-proxy, que ya se revisó arriba, ni el UDP de WireGuard)
+    command -v ss > /dev/null 2>&1 || return 0
+    local linea local_ proc
+    while read -r linea; do
+        proto="$(awk '{print $1}' <<< "$linea")"
+        local_="$(awk '{print $5}' <<< "$linea")"
+        proc="$(grep -o 'users:(("[^"]*"' <<< "$linea" | cut -d'"' -f2 || true)"
+        puerto="${local_##*:}" ip="${local_%:*}"
+        ip="${ip#[}" ip="${ip%]}" ip="${ip%%%*}"
+        case "$ip" in 127.* | ::1 | "$ip_wg") continue ;; esac
+        case "$proc" in docker-proxy) continue ;; esac
+        if [ "$proto" = udp ] && [ "$puerto" = "$wgp" ] && wireguard_activo; then continue; fi
+        # 80/443: el proxy (con la red del host o detrás de otro proxy)
+        if [ "$proto" = tcp ] && { [ "$puerto" = "$http" ] || [ "$puerto" = "$https" ]; }; then continue; fi
+        if [ "$proto" = tcp ] && [ "$puerto" = 22 ]; then
+            echo "AVISO: SSH (22/tcp) abierto en $ip: si lo usas, limítalo a tus IPs en el firewall del servidor o del proveedor"
+            continue
+        fi
+        echo "AVISO: el servidor escucha en $ip:$puerto/$proto (${proc:-proceso del kernel}) fuera de ArgosIsp; ciérralo si no lo usas"
+    done < <(ss -H -lntup 2> /dev/null | awk '$1 == "tcp" || $1 == "udp"' || true)
+}
+
+# Estado del túnel para `argosisp estado`
+estado_wireguard() {
+    if ! wireguard_activo; then
+        echo "WireGuard de los routers: apagado (ARGOSISP_WIREGUARD=1 en el .env y argosisp levantar para activarlo)"
+        return 0
+    fi
+    local peers
+    peers="$(dc exec -T wireguard wg show wg-argos peers 2> /dev/null | grep -c . || true)"
+    echo "WireGuard de los routers: activo en $(wg_ip_servidor), UDP $(leer_env ARGOSISP_WG_PUERTO | grep . || echo 51820), ${peers:-0} routers"
+    # shellcheck disable=SC2016  # se expande dentro del contenedor
+    if ! dc exec -T wireguard-agente sh -c 'test $(( $(date +%s) - $(cat /estado/api.ok 2>/dev/null || echo 0) )) -lt 900' > /dev/null 2>&1; then
+        echo "AVISO: wireguard-agente no pudo mandar el estado del túnel a la API en los últimos 15 min (argosisp logs wireguard-agente)"
+    fi
+    if [ "$(leer_env RADIUS_BIND_IP)" != "$(wg_ip_servidor)" ]; then
+        echo "AVISO: con WireGuard, RADIUS_BIND_IP debería ser $(wg_ip_servidor) (ahora: $(leer_env RADIUS_BIND_IP))"
     fi
 }
 
@@ -537,6 +632,16 @@ cmd_estado() {
     fi
     if leer_estado version > /dev/null 2>&1; then
         echo "Última actualización: $(leer_estado anterior) → $(leer_estado version) el $(leer_estado fecha)"
+    fi
+    if ! es_nodo_portal; then
+        estado_wireguard
+    fi
+    local avisos
+    avisos="$(avisos_puertos)"
+    if [ -n "$avisos" ]; then
+        echo "$avisos"
+    else
+        echo "Puertos hacia fuera: solo los necesarios"
     fi
     echo
     dc ps

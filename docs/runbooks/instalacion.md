@@ -8,7 +8,7 @@ Para el operador que instala ArgosIsp desde cero. El servidor solo descarga: las
 | --- | --- |
 | Sistema | Ubuntu 22.04/24.04 o Debian 12 (también Raspberry Pi OS de 64 bits), amd64 o arm64, con systemd |
 | Memoria y disco | 2 GB de RAM (4 GB recomendados), 10 GB libres en `/opt` (más los respaldos) |
-| Puertos libres | TCP 80 y 443 (panel, API, portal y `/corte`), UDP 1812 y 1813 (RADIUS) |
+| Puertos libres | TCP 80 y 443 (panel, API, portal y `/corte`), UDP 1812 y 1813 (RADIUS) y, con WireGuard, UDP 51820 |
 | DNS | `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>` apuntando a la IP pública del servidor |
 | Salida a internet | `github.com`, `ghcr.io`, `download.docker.com` (si falta Docker) y Let's Encrypt |
 
@@ -26,6 +26,8 @@ Pregunta dos cosas: el **dominio base** (`miisp.com.gt` → `panel.miisp.com.gt`
 curl -fsSL https://github.com/HCDestroyer/argos-isp/releases/latest/download/instalar.sh \
   | sudo bash -s -- --dominio miisp.com.gt --correo admin@miisp.com.gt --si
 ```
+
+La instalación también pregunta si los MikroTik se conectan **por WireGuard** (abajo, «Conectar los routers por WireGuard»); sin preguntas: `--wireguard si` o `--wireguard no` (con `--si` y sin la opción, no).
 
 Otras opciones: `--version 1.4.2` (por defecto la última del canal `estable`), `--dir /ruta` (por defecto `/opt/argosisp`). Dominios distintos del patrón: `ARGOSISP_DOMINIO_PANEL`, `ARGOSISP_DOMINIO_API`, `ARGOSISP_DOMINIO_PORTAL` en el entorno de `sudo`.
 
@@ -55,7 +57,7 @@ ArgosIsp corre en un Raspberry Pi con las mismas imágenes (todas son amd64 y ar
 2. **Copia `/opt/argosisp/.env` fuera del servidor** (gestor de contraseñas o bóveda). `AAA_PPP_KEY` cifra las contraseñas PPPoE y los secrets RADIUS: sin ella un respaldo no sirve.
 3. Configuración → Notificaciones: SMTP y bot de Telegram (no van en el `.env`).
 4. Respaldos: `BACKUP_HOST_DIR` (por defecto `/opt/argosisp/respaldos`) debería ser un disco externo o NFS; cifrado con age y copia remota con rclone en `infra/README.md`, "Respaldos". Después de editar el `.env`: `sudo argosisp levantar`.
-5. RADIUS: en `.env`, `RADIUS_BIND_IP` = la IP por la que llegan los MikroTik (LAN o túnel WireGuard). `COA_ORIGEN_IP` se deja **vacía**: `coa` corre en la red bridge del compose y su socket solo puede usar la IP del contenedor (con la IP del servidor, el `bind` falla); el NAT de Docker cambia el origen por la IP del servidor en la interfaz hacia el router, y esa es la que cada MikroTik debe tener en `/radius` (`radiusAddr`, `infra/mikrotik/README.md`). Da de alta los routers en el panel y genera los clientes de FreeRADIUS con `sudo argosisp radius-clientes`. Configuración del router: `infra/mikrotik/README.md`.
+5. RADIUS: con WireGuard no hay nada que hacer (RADIUS queda en la IP del túnel, abajo). Sin WireGuard, en `.env`, `RADIUS_BIND_IP` = la IP por la que llegan los MikroTik (la de la LAN). `COA_ORIGEN_IP` se deja **vacía**: `coa` corre en la red bridge del compose y su socket solo puede usar la IP del contenedor (con la IP del servidor, el `bind` falla); el NAT de Docker cambia el origen por la IP del servidor en la interfaz hacia el router, y esa es la que cada MikroTik debe tener en `/radius` (`radiusAddr`, `infra/mikrotik/README.md`). Da de alta los routers en el panel y genera los clientes de FreeRADIUS con `sudo argosisp radius-clientes`. Configuración del router: `infra/mikrotik/README.md`.
 6. HSTS del portal: empieza en 300 s (`PORTAL_HSTS_MAX_AGE`); súbelo a `31536000` cuando el certificado del portal funcione.
 7. Opcional: parches automáticos con `sudo argosisp auto activar` (`docs/runbooks/actualizacion.md`).
 
@@ -75,6 +77,26 @@ ArgosIsp corre en un Raspberry Pi con las mismas imágenes (todas son amd64 y ar
 Los datos viven en volúmenes de Docker del proyecto `argosisp` (`pgdata`, `redisdata`, `comprobantes`, `caddydata`, `aaa-datos`, `radius-clientes`): no cambian entre versiones.
 
 Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `aaa-vigia`, `web`, `portal`, `api-portal` (si `ARGOSISP_API_PORTAL=si`), `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
+
+## Conectar los routers por WireGuard
+
+Para cuando los MikroTik no están en la misma red que el servidor (lo normal con un servidor en la nube). Cada router abre un túnel cifrado hacia el servidor y todo lo de ArgosIsp (RADIUS, CoA y la API REST del router) viaja por dentro. Hacia internet solo se abre **un puerto UDP**.
+
+**Al instalar:** responde «sí» a la pregunta de WireGuard (o `--wireguard si`). El instalador:
+
+- escribe en el `.env` `ARGOSISP_WIREGUARD=1`, la red del túnel `ARGOSISP_WG_RED=10.255.0.0/16` (el servidor es la `10.255.0.1`), el puerto `ARGOSISP_WG_PUERTO=51820` y `RADIUS_BIND_IP=10.255.0.1`: RADIUS solo escucha dentro del túnel;
+- deja `net.ipv4.ip_nonlocal_bind=1` en `/etc/sysctl.d/90-argosisp-wireguard.conf`, para que RADIUS arranque aunque el túnel tarde unos segundos al reiniciar el servidor;
+- levanta los servicios `wireguard` (crea la interfaz `wg-argos` en el servidor; su clave se genera una sola vez y queda en un volumen) y `wireguard-agente` (le pasa al túnel los routers que se registran).
+
+**En el proveedor de la nube** abre **UDP 51820** (o el puerto que elegiste). Nada más: 80 y 443 ya estaban, y RADIUS no se publica.
+
+**Si el dominio de la API pasa por Cloudflare u otro proxy HTTP,** el router no puede llegar por UDP a ese nombre: pon en el `.env` `ARGOSISP_WG_ENDPOINT=<IP pública del servidor>` y `sudo argosisp levantar`.
+
+**Conectar un router:** en el panel, ficha del router → «Script de conexión» → descárgalo y aplícalo en el MikroTik (pasos y qué hace: `infra/mikrotik/README.md`, «Conectar un router»). En menos de un minuto el router aparece como «conectado».
+
+**Activarlo después de instalar:** en el `.env` pon `ARGOSISP_WIREGUARD=1` y `RADIUS_BIND_IP=10.255.0.1` (la `.1` de `ARGOSISP_WG_RED`), crea el archivo de `sysctl` de arriba (`echo 'net.ipv4.ip_nonlocal_bind = 1' | sudo tee /etc/sysctl.d/90-argosisp-wireguard.conf && sudo sysctl --system`), abre el UDP en el proveedor y `sudo argosisp levantar`. Los routers que ya llegaban por la LAN siguen igual hasta que les apliques el script.
+
+**Revisar:** `sudo argosisp estado` muestra el túnel (IP, puerto y cuántos routers) y **avisa de cualquier puerto abierto de más**: algo publicado fuera de 80/443, el UDP de WireGuard y RADIUS en la IP del túnel, o un servicio del servidor escuchando hacia fuera (SSH incluido: si lo usas, limítalo a tus IPs). Detalle técnico: `infra/wireguard/README.md`.
 
 ## API del portal (`api-portal`)
 
