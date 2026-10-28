@@ -19895,6 +19895,33 @@
                     ],
                     "maxLength": 500,
                     "description": "Explicación del Q0 (obligatoria con motivo_sin_costo_id)"
+                  },
+                  "origen_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "iris_orden"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9._:-]+$",
+                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
+                    "examples": [
+                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
+                    ]
                   }
                 },
                 "required": [
@@ -26465,6 +26492,33 @@
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date",
                     "description": "Fecha del consumo (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después"
+                  },
+                  "origen_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "iris_orden"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9._:-]+$",
+                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
+                    "examples": [
+                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
+                    ]
                   }
                 },
                 "required": [
@@ -27509,6 +27563,17 @@
                 "premio",
                 "reverso_premio"
               ]
+            }
+          },
+          {
+            "name": "origen_externo_id",
+            "in": "query",
+            "required": false,
+            "description": "Solo los movimientos de esta orden de Iris (origen_externo_id)",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             }
           }
         ],
@@ -60400,6 +60465,33 @@
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date",
                     "description": "Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)"
+                  },
+                  "origen_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "iris_orden"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9._:-]+$",
+                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
+                    "examples": [
+                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
+                    ]
                   }
                 },
                 "required": [
@@ -60573,6 +60665,33 @@
                       "null"
                     ],
                     "maxLength": 500
+                  },
+                  "origen_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "iris_orden"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9._:-]+$",
+                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
+                    "examples": [
+                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
+                    ]
                   }
                 },
                 "required": [
@@ -60715,6 +60834,33 @@
                     ],
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
                     "format": "date"
+                  },
+                  "origen_tipo": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "iris_orden"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio"
+                  },
+                  "origen_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9._:-]+$",
+                    "description": "Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo",
+                    "examples": [
+                      "0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d"
+                    ]
                   }
                 },
                 "required": [
@@ -68640,6 +68786,23 @@
           "asiento_id": {
             "type": "integer",
             "minimum": 1
+          },
+          "origen_externo_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "iris_orden"
+            ],
+            "description": "Sistema externo que originó el cargo: iris_orden = orden de trabajo de Iris (POST /facturas/cargo-unico con origen_tipo)"
+          },
+          "origen_externo_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id en el sistema externo (UUID de la orden de Iris)"
           },
           "created_at": {
             "type": "string",
@@ -78124,6 +78287,23 @@
             ],
             "description": "Id de la factura en su sistema de origen"
           },
+          "origen_externo_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "iris_orden"
+            ],
+            "description": "Sistema externo que originó el cargo: iris_orden = orden de trabajo de Iris (POST /facturas/cargo-unico con origen_tipo)"
+          },
+          "origen_externo_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id en el sistema externo (UUID de la orden de Iris)"
+          },
           "sustituida_por": {
             "type": [
               "integer",
@@ -81144,7 +81324,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Origen interno: compra, factura, conteo, nota_credito…"
           },
           "origen_id": {
             "type": [
@@ -81152,6 +81333,23 @@
               "null"
             ],
             "minimum": 1
+          },
+          "origen_externo_tipo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "iris_orden"
+            ],
+            "description": "Sistema externo que originó el movimiento: iris_orden = orden de trabajo de Iris"
+          },
+          "origen_externo_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id en el sistema externo (UUID de la orden de Iris; el panel enlaza a Iris con él)"
           },
           "traslado_id": {
             "type": [
@@ -97294,6 +97492,21 @@
                     "null"
                   ],
                   "minimum": 1
+                },
+                "origen_externo_tipo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "iris_orden"
+                  ]
+                },
+                "origen_externo_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "motivo": {
                   "type": [

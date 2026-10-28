@@ -157,6 +157,26 @@ jobs:
           COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal \
             docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
           docker compose -f infra/produccion/docker-compose.nodo-portal.yml --env-file infra/produccion/nodo-portal.env.example config --quiet
+          # WireGuard de los routers (perfil wireguard; contratos/conexion-routers.md)
+          COMPOSE_PROFILES=lab,wireguard docker compose -f infra/docker-compose.yml --env-file infra/.env.example config --quiet
+          COMPOSE_PROFILES=wireguard ARGOSISP_WIREGUARD=1 RADIUS_BIND_IP=10.255.0.1 \
+            docker compose -f infra/produccion/docker-compose.produccion.yml --env-file infra/produccion/.env.example config --quiet
+          COMPOSE_PROFILES=wireguard docker compose -f infra/produccion/docker-compose.produccion.yml \
+            --env-file infra/produccion/.env.example config --services | grep -qx wireguard-agente
+
+      # Scripts de RouterOS (infra/mikrotik): lab.rsc y plantillas armados desde sus piezas, variables,
+      # escape de secretos y llaves balanceadas. El /import real se prueba en CHR (README de mikrotik).
+      - name: Plantillas de RouterOS (armado y render)
+        run: |
+          node infra/mikrotik/armar.mjs --verificar
+          node --test infra/mikrotik/render.test.mjs
+
+      # Servidor WireGuard: peer por evento, handshake y estado a la API (falsa), contenedor → router
+      # por el túnel con origen .1, firewall del túnel (solo RADIUS), rotación (infra/wireguard/probar.sh)
+      - name: Servidor WireGuard (prueba de humo)
+        run: |
+          shellcheck infra/wireguard/*.sh
+          infra/wireguard/probar.sh
 
       - name: radiusd -XC
         run: infra/ci/freeradius-check.sh
@@ -179,6 +199,13 @@ jobs:
       # Node del runner (sin setup-node): solo corre un servidor de eco
       - name: Proxy del portal (/corte por HTTP, /entrar y /cuenta por HTTPS con HSTS)
         run: infra/proxy/probar-portal.sh
+
+      # Caddyfile de producción detrás de Nginx Proxy Manager (ARGOSISP_PROXIES_CONFIABLES):
+      # X-Forwarded-For solo desde la red de confianza; sin la variable, como siempre
+      - name: Proxy de producción detrás de otro proxy (IP real del cliente)
+        run: |
+          shellcheck infra/ci/probar-detras-de-proxy.sh
+          infra/ci/probar-detras-de-proxy.sh
 
   # Ensayo de restauración (A6): respaldo de un compose con datos de demo → compose limpio →
   # restaurar.sh → migrate + API → login, clientes y estado de cuenta (infra/backups/ensayo.sh).

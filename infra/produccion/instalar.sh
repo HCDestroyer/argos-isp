@@ -13,6 +13,9 @@
 #   --correo C        correo del administrador (usuario inicial del panel y avisos de Let's Encrypt)
 #   --version X.Y.Z   versión a instalar (por defecto, la última del canal estable)
 #   --dir RUTA        carpeta de la instalación (/opt/argosisp)
+#   --wireguard si|no los MikroTik se conectan por un túnel WireGuard (script de conexión del panel):
+#                     se abre solo el UDP de WireGuard y RADIUS queda en la IP del túnel. Sin la
+#                     opción, pregunta (con --si: no). También ARGOSISP_WIREGUARD=1|0
 #   --si              no preguntar nada (requiere --dominio y --correo)
 #
 # Nodo portal remoto (solo el portal y su proxy; habla únicamente con la API central por HTTPS):
@@ -24,9 +27,19 @@
 # paquetes de empaquetar.sh), ARGOSISP_SIN_DESCARGA=1 (imágenes ya cargadas), ARGOSISP_TLS=interno
 # (certificados de la CA interna de Caddy en lugar de Let's Encrypt), ARGOSISP_REPO, ARGOSISP_REGISTRO,
 # ARGOSISP_API_PORTAL=si|no (API del portal; por defecto si, no con menos de 3 GB de RAM),
-# ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), y para un nodo portal de prueba
+# ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), ARGOSISP_PROXIES_CONFIABLES (IP o
+# CIDR del proxy de delante, p. ej. Nginx Proxy Manager: docs/runbooks/detras-de-proxy.md),
+# ARGOSISP_WG_RED, ARGOSISP_WG_PUERTO y ARGOSISP_WG_ENDPOINT (túnel WireGuard: red, puerto UDP y
+# nombre o IP pública para los routers; infra/wireguard/README.md), y para un nodo portal de prueba
 # ARGOSISP_NODO_CENTRAL_DIRECCION (host:puerto al que se conecta) y ARGOSISP_NODO_CENTRAL_TLS=inseguro.
 set -Eeuo pipefail
+
+# Todo el instalador va dentro de main(), que se llama en la última línea. Con
+# `curl … | sudo bash`, bash lee el script de stdin a medida que lo ejecuta: un hijo que lea stdin
+# (`docker compose exec`, apt-get…) se tragaba el resto y la instalación terminaba sin mostrar la
+# clave ni escribir credenciales-iniciales.txt. Así bash lee la función completa antes de correr
+# nada. Además, cada comando que podría leer stdin va con < /dev/null; las preguntas leen /dev/tty.
+main() {
 
 REPO="${ARGOSISP_REPO:-HCDestroyer/argos-isp}"
 REGISTRO="${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}"
@@ -42,6 +55,11 @@ TOKEN=""
 RAM_MINIMA_MB=1900
 HTTP_PORT="${ARGOSISP_HTTP_PORT:-80}"
 HTTPS_PORT="${ARGOSISP_HTTPS_PORT:-443}"
+PROXIES="${ARGOSISP_PROXIES_CONFIABLES:-}"
+WIREGUARD="${ARGOSISP_WIREGUARD:-}"
+WG_RED="${ARGOSISP_WG_RED:-10.255.0.0/16}"
+WG_PUERTO="${ARGOSISP_WG_PUERTO:-51820}"
+WG_ENDPOINT="${ARGOSISP_WG_ENDPOINT:-}"
 DISCO_MINIMO_GB=10
 DOCKER_MINIMO=25
 COMPOSE_MINIMO=2.24
@@ -60,6 +78,7 @@ while [ $# -gt 0 ]; do
         --rol) ROL="${2:-}"; shift 2 ;;
         --central) CENTRAL="${2:-}"; shift 2 ;;
         --token) TOKEN="${2:-}"; shift 2 ;;
+        --wireguard) WIREGUARD="${2:-}"; shift 2 ;;
         -h | --help) sed -n '2,/^set -E/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) morir "opción desconocida: $1 (--help)" ;;
     esac
@@ -134,6 +153,18 @@ if [ -z "$API_PORTAL" ]; then
     fi
 fi
 case "$API_PORTAL" in si | no) ;; *) morir "ARGOSISP_API_PORTAL debe ser si o no (es '$API_PORTAL')" ;; esac
+# Proxies de confianza (Caddy: trusted_proxies static): IP o CIDR separados por espacio o coma. Se
+# validan aquí porque una entrada mala impide que Caddy arranque.
+proxies_ok=""
+for p in ${PROXIES//,/ }; do
+    [[ "$p" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?$ ||
+        "$p" =~ ^[0-9A-Fa-f]*:[0-9A-Fa-f:.]*(/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))?$ ]] ||
+        morir "ARGOSISP_PROXIES_CONFIABLES: '$p' no es una IP ni un CIDR (separa con espacios o comas)"
+    proxies_ok="${proxies_ok:+$proxies_ok }$p"
+done
+PROXIES="$proxies_ok"
+[ -z "$PROXIES" ] || [ "${ARGOSISP_TLS:-}" = interno ] ||
+    aviso "con un proxy delante (ARGOSISP_PROXIES_CONFIABLES) los retos de Let's Encrypt los recibe el proxy, no Caddy: usa ARGOSISP_TLS=interno (el certificado público lo pone el proxy)"
 mkdir -p "$DIR"
 disco_gb=$(($(df -Pk "$DIR" | awk 'NR==2 {print $4}') / 1024 / 1024))
 [ "$disco_gb" -ge "$DISCO_MINIMO_GB" ] || morir "hacen falta ${DISCO_MINIMO_GB} GB libres en $DIR (hay ${disco_gb} GB)"
@@ -146,14 +177,14 @@ for p in curl jq ca-certificates tar gzip util-linux iproute2; do
     dpkg -s "$p" > /dev/null 2>&1 || faltan="$faltan $p"
 done
 if [ -n "$faltan" ]; then
-    apt-get update -qq
+    apt-get update -qq < /dev/null
     # shellcheck disable=SC2086
-    apt-get install -y -qq $faltan > /dev/null
+    apt-get install -y -qq $faltan < /dev/null > /dev/null
 fi
 
 for puerto in "$HTTP_PORT" "$HTTPS_PORT"; do
     if ss -Hltn "sport = :$puerto" | grep -q .; then
-        morir "el puerto TCP $puerto ya está en uso (ArgosIsp lo necesita para el panel, la API y el portal)"
+        morir "el puerto TCP $puerto ya está en uso (ArgosIsp lo necesita para el panel, la API y el portal). Si ya hay un proxy en 80 y 443 (Nginx Proxy Manager…): ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443, docs/runbooks/detras-de-proxy.md"
     fi
 done
 [ "$ROL" = portal ] || for puerto in 1812 1813; do
@@ -177,9 +208,9 @@ if ! command -v docker > /dev/null; then
     chmod a+r /etc/apt/keyrings/docker.asc
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$repo_id $codename stable" \
         > /etc/apt/sources.list.d/docker.list
-    apt-get update -qq
-    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null
-    systemctl enable --now docker > /dev/null 2>&1 || true
+    apt-get update -qq < /dev/null
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin < /dev/null > /dev/null
+    systemctl enable --now docker < /dev/null > /dev/null 2>&1 || true
 fi
 docker info > /dev/null 2>&1 || morir "Docker está instalado pero no responde (systemctl status docker)"
 docker_version="$(docker version --format '{{.Server.Version}}')"
@@ -220,6 +251,37 @@ DOMINIO="${DOMINIO,,}"
 DOMINIO_PANEL="${ARGOSISP_DOMINIO_PANEL:-panel.$DOMINIO}"
 DOMINIO_API="${ARGOSISP_DOMINIO_API:-api.$DOMINIO}"
 DOMINIO_PORTAL="${ARGOSISP_DOMINIO_PORTAL:-portal.$DOMINIO}"
+
+# WireGuard de los routers (solo el servidor principal)
+case "${WIREGUARD,,}" in
+    1 | si | sí | s | yes) WIREGUARD=1 ;;
+    0 | no | n) WIREGUARD=0 ;;
+    '')
+        if [ "$ROL" = portal ] || $SI || ! { : < /dev/tty; } 2> /dev/null; then
+            WIREGUARD=0
+        else
+            r="$(preguntar '¿Los MikroTik se conectan por un túnel WireGuard? Recomendado si no están en la misma red que este servidor [S/n]')"
+            case "${r,,}" in n | no) WIREGUARD=0 ;; *) WIREGUARD=1 ;; esac
+        fi
+        ;;
+    *) morir "--wireguard debe ser si o no (es '$WIREGUARD')" ;;
+esac
+[ "$ROL" = completo ] || WIREGUARD=0
+RADIUS_IP=0.0.0.0
+if [ "$WIREGUARD" = 1 ]; then
+    if ! [[ "$WG_RED" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\.0/([0-9]{1,2})$ ]] ||
+        [ "${BASH_REMATCH[2]}" -lt 8 ] || [ "${BASH_REMATCH[2]}" -gt 30 ]; then
+        morir "ARGOSISP_WG_RED inválida: '$WG_RED' (una red IPv4 que termina en .0, de /8 a /30)"
+    fi
+    RADIUS_IP="${BASH_REMATCH[1]}.1"
+    if ! [[ "$WG_PUERTO" =~ ^[0-9]{1,5}$ ]] || [ "$WG_PUERTO" -lt 1 ] || [ "$WG_PUERTO" -gt 65535 ]; then
+        morir "ARGOSISP_WG_PUERTO inválido: '$WG_PUERTO'"
+    fi
+    [ -z "$WG_ENDPOINT" ] || [[ "$WG_ENDPOINT" =~ ^[A-Za-z0-9.-]{1,253}$ ]] || morir "ARGOSISP_WG_ENDPOINT inválido: '$WG_ENDPOINT'"
+    if ss -Hlun "sport = :$WG_PUERTO" | grep -q .; then
+        morir "el puerto UDP $WG_PUERTO ya está en uso (WireGuard de los routers): usa otro con ARGOSISP_WG_PUERTO"
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Paquete de la versión
@@ -363,8 +425,18 @@ BACKUP_RETENCION_DIAS=14
 BACKUP_AGE_RECIPIENTS=
 BACKUP_RCLONE_DESTINO=
 
-# RADIUS: IP del servidor por la que llegan los MikroTik (LAN o túnel WireGuard). 0.0.0.0 = todas
-RADIUS_BIND_IP=0.0.0.0
+# WireGuard de los routers (infra/wireguard/README.md): 1 = los MikroTik se conectan por el túnel
+# con el script de conexión del panel. Red del túnel (el servidor es la .1), puerto UDP público y
+# nombre o IP pública que reciben los routers (vacío = DOMINIO_API; si ese dominio pasa por un proxy
+# HTTP como Cloudflare, pon la IP pública del servidor). Después de cambiarlo: argosisp levantar
+ARGOSISP_WIREGUARD=$WIREGUARD
+ARGOSISP_WG_RED=$WG_RED
+ARGOSISP_WG_PUERTO=$WG_PUERTO
+ARGOSISP_WG_ENDPOINT=$WG_ENDPOINT
+
+# RADIUS: IP del servidor por la que llegan los MikroTik. Con WireGuard, la .1 del túnel (no se
+# publica hacia internet); sin él, la IP de la LAN de los routers (0.0.0.0 = todas)
+RADIUS_BIND_IP=$RADIUS_IP
 # Vacía: coa corre en red bridge y el NAT del servidor pone la IP de origen de los CoA (la que el
 # router tiene en /radius). Con la IP del servidor aquí el bind falla dentro del contenedor
 COA_ORIGEN_IP=
@@ -375,6 +447,12 @@ NOTIFY_EMPRESA_NOMBRE=ArgosIsp
 EOF
 [ "$HTTP_PORT" = 80 ] || echo "ARGOSISP_HTTP_PORT=$HTTP_PORT" >> "$DIR/.env.nuevo"
 [ "$HTTPS_PORT" = 443 ] || echo "ARGOSISP_HTTPS_PORT=$HTTPS_PORT" >> "$DIR/.env.nuevo"
+cat >> "$DIR/.env.nuevo" << EOF
+
+# Proxy de delante (Nginx Proxy Manager…): IP o CIDR separados por espacio de los que Caddy acepta
+# X-Forwarded-For / X-Real-IP. Vacía = no hay proxy delante. docs/runbooks/detras-de-proxy.md
+ARGOSISP_PROXIES_CONFIABLES="$PROXIES"
+EOF
 fi
 mv -f "$DIR/.env.nuevo" "$DIR/.env"
 chmod 600 "$DIR/.env"
@@ -386,30 +464,49 @@ umask 022
 ln -sfn "$DIR/actual/argosisp" /usr/local/bin/argosisp
 if command -v systemctl > /dev/null && [ -d /run/systemd/system ]; then
     install -m 0644 "$DIR/actual/systemd/argosisp-actualizar.service" "$DIR/actual/systemd/argosisp-actualizar.timer" /etc/systemd/system/
-    systemctl daemon-reload
+    systemctl daemon-reload < /dev/null
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Imágenes y arranque
+# 7. WireGuard en el host
+# ---------------------------------------------------------------------------
+if [ "$WIREGUARD" = 1 ]; then
+    # RADIUS se publica en la .1 del túnel: al reiniciar el servidor, Docker puede levantar
+    # FreeRADIUS antes de que exista wg-argos. ip_nonlocal_bind deja publicar el puerto igual.
+    printf '# ArgosIsp (instalar.sh): RADIUS en la IP del túnel WireGuard antes de que exista la interfaz\nnet.ipv4.ip_nonlocal_bind = 1\n' \
+        > /etc/sysctl.d/90-argosisp-wireguard.conf
+    sysctl -q -p /etc/sysctl.d/90-argosisp-wireguard.conf < /dev/null || aviso "no pude aplicar net.ipv4.ip_nonlocal_bind (sysctl)"
+    if ! modprobe wireguard < /dev/null 2> /dev/null && [ ! -c /dev/net/tun ]; then
+        morir "este kernel no tiene WireGuard ni /dev/net/tun: no se puede crear el túnel (instala con --wireguard no)"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 8. Imágenes y arranque
 # ---------------------------------------------------------------------------
 export ARGOSISP_DIR="$DIR"
-# Igual que `argosisp` (entorno_compose): perfil y destino de la API del portal
+# Igual que `argosisp` (entorno_compose): perfiles y destino de la API del portal
+perfiles=()
 if [ "$API_PORTAL" = si ]; then
-    export COMPOSE_PROFILES=api-portal ARGOSISP_API_PORTAL_DESTINO=api-portal
+    perfiles+=(api-portal)
+    export ARGOSISP_API_PORTAL_DESTINO=api-portal
 else
-    export COMPOSE_PROFILES='' ARGOSISP_API_PORTAL_DESTINO=api
+    export ARGOSISP_API_PORTAL_DESTINO=api
 fi
+[ "$WIREGUARD" = 1 ] && perfiles+=(wireguard)
+COMPOSE_PROFILES="$(IFS=,; printf '%s' "${perfiles[*]:-}")"
+export COMPOSE_PROFILES
 if [ "$ROL" = portal ]; then
     compose=(docker compose -p argosisp-portal --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.nodo-portal.yml")
 else
     compose=(docker compose -p argosisp --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.yml")
 fi
-"${compose[@]}" config --quiet || morir "el compose de $VERSION no es válido con el .env generado"
+"${compose[@]}" config --quiet < /dev/null || morir "el compose de $VERSION no es válido con el .env generado"
 if [ "${ARGOSISP_SIN_DESCARGA:-0}" != 1 ]; then
     log "descargando imágenes de $REGISTRO (versión $VERSION)"
-    "${compose[@]}" pull --quiet
+    "${compose[@]}" pull --quiet < /dev/null
 fi
-"$DIR/actual/argosisp" levantar || morir "ArgosIsp no quedó sano. Revisa: argosisp logs   (el .env queda en $DIR/.env)"
+"$DIR/actual/argosisp" levantar < /dev/null || morir "ArgosIsp no quedó sano. Revisa: argosisp logs   (el .env queda en $DIR/.env)"
 
 if [ "$ROL" = portal ]; then
     cat << EOF
@@ -427,8 +524,36 @@ EOF
     exit 0
 fi
 
+# URL de entrada: con 443, o detrás de un proxy (publica los dominios en su propio 443), sin puerto;
+# con otro puerto HTTPS y sin proxy, con el puerto.
+sufijo=""
+[ "$HTTPS_PORT" = 443 ] || [ -n "$PROXIES" ] || sufijo=":$HTTPS_PORT"
+corte="http://<IP de este servidor>$([ "$HTTP_PORT" = 80 ] || echo ":$HTTP_PORT")/corte"
+if [ -n "$PROXIES" ]; then
+    nota="  Detrás de un proxy (ARGOSISP_PROXIES_CONFIABLES=$PROXIES): se entra por los dominios del proxy.
+  Cada Proxy Host (panel, api y portal) va por https a la IP de este servidor, puerto $HTTPS_PORT, con
+  Websockets. El dst-nat de los suspendidos (TCP/80) va a este servidor, puerto $HTTP_PORT, nunca al proxy.
+  Paso a paso: docs/runbooks/detras-de-proxy.md"
+elif [ "$HTTP_PORT" != 80 ] || [ "$HTTPS_PORT" != 443 ]; then
+    nota="  Puertos $HTTP_PORT (HTTP) y $HTTPS_PORT (HTTPS). Let's Encrypt necesita 80 y 443 en este servidor: con
+  otros puertos usa ARGOSISP_TLS=interno o un proxy delante (docs/runbooks/detras-de-proxy.md)."
+elif [ "${ARGOSISP_TLS:-}" = interno ]; then
+    nota="  Certificados de la CA interna de Caddy (ARGOSISP_TLS=interno): el navegador avisa."
+else
+    nota="  Los tres dominios deben apuntar a este servidor para que Let's Encrypt emita los certificados."
+fi
+
+if [ "$WIREGUARD" = 1 ]; then
+    nota_wg="  WireGuard de los routers activo: abre UDP $WG_PUERTO en el firewall del proveedor (es el único
+  puerto nuevo). RADIUS escucha en $RADIUS_IP, dentro del túnel. Para conectar un MikroTik: panel →
+  Routers → el router → «Script de conexión» (infra/mikrotik/README.md, «Conectar un router»)."
+else
+    nota_wg="  Sin WireGuard: los MikroTik llegan por la LAN; pon en RADIUS_BIND_IP la IP de este servidor en
+  esa LAN (ahora 0.0.0.0, todas) y argosisp levantar. Para activar el túnel: ARGOSISP_WIREGUARD=1."
+fi
+
 cat > "$DIR/credenciales-iniciales.txt" << EOF
-Panel:    https://$DOMINIO_PANEL
+Panel:    https://$DOMINIO_PANEL$sufijo
 Usuario:  $CORREO
 Clave:    $admin_password
 EOF
@@ -438,13 +563,14 @@ cat << EOF
 
 ArgosIsp $VERSION instalado.
 
-  Panel:    https://$DOMINIO_PANEL
-  API:      https://$DOMINIO_API
-  Portal:   https://$DOMINIO_PORTAL   (y /corte por HTTP en este servidor)
+  Panel:    https://$DOMINIO_PANEL$sufijo
+  API:      https://$DOMINIO_API$sufijo
+  Portal:   https://$DOMINIO_PORTAL$sufijo   (y /corte por HTTP: $corte)
   Usuario:  $CORREO
   Clave:    $admin_password   (también en $DIR/credenciales-iniciales.txt; cámbiala al entrar y borra el archivo)
 
-  Los tres dominios deben apuntar a este servidor para que Let's Encrypt emita los certificados.
+$nota
+$nota_wg
   Guarda una copia de $DIR/.env fuera del servidor: AAA_PPP_KEY descifra las contraseñas PPPoE.
 
   argosisp estado        versión y salud
@@ -452,3 +578,6 @@ ArgosIsp $VERSION instalado.
   argosisp auto activar  parches automáticos diarios (apagado)
 
 EOF
+}
+
+main "$@"

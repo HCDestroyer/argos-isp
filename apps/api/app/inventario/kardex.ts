@@ -10,6 +10,7 @@ import { fechaValida, hoyGuatemala, inicioDeMes } from '#ledger/fechas'
 import { periodoCerrado } from '#ledger/cierres'
 import RegistrarAsiento, { type LineaAsiento } from '#ledger/actions/registrar_asiento'
 import { filtrarBodegasVisibles, type AccesoBodegas } from '#inventario/bodegas'
+import { columnasOrigenExterno, type OrigenExterno, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * Kardex (`contratos/inventario.md` §2 y §5): la única puerta de entrada a
@@ -440,6 +441,8 @@ export interface MovimientoNuevo {
     facturaLineaId?: number | null
     asientoId?: number | null
     origen?: { tipo: string; id: number } | null
+    /** orden de Iris u otro sistema externo (solo trazabilidad, `#inventario/origen_externo`) */
+    origenExterno?: OrigenExterno | null
     trasladoId?: number | null
     reversoDe?: number | null
     causa?: CausaBaja | null
@@ -484,6 +487,7 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
             asiento_id: m.asientoId ?? null,
             origen_tipo: m.origen?.tipo ?? null,
             origen_id: m.origen?.id ?? null,
+            ...columnasOrigenExterno(m.origenExterno),
             traslado_id: m.trasladoId ?? null,
             reverso_de: m.reversoDe ?? null,
             causa: m.causa ?? null,
@@ -506,6 +510,7 @@ export async function insertarMovimiento(t: Transaccion, m: MovimientoNuevo): Pr
         servicio_id: m.servicioId ?? null,
         origen_tipo: m.origen?.tipo ?? null,
         origen_id: m.origen?.id ?? null,
+        ...columnasOrigenExterno(m.origenExterno),
     })
     if (antes !== null) {
         const minimo = dec(m.producto.existencia_minima!)
@@ -593,6 +598,8 @@ export interface MovimientoVista {
     asiento_id: number | null
     origen_tipo: string | null
     origen_id: number | null
+    origen_externo_tipo: OrigenExternoTipo | null
+    origen_externo_id: string | null
     traslado_id: number | null
     reverso_de: number | null
     causa: CausaBaja | null
@@ -644,6 +651,8 @@ function columnasMovimiento(cliente: QueryClientContract) {
         'm.asiento_id',
         'm.origen_tipo',
         'm.origen_id',
+        'm.origen_externo_tipo',
+        'm.origen_externo_id',
         'm.traslado_id',
         'm.reverso_de',
         'm.causa',
@@ -683,6 +692,8 @@ export interface FiltrosKardex extends OpcionesPaginacion {
     desde?: string
     hasta?: string
     tipo?: TipoMovimiento
+    /** id de la orden de Iris (`origen_externo_id`) */
+    origen_externo_id?: string
 }
 
 /**
@@ -720,6 +731,8 @@ export async function listarKardex(
         .if(filtros.desde, (q) => q.where('k.fecha', '>=', filtros.desde!))
         .if(filtros.hasta, (q) => q.where('k.fecha', '<=', filtros.hasta!))
         .if(filtros.tipo, (q) => q.where('k.tipo', filtros.tipo!))
+        // los movimientos de una orden de Iris (el saldo corrido sigue siendo el de toda la historia)
+        .if(filtros.origen_externo_id, (q) => q.where('k.origen_externo_id', filtros.origen_externo_id!))
     const pagina = await paginar<MovimientoVista>(consulta, filtros, { columna: 'k.id', direccion: 'asc' })
     return { data: pagina.data.map(normalizarMovimiento), nextCursor: pagina.nextCursor }
 }

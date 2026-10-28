@@ -83,7 +83,7 @@ jobs:
       fail-fast: true
       matrix:
         arch: [amd64, arm64]
-        imagen: [api, web, portal, aaa, coa, backup, freeradius]
+        imagen: [api, web, portal, aaa, coa, backup, freeradius, wireguard]
         include:
           - { imagen: api, dockerfile: apps/api/Dockerfile, contexto: . }
           - { imagen: web, dockerfile: apps/web/Dockerfile, contexto: . }
@@ -91,6 +91,7 @@ jobs:
           - { imagen: aaa, dockerfile: services/aaa/Dockerfile, contexto: . }
           - { imagen: coa, dockerfile: services/coa/Dockerfile, contexto: . }
           - { imagen: backup, dockerfile: infra/backups/Dockerfile, contexto: . }
+          - { imagen: wireguard, dockerfile: infra/wireguard/Dockerfile, contexto: . }
           # La oficial freeradius/freeradius-server solo existe para amd64 (infra/freeradius)
           - { imagen: freeradius, dockerfile: infra/freeradius/Dockerfile, contexto: infra/freeradius }
     steps:
@@ -162,7 +163,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        imagen: [api, web, portal, aaa, coa, backup, freeradius]
+        imagen: [api, web, portal, aaa, coa, backup, freeradius, wireguard]
     env:
       IMAGEN: ${{ needs.preparar.outputs.registro }}/argosisp-${{ matrix.imagen }}
       VERSION: ${{ needs.preparar.outputs.version }}
@@ -227,7 +228,7 @@ jobs:
             echo "::notice::$VERSION es anterior a $ultima: estable no se mueve"
             exit 0
           fi
-          for imagen in api web portal aaa coa backup freeradius; do
+          for imagen in api web portal aaa coa backup freeradius wireguard; do
             docker buildx imagetools create -t "$REGISTRO/argosisp-$imagen:estable" "$REGISTRO/argosisp-$imagen:$VERSION"
           done
 
