@@ -93,7 +93,8 @@ export const Router = definirEsquema(
             zona_id: {
                 ...nulable(id),
                 description:
-                    'Zona del router (opcional; no cambia el alcance del ACL). La API siempre la envía',
+                    'Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; ' +
+                    'opcional en el esquema hasta que las fixtures del panel la traigan',
             },
             ...auditable,
         },

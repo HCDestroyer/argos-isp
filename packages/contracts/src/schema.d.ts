@@ -16201,7 +16201,7 @@ export interface components {
              * @description Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca
              */
             ultimo_contacto: string | null;
-            /** @description Zona del router (opcional; no cambia el alcance del ACL). La API siempre la envía */
+            /** @description Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; opcional en el esquema hasta que las fixtures del panel la traigan */
             zona_id?: number | null;
             /** @description Control optimista: envíala al editar */
             version: number;
