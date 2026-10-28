@@ -453,7 +453,13 @@ const comodato: Ruta[] = [
             const unidadId = await unidadParaComodato(id, cuerpo)
             await exigirUnidad(ctx, unidadId)
             return new AsignarComodato().execute(
-                { unidad_id: unidadId, fecha: cuerpo.fecha, servicio_id: id },
+                {
+                    unidad_id: unidadId,
+                    fecha: cuerpo.fecha,
+                    servicio_id: id,
+                    origen_tipo: cuerpo.origen_tipo,
+                    origen_id: cuerpo.origen_id,
+                },
                 ctx.contextoAccion(),
             )
         },
