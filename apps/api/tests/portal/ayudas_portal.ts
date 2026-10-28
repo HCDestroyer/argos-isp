@@ -78,6 +78,8 @@ export async function crearServicio(opciones: OpcionesServicio = {}) {
             router_id: router.id,
             plan_id: plan.id,
             estado: opciones.estado ?? 'suspendido',
+            // Un pendiente de instalación nunca tiene `instalado_en` (CHECK `servicios_pendiente_sin_instalar`).
+            ...(opciones.estado === 'pendiente_instalacion' ? { instalado_en: null } : {}),
             user_ppp: `ppp-${sufijo}`,
             pass_ppp: 'cifrado',
             ...(opciones.empresaId === undefined ? {} : { empresa_id: opciones.empresaId }),

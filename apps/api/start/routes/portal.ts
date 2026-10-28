@@ -81,6 +81,7 @@ import { empresaDelServicio, empresaPrincipalDelCliente, urlLogoPortal } from '#
 import { resolverServicio } from '#portal/consultas'
 import { EMPRESA_PRINCIPAL, filaEmpresa } from '#core/empresas'
 import { leerArchivoLogo } from '#core/logos'
+import { rechazarSiPendiente } from '#core/instalacion'
 import {
     PLANTILLAS_BASE,
     VARIABLES_DOCUMENTO,
@@ -823,7 +824,8 @@ const promesas: Ruta[] = [
             'se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción ' +
             '(la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 ' +
             '`promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya ' +
-            `pasó. ${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
+            'pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. ' +
+            `${SOBRE_LA_IDENTIFICACION} ${SOBRE_LA_IP}`,
         etiqueta: 'portal',
         seguridad: 'publico',
         limitada: true,
@@ -836,6 +838,9 @@ const promesas: Ruta[] = [
             const ip = await ipDelCliente(ctx, 'promesas')
             const titular = await titularDeLaPeticion(ctx, ip, cuerpo.servicio_id)
             try {
+                // Pendiente de instalación: sin corte no hay promesa (`contratos/instalacion.md` §3).
+                // Respaldo hasta que `CrearPromesaPago` (A3) lo rechace; no evalúa la promesa.
+                await rechazarSiPendiente(titular.servicioId, 'pedir una promesa de pago sobre')
                 const promesa = await new CrearPromesaPago().execute(
                     {
                         servicio_id: titular.servicioId,

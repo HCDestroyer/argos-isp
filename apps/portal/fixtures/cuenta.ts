@@ -174,6 +174,40 @@ export const CUENTA_DOS_EMPRESAS_FIXTURE: Schema<'PortalCuenta'> = {
     ],
 }
 
+/**
+ * Cliente con un servicio vendido desde Iris y aún sin instalar (`contratos/instalacion.md`): sin
+ * mensualidades, solo el cargo único de instalación. Escenario `?cuenta=pendiente` en desarrollo.
+ */
+export const CUENTA_PENDIENTE_FIXTURE: Schema<'PortalCuenta'> = {
+    cliente: CONTACTO_FIXTURE,
+    servicios: [
+        {
+            id: 63,
+            estado: 'pendiente_instalacion',
+            plan: 'Fibra 50 Mbps',
+            plan_tipo: 'residencial',
+            adicionales: [],
+            direccion: 'Colonia Las Flores, lote 8',
+            promesa_activa: false,
+            monto_adeudado: '250.00',
+            empresa: MARCA_FIXTURE,
+        },
+    ],
+    monto_adeudado: '250.00',
+    empresa_principal: MARCA_FIXTURE,
+    empresas: [
+        {
+            empresa: MARCA_FIXTURE,
+            saldo: '250.00',
+            saldo_a_favor: '0.00',
+            facturas_pendientes: [
+                pendiente({ id: 1310, servicio_id: 63, vence_en: '2099-11-05', estado: 'emitida', vencida: false, total: '250.00', saldo: '250.00' }),
+            ],
+            bonificaciones: [],
+        },
+    ],
+}
+
 function factura(datos: Partial<Schema<'PortalFactura'>> & { id: number }): Schema<'PortalFactura'> {
     return {
         numero: String(datos.id),
