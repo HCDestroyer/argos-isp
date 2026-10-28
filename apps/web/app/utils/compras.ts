@@ -190,7 +190,7 @@ const montoPositivo = (mensaje = 'Monto mayor que 0 con hasta 2 decimales, sin c
     .refine(v => !MONTO.test(v) || new Decimal(v).gt(0), 'Debe ser mayor que cero')
 const montoOpcional = z.string().trim().refine(v => v === '' || MONTO.test(v), 'Monto con hasta 2 decimales')
 const fechaOpcional = (hoy: string, futura = 'La fecha no puede ser futura') => z.string().trim()
-    .refine(v => v === '' || FECHA.test(v), 'Fecha inválida')
+    .refine(v => v === '' || FECHA.test(v), 'Elige una fecha válida (día, mes y año)')
     .refine(v => v === '' || v <= hoy, futura)
 const texto = (max: number) => z.string().trim().max(max, `Máximo ${max} caracteres`)
 
@@ -204,7 +204,7 @@ export function esquemaProveedor(edicion: boolean) {
         regimen_isr: z.enum(['ninguno', 'utilidades', 'opcional_simplificado', 'pequeno_contribuyente']),
         agente_retencion_iva: z.boolean(),
         direccion: texto(300),
-        correo: texto(150).refine(v => v === '' || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), 'Correo no válido'),
+        correo: texto(150).refine(v => v === '' || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), 'Escribe un correo válido, como nombre@dominio.com'),
         telefono: texto(40),
         dias_credito: z.number({ message: 'Días de 0 a 365' }).int('Días enteros').min(0, 'Días de 0 a 365').max(365, 'Días de 0 a 365'),
     })
@@ -337,10 +337,10 @@ export function esquemaCompra(hoy: string, desdeEgreso: boolean) {
         }
         if (!desdeEgreso && d.condicion === 'contado') {
             if (d.metodo === 'caja' && d.caja_id === null) {
-                ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'La caja es obligatoria' })
+                ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'Elige la caja de la que sale el dinero' })
             }
             if (d.metodo === 'cuenta_bancaria' && d.cuenta_bancaria_id === null) {
-                ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'La cuenta bancaria es obligatoria' })
+                ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'Elige la cuenta bancaria de la que sale el dinero' })
             }
         }
         d.lineas.forEach((l, i) => {
@@ -494,10 +494,10 @@ export function esquemaPagoProveedor(hoy: string, maximo: string | null) {
         compras: z.array(z.number().int().positive()),
     }).superRefine((d, ctx) => {
         if (d.metodo === 'caja' && d.caja_id === null) {
-            ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'La caja es obligatoria' })
+            ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'Elige la caja de la que sale el dinero' })
         }
         if (d.metodo === 'cuenta_bancaria' && d.cuenta_bancaria_id === null) {
-            ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'La cuenta bancaria es obligatoria' })
+            ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'Elige la cuenta bancaria de la que sale el dinero' })
         }
     })
 }
@@ -571,7 +571,7 @@ export function esquemaBajaActivo(hoy: string, alta: string) {
         cuenta_bancaria_id: z.number().int().positive().nullable(),
     }).superRefine((d, ctx) => {
         if (d.tipo === 'venta' && (!d.precio_venta || !MONTO.test(d.precio_venta) || new Decimal(d.precio_venta).lte(0))) {
-            ctx.addIssue({ code: 'custom', path: ['precio_venta'], message: 'El precio de venta (sin IVA) es obligatorio' })
+            ctx.addIssue({ code: 'custom', path: ['precio_venta'], message: 'Escribe el precio de venta sin IVA' })
         }
         if (d.tipo === 'venta' && d.cuenta_bancaria_id === null) {
             ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'Elige la cuenta que recibe el precio' })

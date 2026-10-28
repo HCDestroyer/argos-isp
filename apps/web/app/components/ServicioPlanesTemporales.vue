@@ -47,7 +47,7 @@ let clave = nuevaClaveIdempotencia()
 /** Espejo de `programarPlanTemporalValidator`: plan, inicio opcional, días 1–366, motivo 3–500 u omitido. */
 const esquema = z.object({
     plan_id: z.number({ message: 'Elige el plan' }).int().min(1, 'Elige el plan').nullable().refine(v => v !== null, 'Elige el plan'),
-    inicio: z.string().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Fecha inválida'),
+    inicio: z.string().refine(v => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Elige una fecha válida (día, mes y año)'),
     dias: z.number({ message: 'Escribe los días' }).int('Solo enteros').min(1, 'Entre 1 y 366 días').max(366, 'Entre 1 y 366 días'),
     motivo: z.string().trim().max(500, 'Máximo 500 caracteres').refine(v => v === '' || v.length >= 3, 'Al menos 3 caracteres'),
 })

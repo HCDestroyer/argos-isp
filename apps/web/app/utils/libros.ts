@@ -139,7 +139,7 @@ export function nombreBorrador(libro: LibroEmitible, desde: string, hasta: strin
 
 /* Esquemas espejo de los validadores (`#fiscal/validators_libros`). */
 
-const fecha = z.string().trim().regex(FECHA, 'Fecha inválida (AAAA-MM-DD)')
+const fecha = z.string().trim().regex(FECHA, 'Elige una fecha válida (AAAA-MM-DD)')
 
 /** Vista previa: cualquier rango; `hasta` no antes de `desde`. */
 export const esquemaVistaPrevia = z.object({

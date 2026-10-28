@@ -185,7 +185,7 @@ onMounted(async () => {
             color="error"
             variant="subtle"
             icon="i-lucide-circle-alert"
-            title="La API rechazó algunos campos"
+            title="Hay datos por corregir"
             description="Corrige los campos marcados en rojo y vuelve a guardar."
         />
 
@@ -197,6 +197,7 @@ onMounted(async () => {
                 <UFormField
                     name="nombre"
                     label="Nombre"
+                    help="Aparece en el aviso de cobro, el recibo y la búsqueda."
                     required
                     class="sm:col-span-2"
                 >
@@ -222,6 +223,7 @@ onMounted(async () => {
                 <UFormField
                     name="canal_preferido"
                     label="Canal de avisos"
+                    help="Por dónde le llegan los avisos de cobro, de corte y de reactivación."
                 >
                     <USelect
                         v-model="estado.canal_preferido"
@@ -233,6 +235,7 @@ onMounted(async () => {
                 <UFormField
                     name="telefono"
                     label="Teléfono"
+                    help="Para buscarlo al cobrar y para contactarlo."
                 >
                     <UInput
                         v-model="estado.telefono"
@@ -260,6 +263,7 @@ onMounted(async () => {
                 <UFormField
                     name="email"
                     label="Correo"
+                    help="Para enviarle el aviso de cobro y la factura electrónica."
                     class="sm:col-span-2"
                 >
                     <UInput
@@ -282,6 +286,7 @@ onMounted(async () => {
                     v-if="puede('zonas.ver')"
                     name="zona"
                     label="Zona"
+                    help="Agrupa clientes por sector para reportes, corte y la empresa que factura."
                 >
                     <USelect
                         v-model="estado.zona"
@@ -307,6 +312,7 @@ onMounted(async () => {
                 <UFormField
                     name="direccion"
                     label="Dirección"
+                    help="Se propone como dirección de instalación de sus servicios."
                     class="sm:col-span-2"
                 >
                     <UTextarea
@@ -348,6 +354,8 @@ onMounted(async () => {
                 <UFormField
                     name="nit_cui"
                     label="Número"
+                    :required="estado.tipo_documento_fiscal !== 'cf'"
+                    help="La factura electrónica (FEL) sale a nombre de este documento."
                     :description="estado.tipo_documento_fiscal === 'nit' ? 'Con dígito verificador (módulo 11).' : estado.tipo_documento_fiscal === 'cui' ? '13 dígitos del DPI.' : estado.tipo_documento_fiscal === 'pasaporte' ? '3 a 20 letras o dígitos.' : 'Consumidor final no lleva número.'"
                 >
                     <UFieldGroup class="w-full">
@@ -369,6 +377,7 @@ onMounted(async () => {
 
                 <UFormField
                     name="pais_fiscal"
+                    required
                     label="País"
                     description="NIT y CUI son de Guatemala; un extranjero usa pasaporte."
                 >
