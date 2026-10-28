@@ -16,6 +16,7 @@ import {
     verMovimiento,
     type MovimientoVista,
 } from '#inventario/kardex'
+import { origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * `inventario.consumir` (`POST /inventario/consumos`): materiales usados en una instalación o una
@@ -27,6 +28,9 @@ import {
  * (422 `periodo_cerrado`) y si después de ella no hay movimientos que cambiaran el promedio (H55: 409
  * `fecha_con_movimientos_posteriores`); se valúa al promedio, que es el de esa fecha. Nunca deja
  * existencia ni valor negativos en ninguna fecha (409 `existencia_insuficiente_en_fecha`).
+ *
+ * - `origen_tipo` = `iris_orden` + `origen_id` (orden de Iris, `#inventario/origen_externo`): se guardan
+ *   en el movimiento (`origen_externo_*`) y salen en el kardex y en los eventos; solo trazabilidad.
  */
 
 export interface EntradaConsumo {
@@ -36,12 +40,16 @@ export interface EntradaConsumo {
     servicio_id?: number | null
     motivo?: string | null
     fecha?: string | null
+    /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
+    origen_tipo?: OrigenExternoTipo | null
+    origen_id?: string | null
 }
 
 export default class ConsumirInventario extends DomainAction<EntradaConsumo, MovimientoVista> {
     readonly nombre = 'inventario.consumir'
 
     protected async handle(input: EntradaConsumo, t: Transaccion): Promise<MovimientoVista> {
+        const origenExterno = origenExternoDe(input)
         const producto = await productoMovible(t, input.producto_id)
         const empresaId = producto.empresa_id
         t.fijarEmpresa(empresaId)
@@ -76,6 +84,7 @@ export default class ConsumirInventario extends DomainAction<EntradaConsumo, Mov
                 costoTotal: costo.neg(),
                 servicioId: input.servicio_id ?? null,
                 motivo: input.motivo ?? null,
+                origenExterno,
             },
             {
                 contrapartida: producto.cuenta_consumo ?? CUENTA_CONSUMO_POR_DEFECTO,

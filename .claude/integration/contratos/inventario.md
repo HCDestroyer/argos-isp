@@ -130,7 +130,7 @@ Acciones explícitas, una por permiso. Listas con cursor; errores RFC 9457; `Ide
     - `POST /bodegas` (`bodegas.crear`), `POST /bodegas/:id/editar` (`bodegas.editar`), `POST /bodegas/:id/desactivar` (`bodegas.desactivar`).
 - **Existencias y kardex:**
     - `GET /inventario/existencias?bodega_id=&producto_id=&bajo_minimo=`: cantidad y valor por producto × bodega.
-    - `GET /inventario/movimientos?producto_id=&bodega_id=&desde=&hasta=&tipo=`: el kardex, con saldo corrido por producto.
+    - `GET /inventario/movimientos?producto_id=&bodega_id=&desde=&hasta=&tipo=&origen_externo_id=`: el kardex, con saldo corrido por producto (`origen_externo_id`: los movimientos de una orden de Iris, ver «Origen Iris»).
 - **Unidades:**
     - `GET /inventario/unidades?estado=&producto_id=&bodega_id=&servicio_id=&q=` (`q` busca por serie o MAC).
     - `GET /inventario/unidades/:id`: historial de la unidad.
@@ -169,8 +169,8 @@ Compras y cargos únicos: sus validadores aceptan los campos nuevos (`producto_i
 
 | Evento | Payload |
 | --- | --- |
-| `inventario.movimiento_registrado` | movimiento_id, empresa_id, tipo, producto_id, bodega_id, cantidad, costo_total, unidad_id (o null), servicio_id (o null), origen_tipo, origen_id |
-| `inventario.comodato_asignado` / `inventario.comodato_devuelto` | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac; devuelto: condicion, bodega_id |
+| `inventario.movimiento_registrado` | movimiento_id, empresa_id, tipo, producto_id, bodega_id, cantidad, costo_total, unidad_id (o null), servicio_id (o null), origen_tipo, origen_id, origen_externo_tipo, origen_externo_id (o null; orden de Iris) |
+| `inventario.comodato_asignado` / `inventario.comodato_devuelto` | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac, origen_externo_tipo, origen_externo_id (o null); devuelto: condicion, bodega_id |
 | `inventario.equipo_por_recuperar` | unidad_id, empresa_id, servicio_id, cliente_id, producto_id, serie, mac |
 | `inventario.existencia_minima` | empresa_id, producto_id, bodega_id (o null = total), cantidad, minimo. Se emite al cruzar el mínimo hacia abajo, no en cada salida |
 | `inventario.conteo_cerrado` | conteo_id, empresa_id, bodega_id, faltante, sobrante, lineas |
@@ -302,3 +302,17 @@ Rama `a3/inventario-c` (sale de `a3/inventario-b` c15a016). Incluye las decision
 
 1. **`Producto.precio_venta`** (§4): opcional, IVA incluido; sale en `Producto` (OpenAPI) y se envía en `POST /productos` y `POST /productos/:id/editar`. Migración `1792862639792`.
 2. **Compra de serie con menos series que su cantidad**: 422 `validacion` (`type` `…:validacion`), `errors[]` = `{ field: 'lineas.N.unidades', rule: 'requiere_unidades' }`, igual que sin ninguna serie. En una NCRE de serie con menos equipos devueltos que la cantidad: `lineas.N.unidad_ids`, `requiere_unidades`. Con más series que la cantidad: `{ field: 'lineas.N.cantidad', rule: 'cantidad' }`. El `type` no es `requiere_unidades`: la regla va en `errors[].rule`, como en el consumo (`cantidad`, `requiere_unidades`).
+
+## Origen Iris (pedidos A3 y A4 de `contratos/iris.md` §5.1, rama `a3/origen-iris`)
+
+1. **Cuerpo.** `POST /inventario/consumos`, `POST /servicios/:id/equipos`, `…/devolver`, `…/perdida` y `POST /facturas/cargo-unico` aceptan `origen_tipo` y `origen_id` (los nombres del contrato con Iris). `origen_tipo` solo admite `iris_orden`: los orígenes internos del kardex (`compra`, `factura`, `conteo`, `nota_credito`, `sorteo_ganador`…) los pone el sistema y no se aceptan del cliente. `origen_id` es texto de 1 a 100 caracteres `[A-Za-z0-9._:-]` (el UUID de la orden). Con `origen_tipo`, `origen_id` es obligatorio, y al revés: 422 `validacion` con `errors[].field` = el que falta. Sin los dos, todo igual que antes.
+2. **Dónde se guarda.** Columnas nuevas `origen_externo_tipo` + `origen_externo_id` (texto, CHECK `iris_orden`, en pareja) en `inventario.movimientos`, `billing.facturas` y `billing.bonificaciones` (migración `1793210540992_origen_externo_iris`). **No** en `origen_tipo`/`origen_id` del movimiento: ese par es interno, su id es `bigint` y el auditor lo cruza con compras, notas y ganadores.
+3. **Dónde sale.**
+    - `MovimientoInventario` (kardex y respuesta del consumo) y el `historial` de `GET /inventario/unidades/:id`: `origen_externo_tipo`, `origen_externo_id`. Filtro `GET /inventario/movimientos?origen_externo_id=` (el saldo corrido sigue siendo el de toda la historia).
+    - Eventos `inventario.movimiento_registrado`, `inventario.comodato_asignado` e `inventario.comodato_devuelto`: los dos campos (null sin orden).
+    - Cargo único: `Factura`/`FacturaDetalle` (respuesta, `GET /facturas`, `GET /facturas/:id`) y `Bonificacion` (cargo en Q0).
+    - Auditoría: `audit.acciones.entrada` de cada acción lleva `origen_tipo`/`origen_id` tal como llegaron.
+4. **Pérdida de comodato.** No tiene kardex ni evento propio: la orden queda solo en la auditoría de `inventario.declarar_perdida_comodato`. El motivo de la baja y su asiento no cambian.
+5. **Contabilidad.** Solo trazabilidad: ningún asiento, costo, saldo ni descripción de asiento cambia (las pruebas comparan las partidas de un cargo con y sin origen y verifican el libro).
+6. **Idempotencia.** Todas estas rutas ya eran idempotentes por `Idempotency-Key`; Iris manda `iris:<operacion>:<orden_id>[:…]` (§3 de `contratos/iris.md`), probado con `iris:cargo:<orden_id>` y `iris:consumo:<orden_id>`.
+7. **OpenAPI.** En las respuestas los dos campos están siempre (null sin orden), pero se declaran opcionales en `MovimientoInventario`, `Factura` y `Bonificacion` para no romper los fixtures del panel; A4 los agrega y se vuelven requeridos.

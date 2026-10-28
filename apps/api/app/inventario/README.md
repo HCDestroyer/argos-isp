@@ -48,6 +48,10 @@ reporte valorizado, salida por premio, `marcar_reparada` y fechas pasadas en con
   `1.2.01.NN / 1.1.14` y alta del activo (`ledger.activos.unidad_id`); devolución `1.1.14 (valor en
   libros) + 1.2.02 / 1.2.01` sin resultado; pérdida con `activos.dar_de_baja` (5.3.06).
 - Con el inventario sin usar, compras, facturas y cargos únicos se comportan igual que antes.
+- Origen Iris (`origen_externo.ts`, `contratos/inventario.md` «Origen Iris»): consumo, comodato,
+  devolución y pérdida aceptan `origen_tipo = iris_orden` + `origen_id`; se guardan en el movimiento
+  como `origen_externo_tipo`/`origen_externo_id` (aparte del origen interno) y salen en el kardex,
+  el historial de la unidad y los eventos. La pérdida, sin kardex, solo en la auditoría.
 
 ## Eventos
 

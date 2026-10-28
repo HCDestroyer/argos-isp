@@ -24,9 +24,17 @@
 # paquetes de empaquetar.sh), ARGOSISP_SIN_DESCARGA=1 (imágenes ya cargadas), ARGOSISP_TLS=interno
 # (certificados de la CA interna de Caddy en lugar de Let's Encrypt), ARGOSISP_REPO, ARGOSISP_REGISTRO,
 # ARGOSISP_API_PORTAL=si|no (API del portal; por defecto si, no con menos de 3 GB de RAM),
-# ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), y para un nodo portal de prueba
+# ARGOSISP_HTTP_PORT y ARGOSISP_HTTPS_PORT (puertos del proxy), ARGOSISP_PROXIES_CONFIABLES (IP o
+# CIDR del proxy de delante, p. ej. Nginx Proxy Manager: docs/runbooks/detras-de-proxy.md), y para un nodo portal de prueba
 # ARGOSISP_NODO_CENTRAL_DIRECCION (host:puerto al que se conecta) y ARGOSISP_NODO_CENTRAL_TLS=inseguro.
 set -Eeuo pipefail
+
+# Todo el instalador va dentro de main(), que se llama en la última línea. Con
+# `curl … | sudo bash`, bash lee el script de stdin a medida que lo ejecuta: un hijo que lea stdin
+# (`docker compose exec`, apt-get…) se tragaba el resto y la instalación terminaba sin mostrar la
+# clave ni escribir credenciales-iniciales.txt. Así bash lee la función completa antes de correr
+# nada. Además, cada comando que podría leer stdin va con < /dev/null; las preguntas leen /dev/tty.
+main() {
 
 REPO="${ARGOSISP_REPO:-HCDestroyer/argos-isp}"
 REGISTRO="${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}"
@@ -42,6 +50,7 @@ TOKEN=""
 RAM_MINIMA_MB=1900
 HTTP_PORT="${ARGOSISP_HTTP_PORT:-80}"
 HTTPS_PORT="${ARGOSISP_HTTPS_PORT:-443}"
+PROXIES="${ARGOSISP_PROXIES_CONFIABLES:-}"
 DISCO_MINIMO_GB=10
 DOCKER_MINIMO=25
 COMPOSE_MINIMO=2.24
@@ -134,6 +143,18 @@ if [ -z "$API_PORTAL" ]; then
     fi
 fi
 case "$API_PORTAL" in si | no) ;; *) morir "ARGOSISP_API_PORTAL debe ser si o no (es '$API_PORTAL')" ;; esac
+# Proxies de confianza (Caddy: trusted_proxies static): IP o CIDR separados por espacio o coma. Se
+# validan aquí porque una entrada mala impide que Caddy arranque.
+proxies_ok=""
+for p in ${PROXIES//,/ }; do
+    [[ "$p" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?$ ||
+        "$p" =~ ^[0-9A-Fa-f]*:[0-9A-Fa-f:.]*(/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))?$ ]] ||
+        morir "ARGOSISP_PROXIES_CONFIABLES: '$p' no es una IP ni un CIDR (separa con espacios o comas)"
+    proxies_ok="${proxies_ok:+$proxies_ok }$p"
+done
+PROXIES="$proxies_ok"
+[ -z "$PROXIES" ] || [ "${ARGOSISP_TLS:-}" = interno ] ||
+    aviso "con un proxy delante (ARGOSISP_PROXIES_CONFIABLES) los retos de Let's Encrypt los recibe el proxy, no Caddy: usa ARGOSISP_TLS=interno (el certificado público lo pone el proxy)"
 mkdir -p "$DIR"
 disco_gb=$(($(df -Pk "$DIR" | awk 'NR==2 {print $4}') / 1024 / 1024))
 [ "$disco_gb" -ge "$DISCO_MINIMO_GB" ] || morir "hacen falta ${DISCO_MINIMO_GB} GB libres en $DIR (hay ${disco_gb} GB)"
@@ -146,14 +167,14 @@ for p in curl jq ca-certificates tar gzip util-linux iproute2; do
     dpkg -s "$p" > /dev/null 2>&1 || faltan="$faltan $p"
 done
 if [ -n "$faltan" ]; then
-    apt-get update -qq
+    apt-get update -qq < /dev/null
     # shellcheck disable=SC2086
-    apt-get install -y -qq $faltan > /dev/null
+    apt-get install -y -qq $faltan < /dev/null > /dev/null
 fi
 
 for puerto in "$HTTP_PORT" "$HTTPS_PORT"; do
     if ss -Hltn "sport = :$puerto" | grep -q .; then
-        morir "el puerto TCP $puerto ya está en uso (ArgosIsp lo necesita para el panel, la API y el portal)"
+        morir "el puerto TCP $puerto ya está en uso (ArgosIsp lo necesita para el panel, la API y el portal). Si ya hay un proxy en 80 y 443 (Nginx Proxy Manager…): ARGOSISP_HTTP_PORT=8080 ARGOSISP_HTTPS_PORT=8443, docs/runbooks/detras-de-proxy.md"
     fi
 done
 [ "$ROL" = portal ] || for puerto in 1812 1813; do
@@ -177,9 +198,9 @@ if ! command -v docker > /dev/null; then
     chmod a+r /etc/apt/keyrings/docker.asc
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$repo_id $codename stable" \
         > /etc/apt/sources.list.d/docker.list
-    apt-get update -qq
-    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null
-    systemctl enable --now docker > /dev/null 2>&1 || true
+    apt-get update -qq < /dev/null
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin < /dev/null > /dev/null
+    systemctl enable --now docker < /dev/null > /dev/null 2>&1 || true
 fi
 docker info > /dev/null 2>&1 || morir "Docker está instalado pero no responde (systemctl status docker)"
 docker_version="$(docker version --format '{{.Server.Version}}')"
@@ -375,6 +396,12 @@ NOTIFY_EMPRESA_NOMBRE=ArgosIsp
 EOF
 [ "$HTTP_PORT" = 80 ] || echo "ARGOSISP_HTTP_PORT=$HTTP_PORT" >> "$DIR/.env.nuevo"
 [ "$HTTPS_PORT" = 443 ] || echo "ARGOSISP_HTTPS_PORT=$HTTPS_PORT" >> "$DIR/.env.nuevo"
+cat >> "$DIR/.env.nuevo" << EOF
+
+# Proxy de delante (Nginx Proxy Manager…): IP o CIDR separados por espacio de los que Caddy acepta
+# X-Forwarded-For / X-Real-IP. Vacía = no hay proxy delante. docs/runbooks/detras-de-proxy.md
+ARGOSISP_PROXIES_CONFIABLES="$PROXIES"
+EOF
 fi
 mv -f "$DIR/.env.nuevo" "$DIR/.env"
 chmod 600 "$DIR/.env"
@@ -386,7 +413,7 @@ umask 022
 ln -sfn "$DIR/actual/argosisp" /usr/local/bin/argosisp
 if command -v systemctl > /dev/null && [ -d /run/systemd/system ]; then
     install -m 0644 "$DIR/actual/systemd/argosisp-actualizar.service" "$DIR/actual/systemd/argosisp-actualizar.timer" /etc/systemd/system/
-    systemctl daemon-reload
+    systemctl daemon-reload < /dev/null
 fi
 
 # ---------------------------------------------------------------------------
@@ -404,12 +431,12 @@ if [ "$ROL" = portal ]; then
 else
     compose=(docker compose -p argosisp --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.yml")
 fi
-"${compose[@]}" config --quiet || morir "el compose de $VERSION no es válido con el .env generado"
+"${compose[@]}" config --quiet < /dev/null || morir "el compose de $VERSION no es válido con el .env generado"
 if [ "${ARGOSISP_SIN_DESCARGA:-0}" != 1 ]; then
     log "descargando imágenes de $REGISTRO (versión $VERSION)"
-    "${compose[@]}" pull --quiet
+    "${compose[@]}" pull --quiet < /dev/null
 fi
-"$DIR/actual/argosisp" levantar || morir "ArgosIsp no quedó sano. Revisa: argosisp logs   (el .env queda en $DIR/.env)"
+"$DIR/actual/argosisp" levantar < /dev/null || morir "ArgosIsp no quedó sano. Revisa: argosisp logs   (el .env queda en $DIR/.env)"
 
 if [ "$ROL" = portal ]; then
     cat << EOF
@@ -427,8 +454,27 @@ EOF
     exit 0
 fi
 
+# URL de entrada: con 443, o detrás de un proxy (publica los dominios en su propio 443), sin puerto;
+# con otro puerto HTTPS y sin proxy, con el puerto.
+sufijo=""
+[ "$HTTPS_PORT" = 443 ] || [ -n "$PROXIES" ] || sufijo=":$HTTPS_PORT"
+corte="http://<IP de este servidor>$([ "$HTTP_PORT" = 80 ] || echo ":$HTTP_PORT")/corte"
+if [ -n "$PROXIES" ]; then
+    nota="  Detrás de un proxy (ARGOSISP_PROXIES_CONFIABLES=$PROXIES): se entra por los dominios del proxy.
+  Cada Proxy Host (panel, api y portal) va por https a la IP de este servidor, puerto $HTTPS_PORT, con
+  Websockets. El dst-nat de los suspendidos (TCP/80) va a este servidor, puerto $HTTP_PORT, nunca al proxy.
+  Paso a paso: docs/runbooks/detras-de-proxy.md"
+elif [ "$HTTP_PORT" != 80 ] || [ "$HTTPS_PORT" != 443 ]; then
+    nota="  Puertos $HTTP_PORT (HTTP) y $HTTPS_PORT (HTTPS). Let's Encrypt necesita 80 y 443 en este servidor: con
+  otros puertos usa ARGOSISP_TLS=interno o un proxy delante (docs/runbooks/detras-de-proxy.md)."
+elif [ "${ARGOSISP_TLS:-}" = interno ]; then
+    nota="  Certificados de la CA interna de Caddy (ARGOSISP_TLS=interno): el navegador avisa."
+else
+    nota="  Los tres dominios deben apuntar a este servidor para que Let's Encrypt emita los certificados."
+fi
+
 cat > "$DIR/credenciales-iniciales.txt" << EOF
-Panel:    https://$DOMINIO_PANEL
+Panel:    https://$DOMINIO_PANEL$sufijo
 Usuario:  $CORREO
 Clave:    $admin_password
 EOF
@@ -438,13 +484,13 @@ cat << EOF
 
 ArgosIsp $VERSION instalado.
 
-  Panel:    https://$DOMINIO_PANEL
-  API:      https://$DOMINIO_API
-  Portal:   https://$DOMINIO_PORTAL   (y /corte por HTTP en este servidor)
+  Panel:    https://$DOMINIO_PANEL$sufijo
+  API:      https://$DOMINIO_API$sufijo
+  Portal:   https://$DOMINIO_PORTAL$sufijo   (y /corte por HTTP: $corte)
   Usuario:  $CORREO
   Clave:    $admin_password   (también en $DIR/credenciales-iniciales.txt; cámbiala al entrar y borra el archivo)
 
-  Los tres dominios deben apuntar a este servidor para que Let's Encrypt emita los certificados.
+$nota
   Guarda una copia de $DIR/.env fuera del servidor: AAA_PPP_KEY descifra las contraseñas PPPoE.
 
   argosisp estado        versión y salud
@@ -452,3 +498,6 @@ ArgosIsp $VERSION instalado.
   argosisp auto activar  parches automáticos diarios (apagado)
 
 EOF
+}
+
+main "$@"

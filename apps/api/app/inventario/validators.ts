@@ -7,6 +7,7 @@ import { TIPOS_BODEGA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
+import { reglasOrigenExterno } from '#inventario/origen_externo'
 
 /**
  * Validadores del inventario (`contratos/inventario.md` §6, fase A). Las cantidades viajan como
@@ -197,6 +198,9 @@ export const kardexValidator = vine.compile(
         desde: fechaIso().optional(),
         hasta: fechaIso().optional(),
         tipo: vine.enum(TIPOS_MOVIMIENTO).optional(),
+        origen_externo_id: vine.string().trim().minLength(1).maxLength(100).optional().meta({
+            description: 'Solo los movimientos de esta orden de Iris (origen_externo_id)',
+        }),
     }),
 )
 
@@ -217,6 +221,7 @@ export const consumoValidator = vine.compile(
             description:
                 'Fecha del consumo (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después',
         }),
+        ...reglasOrigenExterno(),
     }),
 )
 
@@ -311,6 +316,7 @@ export const asignarComodatoValidator = vine.compile(
             description:
                 'Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)',
         }),
+        ...reglasOrigenExterno(),
     }),
 )
 
@@ -321,6 +327,7 @@ export const devolverComodatoValidator = vine.compile(
         en_reparacion: vine.boolean().nullable().optional(),
         fecha: fechaIso().nullable().optional(),
         motivo: texto(500).nullable().optional(),
+        ...reglasOrigenExterno(),
     }),
 )
 
@@ -328,6 +335,7 @@ export const perdidaComodatoValidator = vine.compile(
     vine.object({
         motivo: motivo(),
         fecha: fechaIso().nullable().optional(),
+        ...reglasOrigenExterno(),
     }),
 )
 

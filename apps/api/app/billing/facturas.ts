@@ -10,6 +10,7 @@ import { CERO, D, aTexto, dec, redondear, type Dec, type Monto } from '#ledger/d
 import { notasDeFactura } from '#billing/notas_credito'
 import { emisorDeFactura } from '#billing/empresa'
 import { CUENTAS } from '#ledger/plan_cuentas'
+import type { OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * Facturas: montos (IVA incluido), estado según lo pagado y consultas de lectura.
@@ -209,6 +210,9 @@ export interface FacturaFila {
     /** factura importada: sistema de origen e id allí */
     origen?: string | null
     id_externo?: string | null
+    /** orden de Iris del cargo único */
+    origen_externo_tipo?: OrigenExternoTipo | null
+    origen_externo_id?: string | null
     /** sustitución (`billing.sustituciones`): la factura nueva que reemplazó a esta, y la original que esta reemplaza */
     sustituida_por?: number | null
     sustituye_a?: number | null
@@ -264,6 +268,9 @@ export function columnasFactura(cliente: QueryClientContract, alias = 'f') {
         c('motivo_sin_costo_texto'),
         c('origen'),
         cliente.raw(`${alias}.clave_externa as id_externo`),
+        // orden de Iris del cargo único (`#inventario/origen_externo`)
+        c('origen_externo_tipo'),
+        c('origen_externo_id'),
         cliente.raw(
             `(select su.nueva_id from billing.sustituciones su where su.original_id = ${alias}.id) as sustituida_por`,
         ),

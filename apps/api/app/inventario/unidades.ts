@@ -461,6 +461,8 @@ export async function historialUnidad(id: number) {
             'm.asiento_id',
             'm.origen_tipo',
             'm.origen_id',
+            'm.origen_externo_tipo',
+            'm.origen_externo_id',
             'm.motivo',
             'm.created_at',
         )) as Array<Partial<MovimientoVista>>
