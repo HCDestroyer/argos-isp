@@ -4,16 +4,17 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { Problema } from '#shared/errores'
 
 /**
- * Autologin desde otro sistema (contrato Horus §1.5, lado receptor). Argos recibe tickets; la
- * emisión hacia Horus ("Ver en Horus") es de A6.
+ * Autologin desde otro sistema (contrato Horus §1.5, lado receptor; Iris lo reutiliza, contrato
+ * Iris §1.3). Argos recibe tickets; la emisión hacia Horus ("Ver en Horus") es de A6 y hacia Iris
+ * ("Ver en Iris") está en `app/integraciones/iris`.
  *
- * - El **conector** es el sistema que pidió el ticket (`horus`), identificado por su token de
+ * - El **conector** es el sistema que pidió el ticket (`horus` o `iris`), identificado por su token de
  *   integración: el ticket queda ligado a ese token y deja de servir si el token se revoca.
  * - Un ticket dura `VIGENCIA_TICKET_S` y se usa una vez. Sin vinculación, el canje entrega un token
  *   de vinculación (`VIGENCIA_VINCULACION_S`, un uso) para completar el login normal.
  */
 
-export const CONECTORES_SSO = ['horus'] as const
+export const CONECTORES_SSO = ['horus', 'iris'] as const
 export type ConectorSso = (typeof CONECTORES_SSO)[number]
 
 /**
