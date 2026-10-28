@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { contextoSistema } from '#shared/contexto'
+import { estado, usuarioConRoles } from '#tests/ayudas'
 import ProgramarRecordatorios from '#notify/actions/programar_recordatorios'
 import { ConsumidorNotify } from '#notify/consumidor'
 import { registrarCanal, reiniciarCanales } from '#notify/canales/registro'
@@ -15,8 +16,8 @@ import {
 
 /**
  * Servicio `pendiente_instalacion` (`contratos/instalacion.md` §3, pedido de A3): ni recordatorios
- * ni aviso de factura vencida para su cargo único, y sin «servicio reactivado» al activar la
- * instalación. El aviso de la factura emitida sí sale. Fechas en 2028 (lejos de otras pruebas).
+ * ni aviso de factura vencida para su cargo único, y al activar la instalación la bienvenida
+ * (`servicio.instalacion_activada`) en vez de «servicio reactivado». El aviso de la factura emitida sí sale. Fechas en 2028 (lejos de otras pruebas).
  */
 
 async function pendiente(servicioId: number) {
@@ -102,20 +103,46 @@ test.group('notify · servicio pendiente de instalación', (group) => {
         assert.lengthOf(await consumir('factura.vencida', payload), 1)
     })
 
-    test('activar la instalación no manda «servicio reactivado»; una reactivación sí', async ({ assert }) => {
+    test('activar la instalación manda la bienvenida una sola vez; una reactivación sigue con «reactivado»', async ({
+        assert,
+    }) => {
         const clienteId = await crearCliente({ email: 'instalado@prueba.local' })
+        const { codigo } = await db.from('core.clientes').where('id', clienteId).select('codigo').first()
+        assert.isString(codigo)
         const servicioId = await crearServicio(clienteId)
+        await db.from('core.servicios').where('id', servicioId).update({ pass_ppp: 'secreto-pppoe-xyz' })
+        const servicio = await db.from('core.servicios').where('id', servicioId).first()
         const base = { servicio_id: servicioId, empresa_id: 1 }
-
-        const instalacion = await consumir('servicio.estado_cambiado', {
+        const activacion = {
             ...base,
             de: 'pendiente_instalacion',
             a: 'activo',
             motivo: 'instalacion',
             origen_tipo: 'iris_orden',
             origen_id: 'ord-1',
+        }
+
+        // el bus entrega el mismo evento dos veces: un solo aviso por canal
+        const id = await eventoOutbox('servicio.estado_cambiado', activacion)
+        const consumidor = new ConsumidorNotify(new ColaFalsa())
+        await consumidor.procesar({ id, evento: 'servicio.estado_cambiado', payload: activacion })
+        await consumidor.procesar({ id, evento: 'servicio.estado_cambiado', payload: activacion })
+        const bienvenida = await db.from('notify.envios').where('origen', `outbox:${id}`)
+        assert.lengthOf(bienvenida, 1)
+        assert.containsSubset(bienvenida[0], {
+            evento: 'servicio.instalacion_activada',
+            canal: 'correo',
+            destino: 'instalado@prueba.local',
+            estado: 'encolado',
         })
-        assert.lengthOf(instalacion, 0)
+        assert.equal(bienvenida[0].asunto, '¡Bienvenido! Tu servicio de internet ya está activo')
+        assert.include(bienvenida[0].cuerpo, 'ya está instalado y funcionando')
+        assert.include(bienvenida[0].cuerpo, '10 Mbps de bajada / 5 Mbps de subida')
+        assert.include(bienvenida[0].cuerpo, `Tu código de cliente es ${codigo}`)
+        assert.notInclude(bienvenida[0].cuerpo, 'reactivado')
+        // nunca credenciales PPPoE
+        assert.notInclude(bienvenida[0].cuerpo, servicio.user_ppp)
+        assert.notInclude(bienvenida[0].cuerpo, 'secreto-pppoe-xyz')
 
         const reactivado = await consumir('servicio.estado_cambiado', {
             ...base,
@@ -124,6 +151,63 @@ test.group('notify · servicio pendiente de instalación', (group) => {
             motivo: 'pago',
         })
         assert.lengthOf(reactivado, 1)
+        assert.equal(reactivado[0].evento, 'servicio.estado_cambiado')
         assert.include(reactivado[0].asunto, 'Servicio reactivado')
+    })
+
+    test('la bienvenida está en el catálogo, se edita y desactivada no sale', async ({ client, assert }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const eventos = await estado(client.get('/api/v1/notificaciones/eventos').bearerToken(token), 200)
+        const lista = (eventos.body().data ?? eventos.body()) as Array<{
+            evento: string
+            nombre: string
+            tipo_aviso: string
+        }>
+        const bienvenida = lista.find((e) => e.evento === 'servicio.instalacion_activada')
+        assert.exists(bienvenida)
+        assert.equal(bienvenida!.nombre, 'Bienvenida al activar la instalación')
+        assert.equal(bienvenida!.tipo_aviso, 'corte')
+
+        const filas = await db
+            .from('notify.plantillas')
+            .where('evento', 'servicio.instalacion_activada')
+            .orderBy('canal')
+        assert.deepEqual(
+            filas.map((f) => f.canal),
+            ['correo', 'telegram'],
+        )
+        const correo = filas[0]
+        try {
+            const editada = await estado(
+                client
+                    .put(`/api/v1/notificaciones/plantillas/${correo.id}`)
+                    .bearerToken(token)
+                    .json({ version: correo.version, activa: false }),
+                200,
+            )
+            assert.isFalse(editada.body().activa)
+            await db
+                .from('notify.plantillas')
+                .where('evento', 'servicio.instalacion_activada')
+                .where('canal', 'telegram')
+                .update({ activa: false })
+
+            const servicioId = await crearServicio(
+                await crearCliente({ email: 'sin-bienvenida@prueba.local' }),
+            )
+            const envios = await consumir('servicio.estado_cambiado', {
+                servicio_id: servicioId,
+                empresa_id: 1,
+                de: 'pendiente_instalacion',
+                a: 'activo',
+                motivo: 'instalacion',
+            })
+            assert.lengthOf(envios, 0)
+        } finally {
+            await db
+                .from('notify.plantillas')
+                .where('evento', 'servicio.instalacion_activada')
+                .update({ activa: true })
+        }
     })
 })

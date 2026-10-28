@@ -20,7 +20,7 @@ import { cargarDestinatario, construirVariables, resolverCliente } from '#notify
 import { configPara, empresaDelEvento } from '#notify/configuracion'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
 import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
-import { avisoNoAplicaPorInstalacion } from '#notify/instalacion'
+import { avisoNoAplicaPorInstalacion, eventoDelAviso } from '#notify/instalacion'
 
 export interface EntradaProgramar {
     /** `outbox:<id>` para eventos; otro prefijo para recordatorios */
@@ -71,7 +71,8 @@ interface Aviso {
  *   plantilla dice que es parte de un cobro mayor con `{{#cobro.repartido}}` (`variables.ts`).
  *   Idempotente igual que cualquier evento: por `origen` (`outbox:<id>`) + cliente y por `pago_id`.
  * - Servicio `pendiente_instalacion` (`instalacion.ts`): sin `factura.vencida` ni recordatorios, y
- *   sin el aviso de «servicio reactivado» al activar la instalación.
+ *   al activar la instalación, la bienvenida (`servicio.instalacion_activada`) en vez de «servicio
+ *   reactivado».
  * - Lealtad (`lealtad.ts`): `lealtad.referido_calificado` va al referidor; el
  *   `lealtad.puntos_acumulados` del crédito del referidor no se avisa (ya lo dice el del referido).
  */
@@ -91,7 +92,8 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
         const empresaEvento = await empresaDelEvento(t.trx, payload)
         if (empresaEvento !== null) t.fijarEmpresa(empresaEvento)
 
-        const avisos: Aviso[] = [{ clienteId, evento: input.evento, payload }]
+        // La activación de la instalación se avisa con la bienvenida (`instalacion.ts`)
+        const avisos: Aviso[] = [{ clienteId, evento: eventoDelAviso(input.evento, payload), payload }]
         if (input.evento === 'pago.registrado') {
             for (const tercero of tercerosDelPago(input.payload, clienteId)) {
                 avisos.push({

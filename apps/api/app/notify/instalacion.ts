@@ -9,12 +9,26 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
  *   instalación). `ProgramarRecordatorios` ya los excluye en su consulta; esto cubre además un
  *   evento que llegue igual.
  * - `servicio.estado_cambiado` de `pendiente_instalacion` a `activo` (la activación de la
- *   instalación): la plantilla del cambio de estado diría «Servicio reactivado… está activo de
- *   nuevo», que no es cierto para un servicio nuevo; no se avisa con ella.
+ *   instalación, `motivo: instalacion`): en vez de la plantilla del cambio de estado («Servicio
+ *   reactivado… está activo de nuevo», que no es cierto para un servicio nuevo) se avisa con la
+ *   bienvenida, `servicio.instalacion_activada` (decisión del PM, 28 oct). Mismo origen
+ *   `outbox:<id>`: si el evento llega dos veces no se repite.
  * - El aviso de `factura.emitida` sí sale: el cargo único es una factura cobrable.
  */
 
 export const ESTADO_PENDIENTE = 'pendiente_instalacion'
+/** Plantilla de la bienvenida al activar la instalación. */
+export const EVENTO_BIENVENIDA = 'servicio.instalacion_activada'
+
+/** La activación de la instalación (`de: pendiente_instalacion`, `a: activo`). */
+export function esActivacionInstalacion(evento: string, payload: Record<string, unknown>): boolean {
+    return evento === 'servicio.estado_cambiado' && payload.de === ESTADO_PENDIENTE && payload.a === 'activo'
+}
+
+/** Plantilla con que se avisa el evento: la bienvenida en la activación de la instalación. */
+export function eventoDelAviso(evento: string, payload: Record<string, unknown>): string {
+    return esActivacionInstalacion(evento, payload) ? EVENTO_BIENVENIDA : evento
+}
 
 function esMora(evento: string): boolean {
     return evento === 'factura.vencida' || /^recordatorio\.\d+$/.test(evento)
@@ -44,9 +58,6 @@ export async function avisoNoAplicaPorInstalacion(
     evento: string,
     payload: Record<string, unknown>,
 ): Promise<boolean> {
-    if (evento === 'servicio.estado_cambiado') {
-        return payload.de === ESTADO_PENDIENTE && payload.a === 'activo'
-    }
     if (!esMora(evento)) return false
     const servicioId = await servicioDelAviso(trx, payload)
     if (servicioId === null) return false
