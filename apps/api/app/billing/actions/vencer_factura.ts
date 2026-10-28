@@ -5,12 +5,15 @@ import { bloqueoVigente, impedimentoConExcepcion, type TipoBloqueo } from '#ledg
 import { diarioDeAsiento } from '#ledger/diarios'
 import { bloquearCliente } from '#billing/cobros'
 import { claveMora, crearMora, morasDebidas, reglaMora, type FacturaConMora } from '#billing/mora'
+import { venceEfectivoSql } from '#billing/vencimiento'
 
 /**
  * `facturas.vencer`: vence UNA factura de servicio y le aplica la mora que corresponda a `hoy`.
  * La llama `vencerFacturas` (cron y `POST /facturas/vencer`), una transacción por factura.
  *
- * - `emitida`/`parcial` con `vence_en < hoy` (la gracia ya está en `vence_en`) → `vencida`,
+ * - `emitida`/`parcial` con vencimiento efectivo < hoy (`venceEfectivoSql`: `vence_en`, que ya trae
+ *   la gracia, o, si se emitió con el servicio pendiente de instalación, `max(vence_en, día de
+ *   instalado_en + dias_gracia)`) → `vencida`,
  *   `vencida_en = now()`, evento `factura.vencida`.
  * - Si sigue vencida, crea los recargos de mora pendientes según el `reglas_snapshot` de la
  *   factura (`mora.ts`): el primero al vencer y, con `mora_recurrente`, uno por mes.
@@ -39,6 +42,9 @@ export interface ResultadoVencerFactura {
 interface FilaFactura extends FacturaConMora {
     tipo: 'servicio' | 'mora'
     estado: string
+    /** `venceEfectivoSql`: decide vencer y mora; `vence_en` sigue siendo el del documento */
+    vence_efectivo: string
+    servicio_pendiente: boolean
 }
 
 export default class VencerFactura extends DomainAction<EntradaVencerFactura, ResultadoVencerFactura> {
@@ -56,20 +62,24 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
         await bloquearCliente(t.trx, previa.cliente_id)
 
         const factura = (await t.trx
-            .from('billing.facturas')
-            .where('id', input.factura_id)
+            .from('billing.facturas as f')
+            .where('f.id', input.factura_id)
             .forUpdate()
             .select(
-                'id',
-                'empresa_id',
-                'cliente_id',
-                'servicio_id',
-                'tipo',
-                'estado',
-                'total',
-                'reglas_snapshot',
-                t.trx.raw(`to_char(periodo, 'YYYY-MM-DD') as periodo`),
-                t.trx.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`),
+                'f.id',
+                'f.empresa_id',
+                'f.cliente_id',
+                'f.servicio_id',
+                'f.tipo',
+                'f.estado',
+                'f.total',
+                'f.reglas_snapshot',
+                t.trx.raw(`to_char(f.periodo, 'YYYY-MM-DD') as periodo`),
+                t.trx.raw(`to_char(f.vence_en, 'YYYY-MM-DD') as vence_en`),
+                t.trx.raw(`to_char(${venceEfectivoSql('f')}, 'YYYY-MM-DD') as vence_efectivo`),
+                t.trx.raw(
+                    `EXISTS (SELECT 1 FROM core.servicios s WHERE s.id = f.servicio_id AND s.estado = 'pendiente_instalacion') as servicio_pendiente`,
+                ),
             )
             .firstOrFail()) as FilaFactura
         factura.empresa_id = Number(factura.empresa_id)
@@ -82,8 +92,10 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
             mora_bloqueada: null,
         }
         if (factura.tipo !== 'servicio') return resultado
+        // un pendiente de instalación no vence ni recibe mora (`contratos/instalacion.md` §3)
+        if (factura.servicio_pendiente) return resultado
 
-        if ((factura.estado === 'emitida' || factura.estado === 'parcial') && factura.vence_en < hoy) {
+        if ((factura.estado === 'emitida' || factura.estado === 'parcial') && factura.vence_efectivo < hoy) {
             await t.trx
                 .from('billing.facturas')
                 .where('id', factura.id)
@@ -106,7 +118,7 @@ export default class VencerFactura extends DomainAction<EntradaVencerFactura, Re
         }
         if (factura.estado !== 'vencida') return resultado
 
-        const debidas = morasDebidas(reglaMora(factura.reglas_snapshot), factura.vence_en, hoy)
+        const debidas = morasDebidas(reglaMora(factura.reglas_snapshot), factura.vence_efectivo, hoy)
         if (debidas === 0) return resultado
         const claves = Array.from({ length: debidas }, (_, i) => claveMora(factura.id, i + 1))
         const existentes = new Set(

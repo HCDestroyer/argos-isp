@@ -4,6 +4,7 @@ import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import { crearClienteFila, crearPlanFila, crearServicioFila } from '#tests/core/fabricas'
 import { hoyGuatemala } from '#ledger/fechas'
+import { sumarDias } from '#billing/periodos'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 import EmitirCargoUnico from '#billing/actions/emitir_cargo_unico'
 import EmitirFactura from '#billing/actions/emitir_factura'
@@ -369,5 +370,108 @@ test.group('billing · servicio pendiente de instalación', () => {
         assert.deepEqual(await altas(), [])
         await activar(servicioId, '2026-09-02T15:00:00Z')
         assert.deepEqual(await altas(), [['2026-09', 1]])
+    })
+
+    test('7. cargo anticipado impago al activar: vence efectivo = día de instalado_en + gracia; ni vencida ni limitado antes; después vence y cuenta para el corte; vence_en del documento intacto', async ({
+        assert,
+    }) => {
+        const { servicioId } = await pendiente({
+            plantilla: {
+                dias_gracia: 5,
+                facturas_para_limitar: 1,
+                facturas_para_cortar: 2,
+                hora_corte: '00:00',
+            },
+        })
+        const hoy = hoyGuatemala()
+        // vence hoy según el documento; emitido antes de la activación
+        const cargo = await cargoInstalacion(servicioId, hoy)
+        await activar(servicioId, new Date().toISOString())
+        const limite = sumarDias(hoy, 5)
+        /** corte del día dado a las 12:00 en Guatemala (vence primero lo pendiente) */
+        const corte = (dia: string) =>
+            new EjecutarCorte().execute(
+                { servicio_id: servicioId, ahora: new Date(`${dia}T18:00:00Z`), ignorar_hora: true },
+                contextoPrueba(),
+            )
+
+        // (1) hasta instalado_en + gracia inclusive: ni vencida ni limitado
+        for (const dia of [sumarDias(hoy, 1), limite]) {
+            const r = await corte(dia)
+            assert.equal(r.vencimiento!.vencidas, 0, dia)
+            assert.equal(await estadoServicio(servicioId), 'activo', dia)
+        }
+        const intacta = await db.from('billing.facturas').where('id', cargo.id).firstOrFail()
+        assert.equal(intacta.estado, 'emitida')
+        assert.lengthOf(await eventosDe('factura.vencida', 'factura_id', cargo.id), 0)
+
+        // (2) al día siguiente vence y cuenta para el corte: limitado
+        const despues = await corte(sumarDias(limite, 1))
+        assert.equal(despues.vencimiento!.vencidas, 1)
+        assert.equal(await estadoServicio(servicioId), 'limitado')
+        const vencida = await db
+            .from('billing.facturas')
+            .where('id', cargo.id)
+            .select('estado', db.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`))
+            .firstOrFail()
+        // el documento (y lo certificado) no cambia: vence_en sigue siendo el original
+        assert.deepEqual({ ...vencida }, { estado: 'vencida', vence_en: hoy })
+        const [evento] = await eventosDe('factura.vencida', 'factura_id', cargo.id)
+        assert.equal(evento.payload.vence, hoy)
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('7. evaluar no cuenta una vencida emitida con el servicio pendiente antes de su vencimiento efectivo', async ({
+        assert,
+    }) => {
+        const { servicioId } = await pendiente({
+            plantilla: {
+                dias_gracia: 5,
+                facturas_para_limitar: 1,
+                facturas_para_cortar: 2,
+                hora_corte: '00:00',
+            },
+        })
+        const hoy = hoyGuatemala()
+        const cargo = await cargoInstalacion(servicioId, hoy)
+        await activar(servicioId, new Date().toISOString())
+        // una vencida que llegó por otra vía (dato anterior a la regla): el corte la respeta
+        await db.from('billing.facturas').where('id', cargo.id).update({ estado: 'vencida' })
+        const evaluar = (dia: string) =>
+            new EvaluarEstadoServicio().execute(
+                { servicio_id: servicioId, ahora: new Date(`${dia}T18:00:00Z`), ignorarHoraCorte: true },
+                contextoPrueba(),
+            )
+        const antes = await evaluar(sumarDias(hoy, 5))
+        assert.include(antes, { vencidas: 0, estado: 'activo', cambiado: false })
+        const luego = await evaluar(sumarDias(hoy, 6))
+        assert.include(luego, { vencidas: 1, estado: 'limitado', cambiado: true })
+    })
+
+    test('7. cargo emitido después de activar: vence en su vence_en, como siempre', async ({ assert }) => {
+        const { servicioId } = await pendiente({
+            plantilla: {
+                dias_gracia: 5,
+                facturas_para_limitar: 1,
+                facturas_para_cortar: 2,
+                hora_corte: '00:00',
+            },
+        })
+        await activar(servicioId, new Date().toISOString())
+        const hoy = hoyGuatemala()
+        const cargo = await cargoInstalacion(servicioId, hoy)
+        const r = await new EjecutarCorte().execute(
+            {
+                servicio_id: servicioId,
+                ahora: new Date(`${sumarDias(hoy, 1)}T18:00:00Z`),
+                ignorar_hora: true,
+            },
+            contextoPrueba(),
+        )
+        assert.equal(r.vencimiento!.vencidas, 1)
+        const factura = await db.from('billing.facturas').where('id', cargo.id).firstOrFail()
+        assert.equal(factura.estado, 'vencida')
+        assert.equal(await estadoServicio(servicioId), 'limitado')
+        await afirmarLibroCuadrado(assert)
     })
 })

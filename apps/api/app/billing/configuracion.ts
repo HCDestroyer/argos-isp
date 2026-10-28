@@ -62,7 +62,17 @@ interface FilaServicio {
 export function inicioFacturacionSql(alias = 's'): string {
     const a = alias
     const dia = (columna: string) => `(${a}.${columna} AT TIME ZONE '${ZONA_NEGOCIO}')::date`
-    return `(CASE WHEN ${a}.instalado_en > ${a}.created_at THEN ${dia('instalado_en')} ELSE coalesce(${a}.fecha_instalacion, ${dia('created_at')}) END)`
+    return `(CASE WHEN ${activadoDesdePendienteSql(a)} THEN ${dia('instalado_en')} ELSE coalesce(${a}.fecha_instalacion, ${dia('created_at')}) END)`
+}
+
+/**
+ * ¿El servicio `alias` (fila de `core.servicios`) se activó desde `pendiente_instalacion`? Un
+ * servicio nacido activo tiene `instalado_en = created_at` (el `now()` por defecto del mismo INSERT o
+ * el relleno de la migración); la activación siempre es posterior al alta. Un pendiente (null), no.
+ * Lo comparten el primer día facturable y el vencimiento efectivo (`#billing/vencimiento`).
+ */
+export function activadoDesdePendienteSql(alias = 's'): string {
+    return `(${alias}.instalado_en IS NOT NULL AND ${alias}.instalado_en > ${alias}.created_at)`
 }
 
 export async function leerServicio(
