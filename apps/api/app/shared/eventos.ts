@@ -263,6 +263,15 @@ export interface CatalogoEventos {
         ip_tunel: string
     }
     /**
+     * El router con túnel dejó de estar vigente (se desactivó, `routers.editar` con `activo: false`;
+     * no hay borrado de routers). El `wireguard-agente` quita su peer (contrato §6.3). Al reactivarlo
+     * se emite otra vez `router.conexion_registrada`.
+     */
+    'router.conexion_eliminada': {
+        router_id: number
+        empresa_id: number | null
+    }
+    /**
      * Servicios adicionales de un servicio (decisión del PM, 19 oct; `contratos/adicionales.md`):
      * streaming, IPTV… Nunca llevan la credencial. A3 factura los `cobrado`; A5 los muestra en el
      * portal. No cambian nada en la red (`aaa-cache` y `routeros` los ignoran).
@@ -1040,6 +1049,7 @@ export const EVENTOS = [
     'router.conexion_generada',
     'router.conexion_registrada',
     'router.conexion_rotada',
+    'router.conexion_eliminada',
     'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',

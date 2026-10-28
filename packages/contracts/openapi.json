@@ -25961,11 +25961,11 @@
         "x-implementado": true
       }
     },
-    "/api/v1/internal/routers/conexion/handshakes": {
+    "/api/v1/internal/wireguard/estado": {
       "post": {
-        "operationId": "internoRoutersConexionHandshakes",
-        "summary": "Último handshake de cada peer (servicio wireguard)",
-        "description": "`peers[]` con `public_key` y `ultimo_handshake` (ISO; null = nunca). Solo avanza el handshake; el primero de un router `pendiente` lo pasa a `conectado`. Claves desconocidas se ignoran.",
+        "operationId": "internoWireguardEstado",
+        "summary": "Estado del servidor WireGuard y último handshake por peer (wireguard-agente)",
+        "description": "`{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake, endpoint, rx_bytes, tx_bytes }], generado_en }` (§6.3). Guarda la clave pública del servidor (va en los scripts) y el último handshake de cada router (solo avanza); `conectado` = handshake de menos de 3 min. Claves desconocidas se ignoran.",
         "tags": [
           "interno"
         ],
@@ -25981,6 +25981,56 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "servidor": {
+                    "type": "object",
+                    "properties": {
+                      "public_key": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
+                        "description": "Clave pública WireGuard del router (base64, 44 caracteres)"
+                      },
+                      "ip": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 64
+                      },
+                      "red": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 64
+                      },
+                      "puerto": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "minimum": 1,
+                        "maximum": 65535
+                      },
+                      "interfaz": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 64
+                      },
+                      "modo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 64
+                      }
+                    },
+                    "required": [
+                      "public_key"
+                    ],
+                    "additionalProperties": false
+                  },
                   "peers": {
                     "type": "array",
                     "items": {
@@ -25997,6 +26047,27 @@
                             "null"
                           ],
                           "format": "date-time"
+                        },
+                        "endpoint": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 100
+                        },
+                        "rx_bytes": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "minimum": 0
+                        },
+                        "tx_bytes": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -26004,10 +26075,18 @@
                       ],
                       "additionalProperties": false
                     },
-                    "maxItems": 10000
+                    "maxItems": 65536
+                  },
+                  "generado_en": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
                   }
                 },
                 "required": [
+                  "servidor",
                   "peers"
                 ],
                 "additionalProperties": false
@@ -26016,15 +26095,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Resultado",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResultadoHandshakes"
-                }
-              }
-            }
+          "204": {
+            "description": "Estado registrado"
           },
           "401": {
             "description": "No autenticado",
@@ -26050,11 +26122,11 @@
         "x-implementado": true
       }
     },
-    "/api/v1/internal/routers/conexion/peers": {
+    "/api/v1/internal/wireguard/peers": {
       "get": {
-        "operationId": "internoRoutersConexionPeers",
-        "summary": "Peers WireGuard de los routers registrados (servicio wireguard)",
-        "description": "Lista completa para `wg syncconf`: los routers con clave pública registrada y su IP del túnel. El servicio la relee con `router.conexion_registrada` y `router.conexion_rotada`.",
+        "operationId": "internoWireguardPeers",
+        "summary": "Peers WireGuard vigentes (wireguard-agente)",
+        "description": "Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.",
         "tags": [
           "interno"
         ],
@@ -26069,10 +26141,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PeerWireguard"
-                  }
+                  "$ref": "#/components/schemas/PeersWireguard"
                 }
               }
             }
@@ -57459,7 +57528,7 @@
       "get": {
         "operationId": "routersScriptConexion",
         "summary": "Generar el script de conexión del router (.rsc)",
-        "description": "Devuelve el `.rsc` (text/plain, descarga) que crea el túnel WireGuard, el usuario `argosisp-api` con clave nueva, el cliente RADIUS (secreto del router) y cierra los puertos de gestión (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte. 422 `radius_secret_requerido` si el router RADIUS no tiene secreto; 503 `wireguard_no_configurado` si falta la configuración del servidor.",
+        "description": "Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.",
         "tags": [
           "routers"
         ],
@@ -57660,7 +57729,7 @@
       "post": {
         "operationId": "routersConexionRegistrar",
         "summary": "Registro del router con su token (lo llama el script, sin sesión)",
-        "description": "Cuerpo `{ token, public_key }`. Token de un solo uso del último script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde la clave pública y el endpoint del servidor. Límite por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. 409 `clave_en_uso` si la clave es de otro router.",
+        "description": "Cuerpo `{ token, public_key, routeros_version, api_ca }` (§6.1). Token de un solo uso del último script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde `{ router_id, ip_tunel, servidor: { public_key, endpoint, puerto, ip } }`; con `api_ca`, Argos verifica con ella el certificado del router. Límite por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. 409 `clave_en_uso` si la clave es de otro router.",
         "tags": [
           "routers"
         ],
@@ -57680,6 +57749,23 @@
                     "type": "string",
                     "pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$",
                     "description": "Clave pública WireGuard del router (base64, 44 caracteres)"
+                  },
+                  "routeros_version": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "description": "Versión de RouterOS del equipo (`/system resource version`)"
+                  },
+                  "api_ca": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 20000,
+                    "pattern": "^-----BEGIN CERTIFICATE-----",
+                    "description": "PEM de la CA propia del router (argosisp-ca.crt); vacío = no cambia. Argos verifica con ella el certificado de www-ssl"
                   }
                 },
                 "required": [
@@ -72001,6 +72087,7 @@
           "ultimo_handshake",
           "handshake_reciente",
           "registrado_en",
+          "routeros_version",
           "token_vence",
           "version"
         ],
@@ -72016,7 +72103,7 @@
               "pendiente",
               "conectado"
             ],
-            "description": "sin_configurar: nunca se generó el script; pendiente: sin handshake desde el registro (o sin registrar); conectado: el servidor vio su handshake"
+            "description": "sin_configurar: nunca se generó el script; pendiente: sin registrar o sin handshake en los últimos 3 min; conectado: handshake de menos de 3 min"
           },
           "ip_tunel": {
             "type": [
@@ -72049,6 +72136,13 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "routeros_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "La que informó el router al registrarse"
           },
           "token_vence": {
             "type": [
@@ -83539,6 +83633,20 @@
           }
         }
       },
+      "PeersWireguard": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeerWireguard"
+            }
+          }
+        }
+      },
       "PeerWireguard": {
         "type": "object",
         "required": [
@@ -88224,11 +88332,7 @@
         "required": [
           "router_id",
           "ip_tunel",
-          "ip_tunel_cidr",
-          "servidor_ip",
-          "servidor_public_key",
-          "servidor_endpoint",
-          "servidor_puerto"
+          "servidor"
         ],
         "properties": {
           "router_id": {
@@ -88236,25 +88340,34 @@
             "minimum": 1
           },
           "ip_tunel": {
-            "type": "string"
-          },
-          "ip_tunel_cidr": {
             "type": "string",
-            "description": "Dirección para la interfaz wg-argos del router"
+            "description": "IP /32 del router en el túnel (el script la compara con la suya)"
           },
-          "servidor_ip": {
-            "type": "string",
-            "description": "IP del servidor en el túnel (RADIUS, API)"
-          },
-          "servidor_public_key": {
-            "type": "string"
-          },
-          "servidor_endpoint": {
-            "type": "string",
-            "description": "Host o IP pública del servidor WireGuard"
-          },
-          "servidor_puerto": {
-            "type": "integer"
+          "servidor": {
+            "type": "object",
+            "required": [
+              "public_key",
+              "endpoint",
+              "puerto",
+              "ip"
+            ],
+            "properties": {
+              "public_key": {
+                "type": "string",
+                "description": "Clave pública del servidor WireGuard"
+              },
+              "endpoint": {
+                "type": "string",
+                "description": "ARGOSISP_WG_ENDPOINT"
+              },
+              "puerto": {
+                "type": "integer"
+              },
+              "ip": {
+                "type": "string",
+                "description": "IP del servidor en el túnel (RADIUS, CoA, API)"
+              }
+            }
           }
         }
       },
@@ -92885,25 +92998,6 @@
               }
             },
             "description": "Detalle por empresa y tipo de bloqueo (también va en libro.proceso_bloqueado)"
-          }
-        }
-      },
-      "ResultadoHandshakes": {
-        "type": "object",
-        "required": [
-          "actualizados",
-          "conectados"
-        ],
-        "properties": {
-          "actualizados": {
-            "type": "integer"
-          },
-          "conectados": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "minimum": 1
-            }
           }
         }
       },

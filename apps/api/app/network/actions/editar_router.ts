@@ -15,6 +15,32 @@ export interface EntradaEditarRouter extends DatosRouter {
 }
 
 /**
+ * Un router con túnel registrado que se desactiva sale de los peers (`router.conexion_eliminada`);
+ * al reactivarlo vuelve (`router.conexion_registrada`). El `wireguard-agente` relee la lista.
+ */
+async function avisarTunel(t: Transaccion, router: RouterVista) {
+    const conexion = (await t.trx
+        .from('network.routers_conexion')
+        .where('router_id', router.id)
+        .whereNotNull('public_key')
+        .select(t.trx.knexRawQuery('host(ip_tunel) AS ip_tunel'))
+        .first()) as { ip_tunel: string } | null
+    if (!conexion) return
+    if (router.activo) {
+        await t.emit('router.conexion_registrada', {
+            router_id: router.id,
+            empresa_id: router.empresa_sugerida_id,
+            ip_tunel: conexion.ip_tunel,
+        })
+    } else {
+        await t.emit('router.conexion_eliminada', {
+            router_id: router.id,
+            empresa_id: router.empresa_sugerida_id,
+        })
+    }
+}
+
+/**
  * Credenciales en la edición (pedido del PM, 28 oct): el panel deja el campo vacío para "no
  * cambiar" (el bodyparser convierte `""` en null), así que null tampoco cambia nada. Quitar una
  * credencial es explícito, con `quitar_*`; pedir las dos cosas a la vez es 422.
@@ -68,6 +94,7 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         if (datos.radius_secret && a.radius_secret) a.radius_secret = 'anterior'
         if (typeof datos.api_ca === 'string' && a.api_ca) a.api_ca = 'anterior'
         await t.registrarCambios({ tipo: 'router', id }, a, d)
+        if (antes.activo !== despues.activo) await avisarTunel(t, despues)
         if (
             antes.capacidad_bajada_kbps !== despues.capacidad_bajada_kbps ||
             antes.capacidad_subida_kbps !== despues.capacidad_subida_kbps

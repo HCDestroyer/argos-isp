@@ -3554,7 +3554,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/internal/routers/conexion/handshakes": {
+    "/api/v1/internal/wireguard/estado": {
         parameters: {
             query?: never;
             header?: never;
@@ -3564,17 +3564,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Último handshake de cada peer (servicio wireguard)
-         * @description `peers[]` con `public_key` y `ultimo_handshake` (ISO; null = nunca). Solo avanza el handshake; el primero de un router `pendiente` lo pasa a `conectado`. Claves desconocidas se ignoran.
+         * Estado del servidor WireGuard y último handshake por peer (wireguard-agente)
+         * @description `{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake, endpoint, rx_bytes, tx_bytes }], generado_en }` (§6.3). Guarda la clave pública del servidor (va en los scripts) y el último handshake de cada router (solo avanza); `conectado` = handshake de menos de 3 min. Claves desconocidas se ignoran.
          */
-        post: operations["internoRoutersConexionHandshakes"];
+        post: operations["internoWireguardEstado"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/internal/routers/conexion/peers": {
+    "/api/v1/internal/wireguard/peers": {
         parameters: {
             query?: never;
             header?: never;
@@ -3582,10 +3582,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Peers WireGuard de los routers registrados (servicio wireguard)
-         * @description Lista completa para `wg syncconf`: los routers con clave pública registrada y su IP del túnel. El servicio la relee con `router.conexion_registrada` y `router.conexion_rotada`.
+         * Peers WireGuard vigentes (wireguard-agente)
+         * @description Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel (`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con `router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.
          */
-        get: operations["internoRoutersConexionPeers"];
+        get: operations["internoWireguardPeers"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7981,7 +7981,7 @@ export interface paths {
         };
         /**
          * Generar el script de conexión del router (.rsc)
-         * @description Devuelve el `.rsc` (text/plain, descarga) que crea el túnel WireGuard, el usuario `argosisp-api` con clave nueva, el cliente RADIUS (secreto del router) y cierra los puertos de gestión (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte. 422 `radius_secret_requerido` si el router RADIUS no tiene secreto; 503 `wireguard_no_configurado` si falta la configuración del servidor.
+         * @description Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS (secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). 422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 `wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin `API_PUBLIC_URL` https) o `plantillas_no_disponibles`.
          */
         get: operations["routersScriptConexion"];
         put?: never;
@@ -8023,7 +8023,7 @@ export interface paths {
         put?: never;
         /**
          * Registro del router con su token (lo llama el script, sin sesión)
-         * @description Cuerpo `{ token, public_key }`. Token de un solo uso del último script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde la clave pública y el endpoint del servidor. Límite por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. 409 `clave_en_uso` si la clave es de otro router.
+         * @description Cuerpo `{ token, public_key, routeros_version, api_ca }` (§6.1). Token de un solo uso del último script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde `{ router_id, ip_tunel, servidor: { public_key, endpoint, puerto, ip } }`; con `api_ca`, Argos verifica con ella el certificado del router. Límite por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. 409 `clave_en_uso` si la clave es de otro router.
          */
         post: operations["routersConexionRegistrar"];
         delete?: never;
@@ -10780,7 +10780,7 @@ export interface components {
         ConexionRouter: {
             router_id: number;
             /**
-             * @description sin_configurar: nunca se generó el script; pendiente: sin handshake desde el registro (o sin registrar); conectado: el servidor vio su handshake
+             * @description sin_configurar: nunca se generó el script; pendiente: sin registrar o sin handshake en los últimos 3 min; conectado: handshake de menos de 3 min
              * @enum {string}
              */
             estado: "sin_configurar" | "pendiente" | "conectado";
@@ -10794,6 +10794,8 @@ export interface components {
             handshake_reciente: boolean;
             /** Format: date-time */
             registrado_en: string | null;
+            /** @description La que informó el router al registrarse */
+            routeros_version: string | null;
             /**
              * Format: date-time
              * @description Vencimiento del token del último script; null si ya se usó o no hay
@@ -13640,6 +13642,9 @@ export interface components {
             descripcion: string;
             monto: components["schemas"]["Dinero"];
         };
+        PeersWireguard: {
+            data: components["schemas"]["PeerWireguard"][];
+        };
         PeerWireguard: {
             router_id: number;
             public_key: string;
@@ -14880,15 +14885,17 @@ export interface components {
         };
         RegistroConexion: {
             router_id: number;
+            /** @description IP /32 del router en el túnel (el script la compara con la suya) */
             ip_tunel: string;
-            /** @description Dirección para la interfaz wg-argos del router */
-            ip_tunel_cidr: string;
-            /** @description IP del servidor en el túnel (RADIUS, API) */
-            servidor_ip: string;
-            servidor_public_key: string;
-            /** @description Host o IP pública del servidor WireGuard */
-            servidor_endpoint: string;
-            servidor_puerto: number;
+            servidor: {
+                /** @description Clave pública del servidor WireGuard */
+                public_key: string;
+                /** @description ARGOSISP_WG_ENDPOINT */
+                endpoint: string;
+                puerto: number;
+                /** @description IP del servidor en el túnel (RADIUS, CoA, API) */
+                ip: string;
+            };
         };
         ReglaConciliacion: {
             id: number;
@@ -15858,10 +15865,6 @@ export interface components {
                 /** @description Los primeros 20 ids */
                 ejemplos: number[];
             }[];
-        };
-        ResultadoHandshakes: {
-            actualizados: number;
-            conectados: number[];
         };
         ResultadoInstalacionFiscal: {
             empresa_id: number;
@@ -31225,7 +31228,7 @@ export interface operations {
             };
         };
     };
-    internoRoutersConexionHandshakes: {
+    internoWireguardEstado: {
         parameters: {
             query?: never;
             header?: never;
@@ -31235,24 +31238,36 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    servidor: {
+                        /** @description Clave pública WireGuard del router (base64, 44 caracteres) */
+                        public_key: string;
+                        ip?: string | null;
+                        red?: string | null;
+                        puerto?: number | null;
+                        interfaz?: string | null;
+                        modo?: string | null;
+                    };
                     peers: {
                         /** @description Clave pública WireGuard del router (base64, 44 caracteres) */
                         public_key: string;
                         /** Format: date-time */
                         ultimo_handshake?: string | null;
+                        endpoint?: string | null;
+                        rx_bytes?: number | null;
+                        tx_bytes?: number | null;
                     }[];
+                    /** Format: date-time */
+                    generado_en?: string | null;
                 };
             };
         };
         responses: {
-            /** @description Resultado */
-            200: {
+            /** @description Estado registrado */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ResultadoHandshakes"];
-                };
+                content?: never;
             };
             /** @description No autenticado */
             401: {
@@ -31274,7 +31289,7 @@ export interface operations {
             };
         };
     };
-    internoRoutersConexionPeers: {
+    internoWireguardPeers: {
         parameters: {
             query?: never;
             header?: never;
@@ -31289,7 +31304,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PeerWireguard"][];
+                    "application/json": components["schemas"]["PeersWireguard"];
                 };
             };
             /** @description No autenticado */
@@ -48010,6 +48025,10 @@ export interface operations {
                     token: string;
                     /** @description Clave pública WireGuard del router (base64, 44 caracteres) */
                     public_key: string;
+                    /** @description Versión de RouterOS del equipo (`/system resource version`) */
+                    routeros_version?: string | null;
+                    /** @description PEM de la CA propia del router (argosisp-ca.crt); vacío = no cambia. Argos verifica con ella el certificado de www-ssl */
+                    api_ca?: string | null;
                 };
             };
         };

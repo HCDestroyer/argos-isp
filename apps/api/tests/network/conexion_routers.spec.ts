@@ -3,9 +3,6 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import env from '#start/env'
 import { cifrar, descifrar } from '#shared/cifrado'
-import { escaparRouterOS, listaRouterOS, PlantillaInvalida, renderScript } from '#network/conexion/render'
-import { leerRedTunel, parsearAdmin } from '#network/conexion/config'
-import { PLANTILLA_MINIMA } from '#network/conexion/plantilla_minima'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearRouterFila } from '#tests/core/fabricas'
 
@@ -17,13 +14,35 @@ const TOKEN_INTERNO = () => env.get('INTERNAL_TOKEN')
 const entornoOriginal = { ...process.env }
 
 function extraer(script: string, variable: string): string {
-    const m = new RegExp(`:local ${variable} "((?:[^"\\\\]|\\\\.)*)"`).exec(script)
+    const m = new RegExp(`:local ${variable} (?:\\[:to[a-z]+ )?"((?:[^"\\\\]|\\\\.)*)"`).exec(script)
     if (!m) throw new Error(`No está ${variable} en el script`)
     return m[1]!
 }
 
+/** Lo que publica el `wireguard-agente` (la clave del servidor va en el script). */
+async function publicarServidor() {
+    await db.rawQuery(
+        `INSERT INTO network.wireguard_servidor (id, public_key) VALUES (1, ?)
+         ON CONFLICT (id) DO UPDATE SET public_key = EXCLUDED.public_key`,
+        [CLAVE_SERVIDOR],
+    )
+}
+
+const SERVICIO: Record<string, string> = {
+    ROUTERS_SERVICIO_WAN_INTERFAZ: 'ether1',
+    ROUTERS_SERVICIO_PPP_LOCAL_V4: '10.10.0.1',
+    ROUTERS_SERVICIO_POOL_V4_RANGOS: '10.10.0.10-10.10.0.250',
+    ROUTERS_SERVICIO_CLIENTES_V4: '10.10.0.0/16',
+    ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: '2001:db8:100::/48',
+    ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: '2001:db8:200::/40',
+    ROUTERS_SERVICIO_PORTAL_V4: '192.0.2.20',
+    ROUTERS_SERVICIO_PORTAL_V6: '2001:db8:ffff::20',
+    ROUTERS_SERVICIO_PORTAL_FQDN: 'portal.argosisp.example',
+    ROUTERS_SERVICIO_DNS_V4: '192.0.2.53',
+}
+
 async function routerRadius(datos: Record<string, unknown> = {}) {
-    return crearRouterFila({ radius_secret: cifrar('secreto-del-nas-123'), ...datos })
+    return crearRouterFila({ radius_secret: cifrar('secreto-del-nas-1234'), ...datos })
 }
 
 async function generar(client: any, token: string, routerId: number, qs: Record<string, string> = {}) {
@@ -34,89 +53,15 @@ async function generar(client: any, token: string, routerId: number, qs: Record<
     return r.text()
 }
 
-test.group('Conexión de routers · render', () => {
-    test('escapa comillas, $, \\, ? y caracteres de control para RouterOS', ({ assert }) => {
-        assert.equal(escaparRouterOS('a"b$c\\d?e'), 'a\\"b\\$c\\\\d\\?e')
-        assert.equal(escaparRouterOS('uno\ndos\r\t'), 'uno\\0Ados\\0D\\09')
-        assert.equal(escaparRouterOS('Señal ñ'), 'Señal ñ')
-        assert.equal(listaRouterOS(['1.2.3.4', 'x"$']), '{"1.2.3.4";"x\\"\\$"}')
-        assert.equal(listaRouterOS([]), '{}')
-    })
-
-    test('secciones, listas y variables; un marcador desconocido es error', ({ assert }) => {
-        const vars = {
-            textos: { a: 'v"1' },
-            listas: { l: ['x'] },
-            secciones: { si: true, no: false },
-        }
-        assert.equal(
-            renderScript(
-                ':local a "{{a}}" {{lista:l}}{{#si}} S{{/si}}{{#no}} N{{/no}}{{^no}} !N{{/no}}',
-                vars,
-            ),
-            ':local a "v\\"1" {"x"} S !N',
-        )
-        assert.throws(() => renderScript('{{b}}', vars), PlantillaInvalida as any)
-        assert.throws(() => renderScript('{{#zz}}x{{/zz}}', vars), PlantillaInvalida as any)
-        assert.throws(() => renderScript('{{lista:otra}}', vars), PlantillaInvalida as any)
-    })
-
-    test('la plantilla mínima solo usa variables conocidas', ({ assert }) => {
-        const textos = Object.fromEntries(
-            [
-                'router_id',
-                'router_nombre',
-                'generado_en',
-                'token_vence',
-                'ip_tunel',
-                'ip_tunel_cidr',
-                'red_tunel',
-                'servidor_ip',
-                'servidor_public_key',
-                'servidor_endpoint',
-                'servidor_puerto',
-                'registro_url',
-                'registro_token',
-                'api_usuario',
-                'api_grupo',
-                'api_password',
-                'radius_secret',
-            ].map((n) => [n, n]),
-        )
-        const script = renderScript(PLANTILLA_MINIMA, {
-            textos,
-            listas: { admin_ips: [] },
-            secciones: { radius: true, incluir_servicio: false, admin: false },
-        })
-        assert.notInclude(script, '{{')
-        assert.include(script, '/radius add')
-    })
-
-    test('red del túnel y lista de administración', ({ assert }) => {
-        assert.deepEqual(leerRedTunel('10.255.3.9/16'), {
-            cidr: '10.255.0.0/16',
-            base: 184483840,
-            prefijo: 16,
-            servidor: '10.255.0.1',
-        })
-        assert.deepEqual(parsearAdmin(' 203.0.113.5, 198.51.100.0/24,203.0.113.5 '), [
-            '203.0.113.5',
-            '198.51.100.0/24',
-        ])
-        assert.deepEqual(parsearAdmin(undefined), [])
-        assert.throws(() => parsearAdmin('1.2.3.4,no-es-ip'))
-        assert.throws(() => parsearAdmin('1.2.3.4/33'))
-    })
-})
-
 test.group('Conexión de routers · API', (group) => {
-    group.each.setup(() => {
-        process.env.ARGOSISP_WG_CLAVE_PUBLICA = CLAVE_SERVIDOR
+    group.each.setup(async () => {
+        process.env.ARGOSISP_WIREGUARD = '1'
         process.env.ARGOSISP_WG_ENDPOINT = 'vpn.argosisp.example'
         process.env.ARGOSISP_WG_RED = '10.255.0.0/16'
         process.env.ARGOSISP_WG_PUERTO = '51820'
         process.env.API_PUBLIC_URL = 'https://argos.example'
         process.env.ROUTERS_REGISTRO_LIMITE = '0'
+        await publicarServidor()
         return () => {
             for (const nombre of Object.keys(process.env)) {
                 if (!(nombre in entornoOriginal)) delete process.env[nombre]
@@ -125,18 +70,17 @@ test.group('Conexión de routers · API', (group) => {
         }
     })
 
-    test('generar el script: IP del túnel estable, token rotado, clave pendiente y sin secretos en auditoría', async ({
+    test('generar el script: plantilla de A6, IP del túnel estable, token rotado y sin secretos en auditoría', async ({
         client,
         assert,
     }) => {
         const { token } = await usuarioConRoles(['tecnico'])
-        const nombre = `MK "Centro" $x ?\nfin`
-        const routerId = await routerRadius({ nombre: unico(nombre), api_password: cifrar('clave-vieja') })
+        const routerId = await routerRadius({ api_password: cifrar('clave-vieja') })
 
         const r = await estado(
             client
                 .get(`/api/v1/routers/${routerId}/script-conexion`)
-                .qs({ admin: '203.0.113.5,198.51.100.0/24', incluir: 'servicio' })
+                .qs({ admin: '203.0.113.5,198.51.100.0/24' })
                 .bearerToken(token),
             200,
         )
@@ -144,27 +88,25 @@ test.group('Conexión de routers · API', (group) => {
         assert.include(r.header('content-disposition'), `argosisp-router-${routerId}.rsc`)
         assert.equal(r.header('cache-control'), 'no-store')
         const script = r.text()
+        assert.notMatch(script, /\{\{/)
+        assert.notMatch(script, /pppoe-server/)
 
         const fila = await db.from('network.routers_conexion').where('router_id', routerId).firstOrFail()
-        const ipTunel = extraer(script, 'tunelIp')
+        const ipTunel = extraer(script, 'wgIp')
         assert.match(ipTunel, /^10\.255\.\d+\.\d+$/)
-        assert.equal(fila.estado, 'pendiente')
         assert.isNull(fila.public_key)
-        assert.equal(extraer(script, 'tunelCidr'), `${ipTunel}/16`)
-        assert.equal(extraer(script, 'servidorIp'), '10.255.0.1')
-        assert.equal(extraer(script, 'servidorPub'), CLAVE_SERVIDOR)
-        assert.equal(extraer(script, 'servidorEndpoint'), 'vpn.argosisp.example')
-        assert.equal(
-            extraer(script, 'registroUrl'),
-            'https://argos.example/api/v1/routers/conexion/registrar',
-        )
-        assert.equal(extraer(script, 'radiusSecret'), 'secreto-del-nas-123')
-        assert.include(script, ':local adminIps {"203.0.113.5";"198.51.100.0/24"}')
-        assert.include(script, 'no incluye la configuración de servicio')
-        // el nombre va escapado: ni comillas sueltas ni saltos de línea
-        assert.include(script, 'MK \\"Centro\\" \\$x \\?\\0Afin')
+        assert.equal(extraer(script, 'routerId'), String(routerId))
+        assert.equal(extraer(script, 'wgServidorIp'), '10.255.0.1')
+        assert.equal(extraer(script, 'wgRed'), '10.255.0.0/16')
+        assert.equal(extraer(script, 'wgServidorPub'), CLAVE_SERVIDOR)
+        assert.equal(extraer(script, 'wgServidorEndpoint'), 'vpn.argosisp.example')
+        assert.equal(extraer(script, 'wgServidorPuerto'), '51820')
+        assert.equal(extraer(script, 'argosUrl'), 'https://argos.example')
+        assert.equal(extraer(script, 'radiusSecret'), 'secreto-del-nas-1234')
+        assert.equal(extraer(script, 'apiNombre'), `router-${routerId}.argosisp`)
+        assert.equal(extraer(script, 'adminIps'), '203.0.113.5,198.51.100.0/24')
 
-        const tokenRegistro = extraer(script, 'registroToken')
+        const tokenRegistro = extraer(script, 'token')
         const password = extraer(script, 'apiPassword')
         assert.lengthOf(password, 32)
         assert.match(password, /^[A-Za-z0-9]+$/)
@@ -173,7 +115,6 @@ test.group('Conexión de routers · API', (group) => {
         const router = await db.from('network.routers').where('id', routerId).firstOrFail()
         assert.equal(descifrar(router.api_password), 'clave-vieja')
 
-        // auditoría y outbox sin secretos
         const acciones = await db
             .from('audit.acciones')
             .where({ accion: 'routers.generar_script', entidad_tipo: 'router', entidad_id: routerId })
@@ -193,17 +134,16 @@ test.group('Conexión de routers · API', (group) => {
             actor: { tipo: 'usuario' },
         })
         const todo = JSON.stringify([acciones, cambios, eventos])
-        for (const secreto of [tokenRegistro, password, 'secreto-del-nas-123', fila.token_hash]) {
+        for (const secreto of [tokenRegistro, password, 'secreto-del-nas-1234', fila.token_hash]) {
             assert.notInclude(todo, secreto)
         }
 
         // segunda generación: misma IP, token y clave nuevos; el token anterior deja de valer
         const script2 = await generar(client, token, routerId)
-        assert.equal(extraer(script2, 'tunelIp'), ipTunel)
-        assert.notEqual(extraer(script2, 'registroToken'), tokenRegistro)
+        assert.equal(extraer(script2, 'wgIp'), ipTunel)
+        assert.notEqual(extraer(script2, 'token'), tokenRegistro)
         assert.notEqual(extraer(script2, 'apiPassword'), password)
-        assert.include(script2, ':local adminIps {}')
-        assert.notInclude(script2, 'no incluye la configuración de servicio')
+        assert.equal(extraer(script2, 'adminIps'), '')
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
@@ -212,7 +152,30 @@ test.group('Conexión de routers · API', (group) => {
         )
     })
 
-    test('registro por token: aplica clave, host y nas_ip al túnel; un solo uso; vencido 410', async ({
+    test('?incluir=servicio: plantilla de servicio con los datos del servidor; sin ellos 422', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const routerId = await routerRadius({ interfaz_clientes: 'ether2' })
+        const falta = await estado(
+            client
+                .get(`/api/v1/routers/${routerId}/script-conexion`)
+                .qs({ incluir: 'servicio' })
+                .bearerToken(token),
+            422,
+        )
+        assert.equal(falta.body().type, 'urn:argosisp:problema:servicio_incompleto')
+        assert.include(falta.body().detail, 'ROUTERS_SERVICIO_PPP_LOCAL_V4')
+        assert.notInclude(falta.body().detail, 'interfaz_clientes')
+
+        Object.assign(process.env, SERVICIO)
+        const script = await generar(client, token, routerId, { incluir: 'servicio' })
+        assert.match(script, /pppoe-server/)
+        assert.notMatch(script, /\{\{/)
+    })
+
+    test('registro por token: aplica clave, CA, host, nas_ip y api_url al túnel; un solo uso; vencido 410', async ({
         client,
         assert,
     }) => {
@@ -220,37 +183,53 @@ test.group('Conexión de routers · API', (group) => {
         const routerId = await routerRadius({
             api_password: cifrar('clave-vieja'),
             api_url: 'https://mk:8443',
+            api_tls_verificar: false,
         })
         const script = await generar(client, token, routerId)
-        const tokenRegistro = extraer(script, 'registroToken')
-        const ipTunel = extraer(script, 'tunelIp')
+        const tokenRegistro = extraer(script, 'token')
+        const ipTunel = extraer(script, 'wgIp')
         const publica = clave()
+        const ca = '-----BEGIN CERTIFICATE-----\nMIIBcaDelRouter\n-----END CERTIFICATE-----'
 
         const r = await estado(
-            client
-                .post('/api/v1/routers/conexion/registrar')
-                .json({ token: tokenRegistro, public_key: publica }),
+            client.post('/api/v1/routers/conexion/registrar').json({
+                token: tokenRegistro,
+                public_key: publica,
+                routeros_version: '7.24.5 (stable)',
+                api_ca: ca,
+            }),
             200,
         )
         assert.deepEqual(r.body(), {
             router_id: routerId,
             ip_tunel: ipTunel,
-            ip_tunel_cidr: `${ipTunel}/16`,
-            servidor_ip: '10.255.0.1',
-            servidor_public_key: CLAVE_SERVIDOR,
-            servidor_endpoint: 'vpn.argosisp.example',
-            servidor_puerto: 51820,
+            servidor: {
+                public_key: CLAVE_SERVIDOR,
+                endpoint: 'vpn.argosisp.example',
+                puerto: 51820,
+                ip: '10.255.0.1',
+            },
         })
         const router = await db
             .from('network.routers')
             .where('id', routerId)
-            .select('host', db.raw('host(nas_ip) AS nas_ip'), 'api_usuario', 'api_url', 'api_password')
+            .select(
+                'host',
+                db.raw('host(nas_ip) AS nas_ip'),
+                'api_usuario',
+                'api_url',
+                'api_password',
+                'api_tls_verificar',
+                'api_ca',
+            )
             .firstOrFail()
         assert.containsSubset(router, {
             host: ipTunel,
             nas_ip: ipTunel,
             api_usuario: 'argosisp-api',
-            api_url: null,
+            api_url: `https://${ipTunel}`,
+            api_tls_verificar: true,
+            api_ca: ca,
         })
         assert.equal(descifrar(router.api_password), extraer(script, 'apiPassword'))
 
@@ -265,6 +244,7 @@ test.group('Conexión de routers · API', (group) => {
             public_key: publica,
             ultimo_handshake: null,
             handshake_reciente: false,
+            routeros_version: '7.24.5 (stable)',
             token_vence: null,
         })
         assert.isString(conexion.body().registrado_en)
@@ -274,18 +254,20 @@ test.group('Conexión de routers · API', (group) => {
             .where('evento', 'router.conexion_registrada')
             .whereRaw("(payload->>'router_id')::bigint = ?", [routerId])
         assert.deepEqual(eventos[0].payload, { router_id: routerId, empresa_id: null, ip_tunel: ipTunel })
-        const cambioClave = await db
-            .from('audit.cambios')
-            .where({ entidad_tipo: 'router', entidad_id: routerId, campo: 'api_password' })
-            .firstOrFail()
-        assert.deepEqual([cambioClave.antes, cambioClave.despues], ['***', '***'])
+        for (const campo of ['api_password', 'api_ca']) {
+            const cambio = await db
+                .from('audit.cambios')
+                .where({ entidad_tipo: 'router', entidad_id: routerId, campo })
+                .orderBy('id', 'desc')
+                .firstOrFail()
+            assert.equal(cambio.despues, '***')
+        }
         const registro = await db
             .from('audit.acciones')
             .where({ accion: 'routers.registrar_conexion', entidad_id: routerId })
             .firstOrFail()
         assert.equal(registro.entrada.token, '***')
 
-        // un solo uso
         const usado = await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
@@ -293,14 +275,12 @@ test.group('Conexión de routers · API', (group) => {
             410,
         )
         assert.equal(usado.body().type, 'urn:argosisp:problema:token_invalido')
-        // desconocido
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
                 .json({ token: 'x'.repeat(32), public_key: publica }),
             410,
         )
-        // vencido
         const script2 = await generar(client, token, routerId)
         await db
             .from('network.routers_conexion')
@@ -309,10 +289,9 @@ test.group('Conexión de routers · API', (group) => {
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
-                .json({ token: extraer(script2, 'registroToken'), public_key: publica }),
+                .json({ token: extraer(script2, 'token'), public_key: publica }),
             410,
         )
-        // clave pública inválida: 422
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
@@ -327,17 +306,15 @@ test.group('Conexión de routers · API', (group) => {
         const a = await routerRadius()
         const b = await routerRadius()
         await estado(
-            client.post('/api/v1/routers/conexion/registrar').json({
-                token: extraer(await generar(client, token, a), 'registroToken'),
-                public_key: publica,
-            }),
+            client
+                .post('/api/v1/routers/conexion/registrar')
+                .json({ token: extraer(await generar(client, token, a), 'token'), public_key: publica }),
             200,
         )
         const conflicto = await estado(
-            client.post('/api/v1/routers/conexion/registrar').json({
-                token: extraer(await generar(client, token, b), 'registroToken'),
-                public_key: publica,
-            }),
+            client
+                .post('/api/v1/routers/conexion/registrar')
+                .json({ token: extraer(await generar(client, token, b), 'token'), public_key: publica }),
             409,
         )
         assert.equal(conflicto.body().type, 'urn:argosisp:problema:clave_en_uso')
@@ -350,7 +327,7 @@ test.group('Conexión de routers · API', (group) => {
         assert.isString(limitado.header('retry-after'))
     })
 
-    test('sin secreto RADIUS 422; sin WireGuard configurado 503; router en modo api sin bloque RADIUS', async ({
+    test('sin secreto RADIUS válido 422; WireGuard apagado, sin clave del servidor o sin https 503', async ({
         client,
         assert,
     }) => {
@@ -361,21 +338,30 @@ test.group('Conexión de routers · API', (group) => {
             422,
         )
         assert.equal(r.body().type, 'urn:argosisp:problema:radius_secret_requerido')
+        const corto = await crearRouterFila({ radius_secret: cifrar('corto') })
+        await estado(client.get(`/api/v1/routers/${corto}/script-conexion`).bearerToken(token), 422)
 
-        const modoApi = await crearRouterFila({ modo_seguridad: 'api' })
-        const script = await generar(client, token, modoApi)
-        assert.notInclude(script, '/radius add')
-        assert.equal(extraer(script, 'radiusSecret'), '')
-
-        delete process.env.ARGOSISP_WG_CLAVE_PUBLICA
-        const sinWg = await estado(
-            client.get(`/api/v1/routers/${modoApi}/script-conexion`).bearerToken(token),
-            503,
-        )
-        assert.equal(sinWg.body().type, 'urn:argosisp:problema:wireguard_no_configurado')
+        const routerId = await routerRadius()
+        const no503 = async (detalle: RegExp) => {
+            const respuesta = await estado(
+                client.get(`/api/v1/routers/${routerId}/script-conexion`).bearerToken(token),
+                503,
+            )
+            assert.equal(respuesta.body().type, 'urn:argosisp:problema:wireguard_no_configurado')
+            assert.match(respuesta.body().detail, detalle)
+        }
+        process.env.API_PUBLIC_URL = 'http://argos.example'
+        await no503(/https/)
+        process.env.API_PUBLIC_URL = 'https://argos.example'
+        process.env.ARGOSISP_WIREGUARD = '0'
+        await no503(/ARGOSISP_WIREGUARD/)
+        process.env.ARGOSISP_WIREGUARD = '1'
+        await db.from('network.wireguard_servidor').delete()
+        await no503(/clave pública/)
+        await publicarServidor()
         await estado(
             client
-                .get(`/api/v1/routers/${modoApi}/script-conexion`)
+                .get(`/api/v1/routers/${routerId}/script-conexion`)
                 .qs({ admin: 'no-ip' })
                 .bearerToken(token),
             422,
@@ -441,20 +427,20 @@ test.group('Conexión de routers · API', (group) => {
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
-                .json({ token: extraer(script, 'registroToken'), public_key: publica }),
+                .json({ token: extraer(script, 'token'), public_key: publica }),
             410,
         )
-        const accion = await db
+        const acciones = await db
             .from('audit.acciones')
             .where({ accion: 'routers.conexion_clave', entidad_id: routerId })
             .orderBy('id')
         assert.deepEqual(
-            accion.map((a) => a.resultado),
+            acciones.map((a) => a.resultado),
             ['error', 'ok'],
         )
     })
 
-    test('handshakes del servicio wireguard: conectado con el primero, nunca retrocede; peers', async ({
+    test('estado del wireguard-agente: clave del servidor, conectado con handshake < 3 min; peers', async ({
         client,
         assert,
     }) => {
@@ -465,79 +451,150 @@ test.group('Conexión de routers · API', (group) => {
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
-                .json({ token: extraer(script, 'registroToken'), public_key: publica }),
+                .json({ token: extraer(script, 'token'), public_key: publica }),
             200,
         )
         const peers = await estado(
-            client.get('/api/v1/internal/routers/conexion/peers').bearerToken(TOKEN_INTERNO()),
+            client.get('/api/v1/internal/wireguard/peers').bearerToken(TOKEN_INTERNO()),
             200,
         )
-        assert.deepInclude(peers.body(), {
+        assert.deepInclude(peers.body().data, {
             router_id: routerId,
             public_key: publica,
-            ip_tunel: extraer(script, 'tunelIp'),
+            ip_tunel: extraer(script, 'wgIp'),
         })
-        await estado(client.get('/api/v1/internal/routers/conexion/peers').bearerToken(token), 401)
+        await estado(client.get('/api/v1/internal/wireguard/peers').bearerToken(token), 401)
 
-        const antesDeAuditar = await db
-            .from('audit.acciones')
-            .where('accion', 'routers.registrar_handshakes')
-            .count('* as n')
-            .first()
-        const sinNada = await estado(
-            client
-                .post('/api/v1/internal/routers/conexion/handshakes')
-                .bearerToken(TOKEN_INTERNO())
-                .json({ peers: [{ public_key: clave(), ultimo_handshake: new Date().toISOString() }] }),
-            200,
-        )
-        assert.deepEqual(sinNada.body(), { actualizados: 0, conectados: [] })
-
+        const nuevaClave = clave()
+        const informe = (handshake: Date | null, generado = new Date()) => ({
+            servidor: {
+                public_key: nuevaClave,
+                ip: '10.255.0.1',
+                red: '10.255.0.0/16',
+                puerto: 51820,
+                interfaz: 'wg-argos',
+                modo: 'kernel',
+            },
+            peers: [
+                {
+                    public_key: publica,
+                    ultimo_handshake: handshake?.toISOString() ?? null,
+                    endpoint: '203.0.113.9:13231',
+                    rx_bytes: 100,
+                    tx_bytes: 200,
+                },
+                { public_key: clave(), ultimo_handshake: new Date().toISOString() },
+            ],
+            generado_en: generado.toISOString(),
+        })
+        const contarAcciones = async () => {
+            const fila = await db
+                .from('audit.acciones')
+                .where('accion', 'routers.registrar_estado_wireguard')
+                .count('* as n')
+                .first()
+            return Number(fila.n)
+        }
+        const inicio = await contarAcciones()
         const ahora = new Date()
-        const r = await estado(
-            client
-                .post('/api/v1/internal/routers/conexion/handshakes')
-                .bearerToken(TOKEN_INTERNO())
-                .json({ peers: [{ public_key: publica, ultimo_handshake: ahora.toISOString() }] }),
-            200,
-        )
-        assert.deepEqual(r.body(), { actualizados: 1, conectados: [routerId] })
         await estado(
             client
-                .post('/api/v1/internal/routers/conexion/handshakes')
+                .post('/api/v1/internal/wireguard/estado')
                 .bearerToken(TOKEN_INTERNO())
-                .json({
-                    peers: [
-                        {
-                            public_key: publica,
-                            ultimo_handshake: new Date(ahora.getTime() - 60_000).toISOString(),
-                        },
-                    ],
-                }),
-            200,
+                .json(informe(ahora)),
+            204,
         )
-        const conexion = await estado(
+        const servidor = await db.from('network.wireguard_servidor').where('id', 1).firstOrFail()
+        assert.equal(servidor.public_key, nuevaClave)
+        // los scripts nuevos llevan la clave publicada
+        assert.equal(extraer(await generar(client, token, await routerRadius()), 'wgServidorPub'), nuevaClave)
+
+        const conectado = await estado(
             client.get(`/api/v1/routers/${routerId}/conexion`).bearerToken(token),
             200,
         )
-        assert.containsSubset(conexion.body(), {
+        assert.containsSubset(conectado.body(), {
             estado: 'conectado',
             ultimo_handshake: ahora.toISOString(),
             handshake_reciente: true,
         })
-        const despues = await db
-            .from('audit.acciones')
-            .where('accion', 'routers.registrar_handshakes')
-            .count('* as n')
-            .first()
-        // solo el informe que conectó al router deja fila
-        assert.equal(Number(despues.n) - Number(antesDeAuditar.n), 1)
-        const cambio = await db
+        // un informe igual (sin cambios de estado) no deja fila; uno atrasado no retrocede el handshake
+        await estado(
+            client
+                .post('/api/v1/internal/wireguard/estado')
+                .bearerToken(TOKEN_INTERNO())
+                .json(informe(new Date(ahora.getTime() - 60_000))),
+            204,
+        )
+        assert.equal(await contarAcciones(), inicio + 1)
+        // 4 min sin handshake: vuelve a pendiente
+        await estado(
+            client
+                .post('/api/v1/internal/wireguard/estado')
+                .bearerToken(TOKEN_INTERNO())
+                .json(informe(ahora, new Date(ahora.getTime() + 4 * 60_000))),
+            204,
+        )
+        assert.equal(await contarAcciones(), inicio + 2)
+        const fila = await db.from('network.routers_conexion').where('router_id', routerId).firstOrFail()
+        assert.equal(fila.estado, 'pendiente')
+        assert.equal(new Date(fila.ultimo_handshake).toISOString(), ahora.toISOString())
+        const cambiosEstado = await db
             .from('audit.cambios')
             .where({ entidad_tipo: 'router_conexion', entidad_id: routerId, campo: 'estado' })
-            .orderBy('id', 'desc')
+            .orderBy('id')
+        // (el alta de la conexión deja `null → pendiente`)
+        assert.deepEqual(
+            cambiosEstado.filter((c) => c.antes !== null).map((c) => [c.antes, c.despues]),
+            [
+                ['pendiente', 'conectado'],
+                ['conectado', 'pendiente'],
+            ],
+        )
+    })
+
+    test('desactivar un router con túnel: sale de los peers y emite conexion_eliminada; reactivarlo lo devuelve', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const routerId = await routerRadius()
+        const script = await generar(client, token, routerId)
+        await estado(
+            client
+                .post('/api/v1/routers/conexion/registrar')
+                .json({ token: extraer(script, 'token'), public_key: clave() }),
+            200,
+        )
+        const { version } = await db.from('network.routers').where('id', routerId).firstOrFail()
+        await estado(
+            client.put(`/api/v1/routers/${routerId}`).bearerToken(token).json({ version, activo: false }),
+            200,
+        )
+        const eliminada = await db
+            .from('audit.outbox')
+            .where('evento', 'router.conexion_eliminada')
+            .whereRaw("(payload->>'router_id')::bigint = ?", [routerId])
             .firstOrFail()
-        assert.deepEqual([cambio.antes, cambio.despues], ['pendiente', 'conectado'])
+        assert.deepEqual(eliminada.payload, { router_id: routerId, empresa_id: null })
+        const peers = await estado(
+            client.get('/api/v1/internal/wireguard/peers').bearerToken(TOKEN_INTERNO()),
+            200,
+        )
+        assert.isFalse(peers.body().data.some((p: { router_id: number }) => p.router_id === routerId))
+
+        await estado(
+            client
+                .put(`/api/v1/routers/${routerId}`)
+                .bearerToken(token)
+                .json({ version: version + 1, activo: true }),
+            200,
+        )
+        const registradas = await db
+            .from('audit.outbox')
+            .where('evento', 'router.conexion_registrada')
+            .whereRaw("(payload->>'router_id')::bigint = ?", [routerId])
+        assert.lengthOf(registradas, 2)
     })
 
     test('rotar: borra el peer, emite conexion_rotada y entrega un script nuevo con la misma IP', async ({
@@ -551,7 +608,7 @@ test.group('Conexión de routers · API', (group) => {
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
-                .json({ token: extraer(script, 'registroToken'), public_key: publica }),
+                .json({ token: extraer(script, 'token'), public_key: publica }),
             200,
         )
         const r = await estado(
@@ -562,8 +619,8 @@ test.group('Conexión de routers · API', (group) => {
             200,
         )
         const nuevo = r.text()
-        assert.equal(extraer(nuevo, 'tunelIp'), extraer(script, 'tunelIp'))
-        assert.include(nuevo, '{"203.0.113.9"}')
+        assert.equal(extraer(nuevo, 'wgIp'), extraer(script, 'wgIp'))
+        assert.equal(extraer(nuevo, 'adminIps'), '203.0.113.9')
         const fila = await db.from('network.routers_conexion').where('router_id', routerId).firstOrFail()
         assert.isNull(fila.public_key)
         assert.equal(fila.estado, 'pendiente')
@@ -575,18 +632,17 @@ test.group('Conexión de routers · API', (group) => {
         assert.deepEqual(rotada.payload, {
             router_id: routerId,
             empresa_id: null,
-            ip_tunel: extraer(script, 'tunelIp'),
+            ip_tunel: extraer(script, 'wgIp'),
         })
         const peers = await estado(
-            client.get('/api/v1/internal/routers/conexion/peers').bearerToken(TOKEN_INTERNO()),
+            client.get('/api/v1/internal/wireguard/peers').bearerToken(TOKEN_INTERNO()),
             200,
         )
-        assert.isFalse(peers.body().some((p: { router_id: number }) => p.router_id === routerId))
-        // el script nuevo registra de nuevo
+        assert.isFalse(peers.body().data.some((p: { router_id: number }) => p.router_id === routerId))
         await estado(
             client
                 .post('/api/v1/routers/conexion/registrar')
-                .json({ token: extraer(nuevo, 'registroToken'), public_key: publica }),
+                .json({ token: extraer(nuevo, 'token'), public_key: publica }),
             200,
         )
     })
@@ -596,13 +652,12 @@ test.group('Conexión de routers · API', (group) => {
         assert,
     }) => {
         const { token } = await usuarioConRoles(['admin'])
-        // red /29 propia: hosts .2 a .6 para routers
         const tercero = 100 + (process.pid % 100)
         process.env.ARGOSISP_WG_RED = `10.254.${tercero}.0/29`
         await routerRadius({ nas_ip: `10.254.${tercero}.2` })
         const ips: string[] = []
         for (let i = 0; i < 4; i++) {
-            ips.push(extraer(await generar(client, token, await routerRadius()), 'tunelIp'))
+            ips.push(extraer(await generar(client, token, await routerRadius()), 'wgIp'))
         }
         assert.deepEqual(
             ips,

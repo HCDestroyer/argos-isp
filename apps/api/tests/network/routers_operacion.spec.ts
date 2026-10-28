@@ -19,7 +19,7 @@ import {
 import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
 import { crearRouterFila, crearZonaFila, ipUnica } from '#tests/core/fabricas'
 
-const SECRETO = 'secreto-del-nas-123'
+const SECRETO = 'secreto-del-nas-1234'
 const entornoOriginal = { ...process.env }
 
 /** Como `fabricaPorDefecto`, sin reintentos (un router caído responde rápido). */
@@ -41,8 +41,14 @@ test.group('Routers · probar conexión', (group) => {
         await falso.levantar()
         return () => falso.cerrar()
     })
-    group.each.setup(() => {
-        process.env.ARGOSISP_WG_CLAVE_PUBLICA = randomBytes(32).toString('base64')
+    group.each.setup(async () => {
+        process.env.ARGOSISP_WIREGUARD = '1'
+        process.env.API_PUBLIC_URL = 'https://argos.example'
+        await db.rawQuery(
+            `INSERT INTO network.wireguard_servidor (id, public_key) VALUES (1, ?)
+             ON CONFLICT (id) DO UPDATE SET public_key = EXCLUDED.public_key`,
+            [randomBytes(32).toString('base64')],
+        )
         process.env.ARGOSISP_WG_ENDPOINT = 'vpn.argosisp.example'
         process.env.ARGOSISP_WG_RED = '10.255.0.0/16'
         process.env.ROUTERS_REGISTRO_LIMITE = '0'
@@ -82,7 +88,7 @@ test.group('Routers · probar conexión', (group) => {
             200,
         )
         const script = respuestaScript.text()
-        const registroToken = /:local registroToken "([^"]+)"/.exec(script)![1]
+        const registroToken = /:local token "([^"]+)"/.exec(script)![1]
         const publica = randomBytes(32).toString('base64')
         await estado(
             client
@@ -92,16 +98,24 @@ test.group('Routers · probar conexión', (group) => {
         )
         await estado(
             client
-                .post('/api/v1/internal/routers/conexion/handshakes')
+                .post('/api/v1/internal/wireguard/estado')
                 .bearerToken(env.get('INTERNAL_TOKEN'))
-                .json({ peers: [{ public_key: publica, ultimo_handshake: new Date().toISOString() }] }),
-            200,
+                .json({
+                    servidor: { public_key: randomBytes(32).toString('base64') },
+                    peers: [{ public_key: publica, ultimo_handshake: new Date().toISOString() }],
+                }),
+            204,
         )
         // el registro apuntó la API al túnel: en la prueba se vuelve al RouterOS falso
         await db
             .from('network.routers')
             .where('id', routerId)
-            .update({ api_url: falso.url, api_password: cifrar(falso.password), api_usuario: falso.usuario })
+            .update({
+                api_url: falso.url,
+                api_password: cifrar(falso.password),
+                api_usuario: falso.usuario,
+                api_tls_verificar: false,
+            })
         falso.lectura('/radius').push({
             '.id': '*1',
             address: '10.255.0.1',

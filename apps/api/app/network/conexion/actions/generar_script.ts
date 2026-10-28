@@ -6,22 +6,20 @@ import { verRouter } from '#network/consultas/routers'
 import { configWireguard, urlBaseApi } from '#network/conexion/config'
 import { asignarIpTunel } from '#network/conexion/ipam_tunel'
 import {
-    GRUPO_API,
-    USUARIO_API,
     VIGENCIA_TOKEN_H,
     auditableConexion,
     filaConexion,
     generarClaveApi,
     generarToken,
 } from '#network/conexion/consultas'
-import { plantillaConexion } from '#network/conexion/plantilla'
-import { renderScript } from '#network/conexion/render'
+import { PLANTILLAS, leerMikrotik, renderizar, variablesMikrotik } from '#network/conexion/render'
+import { valoresServicio } from '#network/conexion/servicio'
 
 export interface EntradaGenerarScript {
     router_id: number
     /** IPs o redes para `argosisp-admin` (winbox y ssh); vacía = gestión solo por el túnel */
     admin?: string[]
-    /** suma PPPoE, perfiles y corte (`?incluir=servicio`) */
+    /** suma PPPoE, perfiles y corte (`?incluir=servicio`, `conexion-servicio.rsc.tpl`) */
     incluir_servicio?: boolean
     /** origen de la petición (`https://host`), si no hay `API_PUBLIC_URL` */
     origen: string
@@ -32,17 +30,21 @@ export interface ScriptConexion {
     nombre_archivo: string
 }
 
+/** El patrón de `radius_secret` en `variables.json` (16 a 128 ASCII imprimibles, sin espacio). */
+const SECRETO_RADIUS = /^[\x21-\x7e]{16,128}$/
+
 /**
- * `routers.generar_script` (`contratos/conexion-routers.md` §3): arma el `.rsc` de conexión del
- * router.
+ * `routers.generar_script` (`contratos/conexion-routers.md` §3 y §6.2): arma el `.rsc` con las
+ * plantillas de A6 (`infra/mikrotik/plantillas`) y el render de `render.ts`.
  *
  * - La primera vez crea la fila de `network.routers_conexion` con su IP del túnel (estable).
  * - Rota el token de registro (un uso, 24 h; el anterior deja de valer) y crea una clave nueva para
  *   el usuario `argosisp-api`, que se guarda cifrada como pendiente: pasa a `api_password` cuando el
- *   router se registra con este script (así un script generado y no ejecutado no deja a la API sin
+ *   router se registra con este script (un script generado y no ejecutado no deja a la API sin
  *   acceso al router).
- * - El secreto RADIUS es el `radius_secret` del router, el mismo con que `pnpm aaa:clients` arma su
- *   cliente de FreeRADIUS. Nunca se inventa otro: sin él, 422 `radius_secret_requerido`.
+ * - El secreto RADIUS es el `radius_secret` del router, el mismo con que se arma su cliente de
+ *   FreeRADIUS. Nunca se inventa otro: sin él (o si no cumple 16 a 128 caracteres imprimibles sin
+ *   espacios), 422 `radius_secret_requerido`.
  * - Ni la auditoría ni el evento llevan secretos; el script no se guarda.
  */
 export default class GenerarScript extends DomainAction<EntradaGenerarScript, ScriptConexion> {
@@ -54,21 +56,26 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
         await t.trx.from('network.routers').where('id', routerId).forUpdate().select('id')
         const router = await verRouter(routerId, t.trx)
         t.fijarEmpresa(router.empresa_sugerida_id)
-        const wg = configWireguard()
+        const wg = await configWireguard(t.trx)
+        const argosUrl = urlBaseApi(input.origen)
 
-        const secretos = (await t.trx
+        const { radius_secret: secretoCifrado } = (await t.trx
             .from('network.routers')
             .where('id', routerId)
             .select('radius_secret')
             .firstOrFail()) as { radius_secret: string | null }
-        const conRadius = router.modo_seguridad === 'radius'
-        if (conRadius && !secretos.radius_secret) {
+        const secreto = secretoCifrado ? descifrar(secretoCifrado) : null
+        if (!secreto || !SECRETO_RADIUS.test(secreto)) {
             throw new ReglaNegocio(
-                'El router no tiene secreto RADIUS. Defínelo en la ficha del router (es el mismo que usa ' +
-                    'FreeRADIUS) y vuelve a generar el script',
+                secreto
+                    ? 'El secreto RADIUS del router debe tener de 16 a 128 caracteres imprimibles y sin espacios ' +
+                          '(va en el script y en FreeRADIUS). Cámbialo en la ficha del router y vuelve a generar'
+                    : 'El router no tiene secreto RADIUS. Defínelo en la ficha del router (es el mismo que usa ' +
+                          'FreeRADIUS) y vuelve a generar el script',
                 'radius_secret_requerido',
             )
         }
+        const servicio = input.incluir_servicio ? valoresServicio(router) : {}
 
         const antes = await filaConexion(routerId, t.trx, true)
         const token = generarToken()
@@ -102,36 +109,29 @@ export default class GenerarScript extends DomainAction<EntradaGenerarScript, Sc
             auditableConexion(antes),
             auditableConexion(despues),
         )
-        t.fijarEntidad('router', routerId)
 
-        const admin = input.admin ?? []
-        const texto = renderScript(plantillaConexion().texto, {
-            textos: {
+        const plantilla = leerMikrotik(input.incluir_servicio ? PLANTILLAS.servicio : PLANTILLAS.conexion)
+        const texto = renderizar(
+            plantilla,
+            {
                 router_id: String(routerId),
-                router_nombre: router.nombre,
                 generado_en: new Date().toISOString(),
-                token_vence: vence.toISO()!,
-                ip_tunel: despues.ip_tunel,
-                ip_tunel_cidr: `${despues.ip_tunel}/${wg.red.prefijo}`,
-                red_tunel: wg.red.cidr,
-                servidor_ip: wg.red.servidor,
-                servidor_public_key: wg.clavePublica,
-                servidor_endpoint: wg.endpoint,
-                servidor_puerto: String(wg.puerto),
-                registro_url: `${urlBaseApi(input.origen)}/api/v1/routers/conexion/registrar`,
-                registro_token: token.valor,
-                api_usuario: USUARIO_API,
-                api_grupo: GRUPO_API,
+                argos_url: argosUrl,
+                token: token.valor,
+                wg_ip: despues.ip_tunel,
+                wg_servidor_ip: wg.red.servidor,
+                wg_red: wg.red.cidr,
+                wg_servidor_public_key: wg.clavePublica,
+                wg_servidor_endpoint: wg.endpoint,
+                wg_servidor_puerto: String(wg.puerto),
+                radius_secret: secreto,
                 api_password: claveApi,
-                radius_secret: conRadius ? descifrar(secretos.radius_secret!) : '',
+                api_nombre: `router-${routerId}.argosisp`,
+                admin_ips: (input.admin ?? []).join(','),
+                ...servicio,
             },
-            listas: { admin_ips: admin },
-            secciones: {
-                radius: conRadius,
-                incluir_servicio: input.incluir_servicio === true,
-                admin: admin.length > 0,
-            },
-        })
+            variablesMikrotik(),
+        )
 
         await t.emit('router.conexion_generada', {
             router_id: routerId,

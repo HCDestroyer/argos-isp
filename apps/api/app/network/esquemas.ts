@@ -470,8 +470,8 @@ export const ConexionRouter = definirEsquema(
         estado: {
             ...enumerado(['sin_configurar', 'pendiente', 'conectado']),
             description:
-                'sin_configurar: nunca se generó el script; pendiente: sin handshake desde el registro ' +
-                '(o sin registrar); conectado: el servidor vio su handshake',
+                'sin_configurar: nunca se generó el script; pendiente: sin registrar o sin handshake en los ' +
+                'últimos 3 min; conectado: handshake de menos de 3 min',
         },
         ip_tunel: { ...nulable(texto), description: 'IP del router en el túnel (/32 de ARGOSISP_WG_RED)' },
         public_key: { ...nulable(texto), description: 'Clave pública WireGuard del router (no es secreta)' },
@@ -481,6 +481,7 @@ export const ConexionRouter = definirEsquema(
             description: 'Hubo handshake en los últimos 180 s (el túnel está vivo)',
         },
         registrado_en: nulable(instante),
+        routeros_version: { ...nulable(texto), description: 'La que informó el router al registrarse' },
         token_vence: {
             ...nulable(instante),
             description: 'Vencimiento del token del último script; null si ya se usó o no hay',
@@ -493,12 +494,16 @@ export const RegistroConexion = definirEsquema(
     'RegistroConexion',
     objeto({
         router_id: id,
-        ip_tunel: texto,
-        ip_tunel_cidr: { ...texto, description: 'Dirección para la interfaz wg-argos del router' },
-        servidor_ip: { ...texto, description: 'IP del servidor en el túnel (RADIUS, API)' },
-        servidor_public_key: texto,
-        servidor_endpoint: { ...texto, description: 'Host o IP pública del servidor WireGuard' },
-        servidor_puerto: entero,
+        ip_tunel: {
+            ...texto,
+            description: 'IP /32 del router en el túnel (el script la compara con la suya)',
+        },
+        servidor: objeto({
+            public_key: { ...texto, description: 'Clave pública del servidor WireGuard' },
+            endpoint: { ...texto, description: 'ARGOSISP_WG_ENDPOINT' },
+            puerto: entero,
+            ip: { ...texto, description: 'IP del servidor en el túnel (RADIUS, CoA, API)' },
+        }),
     }),
 )
 
@@ -507,10 +512,7 @@ export const PeerWireguard = definirEsquema(
     objeto({ router_id: id, public_key: texto, ip_tunel: texto }),
 )
 
-export const ResultadoHandshakes = definirEsquema(
-    'ResultadoHandshakes',
-    objeto({ actualizados: entero, conectados: lista(id) }),
-)
+export const PeersWireguard = definirEsquema('PeersWireguard', objeto({ data: lista(PeerWireguard) }))
 
 export const ChequeoConexion = definirEsquema(
     'ChequeoConexion',

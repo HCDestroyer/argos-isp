@@ -1,75 +1,99 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { Problema } from '#shared/errores'
+
 /**
- * Render del script `.rsc` de conexión (`contratos/conexion-routers.md` §3).
+ * Render del script de conexión: port tal cual de la implementación de referencia de A6
+ * (`infra/mikrotik/render.mjs`, `contratos/conexion-routers.md` §6.2). Mismas reglas; su prueba
+ * (`render.test.mjs`) tiene espejo en `tests/network/conexion_render.spec.ts`.
  *
- * Formato de plantilla (acordado con A6 en `a6.md`):
+ * - Cada `{{nombre}}` de la plantilla se reemplaza por su valor.
+ * - Todos los nombres de la plantilla deben venir y cumplir su patrón de `variables.json` (si no,
+ *   error: nunca se sirve un script a medias).
+ * - El valor va dentro de una cadena de RouterOS: se escapan `\ " $ ?` y se rechazan los caracteres
+ *   de control (un salto de línea cerraría la cadena).
  *
- * - `{{nombre}}`: el valor escapado para ir **dentro de comillas dobles** de RouterOS
- *   (`:local x "{{nombre}}"`). También en comentarios: el escape quita los saltos de línea, así un
- *   valor nunca agrega una línea de comandos.
- * - `{{lista:nombre}}`: arreglo literal de RouterOS ya armado (`{"a";"b"}`, o `{}` vacío), con cada
- *   elemento escapado. Va sin comillas: `:local admin {{lista:admin_ips}}`.
- * - `{{#seccion}} … {{/seccion}}`: se incluye si la sección es verdadera; `{{^seccion}} … {{/seccion}}`
- *   si es falsa. No se anidan secciones con el mismo nombre.
- *
- * Un marcador que no esté en las variables es un error (nunca se deja `{{x}}` en el script).
+ * Los archivos (`variables.json`, `plantillas/*.rsc.tpl`) son de A6 y se leen en cada generación de
+ * `ROUTERS_MIKROTIK_DIR` (en la imagen de la API) o de `infra/mikrotik` del monorepo.
  */
 
-export interface VariablesScript {
-    textos: Record<string, string>
-    listas: Record<string, string[]>
-    secciones: Record<string, boolean>
+const DEL_MONOREPO = fileURLToPath(new URL('../../../../../infra/mikrotik', import.meta.url))
+const VARIABLE = /\{\{([a-z0-9_]+)\}\}/g
+
+export const PLANTILLAS = {
+    conexion: 'plantillas/conexion.rsc.tpl',
+    servicio: 'plantillas/conexion-servicio.rsc.tpl',
+} as const
+
+export interface DefinicionVariable {
+    patron: string
+    descripcion: string
 }
 
 export class PlantillaInvalida extends Error {}
 
-/**
- * Escapa un valor para un string de RouterOS entre comillas dobles: `\`, `"`, `$` (variables) y `?`
- * (la ayuda de la terminal al pegar) llevan `\`; los caracteres de control salen como `\HH`.
- */
-export function escaparRouterOS(valor: string): string {
-    let salida = ''
-    for (const caracter of valor) {
-        const codigo = caracter.codePointAt(0)!
-        if (caracter === '\\' || caracter === '"' || caracter === '$' || caracter === '?') {
-            salida += `\\${caracter}`
-        } else if (codigo < 0x20 || codigo === 0x7f) {
-            salida += `\\${codigo.toString(16).toUpperCase().padStart(2, '0')}`
-        } else {
-            salida += caracter
-        }
-    }
-    return salida
+export function dirMikrotik(entorno: NodeJS.ProcessEnv = process.env): string {
+    return entorno.ROUTERS_MIKROTIK_DIR?.trim() || DEL_MONOREPO
 }
 
-export function listaRouterOS(valores: string[]): string {
-    return `{${valores.map((valor) => `"${escaparRouterOS(valor)}"`).join(';')}}`
+export function leerMikrotik(relativa: string, dir = dirMikrotik()): string {
+    try {
+        return readFileSync(join(dir, relativa), 'utf8')
+    } catch {
+        // Error de instalación (la imagen no trae los archivos de A6): 503, nunca un script a medias.
+        throw new Problema(
+            503,
+            'plantillas_no_disponibles',
+            'Plantillas de conexión no disponibles',
+            `No se pudo leer ${relativa} en ${dir}: revisa ROUTERS_MIKROTIK_DIR`,
+        )
+    }
 }
 
-const SECCION = /\{\{([#^])([a-z_][a-z0-9_]*)\}\}([\s\S]*?)\{\{\/\2\}\}/g
-const MARCADOR = /\{\{(lista:)?([a-z_][a-z0-9_]*)\}\}/g
-
-export function renderScript(plantilla: string, variables: VariablesScript): string {
-    let texto = plantilla
-    // Las secciones se resuelven de adentro hacia afuera hasta que no quede ninguna.
-    for (let previo = ''; previo !== texto;) {
-        previo = texto
-        texto = texto.replace(SECCION, (_todo, tipo: string, nombre: string, cuerpo: string) => {
-            if (!(nombre in variables.secciones)) {
-                throw new PlantillaInvalida(`Sección desconocida: ${nombre}`)
-            }
-            const activa = variables.secciones[nombre] === (tipo === '#')
-            return activa ? cuerpo : ''
-        })
+/** Grupos `conexion` y `servicio` de `variables.json`, en uno. */
+export function variablesMikrotik(dir = dirMikrotik()): Record<string, DefinicionVariable> {
+    const v = JSON.parse(leerMikrotik('variables.json', dir)) as Record<string, unknown>
+    return {
+        ...(v.conexion as Record<string, DefinicionVariable>),
+        ...(v.servicio as Record<string, DefinicionVariable>),
     }
-    if (/\{\{[#^/]/.test(texto)) throw new PlantillaInvalida('Sección sin cerrar en la plantilla')
-    return texto.replace(MARCADOR, (_todo, lista: string | undefined, nombre: string) => {
-        if (lista) {
-            const valores = variables.listas[nombre]
-            if (!valores) throw new PlantillaInvalida(`Lista desconocida: ${nombre}`)
-            return listaRouterOS(valores)
+}
+
+/** Nombres que usa una plantilla, en orden de aparición y sin repetir. */
+export function variablesDe(plantilla: string): string[] {
+    return [...new Set([...plantilla.matchAll(VARIABLE)].map((m) => m[1]!))]
+}
+
+/** Escapa un valor para una cadena entre comillas de RouterOS. */
+export function escapar(valor: unknown): string {
+    const texto = String(valor)
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u001f\u007f]/.test(texto)) {
+        throw new PlantillaInvalida('valor con caracteres de control')
+    }
+    return texto.replace(/[\\"$?]/g, (c) => `\\${c}`)
+}
+
+export function renderizar(
+    plantilla: string,
+    valores: Record<string, string | null | undefined>,
+    variables: Record<string, DefinicionVariable> = variablesMikrotik(),
+): string {
+    const errores: string[] = []
+    for (const nombre of variablesDe(plantilla)) {
+        const def = variables[nombre]
+        const valor = valores[nombre]
+        if (!def) {
+            errores.push(`${nombre}: no está en variables.json`)
+        } else if (valor === undefined || valor === null) {
+            errores.push(`${nombre}: falta`)
+        } else if (!new RegExp(def.patron).test(String(valor))) {
+            errores.push(`${nombre}: no cumple ${def.patron}`)
         }
-        const valor = variables.textos[nombre]
-        if (valor === undefined) throw new PlantillaInvalida(`Variable desconocida: ${nombre}`)
-        return escaparRouterOS(valor)
-    })
+    }
+    if (errores.length) {
+        throw new PlantillaInvalida(`plantilla de conexión: ${errores.join('; ')}`)
+    }
+    return plantilla.replace(VARIABLE, (_, nombre: string) => escapar(valores[nombre]))
 }

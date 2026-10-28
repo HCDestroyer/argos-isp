@@ -13,17 +13,17 @@ Routers, IPAM IPv4 e IPv6, planes y su implementación por router.
 
 ## Conexión por WireGuard (`conexion/`, `contratos/conexion-routers.md`)
 
-Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosisp-api` (grupo con `read,write,api,rest-api`), cliente RADIUS y puertos de gestión cerrados.
+Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosisp-api` (grupo `read,write,api,rest-api`), cliente RADIUS y puertos de gestión cerrados. Las plantillas y `variables.json` son de A6 (`infra/mikrotik`); la API las rellena.
 
-- `network.routers_conexion`: una fila por router con `ip_tunel` (/32 de `ARGOSISP_WG_RED`, única y estable: `ipam_tunel.ts`, salta la `.1` del servidor y las `nas_ip` de otros routers), `public_key`, `estado` (`pendiente`/`conectado`), `ultimo_handshake`, token de registro (hash sha256, 24 h, un uso) y `api_password_pendiente` (cifrada).
-- **Generar** (`GET /routers/:id/script-conexion?admin=&incluir=servicio`, `routers.generar_script`): rota el token y crea una clave aleatoria de 32 caracteres para la API, que queda pendiente hasta que el router se registra con ese script (un script generado y no ejecutado no deja a la API sin acceso). El secreto RADIUS es el `radius_secret` del router, el mismo de `pnpm aaa:clients`; sin él, 422 `radius_secret_requerido`. Sin configuración del servidor, 503 `wireguard_no_configurado`.
-- **Registrar** (`POST /routers/conexion/registrar`, público): `{ token, public_key }`; 410 `token_invalido` si venció, se usó o fue reemplazado; 409 `clave_en_uso`; límite por IP (`ROUTERS_REGISTRO_LIMITE`, `ROUTERS_REGISTRO_VENTANA_S`). Al registrarse, `host` y `nas_ip` del router pasan a la IP del túnel, `api_usuario` a `argosisp-api`, `api_url` a null y la clave pendiente a `api_password`.
-- **Pegar la clave** (`POST /routers/:id/conexion/clave`, `routers.conexion_clave`): igual que el registro, para un router sin internet. 422 `script_no_generado` sin script previo.
-- **Rotar** (`POST /routers/:id/conexion/rotar`, `routers.rotar_conexion`): borra la clave registrada, vuelve a `pendiente` y responde un script nuevo. La IP no cambia.
-- **Estado** (`GET /routers/:id/conexion`, `routers.ver`): `sin_configurar`, `pendiente` o `conectado`, IP del túnel, clave pública, último handshake, `handshake_reciente` (< 180 s) y vencimiento del token.
-- **Servicio `wireguard` (A6)**: `GET /internal/routers/conexion/peers` (lista para `wg syncconf`) y `POST /internal/routers/conexion/handshakes` (`routers.registrar_handshakes`: solo avanza el handshake; el primero de un `pendiente` lo pasa a `conectado` y solo entonces deja fila en `audit.acciones`).
-- Render (`render.ts`): `{{variable}}` va escapada para un string de RouterOS entre comillas (`\`, `"`, `$`, `?` y controles como `\HH`; un valor nunca agrega líneas), `{{lista:x}}` arma `{"a";"b"}` y `{{#x}}…{{/x}}` / `{{^x}}…{{/x}}` son secciones. Un marcador desconocido es error. Plantilla: `ROUTERS_PLANTILLA_CONEXION`, si no `infra/mikrotik/conexion.rsc` (A6), si no `plantilla_minima.ts`.
-- Variables: `ARGOSISP_WG_RED` (10.255.0.0/16), `ARGOSISP_WG_PUERTO` (51820), `ARGOSISP_WG_ENDPOINT` (si no, el host de `API_PUBLIC_URL`), `ARGOSISP_WG_CLAVE_PUBLICA` o `ARGOSISP_WG_CLAVE_PUBLICA_ARCHIVO`, `API_PUBLIC_URL` (URL de registro).
+- `network.routers_conexion`: una fila por router con `ip_tunel` (/32 de `ARGOSISP_WG_RED`, única y estable: `ipam_tunel.ts`, salta la `.1` del servidor y las `nas_ip` de otros routers), `public_key`, `estado`, `ultimo_handshake`, `routeros_version`, token de registro (hash sha256, 24 h, un uso) y `api_password_pendiente` (cifrada). `network.wireguard_servidor`: la clave pública que publicó el agente.
+- **Generar** (`GET /routers/:id/script-conexion?admin=&incluir=servicio`, `routers.generar_script`): rota el token y crea una clave aleatoria de 32 caracteres para la API, pendiente hasta que el router se registra con ese script. El secreto RADIUS es el `radius_secret` del router (el de FreeRADIUS); sin él o fuera del patrón (16 a 128), 422 `radius_secret_requerido`. Con `incluir=servicio`, los datos de `servicio.ts` (422 `servicio_incompleto` si faltan). 503 `wireguard_no_configurado` sin `ARGOSISP_WIREGUARD=1`, sin `ARGOSISP_WG_ENDPOINT`, sin clave publicada o sin `API_PUBLIC_URL` https; 503 `plantillas_no_disponibles` si faltan los archivos.
+- **Registrar** (`POST /routers/conexion/registrar`, público): `{ token, public_key, routeros_version, api_ca }` → `{ router_id, ip_tunel, servidor: { public_key, endpoint, puerto, ip } }`; 410 `token_invalido`; 409 `clave_en_uso`; límite por IP (`ROUTERS_REGISTRO_LIMITE`, `ROUTERS_REGISTRO_VENTANA_S`). Al registrarse: `host` y `nas_ip` = IP del túnel (dirección del NAS en FreeRADIUS y destino del CoA), `api_url = https://<ip_tunel>`, `api_usuario = argosisp-api`, `api_tls_verificar = true`, `api_ca` la del router y la clave pendiente pasa a `api_password`.
+- **Pegar la clave** (`POST /routers/:id/conexion/clave`, `routers.conexion_clave`): igual que el registro, para un router sin internet. 422 `script_no_generado`.
+- **Rotar** (`POST /routers/:id/conexion/rotar`, `routers.rotar_conexion`): borra la clave registrada y responde un script nuevo. La IP no cambia.
+- **Estado** (`GET /routers/:id/conexion`, `routers.ver`): `sin_configurar`, `pendiente` o `conectado` (handshake de menos de 3 min), IP del túnel, clave pública, último handshake, `routeros_version` y vencimiento del token.
+- **Desactivar** un router con túnel (`PUT /routers/:id { activo: false }`) lo saca de los peers y emite `router.conexion_eliminada`; reactivarlo emite `router.conexion_registrada`.
+- **wireguard-agente (A6)**: `GET /internal/wireguard/peers` → `{ data: [{ router_id, public_key, ip_tunel }] }` (routers activos con clave) y `POST /internal/wireguard/estado` → 204 (`routers.registrar_estado_wireguard`: guarda la clave del servidor y el handshake, que solo avanza; el cambio `pendiente` ↔ `conectado` va a `audit.cambios` y la acción solo deja fila en `audit.acciones` si cambió algún estado o la clave).
+- Render (`render.ts`): port de `infra/mikrotik/render.mjs` (espejo de su prueba en `tests/network/conexion_render.spec.ts`): todas las variables deben venir y cumplir su patrón, se escapan `\ " $ ?` y un carácter de control es error. Archivos en `ROUTERS_MIKROTIK_DIR` o `infra/mikrotik`.
 - Ni la auditoría ni los eventos llevan el token, la clave de la API ni el secreto RADIUS; el script no se guarda.
 
 ## Probar conexión y reconciliar (pedido del PM, 28 oct)
@@ -37,7 +37,8 @@ Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosi
 | `RegistrarConexion` | público con token | `router.conexion_registrada` |
 | `ConexionClave` | `routers.conexion_clave` | `router.conexion_registrada` |
 | `RotarConexion` | `routers.rotar_conexion` | `router.conexion_rotada`, `router.conexion_generada` |
-| `RegistrarHandshakes` | interno | — |
+| `RegistrarEstadoWireguard` | interno | — |
+| `EditarRouter` (activo) | `routers.editar` | `router.conexion_eliminada` / `router.conexion_registrada` |
 | `ProbarConexion` | `routers.probar_conexion` | — (`audit.red`) |
 | `ReconciliarAhora` | `routers.reconciliar` | — (encola `routeros.reconciliar`) |
 

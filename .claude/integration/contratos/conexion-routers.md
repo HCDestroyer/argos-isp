@@ -77,3 +77,20 @@ Con `Authorization: Bearer <INTERNAL_TOKEN>` (el de `internal/aaa/*`):
 - `RADIUS_BIND_IP` = la `.1`; los contenedores alcanzan las `/32` por la ruta del host y salen con origen `.1` (enmascarado de Docker), así que `COA_ORIGEN_IP` queda vacía. Detalle: `infra/wireguard/README.md`.
 - El cliente de FreeRADIUS de un router con túnel es su `ip_tunel` (es el origen de sus `Access-Request`): `argosisp radius-clientes` / `clients.d` deben usarla como dirección del NAS (A1/A2).
 
+
+## 7. API de A1 (rama `a1/conexion-routers`)
+
+| Endpoint | Permiso | Respuesta |
+| --- | --- | --- |
+| `GET /api/v1/routers/:id/script-conexion?admin=&incluir=servicio` | `routers.generar_script` | `text/plain` (descarga `argosisp-router-<id>.rsc`, `Cache-Control: no-store`). 422 `radius_secret_requerido`, `servicio_incompleto`, `red_tunel_llena`; 503 `wireguard_no_configurado`, `plantillas_no_disponibles` |
+| `GET /api/v1/routers/:id/conexion` | `routers.ver` | `ConexionRouter`: `estado` (`sin_configurar`, `pendiente`, `conectado` = handshake < 3 min), `ip_tunel`, `public_key`, `ultimo_handshake`, `handshake_reciente`, `registrado_en`, `routeros_version`, `token_vence`, `version` |
+| `POST /api/v1/routers/conexion/registrar` | público, token | §6.1. 410 `token_invalido`, 409 `clave_en_uso`, 429 |
+| `POST /api/v1/routers/:id/conexion/clave` `{ public_key }` | `routers.conexion_clave` | `ConexionRouter`. 422 `script_no_generado` |
+| `POST /api/v1/routers/:id/conexion/rotar?admin=&incluir=` | `routers.rotar_conexion` | `text/plain` (script nuevo) |
+| `GET /api/v1/internal/wireguard/peers`, `POST /api/v1/internal/wireguard/estado` | `INTERNAL_TOKEN` | §6.3 (`204` en el estado) |
+
+- La clave nueva de `argosisp-api` se guarda cifrada como pendiente al generar y pasa a `api_password` cuando el router se registra con ese script (un script generado y no ejecutado no corta la API).
+- `?incluir=servicio`: el grupo `servicio` de `variables.json` sale del entorno de la API (`ROUTERS_SERVICIO_<NOMBRE>`; `pppoe_interfaz` de `interfaz_clientes` del router). Nunca se inventan rangos: si falta alguno, 422 `servicio_incompleto` con la lista.
+- Render: port de `render.mjs` en `apps/api/app/network/conexion/render.ts`, con espejo de `render.test.mjs`. Los archivos se leen de `ROUTERS_MIKROTIK_DIR` (imagen) o de `infra/mikrotik`.
+- `router.conexion_eliminada { router_id, empresa_id }`: al desactivar un router con túnel (no hay borrado de routers); al reactivarlo, otra vez `router.conexion_registrada`. Un router inactivo no sale en los peers.
+- El cambio `pendiente` ↔ `conectado` no emite evento (nadie lo consume): queda en `audit.cambios`.

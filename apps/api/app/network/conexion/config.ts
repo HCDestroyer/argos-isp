@@ -1,18 +1,18 @@
-import { readFileSync } from 'node:fs'
 import { isIP } from 'node:net'
+import db from '@adonisjs/lucid/services/db'
+import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { Problema, ValidacionFallida } from '#shared/errores'
 
 /**
- * Configuración del túnel WireGuard hacia los routers (`contratos/conexion-routers.md` §1). Las
- * variables las comparte el servicio `wireguard` de A6 (compose) y se leen en cada uso: cambiar la
- * red o el endpoint no exige reiniciar la API.
+ * Configuración del túnel WireGuard hacia los routers (`contratos/conexion-routers.md` §1 y §6). Las
+ * variables son las mismas del servicio `wireguard` en los compose de A6 y se leen en cada uso.
  *
+ * - `ARGOSISP_WIREGUARD` (`1` = activo): sin él no se generan scripts (503 `wireguard_no_configurado`).
  * - `ARGOSISP_WG_RED` (`10.255.0.0/16`): red del túnel; el servidor es la primera IP (`.1`).
  * - `ARGOSISP_WG_PUERTO` (51820): puerto UDP del servidor.
- * - `ARGOSISP_WG_ENDPOINT`: host o IP pública del servidor que el router usa como endpoint. Vacío:
- *   el host de `API_PUBLIC_URL`.
- * - `ARGOSISP_WG_CLAVE_PUBLICA` o `ARGOSISP_WG_CLAVE_PUBLICA_ARCHIVO`: clave pública del servidor
- *   (la privada nunca la ve la API). El archivo lo escribe el instalador de A6.
+ * - `ARGOSISP_WG_ENDPOINT`: nombre o IPv4 pública del servidor (el endpoint del peer en el router).
+ * - La clave pública del servidor la publica el `wireguard-agente` (`POST internal/wireguard/estado`,
+ *   `network.wireguard_servidor`); la privada nunca llega a la API.
  */
 
 export interface RedTunel {
@@ -76,59 +76,74 @@ export function leerPuerto(valor: string | undefined = process.env.ARGOSISP_WG_P
 }
 
 function leerEndpoint(entorno: NodeJS.ProcessEnv): string {
-    const directo = entorno.ARGOSISP_WG_ENDPOINT?.trim()
-    if (directo) return directo
-    const api = entorno.API_PUBLIC_URL?.trim()
-    if (api) {
-        try {
-            return new URL(api).hostname
-        } catch {
-            // se informa abajo
-        }
-    }
-    throw new WireguardNoConfigurado(
-        'Define ARGOSISP_WG_ENDPOINT (host o IP pública del servidor WireGuard) o API_PUBLIC_URL',
-    )
-}
-
-function leerClavePublica(entorno: NodeJS.ProcessEnv): string {
-    let clave = entorno.ARGOSISP_WG_CLAVE_PUBLICA?.trim()
-    const archivo = entorno.ARGOSISP_WG_CLAVE_PUBLICA_ARCHIVO?.trim()
-    if (!clave && archivo) {
-        try {
-            clave = readFileSync(archivo, 'utf8').trim()
-        } catch {
-            throw new WireguardNoConfigurado(`No se pudo leer ARGOSISP_WG_CLAVE_PUBLICA_ARCHIVO (${archivo})`)
-        }
-    }
-    if (!clave) {
+    const endpoint = entorno.ARGOSISP_WG_ENDPOINT?.trim()
+    if (!endpoint) {
         throw new WireguardNoConfigurado(
-            'Define ARGOSISP_WG_CLAVE_PUBLICA o ARGOSISP_WG_CLAVE_PUBLICA_ARCHIVO (clave pública del servidor)',
+            'Define ARGOSISP_WG_ENDPOINT (nombre o IPv4 pública del servidor WireGuard)',
         )
     }
-    if (!PATRON_CLAVE_WG.test(clave)) {
-        throw new WireguardNoConfigurado('La clave pública del servidor WireGuard no es una clave válida')
-    }
-    return clave
+    return endpoint
+}
+
+export function wireguardActivo(entorno: NodeJS.ProcessEnv = process.env): boolean {
+    return entorno.ARGOSISP_WIREGUARD?.trim() === '1'
+}
+
+/** Clave pública que publicó el `wireguard-agente`; null si todavía no informó. */
+export async function clavePublicaServidor(
+    cliente: QueryClientContract = db.connection(),
+): Promise<string | null> {
+    const fila = (await cliente
+        .from('network.wireguard_servidor')
+        .where('id', 1)
+        .select('public_key')
+        .first()) as {
+        public_key: string
+    } | null
+    return fila?.public_key ?? null
 }
 
 /** Todo lo que necesita el script; 503 `wireguard_no_configurado` si falta algo. */
-export function configWireguard(entorno: NodeJS.ProcessEnv = process.env): ConfigWireguard {
-    return {
-        red: leerRedTunel(entorno.ARGOSISP_WG_RED),
-        puerto: leerPuerto(entorno.ARGOSISP_WG_PUERTO),
-        endpoint: leerEndpoint(entorno),
-        clavePublica: leerClavePublica(entorno),
+export async function configWireguard(
+    cliente: QueryClientContract = db.connection(),
+    entorno: NodeJS.ProcessEnv = process.env,
+): Promise<ConfigWireguard> {
+    if (!wireguardActivo(entorno)) {
+        throw new WireguardNoConfigurado(
+            'WireGuard está apagado en este servidor (ARGOSISP_WIREGUARD=1 lo activa)',
+        )
     }
+    const red = leerRedTunel(entorno.ARGOSISP_WG_RED)
+    const puerto = leerPuerto(entorno.ARGOSISP_WG_PUERTO)
+    const endpoint = leerEndpoint(entorno)
+    const clavePublica = await clavePublicaServidor(cliente)
+    if (!clavePublica) {
+        throw new WireguardNoConfigurado(
+            'El servidor WireGuard todavía no publicó su clave pública: revisa que el servicio wireguard esté arriba',
+        )
+    }
+    return { red, puerto, endpoint, clavePublica }
 }
 
 /**
- * URL base pública de la API (sin `/api/v1`), a la que el router manda su registro antes de tener
- * túnel: `API_PUBLIC_URL`, `NOTIFY_API_URL` o, en su defecto, el origen de la petición.
+ * Origen público de la API (`API_PUBLIC_URL`, sin barra final ni ruta), al que el router manda su
+ * registro antes de tener túnel. Sin él, el origen de la petición. Debe ser `https://` (el router
+ * verifica el certificado): si no, 503 `wireguard_no_configurado`.
  */
 export function urlBaseApi(origenPeticion: string, entorno: NodeJS.ProcessEnv = process.env): string {
-    const valor = entorno.API_PUBLIC_URL?.trim() || entorno.NOTIFY_API_URL?.trim() || origenPeticion
-    return valor.replace(/\/+$/, '')
+    const valor = (entorno.API_PUBLIC_URL?.trim() || origenPeticion).replace(/\/+$/, '')
+    let url: URL
+    try {
+        url = new URL(valor)
+    } catch {
+        throw new WireguardNoConfigurado(`API_PUBLIC_URL inválida (${valor})`)
+    }
+    if (url.protocol !== 'https:') {
+        throw new WireguardNoConfigurado(
+            'El router se registra por HTTPS: define API_PUBLIC_URL con https:// (el origen público de la API)',
+        )
+    }
+    return url.origin
 }
 
 /**

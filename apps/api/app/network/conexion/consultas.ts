@@ -11,7 +11,7 @@ import { verRouter } from '#network/consultas/routers'
 export const ESTADOS_CONEXION = ['sin_configurar', 'pendiente', 'conectado'] as const
 export type EstadoConexion = (typeof ESTADOS_CONEXION)[number]
 
-/** Un handshake más viejo que esto ya no cuenta como túnel activo (`handshake_reciente`). */
+/** `conectado` = handshake de menos de esto (contrato §6.3: 3 min). */
 export const HANDSHAKE_RECIENTE_S = 180
 /** Vigencia del token de registro (contrato §1). */
 export const VIGENCIA_TOKEN_H = 24
@@ -20,7 +20,7 @@ export const GRUPO_API = 'argosisp-api'
 
 export interface ConexionVista {
     router_id: number
-    /** `sin_configurar`: nunca se generó un script */
+    /** `sin_configurar`: nunca se generó un script; `conectado`: handshake de menos de 3 min */
     estado: EstadoConexion
     ip_tunel: string | null
     /** clave pública WireGuard del router (no es secreta) */
@@ -29,6 +29,8 @@ export interface ConexionVista {
     /** hubo handshake en los últimos `HANDSHAKE_RECIENTE_S` segundos */
     handshake_reciente: boolean
     registrado_en: string | null
+    /** la versión que informó el router al registrarse */
+    routeros_version: string | null
     /** vencimiento del token del último script; null si ya se usó o nunca hubo */
     token_vence: string | null
     version: number
@@ -45,6 +47,7 @@ export interface FilaConexion {
     token_vence: Date | null
     token_usado_en: Date | null
     api_password_pendiente: string | null
+    routeros_version: string | null
     version: number
 }
 
@@ -59,6 +62,7 @@ const COLUMNAS = [
     'token_vence',
     'token_usado_en',
     'api_password_pendiente',
+    'routeros_version',
     'version',
 ]
 
@@ -88,21 +92,24 @@ export function vistaConexion(
             ultimo_handshake: null,
             handshake_reciente: false,
             registrado_en: null,
+            routeros_version: null,
             token_vence: null,
             version: 0,
         }
     }
     const handshake = fila.ultimo_handshake ? new Date(fila.ultimo_handshake) : null
     const tokenVigente = fila.token_hash && !fila.token_usado_en && fila.token_vence
+    const reciente = handshake !== null && ahora.getTime() - handshake.getTime() < HANDSHAKE_RECIENTE_S * 1000
     return {
         router_id: routerId,
-        estado: fila.estado,
+        // el agente informa cada 10 min como mucho: un `conectado` guardado con handshake viejo ya no lo es
+        estado: fila.public_key !== null && reciente ? 'conectado' : 'pendiente',
         ip_tunel: fila.ip_tunel,
         public_key: fila.public_key,
         ultimo_handshake: iso(handshake),
-        handshake_reciente:
-            handshake !== null && ahora.getTime() - handshake.getTime() <= HANDSHAKE_RECIENTE_S * 1000,
+        handshake_reciente: reciente,
         registrado_en: iso(fila.registrado_en),
+        routeros_version: fila.routeros_version,
         token_vence: tokenVigente ? iso(fila.token_vence) : null,
         version: fila.version,
     }
@@ -135,13 +142,18 @@ export interface PeerWireguard {
     ip_tunel: string
 }
 
-/** Peers que el servicio `wireguard` aplica con `wg syncconf` (los routers con clave registrada). */
+/**
+ * Peers vigentes para el `wireguard-agente` (contrato §6.3, lista completa): routers activos con clave
+ * registrada. Un router desactivado sale de la lista (`router.conexion_eliminada`).
+ */
 export async function listarPeers(cliente: QueryClientContract = db.connection()): Promise<PeerWireguard[]> {
     return (await cliente
-        .from('network.routers_conexion')
-        .whereNotNull('public_key')
-        .orderBy('router_id')
-        .select('router_id', 'public_key', db.raw('host(ip_tunel) AS ip_tunel'))) as PeerWireguard[]
+        .from('network.routers_conexion as c')
+        .join('network.routers as r', 'r.id', 'c.router_id')
+        .whereNotNull('c.public_key')
+        .where('r.activo', true)
+        .orderBy('c.router_id')
+        .select('c.router_id', 'c.public_key', db.raw('host(c.ip_tunel) AS ip_tunel'))) as PeerWireguard[]
 }
 
 export function hashToken(token: string): string {

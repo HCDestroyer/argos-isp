@@ -6,6 +6,8 @@ import { aplicarRegistro, type RespuestaRegistro } from '#network/conexion/regis
 export interface EntradaRegistrarConexion {
     token: string
     public_key: string
+    routeros_version?: string | null
+    api_ca?: string | null
 }
 
 /** Token desconocido, vencido o ya usado (contrato §1: 410). */
@@ -17,7 +19,7 @@ export class TokenRegistroInvalido extends Problema {
 
 /**
  * `routers.registrar_conexion`: el router, sin sesión, manda `{ token, public_key }` desde el script
- * (`POST /routers/conexion/registrar`). El token es de un solo uso, del último script generado y
+ * (`POST /routers/conexion/registrar`, con `routeros_version` y `api_ca`, contrato §6.1). El token es de un solo uso, del último script generado y
  * vale 24 h; si no, 410 `token_invalido` (la fila se bloquea: dos registros con el mismo token no
  * pasan los dos). La auditoría guarda el token como `***`.
  */
@@ -42,6 +44,10 @@ export default class RegistrarConexion extends DomainAction<EntradaRegistrarCone
         if (!conexion.token_vence || new Date(conexion.token_vence).getTime() <= Date.now()) {
             throw new TokenRegistroInvalido('El token venció; genera un script nuevo')
         }
-        return aplicarRegistro(t, conexion, input.public_key)
+        return aplicarRegistro(t, conexion, {
+            public_key: input.public_key,
+            routeros_version: input.routeros_version,
+            api_ca: input.api_ca,
+        })
     }
 }

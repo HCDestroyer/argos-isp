@@ -12,8 +12,13 @@ import { BaseSchema } from '@adonisjs/lucid/schema'
  * - `api_password_pendiente`: clave del usuario `argosisp-api` del último script (cifrado v1). Pasa
  *   a `network.routers.api_password` cuando el router se registra con ese script: hasta entonces
  *   el router sigue con su clave anterior y la API no pierde el acceso.
- * - `ultimo_handshake`: lo informa el servicio `wireguard` (telemetría); el primer handshake
- *   después del registro pasa `estado` a `conectado`.
+ * - `ultimo_handshake`: lo informa el `wireguard-agente` (telemetría, `POST internal/wireguard/estado`);
+ *   `estado` = `conectado` mientras el handshake tenga menos de 3 min (§6.3 del contrato).
+ * - `routeros_version`: la que mandó el router al registrarse.
+ *
+ * `network.wireguard_servidor`: una sola fila con lo que publicó el agente (clave pública del
+ * servidor, IP, red, puerto, interfaz y modo). La clave pública va en el script; la privada nunca
+ * llega a la API.
  */
 export default class extends BaseSchema {
     async up() {
@@ -29,6 +34,7 @@ export default class extends BaseSchema {
                 token_vence timestamptz,
                 token_usado_en timestamptz,
                 api_password_pendiente text,
+                routeros_version text,
                 version integer NOT NULL DEFAULT 1,
                 created_at timestamptz NOT NULL DEFAULT now(),
                 updated_at timestamptz NOT NULL DEFAULT now(),
@@ -38,10 +44,23 @@ export default class extends BaseSchema {
                 CONSTRAINT routers_conexion_ip_host CHECK (family(ip_tunel) = 4 AND masklen(ip_tunel) = 32),
                 CONSTRAINT routers_conexion_conectado_con_clave CHECK (estado = 'pendiente' OR public_key IS NOT NULL)
             );
+
+            CREATE TABLE network.wireguard_servidor (
+                id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+                public_key text NOT NULL,
+                ip inet,
+                red cidr,
+                puerto integer,
+                interfaz text,
+                modo text,
+                generado_en timestamptz,
+                updated_at timestamptz NOT NULL DEFAULT now()
+            );
         `)
     }
 
     async down() {
+        this.schema.raw('DROP TABLE IF EXISTS network.wireguard_servidor')
         this.schema.raw('DROP TABLE IF EXISTS network.routers_conexion')
     }
 }

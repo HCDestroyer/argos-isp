@@ -27,7 +27,7 @@ export default class ConexionClave extends DomainAction<EntradaConexionClave, Co
                 'script_no_generado',
             )
         }
-        await aplicarRegistro(t, conexion, input.public_key)
+        await aplicarRegistro(t, conexion, { public_key: input.public_key })
         return verConexion(input.router_id, t.trx)
     }
 }

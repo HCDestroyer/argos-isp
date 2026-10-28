@@ -53,11 +53,10 @@ import { vistaPreviaControl } from '#network/routeros/cambio_control'
 import type { HttpContext } from '@adonisjs/core/http'
 import {
     ConexionRouter,
-    PeerWireguard,
+    PeersWireguard,
     PruebaConexion,
     ReconciliacionEncolada,
     RegistroConexion,
-    ResultadoHandshakes,
 } from '#network/esquemas'
 import ProbarConexion from '#network/conexion/actions/probar_conexion'
 import ReconciliarAhora from '#network/conexion/actions/reconciliar_ahora'
@@ -68,7 +67,7 @@ import GenerarScript, { type ScriptConexion } from '#network/conexion/actions/ge
 import RotarConexion from '#network/conexion/actions/rotar_conexion'
 import RegistrarConexion from '#network/conexion/actions/registrar_conexion'
 import ConexionClave from '#network/conexion/actions/conexion_clave'
-import RegistrarHandshakes from '#network/conexion/actions/registrar_handshakes'
+import RegistrarEstadoWireguard from '#network/conexion/actions/registrar_estado_wireguard'
 
 // A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
 registrarSeccionMetricas('routeros', leerMetricasRouterOS)
@@ -494,13 +493,15 @@ function enviarScript(ctx: HttpContext, script: ScriptConexion): void {
 const origenPeticion = (ctx: HttpContext) => `${ctx.request.protocol()}://${ctx.request.host()}`
 
 const SOBRE_EL_SCRIPT =
-    'Devuelve el `.rsc` (text/plain, descarga) que crea el túnel WireGuard, el usuario `argosisp-api` con ' +
-    'clave nueva, el cliente RADIUS (secreto del router) y cierra los puertos de gestión ' +
-    '(`contratos/conexion-routers.md`). Lleva secretos: el panel lo descarga y no lo guarda. Emite un token ' +
-    'de registro nuevo (24 h, un uso; el anterior deja de valer) y `router.conexion_generada`. ' +
-    '`?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; `?incluir=servicio` suma PPPoE, ' +
-    'perfiles y corte. 422 `radius_secret_requerido` si el router RADIUS no tiene secreto; 503 ' +
-    '`wireguard_no_configurado` si falta la configuración del servidor.'
+    'Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, ' +
+    'variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS ' +
+    '(secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el ' +
+    'panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de ' +
+    'valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; ' +
+    '`?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). ' +
+    '422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 ' +
+    '`wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin ' +
+    '`API_PUBLIC_URL` https) o `plantillas_no_disponibles`.'
 
 // Conexión de routers por WireGuard (contratos/conexion-routers.md)
 const conexion: Ruta[] = [
@@ -642,8 +643,10 @@ const conexion: Ruta[] = [
         operacion: 'routersConexionRegistrar',
         resumen: 'Registro del router con su token (lo llama el script, sin sesión)',
         descripcion:
-            'Cuerpo `{ token, public_key }`. Token de un solo uso del último script, 24 h: si venció, se usó o ' +
-            'no existe, 410 `token_invalido`. Responde la clave pública y el endpoint del servidor. Límite ' +
+            'Cuerpo `{ token, public_key, routeros_version, api_ca }` (§6.1). Token de un solo uso del último ' +
+            'script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde `{ router_id, ip_tunel, ' +
+            'servidor: { public_key, endpoint, puerto, ip } }`; con `api_ca`, Argos verifica con ella el ' +
+            'certificado del router. Límite ' +
             'por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. ' +
             '409 `clave_en_uso` si la clave es de otro router.',
         etiqueta: 'routers',
@@ -657,33 +660,37 @@ const conexion: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
-        ruta: '/internal/routers/conexion/peers',
-        operacion: 'internoRoutersConexionPeers',
-        resumen: 'Peers WireGuard de los routers registrados (servicio wireguard)',
+        ruta: '/internal/wireguard/peers',
+        operacion: 'internoWireguardPeers',
+        resumen: 'Peers WireGuard vigentes (wireguard-agente)',
         descripcion:
-            'Lista completa para `wg syncconf`: los routers con clave pública registrada y su IP del túnel. ' +
-            'El servicio la relee con `router.conexion_registrada` y `router.conexion_rotada`.',
+            'Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel ' +
+            '(`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con ' +
+            '`router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.',
         etiqueta: 'interno',
         seguridad: 'interno',
         permiso: null,
-        respuesta: { status: 200, descripcion: 'Peers', esquema: lista(PeerWireguard) },
-        handler: () => listarPeers(),
+        respuesta: { status: 200, descripcion: 'Peers', esquema: PeersWireguard },
+        handler: async () => ({ data: await listarPeers() }),
     }),
     definirRuta({
         metodo: 'post',
-        ruta: '/internal/routers/conexion/handshakes',
-        operacion: 'internoRoutersConexionHandshakes',
-        resumen: 'Último handshake de cada peer (servicio wireguard)',
+        ruta: '/internal/wireguard/estado',
+        operacion: 'internoWireguardEstado',
+        resumen: 'Estado del servidor WireGuard y último handshake por peer (wireguard-agente)',
         descripcion:
-            '`peers[]` con `public_key` y `ultimo_handshake` (ISO; null = nunca). Solo avanza el handshake; ' +
-            'el primero de un router `pendiente` lo pasa a `conectado`. Claves desconocidas se ignoran.',
+            '`{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake, ' +
+            'endpoint, rx_bytes, tx_bytes }], generado_en }` (§6.3). Guarda la clave pública del servidor (va en ' +
+            'los scripts) y el último handshake de cada router (solo avanza); `conectado` = handshake de menos ' +
+            'de 3 min. Claves desconocidas se ignoran.',
         etiqueta: 'interno',
         seguridad: 'interno',
         permiso: null,
-        cuerpo: v.handshakesValidator,
-        respuesta: { status: 200, descripcion: 'Resultado', esquema: ResultadoHandshakes },
-        handler: (ctx, { cuerpo }) =>
-            new RegistrarHandshakes().execute(cuerpo, ctx.contextoAccion('interno')),
+        cuerpo: v.estadoWireguardValidator,
+        respuesta: { status: 204, descripcion: 'Estado registrado' },
+        handler: async (ctx, { cuerpo }) => {
+            await new RegistrarEstadoWireguard().execute(cuerpo, ctx.contextoAccion('interno'))
+        },
     }),
 ]
 

@@ -432,27 +432,58 @@ export const scriptConexionValidator = vine.compile(
     }),
 )
 
-/** `POST /routers/conexion/registrar` (lo manda el script del router). */
+/** `POST /routers/conexion/registrar` (lo manda el script del router, contrato §6.1). */
 export const registrarConexionValidator = vine.compile(
     vine.object({
         token: vine.string().trim().minLength(16).maxLength(128),
         public_key: clavePublicaWg(),
+        routeros_version: vine
+            .string()
+            .trim()
+            .maxLength(100)
+            .nullable()
+            .optional()
+            .meta({ description: 'Versión de RouterOS del equipo (`/system resource version`)' }),
+        api_ca: vine
+            .string()
+            .trim()
+            .maxLength(20_000)
+            .regex(/^-----BEGIN CERTIFICATE-----/)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'PEM de la CA propia del router (argosisp-ca.crt); vacío = no cambia. Argos verifica con ella ' +
+                    'el certificado de www-ssl',
+            }),
     }),
 )
 
 /** `POST /routers/:id/conexion/clave`: pegar la clave a mano. */
 export const conexionClaveValidator = vine.compile(vine.object({ public_key: clavePublicaWg() }))
 
-/** `POST /internal/routers/conexion/handshakes` (servicio wireguard). */
-export const handshakesValidator = vine.compile(
+/** `POST /internal/wireguard/estado` (wireguard-agente, contrato §6.3). */
+export const estadoWireguardValidator = vine.compile(
     vine.object({
+        servidor: vine.object({
+            public_key: clavePublicaWg(),
+            ip: vine.string().trim().maxLength(64).nullable().optional(),
+            red: vine.string().trim().maxLength(64).nullable().optional(),
+            puerto: vine.number().withoutDecimals().min(1).max(65535).nullable().optional(),
+            interfaz: vine.string().trim().maxLength(64).nullable().optional(),
+            modo: vine.string().trim().maxLength(64).nullable().optional(),
+        }),
         peers: vine
             .array(
                 vine.object({
                     public_key: clavePublicaWg(),
                     ultimo_handshake: instanteIso().nullable(),
+                    endpoint: vine.string().trim().maxLength(100).nullable().optional(),
+                    rx_bytes: vine.number().min(0).nullable().optional(),
+                    tx_bytes: vine.number().min(0).nullable().optional(),
                 }),
             )
-            .maxLength(10000),
+            .maxLength(65_536),
+        generado_en: instanteIso().nullable().optional(),
     }),
 )
