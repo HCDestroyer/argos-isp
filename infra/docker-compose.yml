@@ -8,6 +8,11 @@
 # (127.0.0.1 por defecto; en el laboratorio, la IP del servidor en la LAN o en el túnel WireGuard
 # hacia el MikroTik). Detalle en infra/mikrotik/README.md.
 #
+# Perfil "wireguard" (ARGOSISP_WIREGUARD=1; en desarrollo COMPOSE_PROFILES=lab,wireguard): servidor
+# WireGuard en la red del host (interfaz wg-argos, la .1 de ARGOSISP_WG_RED, UDP ARGOSISP_WG_PUERTO)
+# y su agente, que aplica los peers de network.routers_conexion. Con el túnel, RADIUS_BIND_IP = la
+# .1 (10.255.0.1 por defecto). Detalle en infra/wireguard/README.md y contratos/conexion-routers.md.
+#
 # Los builds usan como contexto la raíz del repo (..), con el Dockerfile de cada app o servicio.
 
 name: argosisp
@@ -73,6 +78,12 @@ x-api-env: &api-env
   NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
   NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
   NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
+  # Túnel WireGuard de los routers (A1/A6, contratos/conexion-routers.md): la red del túnel (IPAM de
+  # las /32), el puerto UDP y el nombre o IP pública que el script de conexión pone como endpoint.
+  ARGOSISP_WIREGUARD: ${ARGOSISP_WIREGUARD:-0}
+  ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+  ARGOSISP_WG_PUERTO: ${ARGOSISP_WG_PUERTO:-51820}
+  ARGOSISP_WG_ENDPOINT: ${ARGOSISP_WG_ENDPOINT:-}
   # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
   INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
   # Bearer de GET /metrics (Prometheus, perfil monitoreo). Vacío = /metrics responde 404.
@@ -641,6 +652,11 @@ services:
     depends_on:
       aaa:
         condition: service_healthy
+      # Con el perfil wireguard, RADIUS_BIND_IP es la .1 del túnel: la interfaz debe existir antes de
+      # publicar el puerto. Sin el perfil no se espera nada (required: false).
+      wireguard:
+        condition: service_healthy
+        required: false
     healthcheck:
       # Status-Server al puerto de autenticación con el cliente localhost.
       test:
@@ -650,6 +666,76 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # Perfil wireguard: servidor WireGuard de los routers (A6, infra/wireguard). En la red del HOST:
+  # crea wg-argos con la .1 de ARGOSISP_WG_RED, así api, routeros-worker, coa y freeradius alcanzan
+  # las IPs del túnel por la ruta del host y salen con origen .1 (enmascarado de Docker). Publica solo
+  # ARGOSISP_WG_PUERTO/udp. La clave privada se genera una vez en el volumen wireguard-clave.
+  wireguard:
+    profiles: [wireguard]
+    image: argosisp/wireguard:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: infra/wireguard/Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    # wireguard-go si el kernel no trae el módulo (ARGOSISP_WG_MODO=auto)
+    devices: [/dev/net/tun:/dev/net/tun]
+    command: [servidor.sh]
+    stop_grace_period: 15s
+    environment:
+      TZ: UTC
+      ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+      ARGOSISP_WG_PUERTO: ${ARGOSISP_WG_PUERTO:-51820}
+      ARGOSISP_WG_MTU: ${ARGOSISP_WG_MTU:-1420}
+      ARGOSISP_WG_MODO: ${ARGOSISP_WG_MODO:-auto}
+      # 1 = por el túnel solo entran RADIUS (1812/1813 a la .1) y respuestas
+      ARGOSISP_WG_FIREWALL: ${ARGOSISP_WG_FIREWALL:-1}
+    volumes:
+      - wireguard-clave:/clave
+      - wireguard-estado:/estado
+    healthcheck:
+      test: [CMD, salud.sh, servidor]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Perfil wireguard: puente entre la API y el servidor (que no ve la red de compose). Escucha
+  # router.conexion_* (grupo `wireguard`) y aplica la lista completa de peers; manda a la API la
+  # clave pública del servidor y el último handshake de cada router (estado «conectado»).
+  wireguard-agente:
+    profiles: [wireguard]
+    image: argosisp/wireguard:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: infra/wireguard/Dockerfile
+    restart: unless-stopped
+    command: [agente.sh]
+    environment:
+      TZ: UTC
+      API_INTERNAL_URL: http://api:3333/api/v1/
+      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+      ARGOSISP_WG_ESTADO_CADA_S: ${ARGOSISP_WG_ESTADO_CADA_S:-60}
+    volumes:
+      - wireguard-estado:/estado
+    depends_on:
+      wireguard:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test: [CMD, salud.sh, agente]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 3m
 
   # Perfil publico: proxy con TLS para la API (incluido el webhook de la pasarela, con el cuerpo
   # crudo) y el panel. El portal no pasa por aquí (necesita la IP real del cliente). infra/proxy/
@@ -759,3 +845,6 @@ volumes:
   aaa-datos:
   # Comprobantes de depósito (api): ver COMPROBANTES_HOST_DIR en .env.example
   comprobantes:
+  # WireGuard: clave privada del servidor (solo la monta `wireguard`) y estado compartido con el agente
+  wireguard-clave:
+  wireguard-estado:
