@@ -12,7 +12,7 @@ Para el operador que instala ArgosIsp desde cero. El servidor solo descarga: las
 | DNS | `panel.<dominio>`, `api.<dominio>` y `portal.<dominio>` apuntando a la IP pública del servidor |
 | Salida a internet | `github.com`, `ghcr.io`, `download.docker.com` (si falta Docker) y Let's Encrypt |
 
-El 443 debe ser alcanzable desde internet para que Let's Encrypt emita los certificados (reto TLS-ALPN; el HTTP-01 va por el 80). Docker se instala solo si falta (repositorio oficial); si ya está, se exige Engine 25+ y Compose 2.24+.
+El 443 debe ser alcanzable desde internet para que Let's Encrypt emita los certificados (reto TLS-ALPN; el HTTP-01 va por el 80). Si el servidor ya tiene Nginx Proxy Manager u otro proxy en 80 y 443: `detras-de-proxy.md` (Argos en 8080/8443 y la IP real del cliente con `ARGOSISP_PROXIES_CONFIABLES`). Docker se instala solo si falta (repositorio oficial); si ya está, se exige Engine 25+ y Compose 2.24+.
 
 ## Instalar (un comando)
 
@@ -108,7 +108,7 @@ Por defecto todo va en un servidor y el instalador no pregunta nada nuevo. Para 
 
 | Síntoma | Qué hacer |
 | --- | --- |
-| "el puerto TCP 80 ya está en uso" | Otro servidor web (Apache, nginx). Detenlo o usa otro servidor: el 80 lo necesita la página de corte |
+| "el puerto TCP 80 ya está en uso" | Otro servidor web (Apache, nginx). Si es un proxy que debe quedarse (Nginx Proxy Manager), instala detrás de él: `detras-de-proxy.md`. Si no, detenlo: el 80 lo necesita la página de corte |
 | "ArgosIsp no quedó sano" | `sudo argosisp logs migrate api`. El `.env` ya quedó escrito: corrige y corre `sudo argosisp levantar` (no reinstales: el instalador se niega si hay `.env`) |
 | El navegador avisa de certificado inválido | Los registros DNS aún no apuntan al servidor o el 443 no es alcanzable desde internet. `sudo argosisp logs proxy`; Caddy reintenta solo |
 | Reinstalar desde cero (borra **todos** los datos) | `sudo argosisp compose down -v && sudo rm -rf /opt/argosisp /usr/local/bin/argosisp` |
