@@ -9752,6 +9752,13 @@ export interface components {
             motivo_texto: string;
             canje_id: number | null;
             asiento_id: number;
+            /**
+             * @description Sistema externo que originó el cargo: iris_orden = orden de trabajo de Iris (POST /facturas/cargo-unico con origen_tipo)
+             * @enum {string|null}
+             */
+            origen_externo_tipo?: "iris_orden" | null;
+            /** @description Id en el sistema externo (UUID de la orden de Iris) */
+            origen_externo_id?: string | null;
             /** Format: date-time */
             created_at: string;
         };
@@ -12141,6 +12148,13 @@ export interface components {
             origen?: string | null;
             /** @description Id de la factura en su sistema de origen */
             id_externo?: string | null;
+            /**
+             * @description Sistema externo que originó el cargo: iris_orden = orden de trabajo de Iris (POST /facturas/cargo-unico con origen_tipo)
+             * @enum {string|null}
+             */
+            origen_externo_tipo?: "iris_orden" | null;
+            /** @description Id en el sistema externo (UUID de la orden de Iris) */
+            origen_externo_id?: string | null;
             /** @description Factura nueva que sustituyó a esta (POST /facturas/:id/sustituir); null si no fue sustituida */
             sustituida_por?: number | null;
             /** @description Factura original que esta sustituye; null si no es una sustituta */
@@ -12943,8 +12957,16 @@ export interface components {
             servicio_id: number | null;
             /** @description Asiento del movimiento (o el de su compra); null sin efecto contable */
             asiento_id: number | null;
+            /** @description Origen interno: compra, factura, conteo, nota_credito… */
             origen_tipo: string | null;
             origen_id: number | null;
+            /**
+             * @description Sistema externo que originó el movimiento: iris_orden = orden de trabajo de Iris
+             * @enum {string|null}
+             */
+            origen_externo_tipo?: "iris_orden" | null;
+            /** @description Id en el sistema externo (UUID de la orden de Iris; el panel enlaza a Iris con él) */
+            origen_externo_id?: string | null;
             traslado_id: number | null;
             reverso_de: number | null;
             /** @enum {string|null} */
@@ -16629,6 +16651,9 @@ export interface components {
                 asiento_id: number | null;
                 origen_tipo: string | null;
                 origen_id: number | null;
+                /** @enum {string|null} */
+                origen_externo_tipo?: "iris_orden" | null;
+                origen_externo_id?: string | null;
                 motivo: string | null;
                 /** Format: date-time */
                 created_at: string;
@@ -27408,6 +27433,13 @@ export interface operations {
                     motivo_sin_costo_id?: number | null;
                     /** @description Explicación del Q0 (obligatoria con motivo_sin_costo_id) */
                     motivo_sin_costo_texto?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
                 };
             };
         };
@@ -31127,6 +31159,13 @@ export interface operations {
                      * @description Fecha del consumo (por defecto hoy): una pasada dentro de un periodo abierto, al promedio de hoy y sin dejar existencia negativa después
                      */
                     fecha?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
                 };
             };
         };
@@ -31665,6 +31704,8 @@ export interface operations {
                 desde?: string;
                 hasta?: string;
                 tipo?: "entrada_compra" | "reverso_compra" | "devolucion_proveedor" | "venta" | "reverso_venta" | "consumo" | "traslado" | "asignacion_comodato" | "devolucion_comodato" | "ajuste_conteo" | "ajuste" | "baja" | "saldo_inicial" | "premio" | "reverso_premio";
+                /** @description Solo los movimientos de esta orden de Iris (origen_externo_id) */
+                origen_externo_id?: string;
             };
             header?: never;
             path?: never;
@@ -48591,6 +48632,13 @@ export interface operations {
                      * @description Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)
                      */
                     fecha?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
                 };
             };
         };
@@ -48674,6 +48722,13 @@ export interface operations {
                     /** Format: date */
                     fecha?: string | null;
                     motivo?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
                 };
             };
         };
@@ -48753,6 +48808,13 @@ export interface operations {
                     motivo: string;
                     /** Format: date */
                     fecha?: string | null;
+                    /** @description Sistema que origina la operación: iris_orden = orden de trabajo de Iris. Con él, origen_id es obligatorio */
+                    origen_tipo?: "iris_orden" | null;
+                    /**
+                     * @description Id del registro de origen (el UUID de la orden de Iris); obligatorio con origen_tipo
+                     * @example 0192f3a4-7c1e-7b2a-9d40-5e6f7a8b9c0d
+                     */
+                    origen_id?: string | null;
                 };
             };
         };

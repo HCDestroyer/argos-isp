@@ -19,6 +19,7 @@ import {
     unidadVista,
 } from '#inventario/comodato'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
+import { columnasOrigenExterno, origenExternoDe, type OrigenExternoTipo } from '#inventario/origen_externo'
 
 /**
  * `inventario.asignar_comodato` (`POST /servicios/:id/equipos`): presta una unidad `disponible` a un
@@ -33,18 +34,24 @@ import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
  *   404. `fecha` (opcional, no futura ni anterior al último movimiento de la unidad) respeta los
  *   bloqueos del libro.
  * - Emite `inventario.comodato_asignado` e `inventario.movimiento_registrado`.
+ * - `origen_tipo` = `iris_orden` + `origen_id` (orden de Iris, `#inventario/origen_externo`): se guardan
+ *   en el movimiento (`origen_externo_*`) y salen en el kardex y en los eventos; solo trazabilidad.
  */
 
 export interface EntradaAsignarComodato {
     servicio_id: number
     unidad_id: number
     fecha?: string | null
+    /** orden de Iris (`iris_orden`) que lo originó; con origen_tipo, origen_id es obligatorio */
+    origen_tipo?: OrigenExternoTipo | null
+    origen_id?: string | null
 }
 
 export default class AsignarComodato extends DomainAction<EntradaAsignarComodato, UnidadVista> {
     readonly nombre = 'inventario.asignar_comodato'
 
     protected async handle(input: EntradaAsignarComodato, t: Transaccion): Promise<UnidadVista> {
+        const origenExterno = origenExternoDe(input)
         t.fijarEntidad('unidad', input.unidad_id)
         const empresaId = await empresaDeLaUnidad(t, input.unidad_id)
         t.fijarEmpresa(empresaId)
@@ -109,6 +116,7 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
                 unidadId: unidad!.id,
                 servicioId: servicio.id,
                 motivo: `comodato al servicio ${servicio.id} (activo ${activoId})`,
+                origenExterno,
             },
             {
                 descripcion: `Comodato de ${producto.sku} ${nombre} al servicio ${servicio.id} · activo ${activoId}`,
@@ -132,7 +140,13 @@ export default class AsignarComodato extends DomainAction<EntradaAsignarComodato
             { estado: unidad!.estado, bodega_id: unidad!.bodega_id, servicio_id: null, activo_id: null },
             { estado: 'en_comodato', bodega_id: null, servicio_id: servicio.id, activo_id: activoId },
         )
-        await emitirComodato(t, 'inventario.comodato_asignado', unidad!, servicio)
+        await emitirComodato(
+            t,
+            'inventario.comodato_asignado',
+            unidad!,
+            servicio,
+            columnasOrigenExterno(origenExterno),
+        )
         return unidadVista(unidad!.id, t)
     }
 }

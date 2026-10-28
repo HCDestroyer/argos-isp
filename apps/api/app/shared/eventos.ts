@@ -716,11 +716,15 @@ export interface CatalogoEventos {
         servicio_id: number | null
         origen_tipo: string | null
         origen_id: number | null
+        /** orden de Iris que lo originó (`iris_orden`, `contratos/iris.md` §5.1 A3); null sin ella */
+        origen_externo_tipo: string | null
+        origen_externo_id: string | null
     }
     /** Una unidad de serie se prestó en comodato a un servicio (fase B). */
-    'inventario.comodato_asignado': PayloadComodato
+    'inventario.comodato_asignado': PayloadComodato & OrigenExternoPayload
     /** La unidad volvió del servicio a una bodega, a su valor en libros. */
-    'inventario.comodato_devuelto': PayloadComodato & { condicion: 'nuevo' | 'usado'; bodega_id: number }
+    'inventario.comodato_devuelto': PayloadComodato &
+        OrigenExternoPayload & { condicion: 'nuevo' | 'usado'; bodega_id: number }
     /** El servicio se retiró con la unidad en comodato: queda por recuperar. */
     'inventario.equipo_por_recuperar': PayloadComodato
     /** La existencia total del producto cruzó su mínimo hacia abajo; `bodega_id` null = total. */
@@ -929,6 +933,12 @@ type PayloadHallazgoHorus = PayloadClienteHorus & {
 }
 
 /** Canje de lealtad (`contratos/lealtad.md` §13). */
+/** Orden de Iris que originó la operación (`contratos/iris.md` §5.1 A3); null sin ella. */
+interface OrigenExternoPayload {
+    origen_externo_tipo: string | null
+    origen_externo_id: string | null
+}
+
 /** Unidad de serie en comodato (`contratos/inventario.md` §7). */
 interface PayloadComodato {
     unidad_id: number

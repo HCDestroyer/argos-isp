@@ -16,6 +16,7 @@ import { TIPOS_BODEGA } from '#inventario/bodegas'
 import { CAUSAS_BAJA, TIPOS_MOVIMIENTO } from '#inventario/kardex'
 import { CONDICIONES, ESTADOS_UNIDAD } from '#inventario/unidades'
 import { ESTADOS_CONTEO } from '#inventario/conteos'
+import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 import { lista } from '#shared/openapi/esquemas'
 
 /**
@@ -93,37 +94,54 @@ export const Existencia = definirEsquema(
 
 export const MovimientoInventario = definirEsquema(
     'MovimientoInventario',
-    objeto({
-        id,
-        empresa_id: id,
-        tipo: enumerado(TIPOS_MOVIMIENTO),
-        fecha,
-        producto_id: id,
-        producto_sku: texto,
-        producto_nombre: texto,
-        bodega_id: id,
-        bodega_nombre: texto,
-        cantidad: { ...Cantidad, description: 'Con signo: + entra, − sale' },
-        costo_unitario: { ...texto, description: 'Costo unitario con 6 decimales' },
-        costo_total: DineroConSigno,
-        unidad_id: nulable(id),
-        servicio_id: nulable(id),
-        asiento_id: {
-            ...nulable(id),
-            description: 'Asiento del movimiento (o el de su compra); null sin efecto contable',
+    objeto(
+        {
+            id,
+            empresa_id: id,
+            tipo: enumerado(TIPOS_MOVIMIENTO),
+            fecha,
+            producto_id: id,
+            producto_sku: texto,
+            producto_nombre: texto,
+            bodega_id: id,
+            bodega_nombre: texto,
+            cantidad: { ...Cantidad, description: 'Con signo: + entra, − sale' },
+            costo_unitario: { ...texto, description: 'Costo unitario con 6 decimales' },
+            costo_total: DineroConSigno,
+            unidad_id: nulable(id),
+            servicio_id: nulable(id),
+            asiento_id: {
+                ...nulable(id),
+                description: 'Asiento del movimiento (o el de su compra); null sin efecto contable',
+            },
+            origen_tipo: {
+                ...nulable(texto),
+                description: 'Origen interno: compra, factura, conteo, nota_credito…',
+            },
+            origen_id: nulable(id),
+            origen_externo_tipo: {
+                ...nulable(enumerado(ORIGENES_EXTERNOS)),
+                description:
+                    'Sistema externo que originó el movimiento: iris_orden = orden de trabajo de Iris',
+            },
+            origen_externo_id: {
+                ...nulable(texto),
+                description:
+                    'Id en el sistema externo (UUID de la orden de Iris; el panel enlaza a Iris con él)',
+            },
+            traslado_id: nulable(id),
+            reverso_de: nulable(id),
+            causa: nulable(enumerado(CAUSAS_BAJA)),
+            motivo: nulable(texto),
+            actor_tipo: texto,
+            actor_id: nulable(id),
+            created_at: instante,
+            saldo_cantidad: { ...Cantidad, description: 'Saldo corrido después del movimiento' },
+            saldo_valor: { ...Dinero, description: 'Valor corrido después del movimiento' },
         },
-        origen_tipo: nulable(texto),
-        origen_id: nulable(id),
-        traslado_id: nulable(id),
-        reverso_de: nulable(id),
-        causa: nulable(enumerado(CAUSAS_BAJA)),
-        motivo: nulable(texto),
-        actor_tipo: texto,
-        actor_id: nulable(id),
-        created_at: instante,
-        saldo_cantidad: { ...Cantidad, description: 'Saldo corrido después del movimiento' },
-        saldo_valor: { ...Dinero, description: 'Valor corrido después del movimiento' },
-    }),
+        // siempre presentes (null sin orden); opcionales en el esquema hasta que los fixtures del panel los lleven
+        ['origen_externo_tipo', 'origen_externo_id'],
+    ),
 )
 
 export const TrasladoInventario = definirEsquema(
@@ -169,21 +187,26 @@ export const UnidadConHistorial = definirEsquema(
     objeto({
         ...camposUnidad,
         historial: lista(
-            objeto({
-                id,
-                tipo: enumerado(TIPOS_MOVIMIENTO),
-                fecha,
-                bodega_id: id,
-                bodega_nombre: texto,
-                cantidad: Cantidad,
-                costo_total: DineroConSigno,
-                servicio_id: nulable(id),
-                asiento_id: nulable(id),
-                origen_tipo: nulable(texto),
-                origen_id: nulable(id),
-                motivo: nulable(texto),
-                created_at: instante,
-            }),
+            objeto(
+                {
+                    id,
+                    tipo: enumerado(TIPOS_MOVIMIENTO),
+                    fecha,
+                    bodega_id: id,
+                    bodega_nombre: texto,
+                    cantidad: Cantidad,
+                    costo_total: DineroConSigno,
+                    servicio_id: nulable(id),
+                    asiento_id: nulable(id),
+                    origen_tipo: nulable(texto),
+                    origen_id: nulable(id),
+                    origen_externo_tipo: nulable(enumerado(ORIGENES_EXTERNOS)),
+                    origen_externo_id: nulable(texto),
+                    motivo: nulable(texto),
+                    created_at: instante,
+                },
+                ['origen_externo_tipo', 'origen_externo_id'],
+            ),
         ),
     }),
 )
