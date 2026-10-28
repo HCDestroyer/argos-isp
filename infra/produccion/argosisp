@@ -222,11 +222,18 @@ version_central() {
 }
 
 # dc_v <versión> <args de docker compose...>
+# Sin stdin (</dev/null): `exec -T` y `run -T` copian la entrada estándar al contenedor y, con
+# `curl … | sudo bash`, esa entrada es el resto de instalar.sh (se lo tragaban). Solo
+# `argosisp compose …` la pasa (DC_CON_STDIN=1), para `compose exec -T postgres psql < volcado.sql`.
 dc_v() {
     local version="$1"
     shift
     entorno_compose
-    docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$version")" "$@"
+    if [ "${DC_CON_STDIN:-0}" = 1 ]; then
+        docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$version")" "$@"
+    else
+        docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$version")" "$@" < /dev/null
+    fi
 }
 
 dc() { dc_v "$(version_instalada)" "$@"; }
@@ -408,10 +415,10 @@ levantar_version() {
     # Apagado: compose no trata como huérfano el contenedor de un perfil inactivo; se quita aquí.
     if ! api_portal_activo; then
         docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$v")" --profile api-portal \
-            rm -sf api-portal > /dev/null 2>&1 || true
+            rm -sf api-portal < /dev/null > /dev/null 2>&1 || true
     fi
     timeout "$ESPERA_S" docker compose -p "$(proyecto)" --env-file "$ENV_FILE" -f "$(compose_de "$v")" \
-        up -d --remove-orphans > "$salida" 2>&1 &
+        up -d --remove-orphans < /dev/null > "$salida" 2>&1 &
     pid=$!
     if ! esperar_sano "$v" "$t0"; then
         kill "$pid" 2> /dev/null || true
@@ -773,7 +780,7 @@ principal() {
         radius-clientes) cmd_radius_clientes ;;
         nodo-portal) cmd_nodo_portal "$@" ;;
         logs) requiere_instalacion; dc logs -f --tail 100 "$@" ;;
-        compose) requiere_instalacion; dc "$@" ;;
+        compose) requiere_instalacion; DC_CON_STDIN=1 dc "$@" ;;
         '' | -h | --help | ayuda) uso 0 ;;
         *) log "comando desconocido: $comando"; uso ;;
     esac

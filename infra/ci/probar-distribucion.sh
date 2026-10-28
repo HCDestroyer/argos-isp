@@ -192,10 +192,15 @@ cmp -s "$FUENTE/argosisp-$V1.tar.gz" "$TMP/otra/argosisp-$V1.tar.gz" || fallar "
 echo "$V1" > "$FUENTE/estable"
 
 # ---------------------------------------------------------------------------
-paso "instalar.sh (un comando, sin preguntas)"
-sudo env ARGOSISP_FUENTE="$FUENTE" ARGOSISP_SIN_DESCARGA=1 ARGOSISP_TLS=interno \
+paso "instalar.sh (un comando, sin preguntas, por pipe como curl … | sudo bash -s --)"
+# Por pipe, igual que en un servidor: bash lee el script de stdin y un hijo que lea stdin se traga
+# el resto (1.1.0 terminaba en "arriba y sano" sin clave ni credenciales-iniciales.txt).
+# shellcheck disable=SC2002
+cat "$FUENTE/instalar.sh" | sudo env ARGOSISP_FUENTE="$FUENTE" ARGOSISP_SIN_DESCARGA=1 ARGOSISP_TLS=interno \
     ARGOSISP_ESPERA_S="${ARGOSISP_ESPERA_S:-420}" ARGOSISP_REGISTRO="$REG" \
-    bash "$FUENTE/instalar.sh" --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR" --si
+    bash -s -- --dominio "$DOMINIO" --correo "$CORREO" --dir "$DIR" --si | tee "$TMP/instalar.log"
+grep -q "ArgosIsp $V1 instalado" "$TMP/instalar.log" || fallar "instalar.sh por pipe no llegó al resumen final"
+sudo test -s "$DIR/credenciales-iniciales.txt" || fallar "instalar.sh por pipe no escribió credenciales-iniciales.txt"
 [ "$(sudo stat -c %a "$DIR/.env")" = 600 ] || fallar ".env no tiene permisos 600"
 [ "$(sudo stat -c %U "$DIR/.env")" = root ] || fallar ".env no es de root"
 [ "$(readlink "$DIR/actual")" = "versiones/$V1" ] || fallar "actual no apunta a $V1"

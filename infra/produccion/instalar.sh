@@ -29,6 +29,13 @@
 # ARGOSISP_NODO_CENTRAL_DIRECCION (host:puerto al que se conecta) y ARGOSISP_NODO_CENTRAL_TLS=inseguro.
 set -Eeuo pipefail
 
+# Todo el instalador va dentro de main(), que se llama en la última línea. Con
+# `curl … | sudo bash`, bash lee el script de stdin a medida que lo ejecuta: un hijo que lea stdin
+# (`docker compose exec`, apt-get…) se tragaba el resto y la instalación terminaba sin mostrar la
+# clave ni escribir credenciales-iniciales.txt. Así bash lee la función completa antes de correr
+# nada. Además, cada comando que podría leer stdin va con < /dev/null; las preguntas leen /dev/tty.
+main() {
+
 REPO="${ARGOSISP_REPO:-HCDestroyer/argos-isp}"
 REGISTRO="${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}"
 FUENTE="${ARGOSISP_FUENTE:-}"
@@ -160,9 +167,9 @@ for p in curl jq ca-certificates tar gzip util-linux iproute2; do
     dpkg -s "$p" > /dev/null 2>&1 || faltan="$faltan $p"
 done
 if [ -n "$faltan" ]; then
-    apt-get update -qq
+    apt-get update -qq < /dev/null
     # shellcheck disable=SC2086
-    apt-get install -y -qq $faltan > /dev/null
+    apt-get install -y -qq $faltan < /dev/null > /dev/null
 fi
 
 for puerto in "$HTTP_PORT" "$HTTPS_PORT"; do
@@ -191,9 +198,9 @@ if ! command -v docker > /dev/null; then
     chmod a+r /etc/apt/keyrings/docker.asc
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$repo_id $codename stable" \
         > /etc/apt/sources.list.d/docker.list
-    apt-get update -qq
-    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null
-    systemctl enable --now docker > /dev/null 2>&1 || true
+    apt-get update -qq < /dev/null
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin < /dev/null > /dev/null
+    systemctl enable --now docker < /dev/null > /dev/null 2>&1 || true
 fi
 docker info > /dev/null 2>&1 || morir "Docker está instalado pero no responde (systemctl status docker)"
 docker_version="$(docker version --format '{{.Server.Version}}')"
@@ -406,7 +413,7 @@ umask 022
 ln -sfn "$DIR/actual/argosisp" /usr/local/bin/argosisp
 if command -v systemctl > /dev/null && [ -d /run/systemd/system ]; then
     install -m 0644 "$DIR/actual/systemd/argosisp-actualizar.service" "$DIR/actual/systemd/argosisp-actualizar.timer" /etc/systemd/system/
-    systemctl daemon-reload
+    systemctl daemon-reload < /dev/null
 fi
 
 # ---------------------------------------------------------------------------
@@ -424,12 +431,12 @@ if [ "$ROL" = portal ]; then
 else
     compose=(docker compose -p argosisp --env-file "$DIR/.env" -f "$DIR/actual/docker-compose.yml")
 fi
-"${compose[@]}" config --quiet || morir "el compose de $VERSION no es válido con el .env generado"
+"${compose[@]}" config --quiet < /dev/null || morir "el compose de $VERSION no es válido con el .env generado"
 if [ "${ARGOSISP_SIN_DESCARGA:-0}" != 1 ]; then
     log "descargando imágenes de $REGISTRO (versión $VERSION)"
-    "${compose[@]}" pull --quiet
+    "${compose[@]}" pull --quiet < /dev/null
 fi
-"$DIR/actual/argosisp" levantar || morir "ArgosIsp no quedó sano. Revisa: argosisp logs   (el .env queda en $DIR/.env)"
+"$DIR/actual/argosisp" levantar < /dev/null || morir "ArgosIsp no quedó sano. Revisa: argosisp logs   (el .env queda en $DIR/.env)"
 
 if [ "$ROL" = portal ]; then
     cat << EOF
@@ -491,3 +498,6 @@ $nota
   argosisp auto activar  parches automáticos diarios (apagado)
 
 EOF
+}
+
+main "$@"
