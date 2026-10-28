@@ -123,6 +123,7 @@ Si el régimen vigente de la empresa en la fecha del documento es `pequeno_contr
 - Catálogos: `GET/POST/PUT /conceptos-cargo[/:id]` (`facturas.configurar_conceptos`; la cuenta debe ser de ingreso, imputable y global o de la empresa) y `GET/POST/PUT /motivos-sin-costo[/:id]` (`facturas.configurar_motivos`). Lectura con `facturas.ver`. `version` (409), nombre único por empresa, `audit.cambios`, se desactivan (`activo`), nunca se borran. Un trigger los siembra con cada empresa nueva.
 - Notas de crédito: por línea y por monto debitan la cuenta de la línea (`cuentaIngresoDeLinea`) y el neto de sus descuentos.
 - Reporte `GET /reportes/bonificaciones` (`reportes.ver`): bonificaciones por mes, motivo y origen, con `valor_bruto` y `base`.
+- **Origen Iris** (pedido A4, `contratos/iris.md` §5.1): `origen_tipo = iris_orden` + `origen_id` (la orden de trabajo; 422 si falta uno) se guardan en `billing.facturas` o `billing.bonificaciones` (`origen_externo_tipo`, `origen_externo_id`) y salen en `Factura` y `Bonificacion`. Solo trazabilidad: el asiento no cambia. Iris manda `Idempotency-Key: iris:cargo:<orden_id>`.
 
 ## Importación (para A6, sin endpoint)
 
@@ -154,10 +155,23 @@ Todas idempotentes por (`origen`, `clave_externa`) (repetir → `creada/creado: 
 - `mora_recurrente`: un recargo más por cada mes cumplido después del vencimiento. Clave `mora-<factura>-<n>`: repetir no duplica.
 - Vencer no cambia el estado del servicio: lo hace el cron de corte a la `hora_corte`.
 
+## Servicio pendiente de instalación (`contratos/instalacion.md` §1 y §3)
+
+Un servicio vendido desde Iris nace `pendiente_instalacion` (sin `instalado_en`) y sale con `servicios.activar_instalacion` (A1).
+
+- `evaluarEstadoServicio` sale temprano sin tocarlo (`motivo: servicio pendiente de instalación`, sin fila de auditoría). Pagar su cargo único anticipado responde 201 y `servicios[]` lo trae con `estado: pendiente_instalacion` (`ServicioEvaluado` admite el estado).
+- `generarFacturas` lo omite y `EmitirFactura` responde `motivo: pendiente_instalacion`. Los cargos únicos (`facturas.emitir_cargo_unico`) sí se emiten.
+- **Primer día facturable** (`inicioFacturacionSql` de `configuracion.ts`, la única fuente; la usan `leerServicio().inicio`, `generarFacturas` y el reporte de altas): si el servicio se activó desde pendiente (`instalado_en > created_at`), el día de `instalado_en` en Guatemala (prorrateo desde ese día; en aniversario, ese día es el aniversario; una `fecha_instalacion` prevista al vender no cuenta). Un servicio nacido activo (`instalado_en = created_at`) sigue como siempre: `fecha_instalacion` (puede ser retroactiva) o el día de alta. Activado a mitad de mes, la siguiente corrida emite su primer periodo prorrateado.
+- `vencerFacturas` no vence ni pone mora a facturas de un pendiente (ni `factura.vencida`); el corte no lo evalúa (`serviciosConHoraCorte` filtra por estado).
+- **Vencimiento efectivo** (decisión del líder, 28 oct: instalar nunca limita el mismo día; `venceEfectivoSql` de `vencimiento.ts`, la única fuente): una factura emitida con el servicio pendiente (`emitida_en < instalado_en`, p. ej. el cobro de instalación anticipado) vence para el vencimiento, la mora y el corte en `max(vence_en, día de instalado_en en Guatemala + dias_gracia)` (`dias_gracia` del `reglas_snapshot` de la factura). La usan `vencerFacturas`/`VencerFactura` y `evaluarEstadoServicio` (una vencida así no cuenta antes de esa fecha). El documento no cambia: `vence_en`, lo certificado por FEL y el `vence` de `factura.vencida` siguen siendo los originales. Las facturas emitidas después de activar vencen en su `vence_en`.
+- Promesas: `CrearPromesaPago`, `POST /promesas/simular` y `limitesPromesa` (portal) responden 422 `servicio_pendiente_instalacion`.
+- Reporte de altas: un pendiente no es alta; activado, cuenta en el mes de su primer día facturable.
+
 ## evaluarEstadoServicio (tarea 6)
 
 `actions/evaluar_estado_servicio.ts` (`servicios.evaluar_estado`) es la **única** que decide el estado del servicio. Entrada `{ servicio_id, ahora?, ignorarHoraCorte? }`; salida `{ estado, motivo, de, cambiado, deseado, vencidas, promesa_activa }`. Se llama anidada (`{ trx }`) desde el cron de corte, `registrarPago`, `anularPago` y (tarea 10) promesas.
 
+0. `pendiente_instalacion`: sale temprano sin tocarlo (sección anterior).
 1. Retirado o sin plantilla: no se toca.
 2. Promesa `activa` → `activo`.
 3. Facturas de servicio vencidas ≥ `facturas_para_cortar` → `suspendido`.

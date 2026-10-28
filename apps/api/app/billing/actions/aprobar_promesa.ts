@@ -5,7 +5,7 @@ import { Conflicto, NoEncontrado, ReglaNegocio } from '#shared/errores'
 import { bloquearCliente } from '#billing/cobros'
 import { verPromesa } from '#billing/promesas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
-import type { ResultadoCrearPromesa } from '#billing/actions/crear_promesa_pago'
+import { servicioTrasPromesa, type ResultadoCrearPromesa } from '#billing/actions/crear_promesa_pago'
 
 /**
  * `promesas.aprobar` (`POST /promesas/:id/aprobar`): un supervisor aprueba una promesa
@@ -117,13 +117,7 @@ export default class AprobarPromesa extends DomainAction<EntradaAprobarPromesa, 
         )
         return {
             ...(await verPromesa(promesa.id, t.trx)),
-            servicio: {
-                servicio_id: r.servicio_id,
-                estado: r.estado,
-                de: r.de,
-                cambiado: r.cambiado,
-                motivo: r.motivo,
-            },
+            servicio: servicioTrasPromesa(r),
         }
     }
 }
