@@ -94,6 +94,23 @@ export function auditableRouter(router: RouterVista) {
     }
 }
 
+/** Campos del router que FreeRADIUS necesita (dirección del NAS y secreto). */
+const CAMPOS_RADIUS = ['nas_ip', 'radius_secret'] as const
+
+/**
+ * Emite `router.radius_cambiado` si entre los campos auditados (`registrarCambios`) cambió
+ * `nas_ip` o `radius_secret`: A2 regenera el cliente de FreeRADIUS. Nunca lleva el secreto.
+ */
+export async function avisarRadius(t: Transaccion, router: RouterVista, cambiados: string[]) {
+    const campos = CAMPOS_RADIUS.filter((campo) => cambiados.includes(campo))
+    if (campos.length === 0) return
+    await t.emit('router.radius_cambiado', {
+        router_id: router.id,
+        empresa_id: router.empresa_sugerida_id,
+        campos,
+    })
+}
+
 /** Alta de un router MikroTik (NAS RADIUS y API REST). */
 export default class CrearRouter extends DomainAction<EntradaCrearRouter, RouterVista> {
     readonly nombre = 'routers.crear'
@@ -113,7 +130,8 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
         t.fijarEntidad('router', id)
         await vincularExterno(t.trx, 'router', id, externo)
         const router = await verRouter(id, t.trx)
-        await t.registrarCambios({ tipo: 'router', id }, null, auditableRouter(router))
+        const cambiados = await t.registrarCambios({ tipo: 'router', id }, null, auditableRouter(router))
+        await avisarRadius(t, router, cambiados)
         return router
     }
 }

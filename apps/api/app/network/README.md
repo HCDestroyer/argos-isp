@@ -39,6 +39,7 @@ Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosi
 | `RotarConexion` | `routers.rotar_conexion` | `router.conexion_rotada`, `router.conexion_generada` |
 | `RegistrarEstadoWireguard` | interno | — |
 | `EditarRouter` (activo) | `routers.editar` | `router.conexion_eliminada` / `router.conexion_registrada` |
+| `CrearRouter`, `EditarRouter`, registro por el túnel (`nas_ip` o `radius_secret`) | `routers.crear`, `routers.editar` | `router.radius_cambiado { router_id, empresa_id, campos[] }` (nunca el secreto; A2 regenera el cliente de FreeRADIUS) |
 | `ProbarConexion` | `routers.probar_conexion` | — (`audit.red`) |
 | `ReconciliarAhora` | `routers.reconciliar` | — (encola `routeros.reconciliar`) |
 

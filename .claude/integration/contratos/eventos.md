@@ -164,6 +164,7 @@ Eventos de velocidad (semana 2, `contratos/velocidad.md`). Decisión de A1: even
 | `router.conexion_registrada` | A1 (`RegistrarConexion`, `ConexionClave`; también al reactivar un router con túnel) | `router_id`, `empresa_id`, `ip_tunel`. Desde aquí `host` y `nas_ip` del router son `ip_tunel` | A6 (`wireguard-agente`): relee `GET /internal/wireguard/peers`; A2: regenera el cliente de FreeRADIUS (`nas_ip` cambió) |
 | `router.conexion_rotada` | A1 (`RotarConexion`) | `router_id`, `empresa_id`, `ip_tunel` | A6 (`wireguard-agente`): relee los peers y quita el del router |
 | `router.conexion_eliminada` | A1 (`EditarRouter` con `activo: false`; no hay borrado de routers) | `router_id`, `empresa_id` | A6 (`wireguard-agente`): relee los peers y quita el del router |
+| `router.radius_cambiado` | A1 (`CrearRouter`, `EditarRouter`, registro por el túnel) | `router_id`, `empresa_id`, `campos[]` ⊂ (`nas_ip`, `radius_secret`). Nunca el valor del secreto. Sale por outbox en la misma transacción solo si cambió alguno de los dos (al crear, `nas_ip` siempre y `radius_secret` si vino); una clave vacía en la edición no cambia nada | A2 (consumidor de clientes de FreeRADIUS): regenera el cliente del router y recarga FreeRADIUS |
 
 Los consumidores no deben fallar con un campo que no conocen: el dispatcher recalcula el estado deseado completo del servicio con cualquier `servicio.config_cambiada`.
 
