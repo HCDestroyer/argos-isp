@@ -659,15 +659,15 @@ export async function avanceDePromesa(
             .where('pf.promesa_id', promesa.id)
             .whereIn('f.estado', [...ESTADOS_PENDIENTES])
             .select(
-                cliente.raw('count(*)::int as pendientes'),
+                cliente.raw('count(*) = 0 as cumplida'),
                 cliente.raw('coalesce(sum(f.total - f.pagado), 0)::text as saldo'),
             )
-            .first()) as { pendientes: number; saldo: string }
+            .first()) as { cumplida: boolean; saldo: string }
         return {
             pagado: dec(fila.pagado),
             vencida,
             saldo_cubierto: dec(saldo.saldo),
-            cumplida: Number(saldo.pendientes) === 0,
+            cumplida: saldo.cumplida,
         }
     }
 
