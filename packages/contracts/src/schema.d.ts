@@ -7359,7 +7359,7 @@ export interface paths {
         put?: never;
         /**
          * Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)
-         * @description Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.
+         * @description Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.
          */
         post: operations["promesasCrear"];
         delete?: never;
@@ -10349,6 +10349,8 @@ export interface components {
             pagado?: components["schemas"]["Dinero"];
             /** @description Cumplida o incumplida: deuda vencida al resolverse */
             deuda_vencida?: components["schemas"]["Dinero"];
+            /** @description Cumplida o incumplida con regla_cumplimiento=facturas: saldo que les quedaba a las facturas cubiertas */
+            saldo_cubierto?: components["schemas"]["Dinero"];
         };
         Cliente: {
             id: number;
@@ -12468,6 +12470,20 @@ export interface components {
             /** @description Reverso de este asiento, si lo hay */
             revertido_por: number | null;
         };
+        FacturaCubierta: {
+            factura_id: number;
+            /**
+             * @description La mora es su propia factura
+             * @enum {string}
+             */
+            tipo: "servicio" | "mora" | "cargo";
+            /** Format: date */
+            periodo: string;
+            /** Format: date */
+            vence_en: string;
+            /** @description Saldo de la factura al crear la promesa (lo que cubre) */
+            monto: components["schemas"]["Dinero"];
+        };
         FacturaDetalle: components["schemas"]["Factura"] & {
             lineas: components["schemas"]["FacturaLinea"][];
             reglas_snapshot: {
@@ -12521,6 +12537,24 @@ export interface components {
             historico: boolean;
             /** Format: date-time */
             aplicado_en: string;
+        };
+        FacturaPromesa: {
+            factura_id: number;
+            /**
+             * @description La mora es su propia factura
+             * @enum {string}
+             */
+            tipo: "servicio" | "mora" | "cargo";
+            /** Format: date */
+            periodo: string;
+            /** Format: date */
+            vence_en: string;
+            /** @description Saldo de la factura al crear la promesa (lo que cubre) */
+            monto: components["schemas"]["Dinero"];
+            /** @description Saldo hoy (0.00 si ya no está pendiente) */
+            saldo: components["schemas"]["Dinero"];
+            /** @description Estado actual de la factura */
+            estado: string;
         };
         FacturasVencidasResumen: {
             /** @description Número de facturas vencidas con saldo */
@@ -14686,7 +14720,15 @@ export interface components {
             cliente_nombre?: string;
             /** Format: date-time */
             vence_en: string;
+            /** @description regla_cumplimiento=facturas: total vencido al crearla (mora incluida), calculado por Argos. monto: el prometido (legado) */
             monto: components["schemas"]["Dinero"];
+            /**
+             * @description facturas: se cumple cuando todas las de `facturas` quedan saldadas (promesas nuevas). monto (legado: abiertas al 29 oct e importadas): lo pagado llega al monto o no queda deuda vencida. Siempre presente en la respuesta
+             * @enum {string}
+             */
+            regla_cumplimiento?: "monto" | "facturas";
+            /** @description Facturas vencidas que cubre, con su saldo al crearla y hoy (vacía con la regla monto). Siempre presente en la respuesta */
+            facturas?: components["schemas"]["FacturaPromesa"][];
             /** @enum {string} */
             estado: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
             /** @enum {string} */
@@ -16494,7 +16536,10 @@ export interface components {
             canal: "portal" | "ia" | "operador" | "supervisor";
             /** Format: date-time */
             vence_en: string;
+            /** @description Total vencido que cubriría la promesa (lo calcula Argos) */
             monto: components["schemas"]["Dinero"];
+            /** @description Facturas vencidas que cubriría, la más antigua primero */
+            facturas: components["schemas"]["FacturaCubierta"][];
             /** Format: date-time */
             evaluada_en: string;
             /**
@@ -16552,6 +16597,10 @@ export interface components {
                 abono_pagado: components["schemas"]["Dinero"];
                 max_por_periodo: number;
                 en_periodo: number;
+                /** @description Total vencido que cubriría una promesa creada ahora */
+                monto_promesa: components["schemas"]["Dinero"];
+                /** @description Facturas vencidas que cubriría */
+                facturas: components["schemas"]["FacturaCubierta"][];
             };
             /** @description Suspendido a mano: la promesa no lo reactivaría */
             suspension_manual: boolean;
@@ -45468,10 +45517,11 @@ export interface operations {
                     /** Format: date-time */
                     vence_en: string;
                     /**
-                     * @description Monto con hasta 2 decimales, como string
+                     * @deprecated
+                     * @description Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)
                      * @example 150.00
                      */
-                    monto: string;
+                    monto?: string;
                     /** @enum {string} */
                     canal?: "portal" | "ia" | "operador" | "supervisor";
                 };
@@ -45775,7 +45825,8 @@ export interface operations {
                      */
                     vence_en?: string;
                     /**
-                     * @description Por defecto: la deuda pendiente del servicio
+                     * @deprecated
+                     * @description Obsoleto: se ignora. La simulación responde el total vencido que cubriría (monto y facturas)
                      * @example 150.00
                      */
                     monto?: string;

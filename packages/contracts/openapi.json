@@ -51879,7 +51879,7 @@
       "post": {
         "operationId": "promesasCrear",
         "summary": "Crear promesa de pago (aprobada, rechazada o pendiente de aprobación)",
-        "description": "Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
+        "description": "Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.",
         "tags": [
           "promesas"
         ],
@@ -51922,10 +51922,11 @@
                   "monto": {
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Monto con hasta 2 decimales, como string",
+                    "description": "Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)",
                     "examples": [
                       "150.00"
-                    ]
+                    ],
+                    "deprecated": true
                   },
                   "canal": {
                     "type": "string",
@@ -51939,8 +51940,7 @@
                 },
                 "required": [
                   "servicio_id",
-                  "vence_en",
-                  "monto"
+                  "vence_en"
                 ],
                 "additionalProperties": false
               }
@@ -52422,10 +52422,11 @@
                   "monto": {
                     "type": "string",
                     "pattern": "^\\d{1,12}(\\.\\d{1,2})?$",
-                    "description": "Por defecto: la deuda pendiente del servicio",
+                    "description": "Obsoleto: se ignora. La simulación responde el total vencido que cubriría (monto y facturas)",
                     "examples": [
                       "150.00"
-                    ]
+                    ],
+                    "deprecated": true
                   },
                   "evaluar_en": {
                     "type": "string",
@@ -70550,6 +70551,10 @@
           "deuda_vencida": {
             "$ref": "#/components/schemas/Dinero",
             "description": "Cumplida o incumplida: deuda vencida al resolverse"
+          },
+          "saldo_cubierto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Cumplida o incumplida con regla_cumplimiento=facturas: saldo que les quedaba a las facturas cubiertas"
           }
         }
       },
@@ -78851,6 +78856,43 @@
           }
         }
       },
+      "FacturaCubierta": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "tipo",
+          "periodo",
+          "vence_en",
+          "monto"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora",
+              "cargo"
+            ],
+            "description": "La mora es su propia factura"
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de la factura al crear la promesa (lo que cubre)"
+          }
+        }
+      },
       "FacturaDetalle": {
         "allOf": [
           {
@@ -79044,6 +79086,53 @@
           "aplicado_en": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "FacturaPromesa": {
+        "type": "object",
+        "required": [
+          "factura_id",
+          "tipo",
+          "periodo",
+          "vence_en",
+          "monto",
+          "saldo",
+          "estado"
+        ],
+        "properties": {
+          "factura_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "servicio",
+              "mora",
+              "cargo"
+            ],
+            "description": "La mora es su propia factura"
+          },
+          "periodo": {
+            "type": "string",
+            "format": "date"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date"
+          },
+          "monto": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo de la factura al crear la promesa (lo que cubre)"
+          },
+          "saldo": {
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Saldo hoy (0.00 si ya no está pendiente)"
+          },
+          "estado": {
+            "type": "string",
+            "description": "Estado actual de la factura"
           }
         }
       },
@@ -87719,7 +87808,23 @@
             "format": "date-time"
           },
           "monto": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "regla_cumplimiento=facturas: total vencido al crearla (mora incluida), calculado por Argos. monto: el prometido (legado)"
+          },
+          "regla_cumplimiento": {
+            "type": "string",
+            "enum": [
+              "monto",
+              "facturas"
+            ],
+            "description": "facturas: se cumple cuando todas las de `facturas` quedan saldadas (promesas nuevas). monto (legado: abiertas al 29 oct e importadas): lo pagado llega al monto o no queda deuda vencida. Siempre presente en la respuesta"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacturaPromesa"
+            },
+            "description": "Facturas vencidas que cubre, con su saldo al crearla y hoy (vacía con la regla monto). Siempre presente en la respuesta"
           },
           "estado": {
             "type": "string",
@@ -95941,6 +96046,7 @@
           "canal",
           "vence_en",
           "monto",
+          "facturas",
           "evaluada_en",
           "resultado",
           "regla",
@@ -95977,7 +96083,15 @@
             "format": "date-time"
           },
           "monto": {
-            "$ref": "#/components/schemas/Dinero"
+            "$ref": "#/components/schemas/Dinero",
+            "description": "Total vencido que cubriría la promesa (lo calcula Argos)"
+          },
+          "facturas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FacturaCubierta"
+            },
+            "description": "Facturas vencidas que cubriría, la más antigua primero"
           },
           "evaluada_en": {
             "type": "string",
@@ -96121,7 +96235,9 @@
               "abono_requerido",
               "abono_pagado",
               "max_por_periodo",
-              "en_periodo"
+              "en_periodo",
+              "monto_promesa",
+              "facturas"
             ],
             "properties": {
               "habilitadas": {
@@ -96175,6 +96291,17 @@
               },
               "en_periodo": {
                 "type": "integer"
+              },
+              "monto_promesa": {
+                "$ref": "#/components/schemas/Dinero",
+                "description": "Total vencido que cubriría una promesa creada ahora"
+              },
+              "facturas": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FacturaCubierta"
+                },
+                "description": "Facturas vencidas que cubriría"
               }
             }
           },
