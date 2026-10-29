@@ -112,6 +112,7 @@ Reglas:
 - **Límites de una unidad.**
     - Una unidad `en_comodato` no se vende, no se traslada y no se da de baja sin antes devolverla o declararla perdida (409 `unidad_en_comodato`).
     - Un servicio `retirado` no recibe comodatos (409 `servicio_retirado`).
+    - `POST /servicios/:id/equipos` acepta `{ unidad_id }` o `{ serie }` (exactamente uno; 422 `unidad_o_serie`). La serie se busca sin distinguir mayúsculas entre las unidades vivas de la empresa del servicio (404 si no existe o es de otra empresa). Un servicio `pendiente_instalacion` sí recibe comodatos (contrato Iris §3).
 - **Consumidor del evento de estado.** El inventario consume `servicio.estado_cambiado`. Con `a = retirado`, cada unidad `en_comodato` de ese servicio pasa a `por_recuperar`, sin asiento. Se emite `inventario.equipo_por_recuperar`. Es idempotente por `servicio_id`.
     - Si el servicio vuelve a otro estado, sus unidades `por_recuperar` vuelven a `en_comodato`.
 - **Tope por técnico.** Una bodega `tecnico` solo la ve y la mueve su `usuario_id` o quien tenga el permiso con alcance global.

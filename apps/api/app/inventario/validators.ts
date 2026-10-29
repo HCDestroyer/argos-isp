@@ -307,7 +307,11 @@ export const listarUnidadesValidator = vine.compile(
 
 export const asignarComodatoValidator = vine.compile(
     vine.object({
-        unidad_id: idEntidad(),
+        unidad_id: idEntidad().optional().meta({ description: 'La unidad; o, en su lugar, `serie`' }),
+        serie: texto(100).optional().meta({
+            description:
+                'Serie de la unidad en la empresa del servicio, sin distinguir mayúsculas (contrato Iris §3); en lugar de `unidad_id`',
+        }),
         fecha: fechaIso().nullable().optional().meta({
             description:
                 'Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)',

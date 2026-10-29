@@ -1,7 +1,7 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { NoEncontrado } from '#shared/errores'
-import type { EstadoServicio } from '#shared/eventos'
-import { hoyGuatemala } from '#ledger/fechas'
+import type { EstadoServicioConPendiente } from '#shared/eventos'
+import { ZONA_NEGOCIO } from '#ledger/fechas'
 import { obtenerPlantilla } from '#billing/plantillas'
 import { aplicarExcepciones, type ConfiguracionFacturacion } from '#billing/excepciones'
 
@@ -18,10 +18,10 @@ export interface ServicioFacturable {
     cliente_id: number
     plan_id: number
     plan_nombre: string
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     /** precio efectivo: `costo_override` o el precio del plan (IVA incluido) */
     precio: string
-    /** fecha de instalación, o el día de alta en Guatemala si no tiene */
+    /** primer día facturable (`inicioFacturacionSql`): instalación, o el día de alta en Guatemala */
     inicio: string
     /** el plan tiene velocidad limitada (> 0 en bajada y subida) */
     limitable: boolean
@@ -36,15 +36,43 @@ interface FilaServicio {
     cliente_id: number
     plan_id: number
     plan_nombre: string
-    estado: EstadoServicio
+    estado: EstadoServicioConPendiente
     costo_override: string | null
     precio: string
-    fecha_instalacion: string | null
-    created_at: Date
+    inicio: string
     bajada_limitada_kbps: number | null
     subida_limitada_kbps: number | null
     plantilla_facturacion_id: number | null
     suspension_manual: boolean
+}
+
+/**
+ * Primer día facturable del servicio (`date`, Guatemala), en SQL para leerlo igual en todas partes
+ * (`contratos/instalacion.md` §3):
+ *
+ * - **Activado desde `pendiente_instalacion`** (`instalado_en` posterior a `created_at`): el día de
+ *   `instalado_en`. El prorrateo del primer periodo arranca ese día y, en ciclo aniversario, el
+ *   aniversario es ese día. Una `fecha_instalacion` prevista al vender no cuenta.
+ * - **Nacido activo** (`instalado_en = created_at`: el valor por defecto `now()` del mismo INSERT, o
+ *   el relleno de la migración): como siempre, `fecha_instalacion` (puede ser retroactiva, p. ej. un
+ *   servicio importado) o el día de alta.
+ * - **Pendiente** (`instalado_en` null): no se factura por periodo; la expresión da el día de alta
+ *   solo para que las lecturas no fallen.
+ */
+export function inicioFacturacionSql(alias = 's'): string {
+    const a = alias
+    const dia = (columna: string) => `(${a}.${columna} AT TIME ZONE '${ZONA_NEGOCIO}')::date`
+    return `(CASE WHEN ${activadoDesdePendienteSql(a)} THEN ${dia('instalado_en')} ELSE coalesce(${a}.fecha_instalacion, ${dia('created_at')}) END)`
+}
+
+/**
+ * ¿El servicio `alias` (fila de `core.servicios`) se activó desde `pendiente_instalacion`? Un
+ * servicio nacido activo tiene `instalado_en = created_at` (el `now()` por defecto del mismo INSERT o
+ * el relleno de la migración); la activación siempre es posterior al alta. Un pendiente (null), no.
+ * Lo comparten el primer día facturable y el vencimiento efectivo (`#billing/vencimiento`).
+ */
+export function activadoDesdePendienteSql(alias = 's'): string {
+    return `(${alias}.instalado_en IS NOT NULL AND ${alias}.instalado_en > ${alias}.created_at)`
 }
 
 export async function leerServicio(
@@ -64,8 +92,7 @@ export async function leerServicio(
             's.estado',
             's.costo_override',
             'p.precio',
-            cliente.raw(`to_char(s.fecha_instalacion, 'YYYY-MM-DD') as fecha_instalacion`),
-            's.created_at',
+            cliente.raw(`to_char(${inicioFacturacionSql('s')}, 'YYYY-MM-DD') as inicio`),
             'p.bajada_limitada_kbps',
             'p.subida_limitada_kbps',
             's.plantilla_facturacion_id',
@@ -81,7 +108,7 @@ export async function leerServicio(
         plan_nombre: fila.plan_nombre,
         estado: fila.estado,
         precio: fila.costo_override ?? fila.precio,
-        inicio: fila.fecha_instalacion ?? hoyGuatemala(fila.created_at),
+        inicio: fila.inicio,
         limitable: (fila.bajada_limitada_kbps ?? 0) > 0 && (fila.subida_limitada_kbps ?? 0) > 0,
         plantilla_id: fila.plantilla_facturacion_id,
         suspension_manual: fila.suspension_manual,

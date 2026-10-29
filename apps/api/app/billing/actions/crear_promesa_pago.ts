@@ -15,6 +15,8 @@ import {
 } from '#billing/promesas'
 import type { CanalPromesa } from '#billing/reglas_promesa'
 import EvaluarEstadoServicio, { type ResultadoEvaluarEstado } from '#billing/actions/evaluar_estado_servicio'
+import { ServicioPendienteInstalacion } from '#core/instalacion'
+import type { EstadoServicio } from '#shared/eventos'
 
 /**
  * `promesas.crear` = `crearPromesaPago` (`POST /promesas`; el portal de A5 la llama directo con
@@ -45,10 +47,22 @@ export interface EntradaCrearPromesa {
     ahora?: Date
 }
 
-export type ServicioTrasPromesa = Pick<
-    ResultadoEvaluarEstado,
-    'servicio_id' | 'estado' | 'de' | 'cambiado' | 'motivo'
->
+/** Un `pendiente_instalacion` nunca llega aquí (422 antes de crear la promesa): estados operativos. */
+export type ServicioTrasPromesa = Pick<ResultadoEvaluarEstado, 'servicio_id' | 'cambiado' | 'motivo'> & {
+    estado: EstadoServicio
+    de: EstadoServicio
+}
+
+/** Cómo quedó el servicio tras activar una promesa (nunca un pendiente: no recibe promesas). */
+export function servicioTrasPromesa(r: ResultadoEvaluarEstado): ServicioTrasPromesa {
+    return {
+        servicio_id: r.servicio_id,
+        estado: r.estado as EstadoServicio,
+        de: r.de as EstadoServicio,
+        cambiado: r.cambiado,
+        motivo: r.motivo,
+    }
+}
 
 export interface ResultadoCrearPromesa extends PromesaVista {
     /** cómo quedó el servicio (solo si la promesa quedó activa) */
@@ -92,6 +106,10 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
         t.fijarEmpresa(servicio.empresa_id)
         if (servicio.estado === 'retirado') {
             throw new ReglaNegocio('El servicio está retirado', 'servicio_retirado')
+        }
+        // sin instalar no hay deuda de servicio que prometer ni corte que evitar (`contratos/instalacion.md` §3)
+        if (servicio.estado === 'pendiente_instalacion') {
+            throw new ServicioPendienteInstalacion('crear una promesa de pago sobre')
         }
         const config = await configuracionDeServicio(t.trx, servicio)
         if (!config) {
@@ -165,13 +183,7 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
         })
         return {
             ...(await verPromesa(promesaId, t.trx)),
-            servicio: {
-                servicio_id: r.servicio_id,
-                estado: r.estado,
-                de: r.de,
-                cambiado: r.cambiado,
-                motivo: r.motivo,
-            },
+            servicio: servicioTrasPromesa(r),
         }
     }
 }

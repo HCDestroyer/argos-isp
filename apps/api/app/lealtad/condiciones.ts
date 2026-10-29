@@ -3,7 +3,7 @@ import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import { CERO, dec, type Dec } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { leerServicio } from '#billing/configuracion'
-import type { EstadoServicio } from '#shared/eventos'
+import type { EstadoServicio, EstadoServicioConPendiente } from '#shared/eventos'
 import type { CondicionesPagoATiempo } from '#lealtad/reglas'
 
 /**
@@ -230,7 +230,8 @@ export async function excedenteDelPago(
 
 export interface ServicioCliente {
     id: number
-    estado: EstadoServicio
+    /** incluye `pendiente_instalacion` (vendido, aún sin instalar) */
+    estado: EstadoServicioConPendiente
     precio: string
 }
 

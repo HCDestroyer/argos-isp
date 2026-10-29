@@ -14,7 +14,7 @@ import {
     objeto,
     texto,
 } from '#shared/openapi/esquemas'
-import { METODOS_PAGO } from '#shared/eventos'
+import { ESTADOS_SERVICIO, METODOS_PAGO } from '#shared/eventos'
 import { NOMBRES_REGLA } from '#billing/promesas'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 
@@ -606,8 +606,9 @@ export const ServicioEvaluado = definirEsquema(
     'ServicioEvaluado',
     objeto({
         servicio_id: id,
-        de: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
-        estado: enumerado(['activo', 'limitado', 'suspendido', 'retirado']),
+        // un pendiente de instalación sale tal cual (p. ej. al pagar su cargo único anticipado)
+        de: enumerado([...ESTADOS_SERVICIO]),
+        estado: enumerado([...ESTADOS_SERVICIO]),
         cambiado: booleano,
         motivo: texto,
     }),

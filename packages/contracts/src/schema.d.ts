@@ -8295,7 +8295,7 @@ export interface paths {
         put?: never;
         /**
          * Prestar una unidad en comodato al servicio (activo fijo 1.2.01.NN / 1.1.14)
-         * @description La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.
+         * @description La unidad disponible sale de su bodega a su costo y se da de alta como activo de la clase del producto (depreciación desde el mes siguiente). La unidad va por `unidad_id` o por `serie` (exactamente uno; la serie se busca en la empresa del servicio, sin distinguir mayúsculas; 422 unidad_o_serie, 404 si no existe). 409 servicio_retirado, unidad_en_comodato, unidad_no_disponible; servicio de otra empresa 404. Emite inventario.comodato_asignado.
          */
         post: operations["serviciosAsignarEquipo"];
         delete?: never;
@@ -16384,9 +16384,9 @@ export interface components {
         ServicioEvaluado: {
             servicio_id: number;
             /** @enum {string} */
-            de: "activo" | "limitado" | "suspendido" | "retirado";
+            de: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
             /** @enum {string} */
-            estado: "activo" | "limitado" | "suspendido" | "retirado";
+            estado: "pendiente_instalacion" | "activo" | "limitado" | "suspendido" | "retirado";
             cambiado: boolean;
             motivo: string;
         };
@@ -49377,7 +49377,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    unidad_id: number;
+                    /** @description La unidad; o, en su lugar, `serie` */
+                    unidad_id?: number;
+                    /** @description Serie de la unidad en la empresa del servicio, sin distinguir mayúsculas (contrato Iris §3); en lugar de `unidad_id` */
+                    serie?: string;
                     /**
                      * Format: date
                      * @description Fecha del préstamo (por defecto hoy; no anterior al último movimiento de la unidad)
