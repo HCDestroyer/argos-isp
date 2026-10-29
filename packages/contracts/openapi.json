@@ -25575,6 +25575,1093 @@
         "x-implementado": true
       }
     },
+    "/api/v1/integraciones/iris": {
+      "get": {
+        "operationId": "irisVer",
+        "summary": "Conector Iris (secretos como ***)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.ver",
+        "x-implementado": true
+      },
+      "put": {
+        "operationId": "irisConfigurar",
+        "summary": "Configurar el conector Iris a mano (URL, token iris_pat_, receptor, encendido)",
+        "description": "Alternativa al enlace de conexión. El token y los secretos son de solo escritura (`***`). Encender exige URL y token (422). Solo https:// salvo `IRIS_PERMITIR_HTTP` (laboratorio).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "version leída; 0 si el conector nunca se guardó. 409 si cambió"
+                  },
+                  "activo": {
+                    "type": "boolean"
+                  },
+                  "url_base": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Origen de la API de Iris (https://host[:puerto])"
+                  },
+                  "token": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Token iris_pat_ de Iris para Argos. Omitido: se conserva; null: se borra. Nunca se devuelve"
+                  },
+                  "webhook_salida_url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Receptor de Iris para los webhooks de Argos"
+                  },
+                  "webhook_salida_secreto": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500,
+                    "description": "Secreto de ese receptor. Omitido: se conserva; null: se borra. Nunca se devuelve"
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConectorIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/abrir": {
+      "post": {
+        "operationId": "irisAbrir",
+        "summary": "Ver en Iris: URL de autologin con ticket de un solo uso",
+        "description": "Contrato Iris §1.3. El servidor de Argos pide el ticket a Iris con el `iris_pat_` y devuelve solo la URL. Destinos `ticket`, `orden` y `prospecto` (ids de Iris). 422 `iris_apagado` con el conector apagado o sin configurar; 502 `iris_error` con el error real si Iris falla.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "destino": {
+                    "type": "object",
+                    "properties": {
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "ticket",
+                          "orden",
+                          "prospecto"
+                        ]
+                      },
+                      "id_externo": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "description": "Id en Iris"
+                      }
+                    },
+                    "required": [
+                      "tipo",
+                      "id_externo"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "destino"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "URL de Iris",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.abrir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.abrir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/conexion/canjear": {
+      "post": {
+        "operationId": "irisEnlaceCanjear",
+        "summary": "Canje del enlace de conexión de Argos (lo llama Iris, servidor a servidor)",
+        "description": "Sin sesión: lo autentica el código. `sistema: \"iris\"`, `base_url` (origen de la API de Iris), `token` (`iris_pat_`) y `webhook` (receptor de Iris para §2.3 con su secreto). Devuelve el `atk_` del usuario técnico Iris (permisos de §1.1; revoca el del canje anterior), el receptor de Argos con su secreto (reservado) y `conector_id`. El conector queda apagado. 410 `enlace_vencido` si el código venció, se usó, se anuló o no existe; la misma petición repetida antes de vencer recibe la misma respuesta.",
+        "tags": [
+          "integraciones"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "codigo": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 200
+                  },
+                  "sistema": {
+                    "type": "string",
+                    "maxLength": 50
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "webhook": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "secreto": {
+                        "type": "string",
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "secreto"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "codigo",
+                  "sistema",
+                  "base_url",
+                  "token",
+                  "webhook"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credenciales de Argos para Iris",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanjeConexionIris"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/enlace": {
+      "post": {
+        "operationId": "irisEnlaceGenerar",
+        "summary": "Generar enlace de conexión para pegar en Iris (15 min, un solo uso)",
+        "description": "Contrato Iris §1.3. `https://<argos>/conectar#<codigo>` se muestra una sola vez; Argos guarda solo el SHA-256. Iris lo canjea en `POST /integraciones/iris/conexion/canjear`. Un enlace nuevo anula los anteriores sin usar.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Enlace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnlaceConexionIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.configurar; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.configurar",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/envios": {
+      "get": {
+        "operationId": "irisEnviosListar",
+        "summary": "Webhooks enviados a Iris: estado, intentos y próximo reintento",
+        "description": "Contrato Iris §2.3. Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`. `descartado`: el conector se apagó antes de enviarlo.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco de la página anterior",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño de página (por defecto 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendiente",
+                "enviado",
+                "fallido",
+                "descartado"
+              ]
+            }
+          },
+          {
+            "name": "evento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de envíos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EnvioIris"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/envios/resumen": {
+      "get": {
+        "operationId": "irisEnviosResumen",
+        "summary": "Estado de los webhooks a Iris: destino, alcance, pendientes, fallidos y último error",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenEnviosIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.ver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/estado": {
+      "get": {
+        "operationId": "irisEstado",
+        "summary": "Si \"Ver en Iris\" puede funcionar (sin URL ni secretos)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoConectorIris"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.abrir",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.abrir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/resolver": {
+      "post": {
+        "operationId": "irisResolver",
+        "summary": "Resolver un lote de IPs a servicio, cliente y empresa (Iris)",
+        "description": "Pedido A8 de Iris: igual que `POST /integraciones/horus/resolver` (1 a 500 IPv4 o IPv6 en el cuerpo, nunca en la URL; prefijo más largo; fuera del alcance del token → `no_encontrada`). Cada llamada queda en la bitácora (`ip.resolver`).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ips": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "ipv4"
+                    },
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "description": "IPv4 o IPv6, de 1 a 500; la respuesta conserva el orden"
+                  }
+                },
+                "required": [
+                  "ips"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Un resultado por IP, en orden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolucionIpsHorus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso ip.resolver; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "ip.resolver",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/sso/tickets": {
+      "post": {
+        "operationId": "irisSsoTicket",
+        "summary": "Pedir un ticket de autologin para un usuario de Iris (servidor a servidor)",
+        "description": "Igual que el de Horus: solo con el token `atk_` del usuario técnico Iris (403 con cualquier otra credencial; si el conector se preparó con un enlace, solo el `atk_` de ese canje, y 409 `iris_apagado` mientras esté apagado). Destino `cliente` o `servicio` con el id de Argos. Devuelve la URL del panel con el ticket en el fragmento (60 s, un solo uso).",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "usuario": {
+                    "type": "object",
+                    "properties": {
+                      "id_externo": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "description": "Id del usuario en Horus; con el conector forma la vinculación"
+                      },
+                      "correo": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 254,
+                        "description": "Solo informativo: nunca se vincula por correo"
+                      },
+                      "nombre": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "id_externo"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "destino": {
+                    "type": "object",
+                    "properties": {
+                      "tipo": {
+                        "type": "string",
+                        "enum": [
+                          "cliente",
+                          "servicio"
+                        ]
+                      },
+                      "id_externo": {
+                        "type": "string",
+                        "pattern": "^[1-9]\\d{0,17}$",
+                        "description": "Id del cliente o del servicio en ArgosIsp"
+                      }
+                    },
+                    "required": [
+                      "tipo",
+                      "id_externo"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "usuario",
+                  "destino"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ticket emitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketSsoEmitido"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso sso.emitir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "sso.emitir",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/tokens": {
+      "get": {
+        "operationId": "irisTokens",
+        "summary": "Tokens del usuario técnico Iris (sin su valor)",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tokens, los más nuevos primero",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TokenApi"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.ver",
+        "x-implementado": true
+      },
+      "post": {
+        "operationId": "irisGenerarToken",
+        "summary": "Generar un token atk_ del usuario técnico Iris (se muestra una sola vez)",
+        "description": "Crea, la primera vez, el usuario técnico \"Iris\" y su rol `integracion_iris` con los permisos del contrato Iris §1.1 que existen en Argos. Opcionalmente restringido a routers o zonas. No revoca los anteriores.",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "routers": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Restringe el token a servicios de estos routers"
+                  },
+                  "zonas": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "description": "Restringe el token a clientes de estas zonas"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Token generado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenIrisCreado"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.generar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.generar_token",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/integraciones/iris/tokens/{id}/revocar": {
+      "post": {
+        "operationId": "irisRevocarToken",
+        "summary": "Revocar un token del usuario técnico Iris",
+        "tags": [
+          "integraciones"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token revocado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenApi"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso iris.revocar_token; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "iris.revocar_token",
+        "x-implementado": true
+      }
+    },
     "/api/v1/internal/aaa/servicio": {
       "get": {
         "operationId": "internoAaaServicio",
@@ -54819,6 +55906,11 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "iris.abrir",
+                        "iris.configurar",
+                        "iris.generar_token",
+                        "iris.revocar_token",
+                        "iris.ver",
                         "lealtad.ajustar",
                         "lealtad.canjear",
                         "lealtad.configurar",
@@ -55143,6 +56235,11 @@
                         "ip.resolver",
                         "ipv6.crear",
                         "ipv6.ver",
+                        "iris.abrir",
+                        "iris.configurar",
+                        "iris.generar_token",
+                        "iris.revocar_token",
+                        "iris.ver",
                         "lealtad.ajustar",
                         "lealtad.canjear",
                         "lealtad.configurar",
@@ -62099,6 +63196,11 @@
                             "ip.resolver",
                             "ipv6.crear",
                             "ipv6.ver",
+                            "iris.abrir",
+                            "iris.configurar",
+                            "iris.generar_token",
+                            "iris.revocar_token",
+                            "iris.ver",
                             "lealtad.ajustar",
                             "lealtad.canjear",
                             "lealtad.configurar",
@@ -63030,7 +64132,8 @@
                   "conector": {
                     "type": "string",
                     "enum": [
-                      "horus"
+                      "horus",
+                      "iris"
                     ]
                   }
                 },
@@ -68417,6 +69520,38 @@
           }
         }
       },
+      "CanjeConexionIris": {
+        "type": "object",
+        "required": [
+          "token",
+          "webhook",
+          "conector_id"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token `atk_` del usuario técnico Iris (§1.1)"
+          },
+          "webhook": {
+            "type": "object",
+            "required": [
+              "url",
+              "secreto"
+            ],
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "secreto": {
+                "type": "string"
+              }
+            }
+          },
+          "conector_id": {
+            "type": "string"
+          }
+        }
+      },
       "CanjeLealtad": {
         "type": "object",
         "required": [
@@ -71160,6 +72295,108 @@
               "null"
             ],
             "description": "Secreto del receptor de Argos en claro, solo cuando se acaba de generar: copiarlo a Horus"
+          }
+        }
+      },
+      "ConectorIris": {
+        "type": "object",
+        "required": [
+          "activo",
+          "url_base",
+          "token",
+          "webhook_salida_url",
+          "webhook_salida_secreto",
+          "webhook_entrada_url",
+          "webhook_entrada_secreto",
+          "conector_id",
+          "conectado_por_enlace_en",
+          "token_argos_id",
+          "version"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Apagado por defecto; encender exige URL y token"
+          },
+          "url_base": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Origen de la API de Iris"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto de solo escritura: `***` si está guardado, null si no"
+          },
+          "webhook_salida_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Receptor de Iris (webhooks Argos → Iris, §2.3)"
+          },
+          "webhook_salida_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto de solo escritura: `***` si está guardado, null si no"
+          },
+          "webhook_entrada_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Receptor de Argos para webhooks de Iris (reservado: responde 501 hasta que el contrato los defina)"
+          },
+          "webhook_entrada_secreto": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "***",
+              null
+            ],
+            "description": "Secreto de solo escritura: `***` si está guardado, null si no"
+          },
+          "conector_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id opaco del conector en Argos (respuesta del canje)"
+          },
+          "conectado_por_enlace_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "token_argos_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Token atk_ entregado a Iris en el último canje"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -75544,6 +76781,23 @@
           }
         }
       },
+      "EnlaceConexionIris": {
+        "type": "object",
+        "required": [
+          "enlace",
+          "vence_en"
+        ],
+        "properties": {
+          "enlace": {
+            "type": "string",
+            "description": "`https://<argos>/conectar#<codigo>`: se muestra una sola vez"
+          },
+          "vence_en": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EnvioHorus": {
         "type": "object",
         "required": [
@@ -75568,6 +76822,89 @@
           "evento_id": {
             "type": "string",
             "description": "`id` del webhook (estable entre reintentos)"
+          },
+          "evento": {
+            "type": "string"
+          },
+          "empresa_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "enviado",
+              "fallido",
+              "descartado"
+            ]
+          },
+          "intentos": {
+            "type": "integer"
+          },
+          "proximo_intento_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ultimo_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ultimo_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EnvioIris": {
+        "type": "object",
+        "required": [
+          "id",
+          "evento_id",
+          "evento",
+          "empresa_id",
+          "estado",
+          "intentos",
+          "proximo_intento_en",
+          "ultimo_status",
+          "ultimo_error",
+          "enviado_en",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evento_id": {
+            "type": "string",
+            "description": "`id` del webhook (`argos-evt-<id>`, estable entre reintentos)"
           },
           "evento": {
             "type": "string"
@@ -76031,6 +77368,18 @@
             ],
             "format": "date-time",
             "description": "Horus no respondió y está en pausa hasta este instante (UTC); null si no"
+          }
+        }
+      },
+      "EstadoConectorIris": {
+        "type": "object",
+        "required": [
+          "activo"
+        ],
+        "properties": {
+          "activo": {
+            "type": "boolean",
+            "description": "Si \"Ver en Iris\" puede funcionar"
           }
         }
       },
@@ -80948,6 +82297,11 @@
           "ip.resolver",
           "ipv6.crear",
           "ipv6.ver",
+          "iris.abrir",
+          "iris.configurar",
+          "iris.generar_token",
+          "iris.revocar_token",
+          "iris.ver",
           "lealtad.ajustar",
           "lealtad.canjear",
           "lealtad.configurar",
@@ -81165,6 +82519,11 @@
           "Resolver una IP a su servicio",
           "Crear bloques y pools IPv6",
           "Ver bloques y pools IPv6",
+          "Abrir un ticket, orden o prospecto en Iris sin volver a iniciar sesión",
+          "Configurar el conector con Iris (URL, token iris_pat_, encendido, enlace de conexión); solo admin",
+          "Generar el token atk_ del usuario técnico Iris (permisos del contrato Iris §1.1); solo admin",
+          "Revocar un token del usuario técnico Iris",
+          "Ver el conector con Iris (sin secretos) y los tokens de su usuario técnico (sin el valor)",
           "Ajustar puntos a mano (con motivo) y rechazar referidos",
           "Canjear puntos de un cliente por un premio (panel o caja)",
           "Configurar el programa de lealtad de la empresa: activarlo, reglas y premios",
@@ -81252,7 +82611,7 @@
           "Marcar requisitos legales del sorteo con evidencia (DIACO, Gobernación, ISR)",
           "Publicar bases, abrir, cerrar el corte o cancelar un sorteo",
           "Ver sorteos, sus bases, participantes, resultados y acta",
-          "Pedir un ticket de autologin para un usuario del otro sistema (solo el token de la integración Horus)",
+          "Pedir un ticket de autologin para un usuario del otro sistema (solo el token de la integración Horus o Iris)",
           "Crear tokens de API",
           "Revocar tokens de API",
           "Ver tokens de API",
@@ -92796,6 +94155,101 @@
           }
         }
       },
+      "ResumenEnviosIris": {
+        "type": "object",
+        "required": [
+          "destino_configurado",
+          "alcance",
+          "pendientes",
+          "fallidos",
+          "ultimo_enviado_en",
+          "ultimo_fallo"
+        ],
+        "properties": {
+          "destino_configurado": {
+            "type": "boolean",
+            "description": "Conector activo con URL y secreto del receptor de Iris; sin él no se envía nada"
+          },
+          "alcance": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "global",
+              "empresas"
+            ],
+            "properties": {
+              "global": {
+                "type": "boolean"
+              },
+              "empresas": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "description": "Empresas del usuario técnico «Iris» cuyos eventos se envían; null sin usuario técnico activo (no se envía nada)"
+          },
+          "pendientes": {
+            "type": "integer"
+          },
+          "fallidos": {
+            "type": "integer"
+          },
+          "ultimo_enviado_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ultimo_fallo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "evento_id",
+              "evento",
+              "estado",
+              "intentos",
+              "ultimo_error",
+              "en"
+            ],
+            "properties": {
+              "evento_id": {
+                "type": "string"
+              },
+              "evento": {
+                "type": "string"
+              },
+              "estado": {
+                "type": "string",
+                "enum": [
+                  "pendiente",
+                  "fallido"
+                ]
+              },
+              "intentos": {
+                "type": "integer"
+              },
+              "ultimo_error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "en": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
       "ResumenFondosEnTransito": {
         "type": "object",
         "required": [
@@ -93128,6 +94582,11 @@
               "ip.resolver",
               "ipv6.crear",
               "ipv6.ver",
+              "iris.abrir",
+              "iris.configurar",
+              "iris.generar_token",
+              "iris.revocar_token",
+              "iris.ver",
               "lealtad.ajustar",
               "lealtad.canjear",
               "lealtad.configurar",
@@ -93500,6 +94959,7 @@
               "horus.ver",
               "inventario.ver",
               "ipv6.ver",
+              "iris.ver",
               "lealtad.ver",
               "libro.ver",
               "libros.ver",
@@ -95776,6 +97236,26 @@
           }
         }
       },
+      "TicketIris": {
+        "type": "object",
+        "required": [
+          "url",
+          "expira_en"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL de Iris con el ticket (un solo uso, 60 s); el panel la abre"
+          },
+          "expira_en": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "TicketSsoEmitido": {
         "type": "object",
         "required": [
@@ -95874,6 +97354,28 @@
             "type": "integer",
             "minimum": 1,
             "description": "Usuario técnico Horus"
+          }
+        }
+      },
+      "TokenIrisCreado": {
+        "type": "object",
+        "required": [
+          "token",
+          "datos",
+          "usuario_id"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Valor `atk_…`; se muestra una sola vez"
+          },
+          "datos": {
+            "$ref": "#/components/schemas/TokenApi"
+          },
+          "usuario_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Usuario técnico Iris"
           }
         }
       },

@@ -90,18 +90,23 @@ export default class ActivarInstalacionServicio extends DomainAction<
         // un instante "adelantado" dentro de la tolerancia se guarda como ahora (nunca futuro)
         const efectivo = instaladoEn.getTime() > ahora.getTime() ? ahora : instaladoEn
 
+        // JS tiene milisegundos y Postgres microsegundos: el instante del alta tal cual (o truncado a
+        // ms) quedaría <= created_at y la facturación lo tomaría por un servicio nacido activo
+        // (`activadoDesdePendienteSql` de `#billing/configuracion` exige instalado_en > created_at).
+        // Se guarda al menos 1 µs después del alta; al operador no le cambia nada.
+        const instalado = `greatest(?::timestamptz, created_at + interval '1 microsecond')`
         const antes = await verServicio(input.id, t.trx)
         await t.trx
             .from('core.servicios')
             .where('id', input.id)
             .update({
                 estado: 'activo',
-                instalado_en: efectivo,
+                instalado_en: t.trx.knexRawQuery(instalado, [efectivo.toISOString()]),
                 ...(input.planta ? { planta: JSON.stringify(normalizarPlanta(input.planta)) } : {}),
                 ...(fila.fecha_instalacion === null
                     ? {
                           fecha_instalacion: t.trx.knexRawQuery(
-                              `(?::timestamptz AT TIME ZONE 'America/Guatemala')::date`,
+                              `(${instalado} AT TIME ZONE 'America/Guatemala')::date`,
                               [efectivo.toISOString()],
                           ),
                       }
