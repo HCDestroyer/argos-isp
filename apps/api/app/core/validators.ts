@@ -456,7 +456,10 @@ const potenciaEnRango = vine.createRule((valor, _opciones, campo) => {
 /** `POST /servicios/:id/activar-instalacion` (`contratos/instalacion.md` §2). */
 export const activarInstalacionValidator = vine.compile(
     vine.object({
-        version: versionEsperada(),
+        version: versionEsperada().optional().meta({
+            description:
+                'Opcional: si viene y no coincide, 409 conflicto_version. Sin ella protegen la máquina de estados (solo sale de pendiente_instalacion; si no, 409 servicio_no_pendiente) y la Idempotency-Key',
+        }),
         instalado_en: instanteIso().optional().meta({
             description:
                 'Cuándo quedó instalado (inicio de la facturación). Sin él, ahora. Ni futuro (5 min de tolerancia de reloj) ni anterior al alta del servicio',
