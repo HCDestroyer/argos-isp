@@ -26,6 +26,10 @@ import {
  *   nada: Iris no podría leer esos datos con su token.
  * - **Sin secretos**: cada payload se arma con una lista cerrada de campos (ids, estados, IPs,
  *   fechas). Nunca `user_ppp`, contraseñas PPPoE, credenciales de adicionales ni tokens.
+ * - **Eliminados** (`contratos/eliminar.md`): `servicio.eliminado` y `router.eliminado` se arman
+ *   solo con el payload del evento (la fila ya no existe; nunca se busca). Un router sin empresa
+ *   sugerida es infraestructura compartida: su `router.eliminado` llega a cualquier conector,
+ *   como `GET /routers` se lo muestra a cualquier alcance.
  */
 
 /** Eventos del bus que van a Iris (§2.3). */
@@ -37,6 +41,8 @@ export const EVENTOS_A_IRIS = [
     'servicio.estado_cambiado',
     'inventario.equipo_por_recuperar',
     'servicio.caidas_repetidas',
+    'servicio.eliminado',
+    'router.eliminado',
 ] as const
 
 export const TABLA_ENVIOS_IRIS = 'integraciones.iris_envios'
@@ -112,6 +118,8 @@ export interface WebhookIris {
     payload: Payload
     /** empresas a las que toca el evento (para el alcance); `empresa_id` del payload es la primera */
     empresas: number[]
+    /** infraestructura compartida (router sin empresa sugerida): pasa con cualquier alcance */
+    compartido?: boolean
 }
 
 /**
@@ -155,8 +163,34 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
         }
     }
 
+    if (evento === 'router.eliminado') {
+        const routerId = entero(p.router_id)
+        if (!routerId) return null
+        const empresaId = entero(p.empresa_id)
+        return {
+            payload: { router_id: routerId, empresa_id: empresaId },
+            empresas: empresaId ? [empresaId] : [],
+            compartido: empresaId === null,
+        }
+    }
+
     const servicioId = entero(p.servicio_id)
     if (!servicioId) return null
+
+    if (evento === 'servicio.eliminado') {
+        // La fila ya no existe: todo sale del payload del evento (A1 lo manda completo)
+        const empresaId = entero(p.empresa_id)
+        return {
+            payload: {
+                servicio_id: servicioId,
+                empresa_id: empresaId,
+                cliente_id: entero(p.cliente_id),
+                router_id: entero(p.router_id),
+            },
+            empresas: empresaId ? [empresaId] : [],
+        }
+    }
+
     const servicio = await datosServicio(servicioId)
     const empresaId = entero(p.empresa_id) ?? servicio.empresa_id
     const clienteId = entero(p.cliente_id) ?? servicio.cliente_id
@@ -235,9 +269,12 @@ export async function payloadParaIris(evento: string, p: Payload): Promise<Webho
     }
 }
 
-/** Si el alcance del conector cubre el evento. Un evento sin empresa solo pasa con alcance global. */
-export function enAlcance(alcance: AlcanceConectorIris, empresas: number[]): boolean {
-    if (alcance.global) return true
+/**
+ * Si el alcance del conector cubre el evento. Un evento sin empresa solo pasa con alcance global,
+ * salvo el de infraestructura compartida (`compartido`), que pasa siempre.
+ */
+export function enAlcance(alcance: AlcanceConectorIris, empresas: number[], compartido = false): boolean {
+    if (alcance.global || compartido) return true
     return empresas.some((e) => alcance.empresas.includes(e))
 }
 
@@ -257,7 +294,7 @@ export async function registrarEnvioIris(evento: EventoEntrante): Promise<number
         return null
     }
     const webhook = await payloadParaIris(evento.evento, evento.payload ?? {})
-    if (!webhook || !enAlcance(alcance, webhook.empresas)) return null
+    if (!webhook || !enAlcance(alcance, webhook.empresas, webhook.compartido)) return null
 
     const payload = { ...webhook.payload }
     if (evento.evento === 'cliente.actualizado' && !alcance.global) {

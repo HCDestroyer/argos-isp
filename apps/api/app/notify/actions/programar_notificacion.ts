@@ -21,6 +21,7 @@ import { configPara, empresaDelEvento } from '#notify/configuracion'
 import { chatTelegramPara } from '#notify/telegram/vinculos'
 import { avisoCubierto, payloadDelAviso } from '#notify/lealtad'
 import { avisoNoAplicaPorInstalacion, eventoDelAviso } from '#notify/instalacion'
+import { servicioEliminado } from '#notify/eliminados'
 
 export interface EntradaProgramar {
     /** `outbox:<id>` para eventos; otro prefijo para recordatorios */
@@ -73,6 +74,8 @@ interface Aviso {
  * - Servicio `pendiente_instalacion` (`instalacion.ts`): sin `factura.vencida` ni recordatorios, y
  *   al activar la instalación, la bienvenida (`servicio.instalacion_activada`) en vez de «servicio
  *   reactivado».
+ * - Servicio eliminado (`eliminados.ts`): un `servicio.*` atrasado de un servicio que ya no existe
+ *   no se avisa (ni error ni envío).
  * - Lealtad (`lealtad.ts`): `lealtad.referido_calificado` va al referidor; el
  *   `lealtad.puntos_acumulados` del crédito del referidor no se avisa (ya lo dice el del referido).
  */
@@ -82,6 +85,10 @@ export default class ProgramarNotificacion extends DomainAction<EntradaProgramar
     protected async handle(input: EntradaProgramar, t: Transaccion): Promise<ResultadoProgramar> {
         // `lealtad.referido_calificado` va al referidor, no al referido (`lealtad.ts`)
         const payload = payloadDelAviso(input.evento, input.payload)
+        // Servicio eliminado (`contratos/eliminar.md`): nada que avisar sobre él
+        if (await servicioEliminado(t.trx, input.evento, payload)) {
+            return { clienteId: null, envios: [], encolar: [] }
+        }
         // Servicio pendiente de instalación: sin mora ni recordatorios (`#notify/instalacion`)
         if (await avisoNoAplicaPorInstalacion(t.trx, input.evento, payload)) {
             return { clienteId: null, envios: [], encolar: [] }

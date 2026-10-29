@@ -95,3 +95,30 @@ Los consumidores son idempotentes y no deben buscar la fila: ya no existe. Un ev
 
 - `GET /api/v1/servicios?estado=retirado` (ya existía).
 - `GET /api/v1/routers?activo=false` (ya existía).
+
+## 7. A6 · Iris, WireGuard y notify
+
+### 7.1 Webhooks a Iris (propuesta para `contratos/iris.md` 0.3.1, §2.3)
+
+Mismo conector que el resto de §2.3 (`integraciones.iris_envios`, `node ace iris:worker`): cuerpo `{ id, evento, ocurrido_en, payload }`, `id = argos-evt-<id del outbox>` (estable; Iris deduplica), firma `X-Webhook-Signature: v1=…` (HMAC-SHA256 con `X-Webhook-Timestamp`) y reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`, visible en el panel.
+
+| Evento | Payload exacto (lista cerrada) | Alcance del usuario técnico «Iris» | Efecto en Iris |
+| --- | --- | --- | --- |
+| `servicio.eliminado` | `servicio_id`, `empresa_id`, `cliente_id`, `router_id` (enteros; el router donde estaba) | Solo si `empresa_id` está en su alcance (o alcance global) | Quita la instantánea del servicio (`integracion.argos_servicios`) y, con `cliente_id`, refresca la lista de servicios del cliente. Una orden o ticket abierto que apunte al servicio queda con su copia local y la marca «ya no existe en Argos» |
+| `router.eliminado` | `router_id`, `empresa_id` (`empresa_sugerida_id` del router, o `null`) | Con `empresa_id`, solo si está en su alcance. Con `null` (router compartido) a cualquier conector, igual que `GET /routers` muestra esos routers a cualquier alcance | Quita el router de lo que use para factibilidad (router o nodo sugerido); una factibilidad ya evaluada conserva el id |
+
+- El payload se arma solo con el evento: la fila ya no existe en Argos y A6 no la busca. Nunca lleva `user_ppp`, contraseñas, `radius_secret`, credenciales de la API ni claves WireGuard (ni la pública).
+- Orden: `servicio.eliminado` sale con un `asignacion.cambiada` de ips vacías en la misma transacción; los dos van a Iris. Un `servicio.*` o `asignacion.cambiada` atrasado de un servicio eliminado sale igual con el `empresa_id` de su payload (`cliente_id` null si el evento no lo trae); Iris lo trata como «no existe» y no recrea la instantánea.
+- Un `GET /servicios/:id` o `GET /routers/:id` de Iris después del webhook responde 404: es el estado esperado, no un error que reintentar.
+
+### 7.2 Peer WireGuard (`wireguard-agente`)
+
+- El agente reconcilia la lista completa con `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y **`router.eliminado`** (grupo `wireguard`). `EliminarRouter` borra `network.routers_conexion` en su transacción, así que `GET /internal/wireguard/peers` ya no trae el peer; `wg syncconf` lo quita sin tocar los demás túneles (el handshake de los otros routers se conserva).
+- La /32 del túnel queda libre: `asignarIpTunel` la entrega al siguiente router (la menor libre). El agente no asigna IPs.
+- Idempotente: un `router.eliminado` repetido, perdido o atrasado deja el mismo `peers.conf` (la lista es la fuente, no el evento).
+
+### 7.3 Notify
+
+- `servicio.eliminado` y `router.eliminado` no avisan al cliente ni al equipo.
+- Un `servicio.*` atrasado de un servicio que ya no existe (`servicio.estado_cambiado`, también la bienvenida de instalación) no se avisa al cliente: ni error ni envío (`app/notify/eliminados.ts`).
+- Las alertas internas de la limpieza (`routeros.fallido`, `coa.fallido`) salen igual, con el servicio y el router por su id (`#812`).
