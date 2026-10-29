@@ -25,66 +25,89 @@ const kbpsNulable = (descripcion: string): EsquemaJson => ({ ...nulable(entero),
 
 export const Router = definirEsquema(
     'Router',
-    objeto({
-        id,
-        nombre: texto,
-        host: texto,
-        api_usuario: nulable(texto),
-        tiene_api_password: booleano,
-        tiene_radius_secret: booleano,
-        nas_ip: texto,
-        modo_seguridad: enumerado(['radius', 'api']),
-        control_velocidad: {
-            ...enumerado(['simple', 'arbol_pcq']),
-            description:
-                'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            host: texto,
+            api_usuario: nulable(texto),
+            tiene_api_password: booleano,
+            tiene_radius_secret: booleano,
+            nas_ip: texto,
+            modo_seguridad: enumerado(['radius', 'api']),
+            control_velocidad: {
+                ...enumerado(['simple', 'arbol_pcq']),
+                description:
+                    'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
+            },
+            capacidad_bajada_kbps: kbpsNulable(
+                'Capacidad del enlace (techo del padre global); null = sin techo',
+            ),
+            capacidad_subida_kbps: kbpsNulable(
+                'Capacidad del enlace (techo del padre global); null = sin techo',
+            ),
+            api_url: {
+                ...nulable(texto),
+                description: 'https://host:puerto de la API REST; null = https://<host>',
+            },
+            api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
+            tiene_api_ca: {
+                ...booleano,
+                description:
+                    'Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con ' +
+                    'PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla)',
+            },
+            dhcp_servidor: {
+                ...nulable(texto),
+                description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
+            },
+            interfaz_clientes: {
+                ...nulable(texto),
+                description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
+            },
+            modo_velocidad: {
+                ...enumerado(['simple', 'pcq']),
+                deprecated: true,
+                description:
+                    'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
+            },
+            empresa_sugerida_id: {
+                ...nulable(id),
+                description:
+                    'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
+            },
+            activo: booleano,
+            en_linea: {
+                ...nulable(booleano),
+                description:
+                    'Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) ' +
+                    'dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el ' +
+                    'umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)',
+            },
+            ultimo_contacto: {
+                ...nulable(instante),
+                description:
+                    'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
+                    'comando de RouterOS (`audit.red` con ok); null si nunca',
+            },
+            serial: {
+                ...nulable(texto),
+                description:
+                    'Número de serie del equipo (`/system/routerboard` serial-number) o software-id (`/system/license`, ' +
+                    'CHR), leído por el sondeo; null = no se conoce. Sirve para detectar el mismo MikroTik registrado dos ' +
+                    'veces (GET /routers/duplicados). La API siempre lo envía; opcional en el esquema hasta que las ' +
+                    'fixtures del panel lo traigan',
+            },
+            unido_a_id: {
+                ...nulable(id),
+                description:
+                    'Router que absorbió a este con POST /routers/:id/unir (este queda inactivo); null = no está unido. ' +
+                    'La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan',
+            },
+            ...auditable,
         },
-        capacidad_bajada_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
-        capacidad_subida_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
-        api_url: {
-            ...nulable(texto),
-            description: 'https://host:puerto de la API REST; null = https://<host>',
-        },
-        api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
-        tiene_api_ca: {
-            ...booleano,
-            description:
-                'Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con ' +
-                'PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla)',
-        },
-        dhcp_servidor: {
-            ...nulable(texto),
-            description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
-        },
-        interfaz_clientes: {
-            ...nulable(texto),
-            description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
-        },
-        modo_velocidad: {
-            ...enumerado(['simple', 'pcq']),
-            deprecated: true,
-            description: 'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
-        },
-        empresa_sugerida_id: {
-            ...nulable(id),
-            description: 'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
-        },
-        activo: booleano,
-        en_linea: {
-            ...nulable(booleano),
-            description:
-                'Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) ' +
-                'dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el ' +
-                'umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)',
-        },
-        ultimo_contacto: {
-            ...nulable(instante),
-            description:
-                'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
-                'comando de RouterOS (`audit.red` con ok); null si nunca',
-        },
-        ...auditable,
-    }),
+        ['serial', 'unido_a_id'],
+    ),
 )
 
 export const RedIpv4 = definirEsquema(
@@ -439,5 +462,85 @@ export const VistaPreviaVelocidad = definirEsquema(
             limit_at_kbps: parKbps,
             activos: { type: 'integer', minimum: 0, description: 'Con 0 se calcula como 1' },
         }),
+    }),
+)
+
+const motivoDuplicado = {
+    ...enumerado(['api', 'nas_ip', 'serial']),
+    description:
+        'api: mismo host:puerto de la API REST (api_url o https://<host>); nas_ip: misma nas_ip; serial: mismo ' +
+        'número de serie o software-id del equipo',
+}
+
+/** Un grupo de `GET /routers/duplicados` (`contratos/routers.md` §2). */
+export const GrupoRoutersDuplicados = definirEsquema(
+    'GrupoRoutersDuplicados',
+    objeto({
+        motivos: { ...lista(motivoDuplicado), description: 'Por qué parecen el mismo equipo' },
+        claves: {
+            ...lista(objeto({ motivo: motivoDuplicado, valor: texto })),
+            description: 'Valores compartidos por dos o más routers del grupo',
+        },
+        routers: lista(
+            objeto({
+                id,
+                nombre: texto,
+                host: texto,
+                api_url: nulable(texto),
+                nas_ip: texto,
+                serial: nulable(texto),
+                control_velocidad: enumerado(['simple', 'arbol_pcq']),
+                servicios_total: { ...entero, description: 'Servicios no retirados del router' },
+                sesiones_abiertas: { ...entero, description: 'Sesiones PPPoE abiertas atribuidas al router' },
+                servicios: {
+                    ...lista(
+                        objeto({
+                            id,
+                            cliente_id: id,
+                            user_ppp: nulable(texto),
+                            estado: texto,
+                            tipo_conexion: texto,
+                        }),
+                    ),
+                    description: 'Los primeros 50 servicios no retirados (por id)',
+                },
+                version: entero,
+            }),
+        ),
+    }),
+)
+
+/** Resultado de `POST /routers/:id/unir` (o su simulación; `contratos/routers.md` §3). */
+export const UnionRouters = definirEsquema(
+    'UnionRouters',
+    objeto({
+        router_id: { ...id, description: 'El router que queda' },
+        absorbido_id: { ...id, description: 'El router absorbido (queda desactivado y unido)' },
+        simulado: { ...booleano, description: 'true = simulación: no se guardó nada' },
+        coincidencias: {
+            ...lista(motivoDuplicado),
+            description: 'Claves que comparten; vacío = no parecen el mismo equipo (va un aviso)',
+        },
+        servicios: {
+            ...lista(
+                objeto({ servicio_id: id, user_ppp: nulable(texto), estado: texto, tipo_conexion: texto }),
+            ),
+            description: 'Servicios que pasan al router que queda (conservan sus direcciones)',
+        },
+        redes_ipv4: { ...lista(id), description: 'Redes IPv4 que pasan al que queda' },
+        ipv6_bloques: { ...lista(id), description: 'Bloques IPv6 (con sus pools) que pasan al que queda' },
+        planes_movidos: {
+            ...lista(id),
+            description: 'plan_id de las implementaciones que pasan al que queda',
+        },
+        planes_descartados: {
+            ...lista(id),
+            description:
+                'plan_id implementados en los dos: gana la del que queda y se descarta la del absorbido',
+        },
+        sesiones_abiertas: { ...entero, description: 'Sesiones abiertas que pasan al que queda' },
+        avisos: { ...lista(texto), description: 'Lo que el operador debe saber antes de confirmar' },
+        router: Router,
+        absorbido: Router,
     }),
 )

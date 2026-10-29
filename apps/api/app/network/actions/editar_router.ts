@@ -1,12 +1,42 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
+import { ReglaNegocio } from '#shared/errores'
 import { actualizarConVersion } from '#shared/version'
 import { auditableRouter, columnasRouter, type DatosRouter } from '#network/actions/crear_router'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import { exigirEmpresaActiva } from '#core/empresas'
+import { extremoApi, exigirRouterUnico } from '#network/routers_duplicados'
 
 export interface EntradaEditarRouter extends DatosRouter {
     id: number
     version: number
+}
+
+/**
+ * 409 `router_duplicado` (`contratos/routers.md`) solo por lo que la edición cambia: el extremo de
+ * la API, la `nas_ip`, o reactivar un router (entonces se revisa todo, también el serial). Así un
+ * duplicado que ya existía se puede seguir editando hasta unirlo (`routers.unir`).
+ */
+async function exigirSinDuplicado(t: Transaccion, antes: RouterVista, datos: DatosRouter) {
+    const despues = {
+        id: antes.id,
+        host: datos.host ?? antes.host,
+        api_url: datos.api_url !== undefined ? datos.api_url : antes.api_url,
+        nas_ip: datos.nas_ip ?? antes.nas_ip,
+        serial: antes.serial,
+    }
+    const activo = datos.activo ?? antes.activo
+    const reactiva = activo && !antes.activo
+    if (reactiva && antes.unido_a_id !== null) {
+        throw new ReglaNegocio(
+            `El router está unido al router ${antes.unido_a_id}: es el mismo equipo y no se reactiva`,
+            'router_unido',
+        )
+    }
+    await exigirRouterUnico(t.trx, despues, {
+        api: activo && (reactiva || extremoApi(despues) !== extremoApi(antes)),
+        nas_ip: despues.nas_ip !== antes.nas_ip,
+        serial: reactiva,
+    })
 }
 
 /**
@@ -25,6 +55,7 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         if (datos.empresa_sugerida_id && datos.empresa_sugerida_id !== antes.empresa_sugerida_id) {
             await exigirEmpresaActiva(t.trx, datos.empresa_sugerida_id, 'empresa_sugerida_id')
         }
+        await exigirSinDuplicado(t, antes, datos)
         await actualizarConVersion(t.trx, 'network.routers', id, version, columnasRouter(datos))
         const despues = await verRouter(id, t.trx)
 

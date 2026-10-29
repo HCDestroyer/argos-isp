@@ -24,6 +24,7 @@ import {
  * - Controles para pruebas: `caer()` / `levantar()` (puerto cerrado → ECONNREFUSED, mismo puerto al
  *   volver), `fallar(n, status)` (las próximas n peticiones responden ese status), `retrasoMs`,
  *   `tabla(ruta)` para leer o tocar el estado a mano, y `peticiones` con todo lo recibido.
+ * - `serial` / `softwareId`: identidad del equipo en `/system/routerboard` y `/system/license`.
  */
 
 export interface PeticionRecibida {
@@ -118,6 +119,10 @@ export class RouterOSFalso {
     readonly password: string
     readonly peticiones: PeticionRecibida[] = []
     retrasoMs = 0
+    /** `serial-number` de `/system/routerboard`; null = sin RouterBOARD (CHR) */
+    serial: string | null = null
+    /** `software-id` de `/system/license` (CHR); null = no lo informa */
+    softwareId: string | null = null
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
     /** Menús de solo lectura (bindings DHCPv6, PPP activas): la prueba los llena a mano */
     readonly #lectura = new Map<RutaLectura, ObjetoRouterOS[]>()
@@ -260,6 +265,23 @@ export class RouterOSFalso {
 
         if (camino === '/system/resource' && metodo === 'GET') {
             return this.#json(res, 200, { 'board-name': 'falso', version: '7.24.5 (stable)', uptime: '1d' })
+        }
+        // Identidad del equipo (`identificar`): un CHR no trae `serial-number` en `/system/routerboard`.
+        if (camino === '/system/routerboard' && metodo === 'GET') {
+            return this.#json(
+                res,
+                200,
+                this.serial
+                    ? { routerboard: 'true', 'serial-number': this.serial }
+                    : { routerboard: 'false' },
+            )
+        }
+        if (camino === '/system/license' && metodo === 'GET') {
+            return this.#json(
+                res,
+                200,
+                this.softwareId ? { 'software-id': this.softwareId, level: 'p1' } : {},
+            )
         }
 
         const soloLectura = RUTAS_LECTURA.find((r) => camino === r)

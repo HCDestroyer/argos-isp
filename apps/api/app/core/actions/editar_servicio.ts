@@ -52,6 +52,12 @@ export interface EntradaEditarServicio {
     prefijo_delegado_v6?: string
     /** `{ campo: valor }`; `null` borra la excepción, un campo ausente no se toca */
     excepciones?: Record<string, unknown>
+    /**
+     * Solo interno (`routers.unir`, nunca por la API): el router nuevo es el mismo equipo que el
+     * anterior y sus redes y pools ya pasaron a él. Conserva las asignaciones tal cual y el evento
+     * sale con `motivo: 'union_routers'` (`contratos/routers.md`).
+     */
+    mismo_equipo?: boolean
 }
 
 type CampoConfig = CatalogoEventos['servicio.config_cambiada']['campos'][number]
@@ -93,6 +99,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
             pass_ppp: passPpp,
             user_ppp: userPppEntrada,
             excepciones: excepcionesEntrada,
+            mismo_equipo: mismoEquipo,
             ...datos
         } = input
         t.fijarEntidad('servicio', id)
@@ -203,15 +210,18 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
         await actualizarConVersion(t.trx, 'core.servicios', id, version, columnas)
 
         const asignacionesAntes = await asignacionesVigentes(t.trx, id)
-        const asignaciones = await reconciliarAsignaciones(t.trx, {
-            servicioId: id,
-            routerId,
-            plan,
-            modo,
-            tipoConexion: tipo,
-            ipv4,
-            prefijoEstatico,
-        })
+        // `routers.unir`: las direcciones ya son del router que queda (mismo equipo); no se tocan
+        const asignaciones = mismoEquipo
+            ? asignacionesAntes
+            : await reconciliarAsignaciones(t.trx, {
+                  servicioId: id,
+                  routerId,
+                  plan,
+                  modo,
+                  tipoConexion: tipo,
+                  ipv4,
+                  prefijoEstatico,
+              })
 
         const excepcionesCambiadas = await guardarExcepciones(t.trx, id, excepciones)
 
@@ -253,6 +263,7 @@ export default class EditarServicio extends DomainAction<EntradaEditarServicio, 
                 servicio_id: id,
                 empresa_id: despues.empresa_id,
                 campos,
+                ...(mismoEquipo ? { motivo: 'union_routers' as const } : {}),
             })
         }
         if (campos.includes('ips') || campos.includes('prefijo_v6')) {

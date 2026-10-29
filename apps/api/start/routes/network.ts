@@ -6,9 +6,12 @@
 import { definirRuta, type Ruta } from '#shared/rutas'
 import { lista, pagina } from '#shared/openapi/esquemas'
 import * as v from '#network/validators'
-import { exigirAlcance } from '#core/acl'
+import { exigirAlcance, filtrarPorAlcance } from '#core/acl'
+import db from '@adonisjs/lucid/services/db'
 import CrearRouter from '#network/actions/crear_router'
 import EditarRouter from '#network/actions/editar_router'
+import UnirRouters from '#network/actions/unir_routers'
+import { gruposDuplicados } from '#network/routers_duplicados'
 import CambiarControlVelocidad from '#network/actions/cambiar_control_velocidad'
 import CrearRedIpv4 from '#network/actions/crear_red_ipv4'
 import { listarRedesIpv4, listarRouters, verRouter } from '#network/consultas/routers'
@@ -27,6 +30,8 @@ import {
     ResumenSesionesRouter,
     MigracionAaaRouter,
     VistaPreviaControl,
+    GrupoRoutersDuplicados,
+    UnionRouters,
 } from '#network/esquemas'
 import CrearBloqueIpv6 from '#network/actions/crear_bloque_ipv6'
 import CrearPoolIpv6 from '#network/actions/crear_pool_ipv6'
@@ -80,6 +85,34 @@ const routers: Ruta[] = [
     }),
     definirRuta({
         metodo: 'get',
+        ruta: '/routers/duplicados',
+        operacion: 'routersDuplicados',
+        resumen: 'Routers activos que parecen el mismo MikroTik (para unirlos)',
+        descripcion:
+            'Grupos de routers activos que comparten la dirección de la API (host:puerto), la nas_ip o el número de ' +
+            'serie del equipo (que lee el sondeo), con sus servicios. Con `router_id`, solo el grupo de ese router ' +
+            '(aviso en la ficha); lista vacía si no tiene duplicados. Se resuelven con POST /routers/:id/unir ' +
+            '(contratos/routers.md §2).',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        query: v.duplicadosRoutersValidator,
+        respuesta: {
+            status: 200,
+            descripcion: 'Grupos de duplicados',
+            esquema: lista(GrupoRoutersDuplicados),
+        },
+        handler: async (ctx, { query }) => {
+            let visibles: number[] | null = null
+            if (ctx.alcance) {
+                const consulta = db.from('network.routers').select('id')
+                filtrarPorAlcance(consulta, ctx.alcance, { router: (q, ids) => q.whereIn('id', ids) })
+                visibles = ((await consulta) as Array<{ id: number }>).map((f) => Number(f.id))
+            }
+            return gruposDuplicados({ routerId: query.router_id, routers: visibles })
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
         ruta: '/routers/:id',
         operacion: 'routersVer',
         resumen: 'Ver router',
@@ -125,6 +158,35 @@ const routers: Ruta[] = [
                 { ...cuerpo, id: Number(params.id) },
                 ctx.contextoAccion(),
             )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/unir',
+        operacion: 'routersUnir',
+        resumen: 'Unir dos registros del mismo MikroTik (el router :id absorbe a absorber_id)',
+        descripcion:
+            'Solo admin. Pasan al router :id las implementaciones de planes (si los dos implementan el mismo plan, ' +
+            'gana la de :id y se avisa), las redes IPv4, los bloques y pools IPv6, los servicios no retirados (cada ' +
+            'uno con servicios.editar anidada: auditoría, servicio.config_cambiada con router y motivo ' +
+            'union_routers, aaa y RouterOS por evento, sin cambiar sus direcciones) y las sesiones abiertas. El ' +
+            'absorbido queda desactivado con unido_a_id. `version` es la del router :id (409 si cambió). ' +
+            '`simular: true` devuelve lo que pasaría con sus avisos sin guardar nada. 422 `router_unido`, ' +
+            '`router_inactivo` o `servicio_no_unible` (contratos/routers.md §3).',
+        etiqueta: 'routers',
+        permiso: 'routers.unir',
+        cuerpo: v.unirRoutersValidator,
+        versionada: true,
+        idempotente: true,
+        respuesta: { status: 200, descripcion: 'Unión (o su simulación)', esquema: UnionRouters },
+        handler: (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            exigirAlcance(ctx.alcance, { router: [cuerpo.absorber_id] })
+            const entrada = { id, version: cuerpo.version, absorber_id: cuerpo.absorber_id }
+            return cuerpo.simular
+                ? UnirRouters.simular(entrada, ctx.contextoAccion())
+                : new UnirRouters().execute(entrada, ctx.contextoAccion())
         },
     }),
     // A2: vista previa del cambio de modo (lo ejecuta el worker de RouterOS con el evento).

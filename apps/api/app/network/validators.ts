@@ -376,3 +376,17 @@ export const desconectarSesionValidator = vine.compile(
 
 /** `GET /routers/:id/vista-previa-control?a=` (A2): modo al que se cambiaría. */
 export const vistaPreviaControlValidator = vine.compile(vine.object({ a: vine.enum(CONTROLES_VELOCIDAD) }))
+
+/** `GET /routers/duplicados` (`contratos/routers.md` §2): con `router_id`, solo su grupo. */
+export const duplicadosRoutersValidator = vine.compile(
+    vine.object({ router_id: vine.number().withoutDecimals().positive().optional() }),
+)
+
+/** `POST /routers/:id/unir` (`contratos/routers.md` §3): `version` del router que queda. */
+export const unirRoutersValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        absorber_id: vine.number().withoutDecimals().positive(),
+        simular: vine.boolean().optional(),
+    }),
+)

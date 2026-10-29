@@ -1,6 +1,7 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { registrarContactoRouter } from '#network/contacto_router'
 import { routerDispatcher } from '#network/routeros/consultas'
+import { identificarRouter } from '#network/routeros/identidad'
 import {
     bitacoraRed,
     fabricaPorDefecto,
@@ -29,6 +30,8 @@ export interface ResultadoSondear {
  * WISP). Si responde, anota el contacto con fuente `sondeo`; si no, no escribe nada y `en_linea`
  * pasa a false cuando se cumple el umbral. Un router sin credenciales no se sondea: si tampoco
  * manda accounting, queda «sin dato» (`en_linea` null).
+ *
+ * Si responde, además lee su número de serie (`identificarRouter`, `contratos/routers.md`).
  *
  * Cada GET enviado queda en `audit.red` (`tipo = routeros`, `comando.operacion = sondear`) con la
  * respuesta o el error del equipo, fuera de la transacción (el GET ya ocurrió aunque se revierta).
@@ -91,6 +94,8 @@ export default class SondearRouters extends DomainAction<EntradaSondear, Resulta
                     respuesta: { status: 200, rtt_ms: Math.round(performance.now() - inicio) },
                     ok: true,
                 })
+                // A1: número de serie del equipo para detectar routers duplicados (`contratos/routers.md`)
+                await identificarRouter(t, cliente, id)
             } catch (error) {
                 const e = error as Error & { status?: number | null; tipo?: string }
                 resultado.sin_respuesta.push({ router_id: id, error: e.message })

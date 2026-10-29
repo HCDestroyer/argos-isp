@@ -62,6 +62,8 @@ export const PERMISOS = {
     'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
         'Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin',
+    'routers.unir':
+        'Unir dos registros del mismo MikroTik: servicios, redes, pools, planes y sesiones pasan al que queda; solo admin',
     'redes.ver': 'Ver redes IPv4',
     'redes.crear': 'Crear redes IPv4',
     'ipv6.ver': 'Ver bloques y pools IPv6',

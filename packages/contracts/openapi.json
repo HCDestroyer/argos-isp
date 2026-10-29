@@ -55969,6 +55969,7 @@
                         "routers.crear",
                         "routers.editar",
                         "routers.marcar_migrado",
+                        "routers.unir",
                         "routers.ver",
                         "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
@@ -56298,6 +56299,7 @@
                         "routers.crear",
                         "routers.editar",
                         "routers.marcar_migrado",
+                        "routers.unir",
                         "routers.ver",
                         "servicios.activar_instalacion",
                         "servicios.adicional_cortesia",
@@ -57957,6 +57959,139 @@
         "x-implementado": true
       }
     },
+    "/api/v1/routers/{id}/unir": {
+      "post": {
+        "operationId": "routersUnir",
+        "summary": "Unir dos registros del mismo MikroTik (el router :id absorbe a absorber_id)",
+        "description": "Solo admin. Pasan al router :id las implementaciones de planes (si los dos implementan el mismo plan, gana la de :id y se avisa), las redes IPv4, los bloques y pools IPv6, los servicios no retirados (cada uno con servicios.editar anidada: auditoría, servicio.config_cambiada con router y motivo union_routers, aaa y RouterOS por evento, sin cambiar sus direcciones) y las sesiones abiertas. El absorbido queda desactivado con unido_a_id. `version` es la del router :id (409 si cambió). `simular: true` devuelve lo que pasaría con sus avisos sin guardar nada. 422 `router_unido`, `router_inactivo` o `servicio_no_unible` (contratos/routers.md §3).",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "version leída; si cambió responde 409"
+                  },
+                  "absorber_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "simular": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "version",
+                  "absorber_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unión (o su simulación)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnionRouters"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.unir; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de versión",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.unir",
+        "x-implementado": true
+      }
+    },
     "/api/v1/routers/{id}/vista-previa-control": {
       "get": {
         "operationId": "routersVistaPreviaControl",
@@ -58049,6 +58184,82 @@
           }
         },
         "x-permiso": "routers.cambiar_control_velocidad",
+        "x-implementado": true
+      }
+    },
+    "/api/v1/routers/duplicados": {
+      "get": {
+        "operationId": "routersDuplicados",
+        "summary": "Routers activos que parecen el mismo MikroTik (para unirlos)",
+        "description": "Grupos de routers activos que comparten la dirección de la API (host:puerto), la nas_ip o el número de serie del equipo (que lee el sondeo), con sus servicios. Con `router_id`, solo el grupo de ese router (aviso en la ficha); lista vacía si no tiene duplicados. Se resuelven con POST /routers/:id/unir (contratos/routers.md §2).",
+        "tags": [
+          "routers"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "router_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Grupos de duplicados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GrupoRoutersDuplicados"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso routers.ver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "routers.ver",
         "x-implementado": true
       }
     },
@@ -63259,6 +63470,7 @@
                             "routers.crear",
                             "routers.editar",
                             "routers.marcar_migrado",
+                            "routers.unir",
                             "routers.ver",
                             "servicios.activar_instalacion",
                             "servicios.adicional_cortesia",
@@ -79412,6 +79624,154 @@
           }
         }
       },
+      "GrupoRoutersDuplicados": {
+        "type": "object",
+        "required": [
+          "motivos",
+          "claves",
+          "routers"
+        ],
+        "properties": {
+          "motivos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "api",
+                "nas_ip",
+                "serial"
+              ],
+              "description": "api: mismo host:puerto de la API REST (api_url o https://<host>); nas_ip: misma nas_ip; serial: mismo número de serie o software-id del equipo"
+            },
+            "description": "Por qué parecen el mismo equipo"
+          },
+          "claves": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "motivo",
+                "valor"
+              ],
+              "properties": {
+                "motivo": {
+                  "type": "string",
+                  "enum": [
+                    "api",
+                    "nas_ip",
+                    "serial"
+                  ],
+                  "description": "api: mismo host:puerto de la API REST (api_url o https://<host>); nas_ip: misma nas_ip; serial: mismo número de serie o software-id del equipo"
+                },
+                "valor": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Valores compartidos por dos o más routers del grupo"
+          },
+          "routers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "nombre",
+                "host",
+                "api_url",
+                "nas_ip",
+                "serial",
+                "control_velocidad",
+                "servicios_total",
+                "sesiones_abiertas",
+                "servicios",
+                "version"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "api_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "nas_ip": {
+                  "type": "string"
+                },
+                "serial": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "control_velocidad": {
+                  "type": "string",
+                  "enum": [
+                    "simple",
+                    "arbol_pcq"
+                  ]
+                },
+                "servicios_total": {
+                  "type": "integer",
+                  "description": "Servicios no retirados del router"
+                },
+                "sesiones_abiertas": {
+                  "type": "integer",
+                  "description": "Sesiones PPPoE abiertas atribuidas al router"
+                },
+                "servicios": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "cliente_id",
+                      "user_ppp",
+                      "estado",
+                      "tipo_conexion"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "cliente_id": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "user_ppp": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "estado": {
+                        "type": "string"
+                      },
+                      "tipo_conexion": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "description": "Los primeros 50 servicios no retirados (por id)"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
       "HabilitacionLibro": {
         "type": "object",
         "required": [
@@ -82360,6 +82720,7 @@
           "routers.crear",
           "routers.editar",
           "routers.marcar_migrado",
+          "routers.unir",
           "routers.ver",
           "servicios.activar_instalacion",
           "servicios.adicional_cortesia",
@@ -82582,6 +82943,7 @@
           "Crear routers",
           "Editar routers y sus credenciales",
           "Marcar cuándo un router pasó al nuevo RADIUS (aaa)",
+          "Unir dos registros del mismo MikroTik: servicios, redes, pools, planes y sesiones pasan al que queda; solo admin",
           "Ver routers",
           "Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)",
           "Dar un adicional de cortesía (sin cobro, con motivo); se exige además de agregar o editar",
@@ -94645,6 +95007,7 @@
               "routers.crear",
               "routers.editar",
               "routers.marcar_migrado",
+              "routers.unir",
               "routers.ver",
               "servicios.activar_instalacion",
               "servicios.adicional_cortesia",
@@ -95130,6 +95493,21 @@
             ],
             "format": "date-time",
             "description": "Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un comando de RouterOS (`audit.red` con ok); null si nunca"
+          },
+          "serial": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Número de serie del equipo (`/system/routerboard` serial-number) o software-id (`/system/license`, CHR), leído por el sondeo; null = no se conoce. Sirve para detectar el mismo MikroTik registrado dos veces (GET /routers/duplicados). La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan"
+          },
+          "unido_a_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Router que absorbió a este con POST /routers/:id/unir (este queda inactivo); null = no está unido. La API siempre lo envía; opcional en el esquema hasta que las fixtures del panel lo traigan"
           },
           "version": {
             "type": "integer",
@@ -97967,6 +98345,133 @@
                 }
               }
             }
+          }
+        }
+      },
+      "UnionRouters": {
+        "type": "object",
+        "required": [
+          "router_id",
+          "absorbido_id",
+          "simulado",
+          "coincidencias",
+          "servicios",
+          "redes_ipv4",
+          "ipv6_bloques",
+          "planes_movidos",
+          "planes_descartados",
+          "sesiones_abiertas",
+          "avisos",
+          "router",
+          "absorbido"
+        ],
+        "properties": {
+          "router_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "El router que queda"
+          },
+          "absorbido_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "El router absorbido (queda desactivado y unido)"
+          },
+          "simulado": {
+            "type": "boolean",
+            "description": "true = simulación: no se guardó nada"
+          },
+          "coincidencias": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "api",
+                "nas_ip",
+                "serial"
+              ],
+              "description": "api: mismo host:puerto de la API REST (api_url o https://<host>); nas_ip: misma nas_ip; serial: mismo número de serie o software-id del equipo"
+            },
+            "description": "Claves que comparten; vacío = no parecen el mismo equipo (va un aviso)"
+          },
+          "servicios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicio_id",
+                "user_ppp",
+                "estado",
+                "tipo_conexion"
+              ],
+              "properties": {
+                "servicio_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "user_ppp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "estado": {
+                  "type": "string"
+                },
+                "tipo_conexion": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Servicios que pasan al router que queda (conservan sus direcciones)"
+          },
+          "redes_ipv4": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Redes IPv4 que pasan al que queda"
+          },
+          "ipv6_bloques": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Bloques IPv6 (con sus pools) que pasan al que queda"
+          },
+          "planes_movidos": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "plan_id de las implementaciones que pasan al que queda"
+          },
+          "planes_descartados": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "plan_id implementados en los dos: gana la del que queda y se descarta la del absorbido"
+          },
+          "sesiones_abiertas": {
+            "type": "integer",
+            "description": "Sesiones abiertas que pasan al que queda"
+          },
+          "avisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lo que el operador debe saber antes de confirmar"
+          },
+          "router": {
+            "$ref": "#/components/schemas/Router"
+          },
+          "absorbido": {
+            "$ref": "#/components/schemas/Router"
           }
         }
       },

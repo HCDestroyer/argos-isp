@@ -214,11 +214,14 @@ export async function routersConHistorial(
     cliente: QueryClientContract = db.connection(),
 ): Promise<number[]> {
     const filas = (await cliente
-        .from('audit.red')
-        .where('servicio_id', servicioId)
-        .where('tipo', 'routeros')
-        .whereNotNull('router_id')
-        .distinct('router_id')) as Array<{ router_id: number }>
+        .from('audit.red as a')
+        .join('network.routers as r', 'r.id', 'a.router_id')
+        .where('a.servicio_id', servicioId)
+        .where('a.tipo', 'routeros')
+        // un router unido a otro (`routers.unir`) es el mismo equipo que el que queda: limpiar en él
+        // borraría lo que el router actual acaba de crear (`contratos/routers.md`)
+        .whereNull('r.unido_a_id')
+        .distinct('a.router_id')) as Array<{ router_id: number }>
     return filas.map((f) => Number(f.router_id))
 }
 
