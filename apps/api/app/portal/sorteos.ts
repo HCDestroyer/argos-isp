@@ -128,7 +128,7 @@ function textoONulo(valor: unknown): string | null {
 export async function sorteoPublico(id: number): Promise<SorteoPublico> {
     const s = await verSorteo(id).catch(() => null)
     if (!s || s.estado === 'borrador' || !s.bases_hash) {
-        throw new NoEncontrado('El sorteo no existe o aún no publica sus bases')
+        throw new NoEncontrado('Ese sorteo no está disponible. Revisa los sorteos vigentes en tu cuenta.')
     }
     const terminado = ESTADOS_TERMINADOS.includes(s.estado)
     const ganadores = terminado ? await ganadoresDe(s.id) : null

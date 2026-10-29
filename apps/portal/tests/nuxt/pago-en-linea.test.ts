@@ -211,7 +211,7 @@ describe('retorno /corte?pago=<id>', () => {
         }
         await esperar()
         const aviso = wrapper.find('[data-testid="pago-sin-confirmar"]')
-        expect(aviso.text()).toContain('Aún no recibimos la confirmación de tu pago')
+        expect(aviso.text()).toContain('Estamos esperando la confirmación de tu pago')
         expect(aviso.text()).toContain('Revisar de nuevo')
         expect(aviso.text()).toContain('Volver a la página de pago')
     })

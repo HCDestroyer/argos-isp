@@ -320,7 +320,10 @@ test.group('Portal: solicitar promesa de pago', (group) => {
             409,
         )
         assert.equal(repetida.body().type, 'urn:argosisp:problema:promesa_abierta')
-        assert.equal(repetida.body().detail, 'Ya tienes una promesa de pago en curso.')
+        assert.equal(
+            repetida.body().detail,
+            'Ya tienes una promesa de pago en curso. Puedes verla en tu cuenta; paga antes de su fecha para mantener tu servicio.',
+        )
     })
 
     test('IP desconocida: 422 no_identificado y nada guardado', async ({ client, assert }) => {

@@ -83,7 +83,10 @@ export default class SolicitarCodigoPortal extends DomainAction<EntradaSolicitar
             : await clientePorIdentificador(t.trx, input.identificador ?? '')
         if (clienteId === null) {
             if (porIp) {
-                throw new ReglaNegocio('No encontramos un servicio para tu conexión', 'no_identificado')
+                throw new ReglaNegocio(
+                    'No encontramos un servicio para tu conexión. Escribe tu NIT, CUI o usuario de conexión para recibir el código.',
+                    'no_identificado',
+                )
             }
             return ciega
         }
@@ -215,7 +218,7 @@ export class EnvioCodigoFallido extends Problema {
             503,
             'envio_codigo_fallido',
             'No pudimos enviar el código',
-            `El envío por ${canal} falló; intenta de nuevo en unos minutos`,
+            `No pudimos enviarte el código por ${canal}. Intenta de nuevo en unos minutos.`,
         )
         this.cause = causa
     }

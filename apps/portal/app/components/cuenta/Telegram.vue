@@ -239,7 +239,7 @@ async function quitar() {
                 v-if="telegram.estado.value && !disponible"
                 class="text-xs text-muted"
             >
-                La vinculación con Telegram aún no está disponible.
+                La vinculación con Telegram no está disponible en este momento. Recibirás tus avisos por correo o por tu canal preferido.
             </p>
         </template>
 

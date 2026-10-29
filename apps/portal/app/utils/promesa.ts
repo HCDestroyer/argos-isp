@@ -25,15 +25,15 @@ export function esquemaPromesa(
         : null
     return z.object({
         vence_el: z.string()
-            .regex(FECHA, 'Elige una fecha')
-            .refine(fecha => !minima || fecha >= minima, 'La fecha ya pasó')
-            .refine(fecha => !maxima || fecha <= maxima, `La fecha no puede pasar del ${formatearFecha(maxima)}`),
+            .regex(FECHA, 'Elige el día en que vas a pagar')
+            .refine(fecha => !minima || fecha >= minima, 'Esa fecha ya pasó: elige hoy o un día posterior')
+            .refine(fecha => !maxima || fecha <= maxima, `Elige una fecha hasta el ${formatearFecha(maxima)}`),
         monto: z.string().trim()
             .regex(DINERO, 'Escribe el monto con hasta 2 decimales, sin la Q')
-            .refine(monto => !DINERO.test(monto) || new Decimal(monto).greaterThan(0), 'El monto debe ser mayor que 0')
+            .refine(monto => !DINERO.test(monto) || new Decimal(monto).greaterThan(0), 'Escribe un monto mayor que Q 0.00')
             .refine(
                 monto => !maximo || !DINERO.test(monto) || new Decimal(monto).lessThanOrEqualTo(maximo),
-                `El monto no puede pasar de ${formatearQuetzales(maximo)}`,
+                `El monto no puede pasar de ${formatearQuetzales(maximo)}: escribe esa cantidad o menos`,
             )
             .refine(() => previo === null, `Primero paga ${formatearQuetzales(previo)}; después solicita la promesa`),
     })

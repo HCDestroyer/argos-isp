@@ -141,6 +141,7 @@ async function guardar(evento: FormSubmitEvent<Datos>) {
             <UFormField
                 label="¿Por dónde prefieres recibir avisos?"
                 name="canal_preferido"
+                required
             >
                 <URadioGroup
                     v-model="estado.canal_preferido"

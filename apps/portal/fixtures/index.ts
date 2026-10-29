@@ -548,7 +548,7 @@ const rutasBase: RutasFixture = {
         const sorteo = SORTEOS_PUBLICOS_FIXTURE[Number(params.id)]
         return sorteo
             ? { status: 200, cuerpo: sorteo }
-            : problema(404, 'no_encontrado', 'No encontrado', 'El sorteo no existe o aún no publica sus bases')
+            : problema(404, 'no_encontrado', 'No encontrado', 'Ese sorteo no está disponible. Revisa los sorteos vigentes en tu cuenta.')
     },
     'GET /api/v1/portal/quien-soy': () => {
         consultasEstado = 0
@@ -649,7 +649,7 @@ const rutasBase: RutasFixture = {
         }
         const escenario = escenarioPromesa()
         if (escenario === 'con_promesa' || promesa.aprobada) {
-            return problema(409, 'promesa_abierta', 'Promesa abierta', 'Ya tienes una promesa de pago en curso.')
+            return problema(409, 'promesa_abierta', 'Promesa abierta', 'Ya tienes una promesa de pago en curso. Puedes verla en tu cuenta; paga antes de su fecha para mantener tu servicio.')
         }
         if (new Decimal(datos.monto ?? '0').greaterThan('525.00')) {
             return {
@@ -794,7 +794,7 @@ const rutasBase: RutasFixture = {
             return SIN_SESION()
         }
         if (!telegram.disponible) {
-            return problema(503, 'telegram_no_configurado', 'Telegram no disponible', 'La vinculación con Telegram aún no está disponible. Intenta más tarde.')
+            return problema(503, 'telegram_no_configurado', 'Telegram no disponible', 'La vinculación con Telegram no está disponible en este momento')
         }
         const empresaId = (pedido as { empresa_id?: number } | undefined)?.empresa_id ?? null
         if (empresaId !== null && !empresasDelCliente().some(e => e.id === empresaId)) {
