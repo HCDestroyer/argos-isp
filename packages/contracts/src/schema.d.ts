@@ -7020,7 +7020,7 @@ export interface paths {
         put?: never;
         /**
          * El cliente solicita una promesa de pago (aprobada, rechazada o pendiente de aprobación)
-         * @description Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si `monto` supera la deuda o la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description La promesa cubre todo lo vencido: Argos calcula el monto (`monto` del cuerpo se ignora) y responde `monto` y `facturas`; se cumple cuando todas quedan pagadas. Llama `promesas.crear` (`CrearPromesaPago` de A3) con canal `portal` (actor `cliente` con la sesión, `sistema` por la IP; con canal `portal` no escribe `aprobada_por`): la promesa se guarda siempre con su evaluación. Aprobada: el servicio se reactiva en la misma transacción (la página lo ve con `GET /portal/estado`). `motivo` va en palabras del cliente. 409 `promesa_abierta` si ya hay una activa o pendiente; 422 si la fecha ya pasó; 422 `servicio_pendiente_instalacion` si el servicio aún no está instalado. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         post: operations["portalSolicitarPromesa"];
         delete?: never;
@@ -7038,7 +7038,7 @@ export interface paths {
         };
         /**
          * Límites de una promesa de pago desde el portal (antes de enviarla)
-         * @description Solo lectura: plazo y fecha máximos del canal portal, monto máximo (deuda), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
+         * @description Solo lectura: plazo y fecha máximos del canal portal, lo que cubriría la promesa (`monto_promesa`: todo lo vencido, y sus `facturas`), abono inicial y si requiere aprobación, de las reglas de la plantilla. No adelanta las reglas de historial: esas las dice el resultado de `POST /portal/promesas`. Sin `servicio_id` identifica el servicio por la IP de origen (página de corte; 422 `no_identificado` si la IP no es de ningún servicio). Con `servicio_id` exige la sesión del portal (cookie `argos_portal`, 401 sin ella) y que el servicio sea del cliente (404 si no). La IP de origen sale del socket, o de `X-Forwarded-For` (`PORTAL_CABECERA_IP`) solo si la conexión viene de un proxy listado en `PORTAL_PROXIES_CONFIABLES`. Límite por IP (IPv6: por /64): `PORTAL_LIMITE_PETICIONES` por `PORTAL_LIMITE_VENTANA_S` (30 por minuto por defecto, contador propio de cada endpoint); al pasarse responde 429 problem+json con `Retry-After`.
          */
         get: operations["portalPromesaCondiciones"];
         put?: never;
@@ -14116,10 +14116,10 @@ export interface components {
              */
             fecha_maxima: string | null;
             plazo_max_dias: number | null;
-            /** @description Deuda pendiente del servicio */
-            monto_maximo: components["schemas"]["Dinero"] | null;
-            /** @description Saldo vencido (o pendiente si no hay vencido) */
-            monto_sugerido: components["schemas"]["Dinero"] | null;
+            /** @description Lo que cubriría la promesa si se crea ahora: todo lo vencido (facturas y mora). El cliente no lo escribe */
+            monto_promesa: components["schemas"]["Dinero"] | null;
+            /** @description Facturas vencidas que cubriría, la más antigua primero. La promesa se cumple cuando todas quedan pagadas */
+            facturas: components["schemas"]["FacturaCubierta"][];
             /** @description La plantilla exige abonar este porcentaje de la deuda antes de prometer */
             abono_inicial: {
                 porcentaje: number;
@@ -14366,7 +14366,15 @@ export interface components {
             servicio_id: number;
             /** Format: date-time */
             vence_en: string;
+            /** @description Total vencido al crearla (regla facturas) o el prometido (legado) */
             monto: components["schemas"]["Dinero"];
+            /**
+             * @description facturas: se cumple al pagar todas las de `facturas`. monto (legado): al pagar el monto
+             * @enum {string}
+             */
+            regla_cumplimiento: "monto" | "facturas";
+            /** @description Facturas que cubre (vacía con la regla monto) */
+            facturas: components["schemas"]["FacturaPromesa"][];
             /** @enum {string} */
             estado: "activa" | "cumplida" | "incumplida" | "cancelada" | "pendiente_aprobacion" | "rechazada";
             /** @enum {string} */
@@ -14380,10 +14388,13 @@ export interface components {
             resultado: "aprobada" | "rechazada" | "pendiente_aprobacion";
             /** Format: date-time */
             vence_en: string;
+            /** @description Total vencido que cubre la promesa (lo calcula Argos) */
             monto: components["schemas"]["Dinero"];
+            /** @description Facturas que cubre; se cumple cuando todas quedan pagadas */
+            facturas: components["schemas"]["FacturaCubierta"][];
             /** @description Resultado en palabras del cliente (nunca el código de la regla) */
             motivo: string;
-            /** @description Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar fecha o monto no sirve: el portal ofrece el contacto */
+            /** @description Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, cambiar la fecha no sirve: el portal ofrece el contacto */
             corregible: boolean;
             /** @description Estado del servicio tras la promesa (solo si quedó aprobada) */
             servicio_estado: components["schemas"]["EstadoServicio"] | null;
@@ -44520,10 +44531,11 @@ export interface operations {
                     /** Format: date */
                     vence_el: string;
                     /**
-                     * @description Monto con hasta 2 decimales, como string
+                     * @deprecated
+                     * @description Obsoleto: se ignora. La promesa cubre todo lo vencido y Argos calcula el monto (respuesta: monto y facturas)
                      * @example 150.00
                      */
-                    monto: string;
+                    monto?: string;
                     /** @description Solo con la sesión del portal; sin él se identifica por la IP de origen */
                     servicio_id?: number;
                 };

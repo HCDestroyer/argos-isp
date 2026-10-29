@@ -13,6 +13,8 @@ import {
     texto,
 } from '#shared/openapi/esquemas'
 import { EstadoServicio } from '#core/esquemas'
+import { FacturaCubierta, FacturaPromesa } from '#billing/esquemas'
+import { REGLAS_CUMPLIMIENTO } from '#billing/promesas'
 import { METODOS_PAGO } from '#shared/eventos'
 import { TIPOS_DESCUENTO, TIPOS_PREMIO } from '#lealtad/premios'
 import { ESTADOS_CANJE } from '#lealtad/canjes'
@@ -441,7 +443,16 @@ export const PortalPromesa = definirEsquema(
         id,
         servicio_id: id,
         vence_en: instante,
-        monto: Dinero,
+        monto: {
+            ...Dinero,
+            description: 'Total vencido al crearla (regla facturas) o el prometido (legado)',
+        },
+        regla_cumplimiento: {
+            ...enumerado(REGLAS_CUMPLIMIENTO),
+            description:
+                'facturas: se cumple al pagar todas las de `facturas`. monto (legado): al pagar el monto',
+        },
+        facturas: { ...lista(FacturaPromesa), description: 'Facturas que cubre (vacía con la regla monto)' },
         estado: enumerado([
             'activa',
             'cumplida',
@@ -474,8 +485,16 @@ export const PortalCondicionesPromesa = definirEsquema(
                 'Último día de pago admitido: plazo máximo del canal portal y antes de la siguiente factura',
         },
         plazo_max_dias: nulable({ ...entero, minimum: 0 }),
-        monto_maximo: { ...nulable(Dinero), description: 'Deuda pendiente del servicio' },
-        monto_sugerido: { ...nulable(Dinero), description: 'Saldo vencido (o pendiente si no hay vencido)' },
+        monto_promesa: {
+            ...nulable(Dinero),
+            description:
+                'Lo que cubriría la promesa si se crea ahora: todo lo vencido (facturas y mora). El cliente no lo escribe',
+        },
+        facturas: {
+            ...lista(FacturaCubierta),
+            description:
+                'Facturas vencidas que cubriría, la más antigua primero. La promesa se cumple cuando todas quedan pagadas',
+        },
         abono_inicial: {
             ...nulable(
                 objeto({
@@ -515,13 +534,17 @@ export const PortalPromesaSolicitada = definirEsquema(
         id,
         resultado: enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
         vence_en: instante,
-        monto: Dinero,
+        monto: { ...Dinero, description: 'Total vencido que cubre la promesa (lo calcula Argos)' },
+        facturas: {
+            ...lista(FacturaCubierta),
+            description: 'Facturas que cubre; se cumple cuando todas quedan pagadas',
+        },
         motivo: { ...texto, description: 'Resultado en palabras del cliente (nunca el código de la regla)' },
         corregible: {
             ...booleano,
             description:
                 'Rechazada por una regla que se cumple con otra fecha (plazo o próxima factura). Si es false, ' +
-                'cambiar fecha o monto no sirve: el portal ofrece el contacto',
+                'cambiar la fecha no sirve: el portal ofrece el contacto',
         },
         servicio_estado: {
             ...nulable(EstadoServicio),

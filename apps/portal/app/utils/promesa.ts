@@ -5,21 +5,22 @@ import type { Schema } from '@argosisp/contracts'
 /** Formulario de promesa de pago (tarea 4): esquema, textos de límites e `Idempotency-Key`. */
 
 type Condiciones = Schema<'PortalCondicionesPromesa'>
+type FacturaCubierta = Schema<'FacturaCubierta'>
 
 const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
-const DINERO = /^\d{1,12}(\.\d{1,2})?$/
 
 /**
  * Espejo de `solicitarPromesaValidator` (apps/api/app/portal/validators.ts) más los límites que
- * mostró `GET /portal/promesas/condiciones` (de `limitesPromesa()` de A3): fecha dentro del plazo,
- * monto hasta la deuda y, si hay `pago_previo` (abono inicial o deuda vencida sobre el máximo), no
- * se envía: la evaluación de A3 la rechazaría. Solo ayuda a corregir antes de enviar: la decisión
- * es del backend.
+ * mostró `GET /portal/promesas/condiciones` (de `limitesPromesa()` de A3): fecha dentro del plazo y,
+ * si hay `pago_previo` (abono inicial o deuda vencida sobre el máximo), no se envía: la evaluación
+ * de A3 la rechazaría. El cliente no escribe un monto: la promesa cubre todo lo vencido
+ * (`contratos/promesas.md`, «Monto y cumplimiento»). Solo ayuda a corregir antes de enviar: la
+ * decisión es del backend.
  */
 export function esquemaPromesa(
-    condiciones: Pick<Condiciones, 'fecha_minima' | 'fecha_maxima' | 'monto_maximo'> & Partial<Pick<Condiciones, 'pago_previo'>>,
+    condiciones: Pick<Condiciones, 'fecha_minima' | 'fecha_maxima'> & Partial<Pick<Condiciones, 'pago_previo'>>,
 ) {
-    const { fecha_minima: minima, fecha_maxima: maxima, monto_maximo: maximo } = condiciones
+    const { fecha_minima: minima, fecha_maxima: maxima } = condiciones
     const previo = condiciones.pago_previo && new Decimal(condiciones.pago_previo).greaterThan(0)
         ? condiciones.pago_previo
         : null
@@ -27,16 +28,30 @@ export function esquemaPromesa(
         vence_el: z.string()
             .regex(FECHA, 'Elige el día en que vas a pagar')
             .refine(fecha => !minima || fecha >= minima, 'Esa fecha ya pasó: elige hoy o un día posterior')
-            .refine(fecha => !maxima || fecha <= maxima, `Elige una fecha hasta el ${formatearFecha(maxima)}`),
-        monto: z.string().trim()
-            .regex(DINERO, 'Escribe el monto con hasta 2 decimales, sin la Q')
-            .refine(monto => !DINERO.test(monto) || new Decimal(monto).greaterThan(0), 'Escribe un monto mayor que Q 0.00')
-            .refine(
-                monto => !maximo || !DINERO.test(monto) || new Decimal(monto).lessThanOrEqualTo(maximo),
-                `El monto no puede pasar de ${formatearQuetzales(maximo)}: escribe esa cantidad o menos`,
-            )
+            .refine(fecha => !maxima || fecha <= maxima, `Elige una fecha hasta el ${formatearFecha(maxima)}`)
             .refine(() => previo === null, `Primero paga ${formatearQuetzales(previo)}; después solicita la promesa`),
     })
+}
+
+/** Lo que cubre la promesa: "Servicio de octubre 2026", "Recargo por mora" o "Cargo de octubre 2026". */
+export function conceptoCubierta(factura: Pick<FacturaCubierta, 'tipo' | 'periodo'>): string {
+    if (factura.tipo === 'mora') {
+        return 'Recargo por mora'
+    }
+    return `${factura.tipo === 'cargo' ? 'Cargo' : 'Servicio'} de ${formatearPeriodo(factura.periodo)}`
+}
+
+/** "Cubre 2 facturas vencidas: se cumple al pagarlas todas" (lista de promesas de `/cuenta`). */
+export function textoCoberturaPromesa(facturas: number): string {
+    return facturas === 1
+        ? 'Cubre 1 factura vencida: se cumple al pagarla'
+        : `Cubre ${facturas} facturas vencidas: se cumple al pagarlas todas`
+}
+
+/** Se ofrece la promesa solo si hay algo vencido que cubrir. */
+export function hayVencidoQuePrometer(condiciones: Pick<Condiciones, 'monto_promesa'> | null | undefined): boolean {
+    const monto = condiciones?.monto_promesa
+    return !!monto && new Decimal(monto).greaterThan(0)
 }
 
 /**
@@ -49,7 +64,7 @@ export function textoPagoPrevio(condiciones: Pick<Condiciones, 'deuda_maxima'>):
     if (deuda && new Decimal(deuda.faltante).greaterThan(0)) {
         partes.push(`Tu saldo vencido (${montoEnTexto(deuda.vencida)}) pasa del máximo para una promesa (${montoEnTexto(deuda.maximo)}).`)
     }
-    partes.push('Paga en línea, en la oficina o por depósito y luego solicita la promesa.')
+    partes.push('Paga en línea, en la oficina o por depósito y luego solicita la promesa: cubrirá lo que quede vencido.')
     return partes.join(' ')
 }
 

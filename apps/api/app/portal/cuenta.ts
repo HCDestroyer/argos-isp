@@ -10,6 +10,7 @@ import { estadoCuenta } from '#billing/estado_cuenta'
 import { bonificacionesRecientes, type BonificacionPortal } from '#portal/bonificaciones'
 import { DateTime } from 'luxon'
 import type { TipoPlan } from '#network/tipos_plan'
+import type { FacturaPromesa, ReglaCumplimiento } from '#billing/promesas'
 import {
     SQL_EMPRESA_FACTURA,
     empresaPrincipalDelCliente,
@@ -167,6 +168,8 @@ export interface PromesaPortal {
     servicio_id: number
     vence_en: Date
     monto: string
+    regla_cumplimiento: ReglaCumplimiento
+    facturas: FacturaPromesa[]
     estado: string
     canal: string
     created_at: Date
@@ -552,6 +555,23 @@ export async function promesasPortal(
             'pr.servicio_id',
             'pr.vence_en',
             'pr.monto',
+            'pr.regla_cumplimiento',
+            // mismas columnas que `verPromesa` de A3 (`FacturaPromesa`): saldo al crearla y hoy
+            db.raw(`coalesce((
+                select json_agg(json_build_object(
+                    'factura_id', f.id,
+                    'tipo', f.tipo,
+                    'periodo', to_char(f.periodo, 'YYYY-MM-DD'),
+                    'vence_en', to_char(f.vence_en, 'YYYY-MM-DD'),
+                    'monto', pf.monto::text,
+                    'saldo', (case when f.estado in ('emitida', 'parcial', 'vencida')
+                        then f.total - f.pagado else 0 end)::numeric(14, 2)::text,
+                    'estado', f.estado
+                ) order by f.vence_en, f.id)
+                from billing.promesas_facturas pf
+                join billing.facturas f on f.id = pf.factura_id
+                where pf.promesa_id = pr.id
+            ), '[]'::json) as facturas`),
             'pr.estado',
             'pr.canal',
             'pr.created_at',

@@ -134,7 +134,7 @@ test.group('Portal: servicio pendiente de instalación', (group) => {
             .post('/api/v1/portal/promesas')
             .header('X-Forwarded-For', s.ip)
             .header('Idempotency-Key', randomUUID())
-            .json({ vence_el: '2099-01-01', monto: '100.00' })
+            .json({ vence_el: '2099-01-01' })
         respuesta.assertStatus(422)
         assert.equal(respuesta.body().type, 'urn:argosisp:problema:servicio_pendiente_instalacion')
         assert.include(respuesta.body().detail, 'pendiente de instalación')

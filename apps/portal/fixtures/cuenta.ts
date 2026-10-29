@@ -401,11 +401,28 @@ export const PAGOS_FIXTURE: Schema<'PortalPago'>[] = [
 ]
 
 export const PROMESAS_FIXTURE: Schema<'PortalPromesa'>[] = [
+    // Cubre todo lo vencido al crearla (regla `facturas`): se cumplió al pagar la 1040.
+    {
+        id: 91,
+        servicio_id: 41,
+        vence_en: '2026-07-14T05:59:59.000Z',
+        monto: '175.00',
+        regla_cumplimiento: 'facturas',
+        facturas: [
+            { factura_id: 1040, tipo: 'servicio', periodo: '2026-07-01', vence_en: '2026-07-10', monto: '175.00', saldo: '0.00', estado: 'pagada' },
+        ],
+        estado: 'cumplida',
+        canal: 'portal',
+        created_at: '2026-07-11T15:00:00.000Z',
+    },
     {
         id: 77,
         servicio_id: 41,
         vence_en: '2026-08-20T05:59:59.000Z',
         monto: '175.00',
+        // de antes de que la promesa cubriera todo lo vencido: conserva su monto, sin facturas
+        regla_cumplimiento: 'monto',
+        facturas: [],
         estado: 'incumplida',
         canal: 'operador',
         created_at: '2026-08-15T14:00:00.000Z',

@@ -5,7 +5,6 @@
  * El portal usa sesión por cookie httpOnly (sin Bearer). En fixtures la sesión es un estado en
  * memoria: se abre con el código `123456` (`POST /portal/verificar`) y se cierra con `salir`.
  */
-import Decimal from 'decimal.js'
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture } from '~/utils/fetchFixtures'
 import { ESCENARIOS_CORTE, ESTADO_REACTIVADO, estadoDe, type EscenarioCorte } from './corte'
@@ -38,6 +37,7 @@ import {
 import {
     condicionesConPagoPrevioFixture,
     condicionesConPromesaFixture,
+    condicionesSinVencidoFixture,
     condicionesFixture,
     promesaSolicitadaFixture,
     type EscenarioResultadoFixture,
@@ -56,12 +56,12 @@ function escenarioCorte(): EscenarioCorte {
 let consultasEstado = 0
 
 /**
- * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|rechazada_fecha|pendiente_aprobacion|con_promesa` en la
+ * Promesa de pago en fixtures: `?promesa=aprobada|rechazada|rechazada_fecha|pendiente_aprobacion|con_promesa|con_pago_previo|sin_vencido` en la
  * URL (solo desarrollo) o `fijarPromesaFixture` en pruebas. Por defecto, aprobada. Tras una
  * aprobada, `/portal/estado` responde `activo` y la cuenta muestra el servicio activo.
  */
-type EscenarioPromesa = EscenarioResultadoFixture | 'con_promesa' | 'con_pago_previo'
-const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'rechazada_fecha', 'pendiente_aprobacion', 'con_promesa', 'con_pago_previo']
+type EscenarioPromesa = EscenarioResultadoFixture | 'con_promesa' | 'con_pago_previo' | 'sin_vencido'
+const ESCENARIOS_PROMESA: readonly EscenarioPromesa[] = ['aprobada', 'rechazada', 'rechazada_fecha', 'pendiente_aprobacion', 'con_promesa', 'con_pago_previo', 'sin_vencido']
 const promesa: { escenario: EscenarioPromesa | null, aprobada: boolean } = { escenario: null, aprobada: false }
 
 export function fijarPromesaFixture(escenario: EscenarioPromesa | null): void {
@@ -639,11 +639,14 @@ const rutasBase: RutasFixture = {
                 ? condicionesConPromesaFixture()
                 : escenarioPromesa() === 'con_pago_previo'
                     ? condicionesConPagoPrevioFixture()
-                    : condicionesFixture(),
+                    : escenarioPromesa() === 'sin_vencido'
+                        ? condicionesSinVencidoFixture()
+                        : condicionesFixture(),
         }
     },
     'POST /api/v1/portal/promesas': ({ cuerpo }) => {
-        const datos = (cuerpo ?? {}) as { vence_el?: string, monto?: string, servicio_id?: number }
+        // `monto` ya no se envía: la promesa cubre todo lo vencido (Argos lo calcula)
+        const datos = (cuerpo ?? {}) as { vence_el?: string, servicio_id?: number }
         if (datos.servicio_id !== undefined && !sesion.abierta) {
             return SIN_SESION()
         }
@@ -651,23 +654,15 @@ const rutasBase: RutasFixture = {
         if (escenario === 'con_promesa' || promesa.aprobada) {
             return problema(409, 'promesa_abierta', 'Promesa abierta', 'Ya tienes una promesa de pago en curso. Puedes verla en tu cuenta; paga antes de su fecha para mantener tu servicio.')
         }
-        if (new Decimal(datos.monto ?? '0').greaterThan('525.00')) {
-            return {
-                status: 422,
-                cuerpo: {
-                    type: 'urn:argosisp:problema:validacion',
-                    title: 'Datos inválidos',
-                    status: 422,
-                    errors: [{ field: 'monto', message: 'El monto supera la deuda pendiente del servicio (Q525.00)' }],
-                } satisfies Problem,
-            }
+        if (escenario === 'sin_vencido') {
+            return problema(422, 'sin_deuda', 'Sin deuda vencida', 'No tienes facturas vencidas: no necesitas una promesa de pago.')
         }
         if (escenario === 'aprobada') {
             promesa.aprobada = true
         }
         return {
             status: 201,
-            cuerpo: promesaSolicitadaFixture(escenario === 'con_pago_previo' ? 'rechazada' : escenario, { vence_el: datos.vence_el ?? '', monto: datos.monto ?? '' }),
+            cuerpo: promesaSolicitadaFixture(escenario === 'con_pago_previo' ? 'rechazada' : escenario, { vence_el: datos.vence_el ?? '' }),
         }
     },
     'POST /api/v1/portal/pagos/iniciar': ({ cuerpo }) => {

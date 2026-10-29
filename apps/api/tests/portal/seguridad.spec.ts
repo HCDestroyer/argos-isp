@@ -234,9 +234,7 @@ test.group('Portal seguridad: dos clientes y dos IPs', (group) => {
         )
         await guardar(
             desdeA(
-                client
-                    .post('/api/v1/portal/promesas')
-                    .json({ vence_el: dia(1), monto: '1.00', servicio_id: b.servicioId }),
+                client.post('/api/v1/portal/promesas').json({ vence_el: dia(1), servicio_id: b.servicioId }),
             ),
             401,
         )
@@ -342,9 +340,7 @@ test.group('Portal seguridad: dos clientes y dos IPs', (group) => {
         )
         await guardar(
             conA(
-                client
-                    .post('/api/v1/portal/promesas')
-                    .json({ vence_el: dia(1), monto: '1.00', servicio_id: b.servicioId }),
+                client.post('/api/v1/portal/promesas').json({ vence_el: dia(1), servicio_id: b.servicioId }),
             ),
             404,
         )
