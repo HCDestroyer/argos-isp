@@ -30,7 +30,7 @@ extremo con los dos sistemas corriendo: `tests/e2e-argos` del repositorio de Hor
 | `configuracion.ts` | Fila única del conector, caché por proceso e invalidación |
 | `cliente.ts` | HTTP a Horus: Bearer `hf_pat_`, timeout 4 s, espera exponencial compartida |
 | `consultas.ts` | Consulta 360 (§3.1, por `external_service_id` y si no por la IP actual), consumo (§3.2), seguridad por lotes (§3.5 o alternativa) |
-| `envios.ts`, `consumidor.ts` | Webhooks Argos → Horus: grupo `horus`, tabla `horus_envios`, reintentos 1 min, 5 min, 30 min, 2 h, 12 h |
+| `envios.ts`, `consumidor.ts` | Webhooks Argos → Horus: grupo `horus`, tabla `horus_envios`, reintentos 1 min, 5 min, 30 min, 2 h, 12 h. Firma, entrega y reintentos son del motor común con Iris (`../webhooks_salientes.ts`) |
 | `receptor.ts`, `actions/recibir_webhook_horus.ts` | Webhooks Horus → Argos: firma, desfase ±5 min, dedupe por `id`, eventos `horus.*` |
 | `actions/generar_enlace_horus.ts`, `actions/canjear_enlace_horus.ts`, `actions/conectar_con_enlace_horus.ts` | Enlace de conexión (§1.4) en los dos sentidos: un enlace nuevo anula los anteriores sin usar; la misma petición de canje repetida antes de vencer recibe la misma respuesta (guardada cifrada); `base_url` se guarda como origen (sin `/api/v1`); el enlace de Horus puede traer su API en `?api=` |
 | `actions/abrir_en_horus.ts` | "Ver en Horus" (§1.5, lado emisor): ticket pedido por el servidor; la URL solo se abre si es `https://<panel de Horus>/sso/entrar#<ticket>` (el panel puede estar en otro origen que la API) |
