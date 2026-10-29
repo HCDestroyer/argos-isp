@@ -27,6 +27,7 @@ export const routers: Schema<'Router'>[] = [
         ...conexion,
         ...SIN_CONTACTO,
         ...empresa,
+        zona_id: null,
         ...meta,
     },
     {
@@ -47,6 +48,7 @@ export const routers: Schema<'Router'>[] = [
         ...SIN_CONTACTO,
         // Multiempresa: los servicios nuevos de este router se sugieren a Fibra del Sur.
         empresa_sugerida_id: 2,
+        zona_id: 2,
         ...meta,
     },
     {
@@ -66,6 +68,7 @@ export const routers: Schema<'Router'>[] = [
         ...conexion,
         ...SIN_CONTACTO,
         ...empresa,
+        zona_id: null,
         ...meta,
     },
 ]
@@ -95,4 +98,11 @@ export const ENTREGA_SIN_CALCULAR: Schema<'EntregaPoolIpv6'> = { atributo_radius
 export const ipv6Pools: Schema<'Ipv6Pool'>[] = [
     { id: 1, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2803:d100:1000::/44', tipo: 'enlace', tamano_entrega: 64, nombre_en_router: 'v6-enlace', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
     { id: 2, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2803:d100:1080::/41', tipo: 'delegacion', tamano_entrega: 56, nombre_en_router: 'v6-pd', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
+]
+
+/** Conexión WireGuard de cada router (`GET /routers/:id/conexion`): uno conectado, uno a medias y uno sin configurar. */
+export const conexionesRouter: Schema<'ConexionRouter'>[] = [
+    { router_id: 1, estado: 'conectado', ip_tunel: '10.255.0.2', public_key: 'kH3sZ0pR1m9bQyU5wT8xVv2cLgN4dJf6aE7iO0rS1tA=', ultimo_handshake: '2026-10-29T15:58:30.000Z', handshake_reciente: true, registrado_en: '2026-10-20T16:00:00.000Z', routeros_version: '7.24.5 (stable)', token_vence: null, version: 3 },
+    { router_id: 2, estado: 'pendiente', ip_tunel: '10.255.0.3', public_key: null, ultimo_handshake: null, handshake_reciente: false, registrado_en: null, routeros_version: null, token_vence: '2026-10-30T16:00:00.000Z', version: 1 },
+    { router_id: 3, estado: 'sin_configurar', ip_tunel: null, public_key: null, ultimo_handshake: null, handshake_reciente: false, registrado_en: null, routeros_version: null, token_vence: null, version: 0 },
 ]

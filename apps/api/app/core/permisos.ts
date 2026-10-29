@@ -32,6 +32,8 @@ export const PERMISOS = {
     'servicios.limitar': 'Limitar la velocidad de servicios',
     'servicios.quitar_limite': 'Quitar el límite de velocidad',
     'servicios.retirar': 'Retirar servicios',
+    'servicios.sincronizar_router':
+        'Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió',
     'servicios.activar_instalacion':
         'Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
@@ -62,6 +64,14 @@ export const PERMISOS = {
     'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
         'Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin',
+    'routers.generar_script':
+        'Generar el script de conexión del router (WireGuard, usuario de la API, RADIUS); rota su token',
+    'routers.rotar_conexion':
+        'Rotar la conexión WireGuard de un router (invalida el peer y genera un script nuevo)',
+    'routers.conexion_clave': 'Pegar a mano la clave pública WireGuard de un router',
+    'routers.probar_conexion':
+        'Probar la conexión con un router (túnel, API REST, datos del equipo y RADIUS)',
+    'routers.reconciliar': 'Reconciliar ahora la configuración de RouterOS de un router',
     'redes.ver': 'Ver redes IPv4',
     'redes.crear': 'Crear redes IPv4',
     'redes.editar': 'Editar redes IPv4: nombre, red, gateway, rango y DNS',
@@ -383,6 +393,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.quitar_limite',
             'servicios.activar_instalacion',
             'servicios.desconectar',
+            'servicios.sincronizar_router',
             'servicios.ver_credenciales',
             'servicios.agregar_adicional',
             'servicios.editar_adicional',
@@ -390,6 +401,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.ver_credencial_adicional',
             'adicionales.ver',
             'routers.ver',
+            'routers.probar_conexion',
             'redes.ver',
             'ipv6.ver',
             'planes.ver',
@@ -424,6 +436,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             // instala lo que vende Iris (contratos/instalacion.md): tiene servicios.crear
             'servicios.activar_instalacion',
             'servicios.desconectar',
+            'servicios.sincronizar_router',
             'servicios.ver_credenciales',
             'servicios.agregar_adicional',
             'servicios.editar_adicional',
@@ -434,6 +447,10 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'routers.crear',
             'routers.editar',
             'routers.marcar_migrado',
+            'routers.generar_script',
+            'routers.conexion_clave',
+            'routers.probar_conexion',
+            'routers.reconciliar',
             'redes.ver',
             'redes.crear',
             'redes.editar',

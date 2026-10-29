@@ -59,6 +59,7 @@ import { rutasPromesas } from './promesas/rutas'
 import { rutasRed } from './red/rutas'
 import { rutasSimulador } from './promesas/simulador'
 import { rutasReportes } from './reportes/rutas'
+import { rutasConexionRouters } from './routers/conexion'
 import { rutasPools } from './routers/pools'
 import { rutasRouters } from './routers/rutas'
 import { rutasAsignaciones } from './servicios/asignaciones'
@@ -525,6 +526,7 @@ export const rutasFixture: RutasFixture = conFallasSimuladas({
     ...rutasAsignaciones,
     ...rutasRouters,
     ...rutasPools,
+    ...rutasConexionRouters,
     ...rutasRed,
     ...rutasPlanes,
     ...rutasPlantillas,

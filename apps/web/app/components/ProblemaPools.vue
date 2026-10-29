@@ -2,16 +2,20 @@
 import type { Problem } from '@argosisp/contracts'
 
 /**
- * Rechazo al editar o migrar redes, bloques y pools: título en lenguaje simple, qué hacer y la lista
- * de direcciones o servicios afectados (`errors[]`). Otros errores, como `ProblemaAlerta`.
+ * Rechazo con código conocido (pools, script de conexión): título en lenguaje simple, qué hacer y la
+ * lista de lo afectado (`errors[]`). Otros errores, como `ProblemaAlerta`.
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     problema: Problem
-}>()
+    /** Títulos y ayudas por código (por defecto, los de pools; el script de conexión trae los suyos). */
+    rechazos?: Record<string, { titulo: string, ayuda: string }>
+}>(), {
+    rechazos: () => RECHAZOS_POOLS,
+})
 
 const rechazo = computed(() => {
     const codigo = codigoProblema(props.problema)
-    return codigo ? (RECHAZOS_POOLS[codigo] ?? null) : null
+    return codigo ? (props.rechazos[codigo] ?? null) : null
 })
 const lista = computed(() => (props.problema.errors ?? []).map(e => e.message).filter(Boolean))
 </script>

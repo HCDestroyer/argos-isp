@@ -204,10 +204,18 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'Ipv6BloqueModal.vue': { permisos: ['ipv6.crear', 'ipv6.editar'], desde: ['components/RouterDireccionamiento.vue'] },
     'Ipv6PoolModal.vue': { permisos: ['ipv6.crear', 'ipv6.editar'], desde: ['components/RouterDireccionamiento.vue'] },
     'PoolMigrarModal.vue': { permisos: ['redes.migrar', 'ipv6.migrar', 'routers.ver'], desde: ['components/RouterDireccionamiento.vue'], exentos: { 'components/RouterDireccionamiento.vue': ['routers.ver'] } },
+    // Conexión por WireGuard (contratos/conexion-routers.md): la ficha monta la sección (`routers.ver`) y
+    // cada botón comprueba su permiso; el script lo abren la sección y el menú de acciones.
+    'RouterConexionSeccion.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
+    'RouterPruebaConexionModal.vue': { permisos: ['routers.probar_conexion'], desde: ['components/RouterAcciones.vue'] },
+    'RouterClaveModal.vue': { permisos: ['routers.conexion_clave'], desde: ['components/RouterConexionSeccion.vue'] },
+    // Con `modo="rotar"` usa `routers.rotar_conexion`; el menú de acciones solo lo abre para generar.
+    'RouterScriptModal.vue': { permisos: ['routers.generar_script', 'routers.rotar_conexion'], desde: ['components/RouterConexionSeccion.vue', 'components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.rotar_conexion'] } },
     'RouterEditarModal.vue': { permisos: ['routers.editar', 'routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
     'ServicioCambiarEmpresaModal.vue': { permisos: ['servicios.cambiar_empresa'], desde: ['pages/servicios/[id].vue'] },
     // Solo se monta con `puedeActivarInstalacion` (servicios.activar_instalacion); recarga con el servicios.ver de la página.
     'ServicioActivarInstalacionModal.vue': { permisos: ['servicios.activar_instalacion', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
+    'ServicioSincronizarRouterModal.vue': { permisos: ['servicios.sincronizar_router'], desde: ['pages/servicios/[id].vue'] },
     'ServicioAsignaciones.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioEditar.vue': { permisos: ['servicios.editar', 'servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'UsuarioEmpresasModal.vue': { permisos: ['usuarios.asignar_empresas'], desde: ['pages/usuarios/index.vue'] },

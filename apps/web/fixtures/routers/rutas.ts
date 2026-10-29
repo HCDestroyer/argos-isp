@@ -62,6 +62,18 @@ function dentroDe(pool: string, bloque: string): boolean {
     return (p.red & mascara) === b.red
 }
 
+/**
+ * En los fixtures no se parsea X.509: un PEM con esta marca hace de certificado que no es una CA
+ * (el de `argosisp-api` pegado en lugar del de `argos-ca`). Mensaje igual a `MENSAJE_PROPOSITO` de A1.
+ */
+export const MARCA_PEM_NO_CA = 'NOESCA'
+export const PEM_NO_CA = `-----BEGIN CERTIFICATE-----\nMIIB${MARCA_PEM_NO_CA}servicio\n-----END CERTIFICATE-----`
+const MENSAJE_PROPOSITO_CA = 'El certificado que Argos usa para verificar no es una CA, o el del router no tiene el uso tls-server. '
+    + 'Revisa: (1) en la CA del router (api_ca) va el certificado de la CA (argos-ca), no el del servicio '
+    + '(argosisp-api); (2) el certificado de www-ssl debe tener key-usage=...,tls-server y estar firmado con '
+    + 'ca=argos-ca (/certificate add ... key-usage=digital-signature,key-encipherment,tls-server, luego '
+    + '/certificate sign argosisp-api ca=argos-ca)'
+
 /** Como `camposConexionApi` (A1): los cinco campos de conexión, opcionales y nulables. */
 function erroresConexion(cuerpo: Record<string, unknown>): NonNullable<Problem['errors']> {
     const errores: NonNullable<Problem['errors']> = []
@@ -80,6 +92,10 @@ function erroresConexion(cuerpo: Record<string, unknown>): NonNullable<Problem['
     }
     texto('api_url', 300, API_URL, 'Debe ser https://host o https://host:puerto')
     texto('api_ca', 20_000, /^-----BEGIN CERTIFICATE-----/, 'Debe ser un certificado PEM')
+    // La API lee `basicConstraints`: el certificado del servicio (no CA) es 422 en `api_ca` (A1).
+    if (typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.includes(MARCA_PEM_NO_CA) && !errores.some(e => e.field === 'api_ca')) {
+        errores.push({ field: 'api_ca', rule: 'ca', message: MENSAJE_PROPOSITO_CA })
+    }
     texto('dhcp_servidor', 100)
     texto('interfaz_clientes', 100)
     if (cuerpo.api_tls_verificar !== undefined && typeof cuerpo.api_tls_verificar !== 'boolean') {
@@ -123,6 +139,15 @@ export const rutasRouters: RutasFixture = {
             .filter(campo => !capacidadValida(cuerpo[campo]))
             .map(campo => ({ field: campo, message: 'Debe ser un entero entre 1 y 100000000', rule: 'range' }))
         errores.push(...erroresConexion(cuerpo))
+        if (cuerpo.quitar_api_password === true && typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') {
+            errores.push({ field: 'api_password', message: 'Quita la clave o escribe una nueva, no las dos cosas', rule: 'quitar' })
+        }
+        if (cuerpo.quitar_radius_secret === true && typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '') {
+            errores.push({ field: 'radius_secret', message: 'Quita el secreto o escribe uno nuevo, no las dos cosas', rule: 'quitar' })
+        }
+        if (typeof cuerpo.zona_id === 'number' && !bd.zonas.some(z => z.id === cuerpo.zona_id)) {
+            errores.push({ field: 'zona_id', message: `La zona ${cuerpo.zona_id} no existe`, rule: 'exists' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -140,8 +165,10 @@ export const rutasRouters: RutasFixture = {
             nas_ip: texto('nas_ip'),
             modo_seguridad: cuerpo.modo_seguridad === 'radius' || cuerpo.modo_seguridad === 'api' ? cuerpo.modo_seguridad : router.modo_seguridad,
             api_usuario: 'api_usuario' in cuerpo ? (cuerpo.api_usuario as string | null) : router.api_usuario,
-            tiene_api_password: 'api_password' in cuerpo ? typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '' : router.tiene_api_password,
-            tiene_radius_secret: 'radius_secret' in cuerpo ? typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '' : router.tiene_radius_secret,
+            // Vacío o null no cambia; `quitar_*` la borra a propósito.
+            tiene_api_password: cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password,
+            tiene_radius_secret: cuerpo.quitar_radius_secret === true ? false : (typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '') || router.tiene_radius_secret,
+            zona_id: 'zona_id' in cuerpo ? (cuerpo.zona_id as number | null) : (router.zona_id ?? null),
             activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             capacidad_bajada_kbps: capacidad('capacidad_bajada_kbps'),
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
@@ -259,6 +286,7 @@ export const rutasRouters: RutasFixture = {
             dhcp_servidor: null,
             interfaz_clientes: null,
             empresa_sugerida_id: null,
+            zona_id: typeof cuerpo.zona_id === 'number' ? cuerpo.zona_id : null,
             ...SIN_CONTACTO,
             version: 1,
             created_at: creado,

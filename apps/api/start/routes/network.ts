@@ -69,6 +69,26 @@ import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
+import {
+    ConexionRouter,
+    PeersWireguard,
+    PruebaConexion,
+    ReconciliacionEncolada,
+    RegistroConexion,
+    SincronizacionServicio,
+} from '#network/esquemas'
+import ProbarConexion from '#network/conexion/actions/probar_conexion'
+import SincronizarRouterServicio from '#network/actions/sincronizar_router_servicio'
+import { exigirServicio } from '#core/acceso_empresa'
+import ReconciliarAhora from '#network/conexion/actions/reconciliar_ahora'
+import { parsearAdmin } from '#network/conexion/config'
+import { listarPeers, verConexion } from '#network/conexion/consultas'
+import { limitarRegistro } from '#network/conexion/limite_registro'
+import GenerarScript, { type ScriptConexion } from '#network/conexion/actions/generar_script'
+import RotarConexion from '#network/conexion/actions/rotar_conexion'
+import RegistrarConexion from '#network/conexion/actions/registrar_conexion'
+import ConexionClave from '#network/conexion/actions/conexion_clave'
+import RegistrarEstadoWireguard from '#network/conexion/actions/registrar_estado_wireguard'
 
 /** 403 si el actor no tiene además `permiso` (la ruta ya exigió el suyo). */
 async function exigirPermisoExtra(ctx: HttpContext, permiso: Permiso, motivo: string) {
@@ -722,4 +742,241 @@ const red: Ruta[] = [
     }),
 ]
 
-export default [...routers, ...planes, ...sesiones, ...red]
+/** Descarga del `.rsc`: lleva secretos, así que nunca se guarda en caché. */
+function enviarScript(ctx: HttpContext, script: ScriptConexion): void {
+    ctx.response.header('Content-Type', 'text/plain; charset=utf-8')
+    ctx.response.header('Content-Disposition', `attachment; filename="${script.nombre_archivo}"`)
+    ctx.response.header('Cache-Control', 'no-store')
+    ctx.response.header('X-Content-Type-Options', 'nosniff')
+    ctx.response.send(script.script)
+}
+
+const origenPeticion = (ctx: HttpContext) => `${ctx.request.protocol()}://${ctx.request.host()}`
+
+const SOBRE_EL_SCRIPT =
+    'Devuelve el `.rsc` (text/plain, descarga) armado con las plantillas de A6 (`infra/mikrotik/plantillas`, ' +
+    'variables de `variables.json`): túnel WireGuard, usuario `argosisp-api` con clave nueva, cliente RADIUS ' +
+    '(secreto del router) y puertos de gestión cerrados (`contratos/conexion-routers.md`). Lleva secretos: el ' +
+    'panel lo descarga y no lo guarda. Emite un token de registro nuevo (24 h, un uso; el anterior deja de ' +
+    'valer) y `router.conexion_generada`. `?admin=` IPs/redes IPv4 separadas por coma para `argosisp-admin`; ' +
+    '`?incluir=servicio` suma PPPoE, perfiles y corte (422 `servicio_incompleto` si faltan datos del servidor). ' +
+    '422 `radius_secret_requerido` sin secreto RADIUS válido (16 a 128 caracteres); 503 ' +
+    '`wireguard_no_configurado` (WireGuard apagado, sin clave publicada por el agente, sin endpoint o sin ' +
+    '`API_PUBLIC_URL` https) o `plantillas_no_disponibles`.'
+
+// Conexión de routers por WireGuard (contratos/conexion-routers.md)
+const conexion: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/sincronizar-router',
+        operacion: 'serviciosSincronizarRouter',
+        resumen: 'Sincronizar ya el servicio con su MikroTik (cola, address-list, lease y ARP)',
+        descripcion:
+            'Ejecuta `routeros.aplicar_servicio` en el acto y devuelve lo corregido (`cambios[]`) o ' +
+            '`ya_estaba_bien`. Idempotente y con candado por servicio; cada comando queda en `audit.red`. Si el ' +
+            'router no responde, 200 con `error` (`motivo`, `detalle`). 422 `servicio_pendiente_instalacion`; ' +
+            '422 `router_sin_api` (router inactivo o sin usuario y clave de la API).',
+        etiqueta: 'servicios',
+        permiso: 'servicios.sincronizar_router',
+        idempotente: true,
+        respuesta: {
+            status: 200,
+            descripcion: 'Resultado de la sincronización',
+            esquema: SincronizacionServicio,
+        },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new SincronizarRouterServicio().execute({ servicio_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/probar-conexion',
+        operacion: 'routersProbarConexion',
+        resumen: 'Probar la conexión con el router (túnel, API REST, datos del equipo y RADIUS)',
+        descripcion:
+            'Chequeos `{ clave, ok, detalle, ms }`: `tunel` (si tiene conexión WireGuard: conectado y handshake ' +
+            'en los últimos 180 s), `api` (`GET /rest/system/resource` con las credenciales guardadas; si falla, ' +
+            '`motivo` = `no_responde`, `credenciales`, `certificado` o `respuesta`), `equipo` (versión, modelo, ' +
+            'uptime y CPU) y `radius` (modo radius: `/radius` con servicio ppp hacia Argos; el secreto se compara ' +
+            'solo si el router lo devuelve y nunca sale). Cada GET queda en `audit.red`; si la API responde, ' +
+            'actualiza `en_linea` y `ultimo_contacto` como el sondeo. Responde 200 aunque el router esté caído.',
+        etiqueta: 'routers',
+        permiso: 'routers.probar_conexion',
+        respuesta: { status: 200, descripcion: 'Resultado de la prueba', esquema: PruebaConexion },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new ProbarConexion().execute({ router_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/reconciliar',
+        operacion: 'routersReconciliar',
+        resumen: 'Reconciliar ahora la configuración de RouterOS del router',
+        descripcion:
+            'Encola `routeros.reconciliar` (`motivo: manual`) en el worker de routeros, con lock: si ya hay uno ' +
+            'esperando o en curso para el router, responde el mismo `job_id` con `encolado: false`. Lo corregido ' +
+            'queda en `audit.red`. 404 si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.reconciliar',
+        respuesta: { status: 202, descripcion: 'Reconciliación encolada', esquema: ReconciliacionEncolada },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new ReconciliarAhora().execute({ router_id: id }, ctx.contextoAccion())
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/script-conexion',
+        operacion: 'routersScriptConexion',
+        resumen: 'Generar el script de conexión del router (.rsc)',
+        descripcion: SOBRE_EL_SCRIPT,
+        etiqueta: 'routers',
+        permiso: 'routers.generar_script',
+        query: v.scriptConexionValidator,
+        respuesta: { status: 200, descripcion: 'Script .rsc', contenido: 'text/plain' },
+        handler: async (ctx, { query, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            const script = await new GenerarScript().execute(
+                {
+                    router_id: id,
+                    admin: parsearAdmin(query.admin),
+                    incluir_servicio: query.incluir === 'servicio',
+                    origen: origenPeticion(ctx),
+                },
+                ctx.contextoAccion(),
+            )
+            enviarScript(ctx, script)
+        },
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/routers/:id/conexion',
+        operacion: 'routersConexion',
+        resumen: 'Estado de la conexión WireGuard del router',
+        descripcion:
+            'Estado (`sin_configurar`, `pendiente`, `conectado`), IP del túnel, clave pública, último handshake ' +
+            'y vencimiento del token del último script. Nunca trae secretos. 404 si el router no existe.',
+        etiqueta: 'routers',
+        permiso: 'routers.ver',
+        respuesta: { status: 200, descripcion: 'Conexión del router', esquema: ConexionRouter },
+        handler: (ctx, { params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return verConexion(id)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/conexion/rotar',
+        operacion: 'routersConexionRotar',
+        resumen: 'Rotar la conexión WireGuard del router y generar un script nuevo (.rsc)',
+        descripcion:
+            'Invalida el peer (borra la clave pública registrada, vuelve a `pendiente`, emite ' +
+            '`router.conexion_rotada`) y responde el script nuevo como `GET /routers/:id/script-conexion` ' +
+            '(mismos `?admin=` e `?incluir=`). La IP del túnel no cambia.',
+        etiqueta: 'routers',
+        permiso: 'routers.rotar_conexion',
+        query: v.scriptConexionValidator,
+        respuesta: { status: 200, descripcion: 'Script .rsc nuevo', contenido: 'text/plain' },
+        handler: async (ctx, { query, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            const script = await new RotarConexion().execute(
+                {
+                    router_id: id,
+                    admin: parsearAdmin(query.admin),
+                    incluir_servicio: query.incluir === 'servicio',
+                    origen: origenPeticion(ctx),
+                },
+                ctx.contextoAccion(),
+            )
+            enviarScript(ctx, script)
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/:id/conexion/clave',
+        operacion: 'routersConexionClave',
+        resumen: 'Pegar a mano la clave pública WireGuard del router',
+        descripcion:
+            'Para un router sin internet: la clave que imprimió el script. Mismo efecto que el registro por ' +
+            'token (lo consume): el router queda `pendiente` hasta el primer handshake y `host`/`nas_ip` pasan ' +
+            'a la IP del túnel. 422 `script_no_generado` si nunca se generó el script; 409 `clave_en_uso` si ' +
+            'la clave es de otro router.',
+        etiqueta: 'routers',
+        permiso: 'routers.conexion_clave',
+        cuerpo: v.conexionClaveValidator,
+        respuesta: { status: 200, descripcion: 'Conexión del router', esquema: ConexionRouter },
+        handler: (ctx, { cuerpo, params }) => {
+            const id = Number(params.id)
+            exigirAlcance(ctx.alcance, { router: [id] })
+            return new ConexionClave().execute(
+                { router_id: id, public_key: cuerpo.public_key },
+                ctx.contextoAccion(),
+            )
+        },
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/routers/conexion/registrar',
+        operacion: 'routersConexionRegistrar',
+        resumen: 'Registro del router con su token (lo llama el script, sin sesión)',
+        descripcion:
+            'Cuerpo `{ token, public_key, routeros_version, api_ca }` (§6.1). Token de un solo uso del último ' +
+            'script, 24 h: si venció, se usó o no existe, 410 `token_invalido`. Responde `{ router_id, ip_tunel, ' +
+            'servidor: { public_key, endpoint, puerto, ip } }`; con `api_ca`, Argos verifica con ella el ' +
+            'certificado del router. Límite ' +
+            'por IP (`ROUTERS_REGISTRO_LIMITE` por `ROUTERS_REGISTRO_VENTANA_S`): 429 con `Retry-After`. ' +
+            '409 `clave_en_uso` si la clave es de otro router.',
+        etiqueta: 'routers',
+        seguridad: 'publico',
+        permiso: null,
+        cuerpo: v.registrarConexionValidator,
+        limitada: true,
+        antes: limitarRegistro,
+        respuesta: { status: 200, descripcion: 'Router registrado', esquema: RegistroConexion },
+        handler: (ctx, { cuerpo }) => new RegistrarConexion().execute(cuerpo, ctx.contextoAccion('api')),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/internal/wireguard/peers',
+        operacion: 'internoWireguardPeers',
+        resumen: 'Peers WireGuard vigentes (wireguard-agente)',
+        descripcion:
+            'Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel ' +
+            '(`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con ' +
+            '`router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.',
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        respuesta: { status: 200, descripcion: 'Peers', esquema: PeersWireguard },
+        handler: async () => ({ data: await listarPeers() }),
+    }),
+    definirRuta({
+        metodo: 'post',
+        ruta: '/internal/wireguard/estado',
+        operacion: 'internoWireguardEstado',
+        resumen: 'Estado del servidor WireGuard y último handshake por peer (wireguard-agente)',
+        descripcion:
+            '`{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake, ' +
+            'endpoint, rx_bytes, tx_bytes }], generado_en }` (§6.3). Guarda la clave pública del servidor (va en ' +
+            'los scripts) y el último handshake de cada router (solo avanza); `conectado` = handshake de menos ' +
+            'de 3 min. Claves desconocidas se ignoran.',
+        etiqueta: 'interno',
+        seguridad: 'interno',
+        permiso: null,
+        cuerpo: v.estadoWireguardValidator,
+        respuesta: { status: 204, descripcion: 'Estado registrado' },
+        handler: async (ctx, { cuerpo }) => {
+            await new RegistrarEstadoWireguard().execute(cuerpo, ctx.contextoAccion('interno'))
+        },
+    }),
+]
+
+export default [...routers, ...conexion, ...planes, ...sesiones, ...red]

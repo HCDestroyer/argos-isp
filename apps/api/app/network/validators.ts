@@ -71,6 +71,18 @@ const camposConexionApi = {
     }),
 }
 
+/** Credencial del router en el alta (vacía o null = sin ella); en auditoría siempre `***`. */
+const credencialRouter = (descripcion: string) =>
+    vine
+        .string()
+        .maxLength(200)
+        .nullable()
+        .optional()
+        .meta({ description: `${descripcion}. Vacía o null = sin credencial` })
+
+const zonaRouter = () =>
+    idEntidad().nullable().optional().meta({ description: 'Zona del router (opcional); 422 si no existe' })
+
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     host: vine
@@ -80,21 +92,14 @@ const camposRouter = {
         .maxLength(255)
         .meta({ description: 'Host o IP de la API REST de RouterOS' }),
     api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
-    api_password: vine
-        .string()
-        .maxLength(200)
-        .nullable()
-        .optional()
-        .meta({ description: 'Se guarda cifrada' }),
-    radius_secret: vine
-        .string()
-        .maxLength(200)
-        .nullable()
-        .optional()
-        .meta({ description: 'Se guarda cifrado' }),
+    api_password: credencialRouter('Clave del usuario de la API REST. Se guarda cifrada'),
+    radius_secret: credencialRouter(
+        'Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado',
+    ),
     nas_ip: ipv4(),
     modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
     empresa_sugerida_id: empresaSugerida(),
+    zona_id: zonaRouter(),
     control_velocidad: vine.enum(CONTROLES_VELOCIDAD).optional().meta({
         description:
             'simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad',
@@ -123,11 +128,27 @@ export const editarRouterValidator = conMensajes(
             nombre: camposRouter.nombre.optional(),
             host: vine.string().trim().minLength(1).maxLength(255).optional(),
             api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
-            api_password: vine.string().maxLength(200).nullable().optional(),
-            radius_secret: vine.string().maxLength(200).nullable().optional(),
+            api_password: vine
+                .string()
+                .maxLength(200)
+                .nullable()
+                .optional()
+                .meta({ description: 'Clave nueva de la API REST (cifrada). Vacía o null = no cambiar' }),
+            radius_secret: vine.string().maxLength(200).nullable().optional().meta({
+                description: 'Secreto RADIUS nuevo (cifrado; el de FreeRADIUS). Vacío o null = no cambiar',
+            }),
+            quitar_api_password: vine
+                .boolean()
+                .optional()
+                .meta({ description: 'Borra la clave de la API (422 si además llega api_password)' }),
+            quitar_radius_secret: vine
+                .boolean()
+                .optional()
+                .meta({ description: 'Borra el secreto RADIUS (422 si además llega radius_secret)' }),
             nas_ip: ipv4().optional(),
             modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
             empresa_sugerida_id: empresaSugerida(),
+            zona_id: zonaRouter(),
             capacidad_bajada_kbps: capacidad(),
             capacidad_subida_kbps: capacidad(),
             ...camposConexionApi,
@@ -645,4 +666,94 @@ export const vistaPreviaControlValidator = conMensajes(
         'a.required':
             'Indica el control de velocidad al que cambiarías (simple o arbol_pcq) para ver qué se crea y qué se borra',
     },
+)
+
+/*
+|--------------------------------------------------------------------------
+| Conexión de routers por WireGuard (contratos/conexion-routers.md)
+|--------------------------------------------------------------------------
+*/
+
+/** Clave pública WireGuard: 32 bytes en base64 (44 caracteres). */
+const clavePublicaWg = () =>
+    vine
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$/)
+        .meta({ description: 'Clave pública WireGuard del router (base64, 44 caracteres)' })
+
+/** `GET /routers/:id/script-conexion?admin=&incluir=` */
+export const scriptConexionValidator = vine.compile(
+    vine.object({
+        admin: vine
+            .string()
+            .trim()
+            .maxLength(2000)
+            .optional()
+            .meta({
+                description:
+                    'IPs o redes IPv4 separadas por coma para la lista argosisp-admin (winbox y ssh). ' +
+                    'Vacía: gestión solo por el túnel',
+            }),
+        incluir: vine
+            .enum(['servicio'])
+            .optional()
+            .meta({ description: '`servicio`: suma PPPoE, perfiles y corte; por defecto solo conexión' }),
+    }),
+)
+
+/** `POST /routers/conexion/registrar` (lo manda el script del router, contrato §6.1). */
+export const registrarConexionValidator = vine.compile(
+    vine.object({
+        token: vine.string().trim().minLength(16).maxLength(128),
+        public_key: clavePublicaWg(),
+        routeros_version: vine
+            .string()
+            .trim()
+            .maxLength(100)
+            .nullable()
+            .optional()
+            .meta({ description: 'Versión de RouterOS del equipo (`/system resource version`)' }),
+        api_ca: vine
+            .string()
+            .trim()
+            .maxLength(20_000)
+            .regex(/^-----BEGIN CERTIFICATE-----/)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'PEM de la CA propia del router (argosisp-ca.crt); vacío = no cambia. Argos verifica con ella ' +
+                    'el certificado de www-ssl',
+            }),
+    }),
+)
+
+/** `POST /routers/:id/conexion/clave`: pegar la clave a mano. */
+export const conexionClaveValidator = vine.compile(vine.object({ public_key: clavePublicaWg() }))
+
+/** `POST /internal/wireguard/estado` (wireguard-agente, contrato §6.3). */
+export const estadoWireguardValidator = vine.compile(
+    vine.object({
+        servidor: vine.object({
+            public_key: clavePublicaWg(),
+            ip: vine.string().trim().maxLength(64).nullable().optional(),
+            red: vine.string().trim().maxLength(64).nullable().optional(),
+            puerto: vine.number().withoutDecimals().min(1).max(65535).nullable().optional(),
+            interfaz: vine.string().trim().maxLength(64).nullable().optional(),
+            modo: vine.string().trim().maxLength(64).nullable().optional(),
+        }),
+        peers: vine
+            .array(
+                vine.object({
+                    public_key: clavePublicaWg(),
+                    ultimo_handshake: instanteIso().nullable(),
+                    endpoint: vine.string().trim().maxLength(100).nullable().optional(),
+                    rx_bytes: vine.number().min(0).nullable().optional(),
+                    tx_bytes: vine.number().min(0).nullable().optional(),
+                }),
+            )
+            .maxLength(65_536),
+        generado_en: instanteIso().nullable().optional(),
+    }),
 )

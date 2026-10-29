@@ -15,6 +15,7 @@ import {
     type EsquemaJson,
 } from '#shared/openapi/esquemas'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { MOTIVOS_API } from '#network/diagnostico_routeros'
 
 /**
  * Schemas de respuesta del módulo network. Credenciales (api_password, radius_secret) nunca salen;
@@ -25,66 +26,81 @@ const kbpsNulable = (descripcion: string): EsquemaJson => ({ ...nulable(entero),
 
 export const Router = definirEsquema(
     'Router',
-    objeto({
-        id,
-        nombre: texto,
-        host: texto,
-        api_usuario: nulable(texto),
-        tiene_api_password: booleano,
-        tiene_radius_secret: booleano,
-        nas_ip: texto,
-        modo_seguridad: enumerado(['radius', 'api']),
-        control_velocidad: {
-            ...enumerado(['simple', 'arbol_pcq']),
-            description:
-                'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
+    objeto(
+        {
+            id,
+            nombre: texto,
+            host: texto,
+            api_usuario: nulable(texto),
+            tiene_api_password: booleano,
+            tiene_radius_secret: booleano,
+            nas_ip: texto,
+            modo_seguridad: enumerado(['radius', 'api']),
+            control_velocidad: {
+                ...enumerado(['simple', 'arbol_pcq']),
+                description:
+                    'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
+            },
+            capacidad_bajada_kbps: kbpsNulable(
+                'Capacidad del enlace (techo del padre global); null = sin techo',
+            ),
+            capacidad_subida_kbps: kbpsNulable(
+                'Capacidad del enlace (techo del padre global); null = sin techo',
+            ),
+            api_url: {
+                ...nulable(texto),
+                description: 'https://host:puerto de la API REST; null = https://<host>',
+            },
+            api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
+            tiene_api_ca: {
+                ...booleano,
+                description:
+                    'Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con ' +
+                    'PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla)',
+            },
+            dhcp_servidor: {
+                ...nulable(texto),
+                description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
+            },
+            interfaz_clientes: {
+                ...nulable(texto),
+                description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
+            },
+            modo_velocidad: {
+                ...enumerado(['simple', 'pcq']),
+                deprecated: true,
+                description:
+                    'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
+            },
+            empresa_sugerida_id: {
+                ...nulable(id),
+                description:
+                    'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
+            },
+            activo: booleano,
+            en_linea: {
+                ...nulable(booleano),
+                description:
+                    'Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) ' +
+                    'dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el ' +
+                    'umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)',
+            },
+            ultimo_contacto: {
+                ...nulable(instante),
+                description:
+                    'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
+                    'comando de RouterOS (`audit.red` con ok); null si nunca',
+            },
+            zona_id: {
+                ...nulable(id),
+                description:
+                    'Zona del router (null = sin zona; no cambia el alcance del ACL). La API siempre la envía; ' +
+                    'opcional en el esquema hasta que las fixtures del panel la traigan',
+            },
+            ...auditable,
         },
-        capacidad_bajada_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
-        capacidad_subida_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
-        api_url: {
-            ...nulable(texto),
-            description: 'https://host:puerto de la API REST; null = https://<host>',
-        },
-        api_tls_verificar: { ...booleano, description: 'Verificar el certificado TLS del router' },
-        tiene_api_ca: {
-            ...booleano,
-            description:
-                'Hay una CA propia cargada (PEM). El PEM nunca sale por la API, como api_password; se cambia con ' +
-                'PUT /routers/:id (`api_ca`: el PEM nuevo, o null para quitarla)',
-        },
-        dhcp_servidor: {
-            ...nulable(texto),
-            description: 'server del lease DHCP (dhcp_fija); null = ROUTEROS_DHCP_SERVIDOR o all',
-        },
-        interfaz_clientes: {
-            ...nulable(texto),
-            description: 'Interfaz del ARP estático del amarre IP-MAC; null = ROUTEROS_INTERFAZ_CLIENTES',
-        },
-        modo_velocidad: {
-            ...enumerado(['simple', 'pcq']),
-            deprecated: true,
-            description: 'Obsoleto: derivado de control_velocidad (arbol_pcq → pcq). Usar control_velocidad',
-        },
-        empresa_sugerida_id: {
-            ...nulable(id),
-            description: 'Empresa por defecto de los servicios nuevos del router (después de la de la zona)',
-        },
-        activo: booleano,
-        en_linea: {
-            ...nulable(booleano),
-            description:
-                'Si el router responde: true con contacto periódico (accounting RADIUS o sondeo de RouterOS) ' +
-                'dentro de SESIONES_COLGADAS_INTERVALOS × AAA_INTERIM_SEGUNDOS (15 min); false si pasó el ' +
-                'umbral; null si ninguna fuente periódica lo mide todavía (no se sabe)',
-        },
-        ultimo_contacto: {
-            ...nulable(instante),
-            description:
-                'Última vez que el router mandó accounting, respondió a un sondeo, a un CoA/Disconnect o a un ' +
-                'comando de RouterOS (`audit.red` con ok); null si nunca',
-        },
-        ...auditable,
-    }),
+        ['zona_id'],
+    ),
 )
 
 const numero: EsquemaJson = { type: 'number' }
@@ -670,5 +686,139 @@ export const VistaPreviaVelocidad = definirEsquema(
             limit_at_kbps: parKbps,
             activos: { type: 'integer', minimum: 0, description: 'Con 0 se calcula como 1' },
         }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Conexión de routers por WireGuard (contratos/conexion-routers.md)
+|--------------------------------------------------------------------------
+*/
+
+export const ConexionRouter = definirEsquema(
+    'ConexionRouter',
+    objeto({
+        router_id: id,
+        estado: {
+            ...enumerado(['sin_configurar', 'pendiente', 'conectado']),
+            description:
+                'sin_configurar: nunca se generó el script; pendiente: sin registrar o sin handshake en los ' +
+                'últimos 3 min; conectado: handshake de menos de 3 min',
+        },
+        ip_tunel: { ...nulable(texto), description: 'IP del router en el túnel (/32 de ARGOSISP_WG_RED)' },
+        public_key: { ...nulable(texto), description: 'Clave pública WireGuard del router (no es secreta)' },
+        ultimo_handshake: nulable(instante),
+        handshake_reciente: {
+            ...booleano,
+            description: 'Hubo handshake en los últimos 180 s (el túnel está vivo)',
+        },
+        registrado_en: nulable(instante),
+        routeros_version: { ...nulable(texto), description: 'La que informó el router al registrarse' },
+        token_vence: {
+            ...nulable(instante),
+            description: 'Vencimiento del token del último script; null si ya se usó o no hay',
+        },
+        version: { ...entero, description: '0 sin configurar' },
+    }),
+)
+
+export const RegistroConexion = definirEsquema(
+    'RegistroConexion',
+    objeto({
+        router_id: id,
+        ip_tunel: {
+            ...texto,
+            description: 'IP /32 del router en el túnel (el script la compara con la suya)',
+        },
+        servidor: objeto({
+            public_key: { ...texto, description: 'Clave pública del servidor WireGuard' },
+            endpoint: { ...texto, description: 'ARGOSISP_WG_ENDPOINT' },
+            puerto: entero,
+            ip: { ...texto, description: 'IP del servidor en el túnel (RADIUS, CoA, API)' },
+        }),
+    }),
+)
+
+export const PeerWireguard = definirEsquema(
+    'PeerWireguard',
+    objeto({ router_id: id, public_key: texto, ip_tunel: texto }),
+)
+
+export const PeersWireguard = definirEsquema('PeersWireguard', objeto({ data: lista(PeerWireguard) }))
+
+export const ChequeoConexion = definirEsquema(
+    'ChequeoConexion',
+    objeto(
+        {
+            clave: enumerado(['tunel', 'api', 'equipo', 'radius']),
+            ok: {
+                ...nulable(booleano),
+                description: 'null = no se pudo comprobar (falló otro chequeo antes)',
+            },
+            detalle: { ...texto, description: 'Explicación en lenguaje simple; nunca trae secretos' },
+            ms: entero,
+            motivo: {
+                ...nulable(enumerado(MOTIVOS_API)),
+                description:
+                    'Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), ' +
+                    'certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra ' +
+                    'un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta',
+            },
+            datos: {
+                ...nulable(jsonLibre),
+                description:
+                    '`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; ' +
+                    'si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)',
+            },
+        },
+        ['motivo', 'datos'],
+    ),
+)
+
+export const PruebaConexion = definirEsquema(
+    'PruebaConexion',
+    objeto({
+        router_id: id,
+        ok: { ...booleano, description: 'Todos los chequeos salieron bien' },
+        probado_en: instante,
+        chequeos: lista(ChequeoConexion),
+    }),
+)
+
+export const ReconciliacionEncolada = definirEsquema(
+    'ReconciliacionEncolada',
+    objeto({
+        router_id: id,
+        job_id: texto,
+        encolado: {
+            ...booleano,
+            description: 'false: ya había una esperando o en curso (no se encoló otra)',
+        },
+    }),
+)
+
+export const SincronizacionServicio = definirEsquema(
+    'SincronizacionServicio',
+    objeto({
+        servicio_id: id,
+        router_id: id,
+        cambios: lista(
+            objeto(
+                {
+                    router_id: id,
+                    ruta: { ...texto, description: 'Menú de RouterOS (`/queue/simple`, `/ip/arp`…)' },
+                    comment: { ...texto, description: '`argosisp:servicio:<id>` o `argosisp:plan:<id>`' },
+                    accion: enumerado(['creado', 'actualizado', 'borrado']),
+                    duplicados: entero,
+                },
+                ['duplicados'],
+            ),
+        ),
+        ya_estaba_bien: { ...booleano, description: 'Nada que corregir y el router respondió' },
+        avisos: lista(texto),
+        error: {
+            ...nulable(objeto({ motivo: enumerado(MOTIVOS_API), detalle: texto })),
+            description: 'El router no respondió o rechazó un comando (lenguaje simple); null si todo bien',
+        },
     }),
 )

@@ -31,6 +31,16 @@ async function cargar() {
 
 onMounted(cargar)
 
+/** Tras probar la conexión o generar un script: estado en línea y sección «Conexión» al día. */
+const seccionConexion = useTemplateRef('seccionConexion')
+async function refrescar() {
+    const resultado = await useRouters().ver(routerId.value)
+    if (resultado.ok) {
+        nas.value = resultado.data
+    }
+    await seccionConexion.value?.cargar()
+}
+
 const contacto = computed(() => ESTADOS_ROUTER[nas.value ? estadoContactoRouter(nas.value) : 'desconocido'])
 
 const control = computed(() => {
@@ -59,6 +69,7 @@ const control = computed(() => {
                 :router="nas"
                 con-editar
                 @actualizado="nas = $event"
+                @probado="refrescar"
             />
             <UButton
                 to="/routers"
@@ -134,6 +145,12 @@ const control = computed(() => {
                 />
             </dl>
         </section>
+        <RouterConexionSeccion
+            v-if="nas"
+            ref="seccionConexion"
+            :router="nas"
+            class="mx-auto mt-6 w-full max-w-4xl"
+        />
         <RouterDireccionamiento
             v-if="nas"
             :router-id="nas.id"
