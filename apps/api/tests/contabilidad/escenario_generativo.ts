@@ -89,6 +89,12 @@ import {
 /** Fechas fijas para que la semilla reproduzca lo mismo cualquier día. */
 const TOPE_FACTURACION = '2026-10-01'
 const VENCER_HASTA = '2026-10-16'
+/**
+ * Instante fijo de las promesas: dentro del periodo de octubre (facturas hasta TOPE_FACTURACION),
+ * después de VENCER_HASTA. Con `now()` la regla `no_exceder_siguiente_facturacion` las rechazaba
+ * en los últimos días del mes y el escenario dependía de la fecha real.
+ */
+const AHORA_PROMESAS = DateTime.fromISO('2026-10-20T12:00:00', { zone: 'America/Guatemala' })
 /** Meses que el escenario cierra y reabre (ya terminados). */
 const MESES_CERRABLES = ['2026-08-01', '2026-09-01'] as const
 
@@ -793,9 +799,10 @@ export class EscenarioGenerativo {
         const r = await new CrearPromesaPago().execute(
             {
                 servicio_id: servicio.id,
-                vence_en: DateTime.now().plus({ days: 3 }).toJSDate(),
+                vence_en: AHORA_PROMESAS.plus({ days: 3 }).toJSDate(),
                 monto: texto(this.parcial(total + 1n)),
                 canal: 'operador',
+                ahora: AHORA_PROMESAS.toJSDate(),
             },
             this.ctx,
         )
@@ -809,7 +816,7 @@ export class EscenarioGenerativo {
         const antes = await contarAsientos(this.empresas)
         const servicio = this.azar.elegir(this.servicios)
         const r = await new IncumplirPromesas().execute(
-            { servicio_id: servicio.id, ahora: DateTime.now().plus({ days: 10 }).toJSDate() },
+            { servicio_id: servicio.id, ahora: AHORA_PROMESAS.plus({ days: 10 }).toJSDate() },
             this.ctx,
         )
         if ((await contarAsientos(this.empresas)) !== antes) {

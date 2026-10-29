@@ -25,7 +25,7 @@ const descripcion = computed(() => {
         return props.problema.detail
     }
     if (props.problema.status === 501) {
-        return 'El backend todavía no implementa este endpoint.'
+        return 'Esta función no está disponible en esta instalación.'
     }
     return undefined
 })

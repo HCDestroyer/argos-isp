@@ -13,7 +13,6 @@ import {
     DiagnosticoCorte,
     MatrizControlVelocidad,
     PlanRouter,
-    ResultadoReconciliacion,
     Router,
     SincronizacionPlan,
     VistaPreviaEstrategia,
@@ -30,7 +29,6 @@ import {
 } from '#network/estrategia_velocidad'
 import { vistaPreviaEstrategia } from '#network/routeros/cambio_control'
 import { sincronizarPlan } from '#network/routeros/sincronizar'
-import ReconciliarRouterOS from '#network/routeros/actions/reconciliar_router'
 import { diagnosticoCorte, vistaPreviaReconciliar } from '#network/routeros/diagnostico'
 
 const velocidad: Ruta[] = [
@@ -172,7 +170,7 @@ const velocidad: Ruta[] = [
             'Compara el router con su estado deseado: servicios, velocidad (colas, árbol, PCQ, perfiles) y ' +
             'corte (reglas, listas, perfil suspendido, orden de los saltos). `error` si el router no responde.',
         etiqueta: 'routers',
-        permiso: 'routeros.reconciliar',
+        permiso: 'routers.reconciliar',
         respuesta: { status: 200, descripcion: 'Vista previa', esquema: VistaPreviaReconciliar },
         handler: (ctx, { params }) => {
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
@@ -180,50 +178,24 @@ const velocidad: Ruta[] = [
         },
     }),
     definirRuta({
-        metodo: 'post',
-        ruta: '/routers/:id/reconciliar',
-        operacion: 'routersReconciliar',
-        resumen: 'Reconciliar ahora el router por su API',
-        descripcion:
-            'Crea lo que falta, corrige lo que difiere y borra lo que sobra de lo que administra ArgosIsp ' +
-            '(comentarios `argosisp:`), en orden seguro. Cada comando queda en `audit.red`. Si el router no ' +
-            'responde, `error` y `routeros.fallido`.',
-        etiqueta: 'routers',
-        permiso: 'routeros.reconciliar',
-        idempotente: true,
-        respuesta: { status: 200, descripcion: 'Resultado', esquema: ResultadoReconciliacion },
-        handler: async (ctx, { params }) => {
-            const id = Number(params.id)
-            exigirAlcance(ctx.alcance, { router: [id] })
-            const r = await new ReconciliarRouterOS().execute(
-                { router_id: id, motivo: 'manual' },
-                ctx.contextoAccion(),
-            )
-            return {
-                router_id: r.router_id,
-                servicios: r.servicios,
-                correcciones: r.correcciones.map(({ ruta, comment, accion }) => ({ ruta, comment, accion })),
-                avisos: r.avisos,
-                error: r.error,
-                errores_velocidad: r.errores_velocidad,
-            }
-        },
-    }),
-    definirRuta({
         metodo: 'get',
         ruta: '/routers/:id/diagnostico-corte',
         operacion: 'routersDiagnosticoCorte',
-        resumen: 'Chequeo del corte: reglas, listas, perfil suspendido, walled garden y portal',
+        resumen: '¿Un suspendido de este router ve la página de corte?',
         descripcion:
-            'El chequeo `corte` de «Probar conexión»: lee el router (y hace `/tool/fetch` al portal con ' +
-            '`output=none`) y dice en lenguaje simple qué falta y qué hacer; `reconciliar: true` si «Reconciliar ' +
-            'ahora» lo arregla.',
+            'El chequeo `corte` de «Probar conexión», solo: `chequeos[]` con `lista_suspendidos` (existe, o no hace ' +
+            'falta si no hay suspendidos), `reglas` (filter y NAT, activas y en orden), `portal_http` (`/tool/fetch` ' +
+            'desde el router al destino real del dst-nat, `http://<ip>:<puerto>/corte`; queda en `audit.red`), ' +
+            '`sesiones_suspendidas` (cada suspendido con su IP en la lista), `fasttrack`, `perfil_suspendido` y ' +
+            '`walled_garden`. Cada paso trae `detalle` en lenguaje simple, `comandos` de RouterOS y `reconciliar`. ' +
+            'Con el portal por nombre, la IPv4 se resuelve en el acto (`portal.origen: dns`). `limites`: HTTPS e IPv6 ' +
+            'no se redirigen.',
         etiqueta: 'routers',
         permiso: 'routers.ver',
         respuesta: { status: 200, descripcion: 'Diagnóstico', esquema: DiagnosticoCorte },
         handler: (ctx, { params }) => {
             exigirAlcance(ctx.alcance, { router: [Number(params.id)] })
-            return diagnosticoCorte(Number(params.id))
+            return diagnosticoCorte(Number(params.id), {}, ctx.contextoAccion().requestId)
         },
     }),
 ]

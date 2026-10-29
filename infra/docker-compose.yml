@@ -8,6 +8,11 @@
 # (127.0.0.1 por defecto; en el laboratorio, la IP del servidor en la LAN o en el túnel WireGuard
 # hacia el MikroTik). Detalle en infra/mikrotik/README.md.
 #
+# Perfil "wireguard" (ARGOSISP_WIREGUARD=1; en desarrollo COMPOSE_PROFILES=lab,wireguard): servidor
+# WireGuard en la red del host (interfaz wg-argos, la .1 de ARGOSISP_WG_RED, UDP ARGOSISP_WG_PUERTO)
+# y su agente, que aplica los peers de network.routers_conexion. Con el túnel, RADIUS_BIND_IP = la
+# .1 (10.255.0.1 por defecto). Detalle en infra/wireguard/README.md y contratos/conexion-routers.md.
+#
 # Los builds usan como contexto la raíz del repo (..), con el Dockerfile de cada app o servicio.
 
 name: argosisp
@@ -73,6 +78,31 @@ x-api-env: &api-env
   NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
   NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
   NOTIFY_PORTAL_URL: ${NOTIFY_PORTAL_URL:-}
+  # Túnel WireGuard de los routers (A1/A6, contratos/conexion-routers.md): la red del túnel (IPAM de
+  # las /32), el puerto UDP y el nombre o IP pública que el script de conexión pone como endpoint.
+  ARGOSISP_WIREGUARD: ${ARGOSISP_WIREGUARD:-0}
+  ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+  ARGOSISP_WG_PUERTO: ${ARGOSISP_WG_PUERTO:-51820}
+  ARGOSISP_WG_ENDPOINT: ${ARGOSISP_WG_ENDPOINT:-}
+  # ?incluir=servicio del script de conexión (PPPoE, perfiles y corte; app/network/conexion/servicio.ts):
+  # datos del servidor que Argos no guarda por router. Por defecto los del laboratorio (lab.rsc); en
+  # producción no hay valores por defecto (infra/produccion/.env.example). Sin ellos, 422 servicio_incompleto.
+  ROUTERS_MIKROTIK_DIR: ${ROUTERS_MIKROTIK_DIR:-/app/mikrotik}
+  ROUTEROS_INTERFAZ_CLIENTES: ${ROUTEROS_INTERFAZ_CLIENTES:-}
+  ROUTERS_SERVICIO_SUSP_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+  ROUTERS_SERVICIO_WAN_INTERFAZ: ${ROUTERS_SERVICIO_WAN_INTERFAZ:-ether1}
+  ROUTERS_SERVICIO_PPP_LOCAL_V4: ${ROUTERS_SERVICIO_PPP_LOCAL_V4:-10.10.0.1}
+  ROUTERS_SERVICIO_POOL_V4_RANGOS: ${ROUTERS_SERVICIO_POOL_V4_RANGOS:-10.10.0.10-10.10.0.250}
+  ROUTERS_SERVICIO_CLIENTES_V4: ${ROUTERS_SERVICIO_CLIENTES_V4:-10.10.0.0/16}
+  ROUTERS_SERVICIO_CLIENTES_V6: ${ROUTERS_SERVICIO_CLIENTES_V6:-2001:db8:100::/48,2001:db8:101::/48,2001:db8:200::/40,2001:db8:300::/40}
+  ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO:-2001:db8:100::/48}
+  ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO:-2001:db8:200::/40}
+  ROUTERS_SERVICIO_PORTAL_V4: ${ROUTERS_SERVICIO_PORTAL_V4:-192.0.2.20}
+  ROUTERS_SERVICIO_PORTAL_V6: ${ROUTERS_SERVICIO_PORTAL_V6:-2001:db8:ffff::20}
+  ROUTERS_SERVICIO_PORTAL_FQDN: ${ROUTERS_SERVICIO_PORTAL_FQDN:-portal.argosisp.example}
+  ROUTERS_SERVICIO_WALLED_GARDEN: ${ROUTERS_SERVICIO_WALLED_GARDEN:-app.recurrente.com}
+  ROUTERS_SERVICIO_DNS_V4: ${ROUTERS_SERVICIO_DNS_V4:-192.0.2.53,198.51.100.53}
+  ROUTERS_SERVICIO_DNS_V6: ${ROUTERS_SERVICIO_DNS_V6:-2001:db8:ffff::53}
   # Token de GET /internal/aaa/servicio; el mismo valor que usa services/aaa.
   INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
   # Bearer de GET /metrics (Prometheus, perfil monitoreo). Vacío = /metrics responde 404.
@@ -550,15 +580,35 @@ services:
       AAA_INTERIM_SEGUNDOS: ${AAA_INTERIM_SEGUNDOS:-300}
       # GET /metrics (job aaa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # Clientes de FreeRADIUS por evento (A2, contratos/conexion-routers.md §6.4): con
+      # router.conexion_* (y al arrancar) regenera clients.d desde network.routers y avisa a
+      # freeradius por el FIFO clients.d/.recargar. 0 = solo a mano (pnpm aaa:clients).
+      AAA_CLIENTES_EVENTOS: ${AAA_CLIENTES_EVENTOS:-1}
+      # Nombre del nodo: grupo radius-clientes:<nodo> del stream (el segundo nodo, aaa2)
+      AAA_NODO: aaa
+      AAA_CLIENTS_DIR: /radius-clientes
+      # Cliente fijo mikrotik-lab de clients.conf: no se genera otro con la misma IP
+      RADIUS_LAB_NAS_IP: ${RADIUS_LAB_NAS_IP:-}
+      # Lectura de network.routers con el usuario de la aplicación (no hay uno de solo lectura)
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_USER: ${DB_APP_USER:-argosisp_api}
+      DB_PASSWORD: ${DB_APP_PASSWORD:-argosisp_api}
+      DB_DATABASE: argosisp
     # Último perfil conocido del modo degradado (A2: AAA_DEGRADADO_RUTA de la imagen,
     # /var/lib/argosisp-aaa/ultimo-conocido.json, dueño node, 0600). Con un segundo nodo, un volumen
     # propio por nodo (aaa2-datos).
     volumes:
       - aaa-datos:/var/lib/argosisp-aaa
+      # clients.d escribible (la misma carpeta que lee freeradius; los .conf y el FIFO no se commitean,
+      # services/aaa/.gitignore). La carpeta del repo debe ser escribible por el uid 1000 (node).
+      - ../services/aaa/freeradius/clients.d:/radius-clientes
     ports:
       - 127.0.0.1:${AAA_PORT_HOST:-3100}:3100
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       <<: *node-healthcheck
@@ -638,7 +688,9 @@ services:
     profiles: [lab]
     image: freeradius/freeradius-server:3.2.10
     restart: unless-stopped
-    # Log a stdout (docker logs). Para depurar: command: [-X]
+    # recargar.sh (A2) en lugar del entrypoint de la imagen: corre `freeradius -f` con estos argumentos
+    # y lo reinicia cuando aaa regenera clients.d (FIFO .recargar). Log a stdout; para depurar: [-X]
+    entrypoint: [/usr/local/bin/argosisp-recargar.sh]
     command: [-l, stdout]
     environment:
       TZ: UTC
@@ -651,12 +703,18 @@ services:
       - ../services/aaa/freeradius/sites-enabled:/etc/freeradius/sites-enabled:ro
       - ../services/aaa/freeradius/clients.conf:/etc/freeradius/clients.conf:ro
       - ../services/aaa/freeradius/clients.d:/etc/freeradius/clients.d:ro
+      - ../services/aaa/freeradius/recargar.sh:/usr/local/bin/argosisp-recargar.sh:ro
     ports:
       - ${RADIUS_BIND_IP:-127.0.0.1}:1812:1812/udp
       - ${RADIUS_BIND_IP:-127.0.0.1}:1813:1813/udp
     depends_on:
       aaa:
         condition: service_healthy
+      # Con el perfil wireguard, RADIUS_BIND_IP es la .1 del túnel: la interfaz debe existir antes de
+      # publicar el puerto. Sin el perfil no se espera nada (required: false).
+      wireguard:
+        condition: service_healthy
+        required: false
     healthcheck:
       # Status-Server al puerto de autenticación con el cliente localhost.
       test:
@@ -666,6 +724,76 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # Perfil wireguard: servidor WireGuard de los routers (A6, infra/wireguard). En la red del HOST:
+  # crea wg-argos con la .1 de ARGOSISP_WG_RED, así api, routeros-worker, coa y freeradius alcanzan
+  # las IPs del túnel por la ruta del host y salen con origen .1 (enmascarado de Docker). Publica solo
+  # ARGOSISP_WG_PUERTO/udp. La clave privada se genera una vez en el volumen wireguard-clave.
+  wireguard:
+    profiles: [wireguard]
+    image: argosisp/wireguard:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: infra/wireguard/Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    # wireguard-go si el kernel no trae el módulo (ARGOSISP_WG_MODO=auto)
+    devices: [/dev/net/tun:/dev/net/tun]
+    command: [servidor.sh]
+    stop_grace_period: 15s
+    environment:
+      TZ: UTC
+      ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+      ARGOSISP_WG_PUERTO: ${ARGOSISP_WG_PUERTO:-51820}
+      ARGOSISP_WG_MTU: ${ARGOSISP_WG_MTU:-1420}
+      ARGOSISP_WG_MODO: ${ARGOSISP_WG_MODO:-auto}
+      # 1 = por el túnel solo entran RADIUS (1812/1813 a la .1) y respuestas
+      ARGOSISP_WG_FIREWALL: ${ARGOSISP_WG_FIREWALL:-1}
+    volumes:
+      - wireguard-clave:/clave
+      - wireguard-estado:/estado
+    healthcheck:
+      test: [CMD, salud.sh, servidor]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Perfil wireguard: puente entre la API y el servidor (que no ve la red de compose). Escucha
+  # router.conexion_* (grupo `wireguard`) y aplica la lista completa de peers; manda a la API la
+  # clave pública del servidor y el último handshake de cada router (estado «conectado»).
+  wireguard-agente:
+    profiles: [wireguard]
+    image: argosisp/wireguard:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: infra/wireguard/Dockerfile
+    restart: unless-stopped
+    command: [agente.sh]
+    environment:
+      TZ: UTC
+      API_INTERNAL_URL: http://api:3333/api/v1/
+      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:-}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+      ARGOSISP_WG_ESTADO_CADA_S: ${ARGOSISP_WG_ESTADO_CADA_S:-60}
+    volumes:
+      - wireguard-estado:/estado
+    depends_on:
+      wireguard:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test: [CMD, salud.sh, agente]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 3m
 
   # Perfil publico: proxy con TLS para la API (incluido el webhook de la pasarela, con el cuerpo
   # crudo) y el panel. El portal no pasa por aquí (necesita la IP real del cliente). infra/proxy/
@@ -775,3 +903,6 @@ volumes:
   aaa-datos:
   # Comprobantes de depósito (api): ver COMPROBANTES_HOST_DIR en .env.example
   comprobantes:
+  # WireGuard: clave privada del servidor (solo la monta `wireguard`) y estado compartido con el agente
+  wireguard-clave:
+  wireguard-estado:

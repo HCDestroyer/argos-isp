@@ -150,7 +150,7 @@ export const REPORTES: Record<ClaveReporte, PresentacionReporte> = {
         rangoPorDefecto: DOCE_MESES,
         nota: {
             titulo: 'Reemplaza a «Facturas sin costo»',
-            descripcion: 'Desde la decisión del PM no se emiten facturas sin costo: lo regalado queda como bonificación, con su asiento interno 5.1.01 / ingreso (base sin IVA).',
+            descripcion: 'Ya no se emiten facturas sin costo: lo regalado queda como bonificación, con su asiento interno 5.1.01 / ingreso (base sin IVA).',
         },
     },
     'egresos': {

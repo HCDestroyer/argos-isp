@@ -206,7 +206,7 @@ export async function reconciliarAsignaciones(
             await liberarIpv4(trx, servicioId)
         } else {
             throw new ReglaNegocio(
-                'El router no tiene redes IPv4 ni el plan define pool_ipv4 en ese router',
+                'El router no tiene redes IPv4 y el plan no indica un pool IPv4 para ese router: agrega una red al router o el pool en la implementación del plan',
                 'sin_ipv4',
             )
         }

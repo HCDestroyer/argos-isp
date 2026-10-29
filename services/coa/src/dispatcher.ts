@@ -15,8 +15,8 @@ import type { MetricasCoa } from './metricas.ts'
 
 /**
  * coa-dispatcher: por cada `servicio.estado_cambiado` / `servicio.config_cambiada` decide CoA o
- * Disconnect (`decision.ts`), lo manda a cada sesión abierta del servicio (`nas_ip` de la sesión,
- * secret del router) y registra cada intento en `audit.red`.
+ * Disconnect (`decision.ts`), lo manda a cada sesión abierta del servicio (`nas_ip` y secret
+ * actuales del router de la sesión; `almacen.ts`) y registra cada intento en `audit.red`.
  *
  * - Reintentos: hasta `reintentos` más tras el primer envío, con backoff exponencial, solo ante
  *   timeout o error de red. Un NAK es respuesta definitiva del NAS (p. ej. sesión inexistente).
@@ -233,6 +233,10 @@ export class Dispatcher {
             razon: decision.razon,
             sesion_id: sesion.id,
             nas_ip: sesion.nas_ip,
+            // El router cambió de IP desde el Start (túnel WireGuard): queda la IP vieja para auditar.
+            ...(sesion.nas_ip_sesion && sesion.nas_ip_sesion !== sesion.nas_ip
+                ? { nas_ip_sesion: sesion.nas_ip_sesion }
+                : {}),
             puerto: this.#op.puertoNas,
             atributos,
         }

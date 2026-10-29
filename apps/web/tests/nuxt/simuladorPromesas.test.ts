@@ -4,6 +4,7 @@ import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
 import { meAdmin } from '~~/fixtures/auth/sesiones'
 import PromesaSimularModal from '~/components/PromesaSimularModal.vue'
 import { esperar } from '../ayudas/esperar'
+import { fijarHoyFixtures, soltarReloj } from '../ayudas/reloj'
 
 function enDias(dias: number): string {
     return sumarDiasFecha(hoyGuatemala(), dias)
@@ -15,12 +16,15 @@ function enCuerpo(selector: string): HTMLElement | null {
 
 describe('semana 2 · simulador de promesas', () => {
     beforeEach(() => {
+        // Promesas a pocos días: sin fecha fija, a fin de mes caen en la siguiente facturación.
+        fijarHoyFixtures()
         reiniciarFixtures()
         sesionFixture('fixture-admin')
         useUsuarioActual().value = meAdmin
     })
 
     afterEach(() => {
+        soltarReloj()
         sesionFixture(null)
         useUsuarioActual().value = null
         // Sin vaciar el body: tests/setup.ts desmonta todo después (vaciarlo antes rompía el desmontaje).

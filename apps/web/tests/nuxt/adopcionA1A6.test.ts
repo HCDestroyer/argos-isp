@@ -100,7 +100,7 @@ describe('campos personalizados en el cliente', () => {
         const esquema = esquemaClienteCon(catalogo)
         const entrada = { ...entradaDesdeCliente(undefined, catalogo), nombre: 'Ana' }
         const sinValor = esquema.safeParse(entrada)
-        expect(!sinValor.success && sinValor.error.issues.map(i => [i.path.join('.'), i.message])).toEqual([['campos_personalizados.medio_contacto', 'Cómo nos conoció es obligatorio']])
+        expect(!sinValor.success && sinValor.error.issues.map(i => [i.path.join('.'), i.message])).toEqual([['campos_personalizados.medio_contacto', 'Completa «Cómo nos conoció»: es obligatorio']])
         const fechaMala = esquema.safeParse({ ...entrada, campos_personalizados: { ...entrada.campos_personalizados, medio_contacto: 'Vecino', fecha_visita: '2026-02-30' } })
         expect(!fechaMala.success && fechaMala.error.issues[0]?.path.join('.')).toBe('campos_personalizados.fecha_visita')
         const bien = esquema.parse({ ...entrada, campos_personalizados: { ...entrada.campos_personalizados, medio_contacto: 'Vecino', referencia_casa: '  Portón verde ' } })

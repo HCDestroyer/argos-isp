@@ -148,6 +148,7 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                             <UFormField
                                 label="Facturas seguidas a tiempo"
                                 name="racha_periodos"
+                                required
                             >
                                 <UInputNumber
                                     v-model="estado.racha_periodos"
@@ -159,6 +160,7 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                             <UFormField
                                 label="Puntos extra"
                                 name="racha_puntos_extra"
+                                required
                             >
                                 <UInputNumber
                                     v-model="estado.racha_puntos_extra"
@@ -173,6 +175,7 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                         <UFormField
                             label="Cada cuántos meses"
                             name="cada_meses"
+                            required
                         >
                             <UInputNumber
                                 v-model="estado.cada_meses"
@@ -212,6 +215,7 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                         <UFormField
                             label="Facturas pagadas del referido"
                             name="facturas_pagadas_minimas"
+                            required
                         >
                             <UInputNumber
                                 v-model="estado.facturas_pagadas_minimas"
@@ -260,6 +264,7 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                         <UFormField
                             label="Meses adelantados mínimos"
                             name="periodos_minimos"
+                            required
                         >
                             <UInputNumber
                                 v-model="estado.periodos_minimos"
@@ -289,6 +294,7 @@ async function enviar(evento: FormSubmitEvent<SalidaReglaLealtad>) {
                         <UFormField
                             label="Veces"
                             name="tope_por_cliente"
+                            required
                         >
                             <UInputNumber
                                 v-model="estado.tope_por_cliente"

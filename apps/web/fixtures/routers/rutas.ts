@@ -3,7 +3,8 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
 import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
-import { SIN_CONTACTO } from './datos'
+import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, SIN_CONTACTO } from './datos'
+import { vistaBloque, vistaPool, vistaRed } from './pools'
 import { vistaPreviaControl } from './vistaPrevia'
 import { estrategiaDeControl } from './estrategiasDatos'
 
@@ -62,6 +63,18 @@ function dentroDe(pool: string, bloque: string): boolean {
     return (p.red & mascara) === b.red
 }
 
+/**
+ * En los fixtures no se parsea X.509: un PEM con esta marca hace de certificado que no es una CA
+ * (el de `argosisp-api` pegado en lugar del de `argos-ca`). Mensaje igual a `MENSAJE_PROPOSITO` de A1.
+ */
+export const MARCA_PEM_NO_CA = 'NOESCA'
+export const PEM_NO_CA = `-----BEGIN CERTIFICATE-----\nMIIB${MARCA_PEM_NO_CA}servicio\n-----END CERTIFICATE-----`
+const MENSAJE_PROPOSITO_CA = 'El certificado que Argos usa para verificar no es una CA, o el del router no tiene el uso tls-server. '
+    + 'Revisa: (1) en la CA del router (api_ca) va el certificado de la CA (argos-ca), no el del servicio '
+    + '(argosisp-api); (2) el certificado de www-ssl debe tener key-usage=...,tls-server y estar firmado con '
+    + 'ca=argos-ca (/certificate add ... key-usage=digital-signature,key-encipherment,tls-server, luego '
+    + '/certificate sign argosisp-api ca=argos-ca)'
+
 /** Como `camposConexionApi` (A1): los cinco campos de conexión, opcionales y nulables. */
 function erroresConexion(cuerpo: Record<string, unknown>): NonNullable<Problem['errors']> {
     const errores: NonNullable<Problem['errors']> = []
@@ -80,6 +93,10 @@ function erroresConexion(cuerpo: Record<string, unknown>): NonNullable<Problem['
     }
     texto('api_url', 300, API_URL, 'Debe ser https://host o https://host:puerto')
     texto('api_ca', 20_000, /^-----BEGIN CERTIFICATE-----/, 'Debe ser un certificado PEM')
+    // La API lee `basicConstraints`: el certificado del servicio (no CA) es 422 en `api_ca` (A1).
+    if (typeof cuerpo.api_ca === 'string' && cuerpo.api_ca.includes(MARCA_PEM_NO_CA) && !errores.some(e => e.field === 'api_ca')) {
+        errores.push({ field: 'api_ca', rule: 'ca', message: MENSAJE_PROPOSITO_CA })
+    }
     texto('dhcp_servidor', 100)
     texto('interfaz_clientes', 100)
     if (cuerpo.api_tls_verificar !== undefined && typeof cuerpo.api_tls_verificar !== 'boolean') {
@@ -123,6 +140,15 @@ export const rutasRouters: RutasFixture = {
             .filter(campo => !capacidadValida(cuerpo[campo]))
             .map(campo => ({ field: campo, message: 'Debe ser un entero entre 1 y 100000000', rule: 'range' }))
         errores.push(...erroresConexion(cuerpo))
+        if (cuerpo.quitar_api_password === true && typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') {
+            errores.push({ field: 'api_password', message: 'Quita la clave o escribe una nueva, no las dos cosas', rule: 'quitar' })
+        }
+        if (cuerpo.quitar_radius_secret === true && typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '') {
+            errores.push({ field: 'radius_secret', message: 'Quita el secreto o escribe uno nuevo, no las dos cosas', rule: 'quitar' })
+        }
+        if (typeof cuerpo.zona_id === 'number' && !bd.zonas.some(z => z.id === cuerpo.zona_id)) {
+            errores.push({ field: 'zona_id', message: `La zona ${cuerpo.zona_id} no existe`, rule: 'exists' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -131,7 +157,20 @@ export const rutasRouters: RutasFixture = {
             const valor = campo in cuerpo ? cuerpo[campo] : router[campo]
             return (typeof valor === 'string' ? valor.trim() : valor) as Schema<'Router'>[K]
         }
+        // Datos generales, como `editarRouterValidator`: sin el campo se conserva. Los secretos nunca
+        // vuelven: solo `tiene_api_password` / `tiene_radius_secret`.
+        const texto = (campo: 'nombre' | 'host' | 'nas_ip'): string => (typeof cuerpo[campo] === 'string' ? (cuerpo[campo] as string).trim() : router[campo])
         Object.assign(router, {
+            nombre: texto('nombre'),
+            host: texto('host'),
+            nas_ip: texto('nas_ip'),
+            modo_seguridad: cuerpo.modo_seguridad === 'radius' || cuerpo.modo_seguridad === 'api' ? cuerpo.modo_seguridad : router.modo_seguridad,
+            api_usuario: 'api_usuario' in cuerpo ? (cuerpo.api_usuario as string | null) : router.api_usuario,
+            // Vacío o null no cambia; `quitar_*` la borra a propósito.
+            tiene_api_password: cuerpo.quitar_api_password === true ? false : (typeof cuerpo.api_password === 'string' && cuerpo.api_password !== '') || router.tiene_api_password,
+            tiene_radius_secret: cuerpo.quitar_radius_secret === true ? false : (typeof cuerpo.radius_secret === 'string' && cuerpo.radius_secret !== '') || router.tiene_radius_secret,
+            zona_id: 'zona_id' in cuerpo ? (cuerpo.zona_id as number | null) : (router.zona_id ?? null),
+            activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             capacidad_bajada_kbps: capacidad('capacidad_bajada_kbps'),
             capacidad_subida_kbps: capacidad('capacidad_subida_kbps'),
             api_url: conexion('api_url'),
@@ -146,7 +185,8 @@ export const rutasRouters: RutasFixture = {
             updated_at: ahora(),
         })
         // Como la API: la CA se audita como `***`.
-        registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, typeof cuerpo.api_ca === 'string' ? { ...cuerpo, api_ca: '***' } : cuerpo)
+        const auditado = { ...cuerpo, ...(typeof cuerpo.api_ca === 'string' ? { api_ca: '***' } : {}), ...('api_password' in cuerpo ? { api_password: '***' } : {}), ...('radius_secret' in cuerpo ? { radius_secret: '***' } : {}) }
+        registrarAccion(solicitud, 'routers.editar', { tipo: 'router', id: router.id }, auditado)
         return { status: 200, cuerpo: router }
     }),
 
@@ -200,14 +240,14 @@ export const rutasRouters: RutasFixture = {
     'GET /api/v1/routers/:id/redes-ipv4': conPermiso('redes.ver', (solicitud) => {
         const id = idDe(solicitud)
         return existeRouter(id)
-            ? { status: 200, cuerpo: bd.redesIpv4.filter(red => red.router_id === id) }
+            ? { status: 200, cuerpo: bd.redesIpv4.filter(red => red.router_id === id).map(vistaRed) }
             : noEncontrado('el router')
     }),
 
     'GET /api/v1/routers/:id/ipv6-bloques': conPermiso('ipv6.ver', (solicitud) => {
         const id = idDe(solicitud)
         return existeRouter(id)
-            ? { status: 200, cuerpo: bd.ipv6Bloques.filter(bloque => bloque.router_id === id) }
+            ? { status: 200, cuerpo: bd.ipv6Bloques.filter(bloque => bloque.router_id === id).map(vistaBloque) }
             : noEncontrado('el router')
     }),
 
@@ -252,6 +292,7 @@ export const rutasRouters: RutasFixture = {
             dhcp_servidor: null,
             interfaz_clientes: null,
             empresa_sugerida_id: null,
+            zona_id: typeof cuerpo.zona_id === 'number' ? cuerpo.zona_id : null,
             ...SIN_CONTACTO,
             version: 1,
             created_at: creado,
@@ -276,10 +317,26 @@ export const rutasRouters: RutasFixture = {
         if (bd.redesIpv4.some(r => r.cidr === cidr)) {
             return datosInvalidos([{ field: 'cidr', message: `La red ${cidr} se solapa con otra ya registrada`, rule: 'solapamiento' }])
         }
-        const red: Schema<'RedIpv4'> = { id: Math.max(0, ...bd.redesIpv4.map(r => r.id)) + 1, router_id: id, cidr, gateway: typeof cuerpo.gateway === 'string' ? cuerpo.gateway : null, tipo: cuerpo.tipo === 'estatico' ? 'estatico' : 'pool', version: 1, created_at: ahora(), updated_at: ahora() }
+        const opcional = (campo: string): string | null => (typeof cuerpo[campo] === 'string' && (cuerpo[campo] as string).trim() !== '' ? (cuerpo[campo] as string).trim() : null)
+        const red: Schema<'RedIpv4'> = {
+            id: Math.max(0, ...bd.redesIpv4.map(r => r.id)) + 1,
+            router_id: id,
+            nombre: opcional('nombre'),
+            cidr,
+            gateway: opcional('gateway'),
+            tipo: cuerpo.tipo === 'estatico' ? 'estatico' : 'pool',
+            rango_inicio: opcional('rango_inicio'),
+            rango_fin: opcional('rango_fin'),
+            dns_primario: opcional('dns_primario'),
+            dns_secundario: opcional('dns_secundario'),
+            ocupacion: OCUPACION_SIN_CALCULAR,
+            version: 1,
+            created_at: ahora(),
+            updated_at: ahora(),
+        }
         bd.redesIpv4.push(red)
         registrarAccion(solicitud, 'redes.crear', { tipo: 'red_ipv4', id: red.id }, cuerpo)
-        return { status: 201, cuerpo: red }
+        return { status: 201, cuerpo: vistaRed(red) }
     }),
 
     'POST /api/v1/routers/:id/ipv6-bloques': conPermiso('ipv6.crear', (solicitud) => {
@@ -287,23 +344,25 @@ export const rutasRouters: RutasFixture = {
         if (!existeRouter(id) || id === null) {
             return noEncontrado('el router')
         }
-        const prefijo = String(cuerpoObjeto(solicitud).prefijo ?? '').trim()
+        const cuerpo = cuerpoObjeto(solicitud)
+        const prefijo = String(cuerpo.prefijo ?? '').trim()
         if (!CIDR_V6.test(prefijo)) {
             return datosInvalidos([{ field: 'prefijo', message: 'El prefijo debe estar en notación CIDR', rule: 'regex' }])
         }
         if (bd.ipv6Bloques.some(b => b.prefijo === prefijo)) {
             return datosInvalidos([{ field: 'prefijo', message: `El bloque ${prefijo} se solapa con otro`, rule: 'solapamiento' }])
         }
-        const bloque: Schema<'Ipv6Bloque'> = { id: Math.max(0, ...bd.ipv6Bloques.map(b => b.id)) + 1, router_id: id, prefijo, version: 1, created_at: ahora(), updated_at: ahora() }
+        const texto = (campo: string): string | null => (typeof cuerpo[campo] === 'string' && (cuerpo[campo] as string).trim() !== '' ? (cuerpo[campo] as string).trim() : null)
+        const bloque: Schema<'Ipv6Bloque'> = { id: Math.max(0, ...bd.ipv6Bloques.map(b => b.id)) + 1, router_id: id, nombre: texto('nombre'), proveedor: texto('proveedor'), prefijo, espacio: { pools: 0, porcentaje_en_pools: 0 }, version: 1, created_at: ahora(), updated_at: ahora() }
         bd.ipv6Bloques.push(bloque)
-        registrarAccion(solicitud, 'ipv6.crear', { tipo: 'ipv6_bloque', id: bloque.id }, { prefijo })
-        return { status: 201, cuerpo: bloque }
+        registrarAccion(solicitud, 'ipv6.crear', { tipo: 'ipv6_bloque', id: bloque.id }, cuerpo)
+        return { status: 201, cuerpo: vistaBloque(bloque) }
     }),
 
     'GET /api/v1/ipv6-bloques/:id/pools': conPermiso('ipv6.ver', (solicitud) => {
         const id = idDe(solicitud)
         return bd.ipv6Bloques.some(b => b.id === id)
-            ? { status: 200, cuerpo: bd.ipv6Pools.filter(p => p.bloque_id === id) }
+            ? { status: 200, cuerpo: bd.ipv6Pools.filter(p => p.bloque_id === id).map(vistaPool) }
             : noEncontrado('el bloque')
     }),
 
@@ -329,9 +388,23 @@ export const rutasRouters: RutasFixture = {
         if (bd.ipv6Pools.some(p => p.prefijo === prefijo)) {
             return datosInvalidos([{ field: 'prefijo', message: `El pool ${prefijo} ya existe`, rule: 'solapamiento' }])
         }
-        const pool: Schema<'Ipv6Pool'> = { id: Math.max(0, ...bd.ipv6Pools.map(p => p.id)) + 1, bloque_id: bloque.id, prefijo, tipo, tamano_entrega: tamano, nombre_en_router: typeof cuerpo.nombre_en_router === 'string' ? cuerpo.nombre_en_router : null, version: 1, created_at: ahora(), updated_at: ahora() }
+        const pool: Schema<'Ipv6Pool'> = {
+            id: Math.max(0, ...bd.ipv6Pools.map(p => p.id)) + 1,
+            bloque_id: bloque.id,
+            router_id: bloque.router_id,
+            nombre: typeof cuerpo.nombre === 'string' && cuerpo.nombre.trim() ? cuerpo.nombre.trim() : null,
+            prefijo,
+            tipo,
+            tamano_entrega: tamano,
+            nombre_en_router: typeof cuerpo.nombre_en_router === 'string' && cuerpo.nombre_en_router ? cuerpo.nombre_en_router : null,
+            ocupacion: OCUPACION_SIN_CALCULAR,
+            entrega: ENTREGA_SIN_CALCULAR,
+            version: 1,
+            created_at: ahora(),
+            updated_at: ahora(),
+        }
         bd.ipv6Pools.push(pool)
         registrarAccion(solicitud, 'ipv6.crear', { tipo: 'ipv6_pool', id: pool.id }, cuerpo)
-        return { status: 201, cuerpo: pool }
+        return { status: 201, cuerpo: vistaPool(pool) }
     }),
 }

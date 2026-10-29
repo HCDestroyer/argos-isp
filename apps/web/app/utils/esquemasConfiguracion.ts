@@ -40,7 +40,7 @@ function telefonoOpcional() {
  * cada campo es texto; vacío se manda como `null`.
  */
 export const esquemaEmpresa = z.object({
-    nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(200, 'Máximo 200 caracteres'),
+    nombre: z.string().trim().min(1, 'Escribe el nombre').max(200, 'Máximo 200 caracteres'),
     nit: opcional(20),
     direccion: opcional(300),
     telefono: telefonoOpcional(),

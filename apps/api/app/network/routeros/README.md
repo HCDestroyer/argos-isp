@@ -21,9 +21,9 @@ Vive en `apps/api` y no en `services/coa` porque usa la función de velocidad ú
 | `consumidor.ts`                   | Grupo `routeros` del bus                                                                                                                                                                                                 |
 | `jobs.ts`                         | Crons `recuperar`, `reconciliar` y `sondear` (cola `routeros-cron`)                                                                                                                                                      |
 | `velocidad_router.ts`             | Función pura: objetos de velocidad del router (padres por plan, perfiles PPP `plan-<id>`) según `control_velocidad`, reuso y lo leído del router                                                                         |
-| `corte_router.ts`                 | Función pura: objetos de nivel router del corte y FastTrack (mismos comentarios que `lab.rsc`), orden de las reglas                                                                                                       |
+| `corte_router.ts`                 | Función pura: objetos de nivel router del corte y FastTrack (mismos comentarios que `lab.rsc`), orden de las reglas                                                                                                      |
 | `sincronizar.ts`                  | `sincronizarPlan`: `planes.sincronizar` (CoA de velocidad y `aaa:user:*`) y `routeros.reconciliar` de cada router del plan                                                                                               |
-| `diagnostico.ts`                  | Vista previa de «Reconciliar ahora» (lee el router) y chequeo `corte` de «Probar conexión»                                                                                                                              |
+| `diagnostico.ts`                  | Vista previa de «Reconciliar ahora» (lee el router) y chequeo `corte` de «Probar conexión»                                                                                                                               |
 | `prefijos.ts`                     | Cola `routeros-prefijos`: tras `sesion.iniciada` sin /56 (IPv6 `radius_pool`), `CompletarPrefijoDelegado` lee el binding DHCPv6-PD del router (`app/network/sesiones`)                                                   |
 
 Comando: `node ace routeros:worker` (consumidor + crons; `--una-vez reconciliar|recuperar|sondear`, `--sin-eventos`).
@@ -104,6 +104,10 @@ El modo por router pasó a ser una estrategia de cuatro capas (aplicación, padr
 
 El reconciliador (y el último paso de un cambio de estrategia) deja el corte en cada router con API: lista de interfaces y perfil `suspendido`, address-lists, saltos `argosisp:top` al inicio de filter y nat (antes de FastTrack), cadenas `argos-corte`, `argos-corte-in`, `argos-activo` y `argos-corte-nat`, y la excepción de FastTrack si alguna estrategia la pide. Mismos comentarios que `lab.rsc`: si el script ya corrió, no cambia nada. Orden: crear → `move` → borrar. Configuración `ROUTERS_SERVICIO_*` (la del script de conexión) o `PORTAL_URL_PUBLICA` / pasarela.
 
+**Portal por FQDN**: el `to-addresses` del dst-nat HTTP → `/corte` es `ROUTERS_SERVICIO_PORTAL_V4`, la IP de `PORTAL_URL_PUBLICA` o, si es un nombre, el FQDN resuelto a IPv4 desde la API **en cada reconciliación** (`configCorteResuelta`; solo en el estado deseado, sin caché). Si no resuelve: `routeros.fallido` (`operacion: "resolver portal"`), la regla que haya se conserva y el diagnóstico sale en rojo (`portal_sin_ipv4`).
+
+**Diagnóstico de corte** (`diagnosticoCorte`, chequeo `corte` de «Probar conexión» y `GET /routers/:id/diagnostico-corte`): lista `suspendidos` (o que no hace falta), reglas activas y en orden, `/tool/fetch` al destino real del NAT, suspendidos con su IP fuera de la lista y FastTrack; cada paso con comandos de RouterOS. Límites: HTTPS e IPv6 no se redirigen (`contratos/control-velocidad.md` §10).
+
 ## Eventos
 
 | Consume (grupo `routeros`)                                                                       | Hace                                                                                                                                                                              |
@@ -116,7 +120,7 @@ El reconciliador (y el último paso de un cambio de estrategia) deja el corte en
 
 | Emite (outbox)                                                  | Cuándo                                                                                                                                                                                                                              |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sesion.velocidad_solicitada`                                   | Sincronizar plan o cambio de estrategia: CoA de velocidad (lo manda `coa`) a sesiones `radius_rate_limit` / `perfil_ppp` vivas                                                                                                         |
+| `sesion.velocidad_solicitada`                                   | Sincronizar plan o cambio de estrategia: CoA de velocidad (lo manda `coa`) a sesiones `radius_rate_limit` / `perfil_ppp` vivas                                                                                                      |
 | `routeros.fallido { servicio_id, router_id, operacion, error }` | El router no respondió tras 1 + 3 intentos (backoff 0,5 · 1 · 2 s), rechazó las credenciales, respondió 400 o no tiene credenciales. El router queda pendiente y la acción **no lanza** (reintentar el evento no arregla el router) |
 
 ## Garantías
@@ -138,6 +142,7 @@ El reconciliador (y el último paso de un cambio de estrategia) deja el corte en
 
 - `tests/network/routeros_estrategias.spec.ts`: matriz (422 con el porqué), objetos de cada estrategia, dos formas en el mismo router, migración sin cambios, cambio sin cortar (WISP crea antes de borrar, PPPoE con CoA y sin Disconnect), `reconectar` y sincronizar plan.
 - `tests/network/routeros_corte.spec.ts`: router virgen con el corte, idempotencia, `move` de un salto desordenado, reglas del script intactas y FastTrack según la estrategia.
+- `tests/network/routeros_corte_diagnostico.spec.ts`: portal por FQDN que resuelve (y cambia de IP) y que no resuelve (`routeros.fallido`), NAT faltante o desactivada, portal 404/302/inalcanzable, suspendido fuera de la lista, sin suspendidos, FastTrack y el chequeo `corte` de «Probar conexión».
 - `tests/network/coa.spec.ts`: de punta a punta con `coa` y el NAS simulado: sincronizar → CoA-Request sin Disconnect; el CoA de suspensión nombra la lista y la cadena que dejó el reconciliador.
 
 - `tests/network/routeros_cliente.spec.ts`: cliente contra el RouterOS falso (idempotencia, normalización, 401, 400, 5xx, timeout, router caído, PUT con respuesta perdida, HTTPS con y sin CA).
