@@ -1,5 +1,12 @@
 import { test } from '@japa/runner'
-import { comandosCertificado, diagnosticarErrorRouterOS } from '#network/diagnostico_routeros'
+import {
+    MENSAJE_PROPOSITO,
+    comandosCertificado,
+    diagnosticarErrorRouterOS,
+} from '#network/diagnostico_routeros'
+import { exigirCaValida } from '#network/actions/crear_router'
+import { ValidacionFallida } from '#shared/errores'
+import { CA_PEM, SERVICIO_PEM } from '#tests/network/certificados'
 import {
     RouterOSCredenciales,
     RouterOSInalcanzable,
@@ -89,5 +96,34 @@ test.group('Diagnóstico de errores de RouterOS', () => {
         assert.equal(d.motivo, 'no_responde')
         assert.notInclude(d.detalle, 'EHOSTUNREACH')
         assert.include(d.error_tecnico, 'EHOSTUNREACH')
+    })
+
+    test('unsuitable certificate purpose: la api_ca no es una CA o falta tls-server', ({ assert }) => {
+        const d = diagnosticarErrorRouterOS(tls('unsuitable certificate purpose', 'INVALID_PURPOSE'))
+        assert.equal(d.motivo, 'certificado_proposito')
+        assert.equal(d.detalle, MENSAJE_PROPOSITO)
+        assert.include(d.detalle, 'argos-ca')
+        assert.include(d.detalle, 'tls-server')
+        assert.include(
+            comandosCertificado('10.255.0.2'),
+            'key-usage=digital-signature,key-encipherment,tls-server',
+        )
+    })
+
+    test('api_ca: solo una CA (basicConstraints CA:TRUE); el certificado del servicio o un PEM roto → 422', ({
+        assert,
+    }) => {
+        assert.doesNotThrow(() => exigirCaValida(CA_PEM))
+        assert.doesNotThrow(() => exigirCaValida(null))
+        try {
+            exigirCaValida(SERVICIO_PEM)
+            assert.fail('debía rechazar un certificado que no es CA')
+        } catch (error) {
+            assert.instanceOf(error, ValidacionFallida)
+            const e = error as ValidacionFallida
+            assert.equal(e.errores![0]!.field, 'api_ca')
+            assert.equal(e.errores![0]!.message, MENSAJE_PROPOSITO)
+        }
+        assert.throws(() => exigirCaValida('-----BEGIN CERTIFICATE-----\nroto\n-----END CERTIFICATE-----'))
     })
 })

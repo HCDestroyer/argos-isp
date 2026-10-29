@@ -57,8 +57,11 @@ import {
     PruebaConexion,
     ReconciliacionEncolada,
     RegistroConexion,
+    SincronizacionServicio,
 } from '#network/esquemas'
 import ProbarConexion from '#network/conexion/actions/probar_conexion'
+import SincronizarRouterServicio from '#network/actions/sincronizar_router_servicio'
+import { exigirServicio } from '#core/acceso_empresa'
 import ReconciliarAhora from '#network/conexion/actions/reconciliar_ahora'
 import { parsearAdmin } from '#network/conexion/config'
 import { listarPeers, verConexion } from '#network/conexion/consultas'
@@ -505,6 +508,30 @@ const SOBRE_EL_SCRIPT =
 
 // Conexión de routers por WireGuard (contratos/conexion-routers.md)
 const conexion: Ruta[] = [
+    definirRuta({
+        metodo: 'post',
+        ruta: '/servicios/:id/sincronizar-router',
+        operacion: 'serviciosSincronizarRouter',
+        resumen: 'Sincronizar ya el servicio con su MikroTik (cola, address-list, lease y ARP)',
+        descripcion:
+            'Ejecuta `routeros.aplicar_servicio` en el acto y devuelve lo corregido (`cambios[]`) o ' +
+            '`ya_estaba_bien`. Idempotente y con candado por servicio; cada comando queda en `audit.red`. Si el ' +
+            'router no responde, 200 con `error` (`motivo`, `detalle`). 422 `servicio_pendiente_instalacion`; ' +
+            '422 `router_sin_api` (router inactivo o sin usuario y clave de la API).',
+        etiqueta: 'servicios',
+        permiso: 'servicios.sincronizar_router',
+        idempotente: true,
+        respuesta: {
+            status: 200,
+            descripcion: 'Resultado de la sincronización',
+            esquema: SincronizacionServicio,
+        },
+        handler: async (ctx, { params }) => {
+            const id = Number(params.id)
+            await exigirServicio(ctx, id)
+            return new SincronizarRouterServicio().execute({ servicio_id: id }, ctx.contextoAccion())
+        },
+    }),
     definirRuta({
         metodo: 'post',
         ruta: '/routers/:id/probar-conexion',

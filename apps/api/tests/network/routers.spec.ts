@@ -4,6 +4,7 @@ import { descifrar } from '#shared/cifrado'
 import { asignarIpv4, liberarIpv4 } from '#network/ipam_v4'
 import { routerDispatcher } from '#network/routeros/consultas'
 import { estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { CA_PEM, OTRA_CA_PEM } from '#tests/network/certificados'
 import { crearClienteFila, crearRouterFila, crearServicioFila, ipUnica, redUnica } from '#tests/core/fabricas'
 
 test.group('Routers', () => {
@@ -93,7 +94,7 @@ test.group('Routers', () => {
         assert,
     }) => {
         const { token } = await usuarioConRoles(['admin'])
-        const ca = '-----BEGIN CERTIFICATE-----\nMIIBprueba\n-----END CERTIFICATE-----'
+        const ca = CA_PEM
         const sinConexion = await estado(
             client
                 .post('/api/v1/routers')
@@ -162,7 +163,7 @@ test.group('Routers', () => {
         assert.equal(accion.entrada.api_ca, '***')
         assert.isFalse(JSON.stringify(accion).includes('MIIBprueba'))
 
-        const otraCa = '-----BEGIN CERTIFICATE-----\nMIIBotra\n-----END CERTIFICATE-----'
+        const otraCa = OTRA_CA_PEM
         const editado = await estado(
             client.put(`/api/v1/routers/${router.id}`).bearerToken(token).json({
                 version: 1,

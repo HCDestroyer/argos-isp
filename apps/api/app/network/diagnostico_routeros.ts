@@ -13,6 +13,7 @@ export const MOTIVOS_API = [
     'sin_credenciales',
     'sin_certificado',
     'certificado_no_confiable',
+    'certificado_proposito',
     'puerto_cerrado',
     'protocolo',
     'credenciales',
@@ -52,11 +53,20 @@ export function comandosCertificado(host: string): string {
     return [
         '/certificate add name=argos-ca common-name=argos-ca key-usage=key-cert-sign,crl-sign days-valid=3650',
         '/certificate sign argos-ca',
-        `/certificate add name=argosisp-api common-name=${host} subject-alt-name=${san} days-valid=3650`,
+        `/certificate add name=argosisp-api common-name=${host} subject-alt-name=${san} ` +
+            'key-usage=digital-signature,key-encipherment,tls-server days-valid=3650',
         '/certificate sign argosisp-api ca=argos-ca',
         '/ip service set www-ssl certificate=argosisp-api disabled=no',
     ].join('\n')
 }
+
+/** Lo que hay que revisar ante `unsuitable certificate purpose` (y al pegar una `api_ca` que no es CA). */
+export const MENSAJE_PROPOSITO =
+    'El certificado que Argos usa para verificar no es una CA, o el del router no tiene el uso tls-server. ' +
+    'Revisa: (1) en la CA del router (api_ca) va el certificado de la CA (argos-ca), no el del servicio ' +
+    '(argosisp-api); (2) el certificado de www-ssl debe tener key-usage=...,tls-server y estar firmado con ' +
+    'ca=argos-ca (/certificate add ... key-usage=digital-signature,key-encipherment,tls-server, luego ' +
+    '/certificate sign argosisp-api ca=argos-ca)'
 
 export function diagnosticarErrorRouterOS(
     error: ErrorRouterOSLike,
@@ -79,7 +89,11 @@ export function diagnosticarErrorRouterOS(
                 '/user group set argosisp-api policy=read,write,api,rest-api',
         )
     }
-    if (error.tipo === 'credenciales' || error.status === 401) {
+    if (
+        error.tipo === 'credenciales' ||
+        error.status === 401 ||
+        /credenciales de la API rechazadas/.test(tecnico)
+    ) {
         return resultado(
             'credenciales',
             'El router rechazó el acceso (401): el usuario o la clave de la API no coinciden con los guardados en ' +
@@ -101,6 +115,9 @@ export function diagnosticarErrorRouterOS(
                 comandosCertificado(host),
         )
     }
+    if (error.codigo === 'INVALID_PURPOSE' || /unsuitable certificate purpose/i.test(texto)) {
+        return resultado('certificado_proposito', MENSAJE_PROPOSITO)
+    }
     if (
         esErrorTls(error.codigo) ||
         /self.signed|unable to verify|unable to get local issuer|certificate has expired|altname/i.test(texto)
@@ -115,6 +132,7 @@ export function diagnosticarErrorRouterOS(
     if (
         error.codigo === 'ECONNREFUSED' ||
         error.codigo === 'ETIMEDOUT' ||
+        /\bECONNREFUSED\b|\bETIMEDOUT\b/.test(tecnico) ||
         /sin respuesta en \d+ ms/.test(tecnico)
     ) {
         return resultado(

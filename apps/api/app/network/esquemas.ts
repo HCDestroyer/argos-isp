@@ -565,3 +565,29 @@ export const ReconciliacionEncolada = definirEsquema(
         },
     }),
 )
+
+export const SincronizacionServicio = definirEsquema(
+    'SincronizacionServicio',
+    objeto({
+        servicio_id: id,
+        router_id: id,
+        cambios: lista(
+            objeto(
+                {
+                    router_id: id,
+                    ruta: { ...texto, description: 'Menú de RouterOS (`/queue/simple`, `/ip/arp`…)' },
+                    comment: { ...texto, description: '`argosisp:servicio:<id>` o `argosisp:plan:<id>`' },
+                    accion: enumerado(['creado', 'actualizado', 'borrado']),
+                    duplicados: entero,
+                },
+                ['duplicados'],
+            ),
+        ),
+        ya_estaba_bien: { ...booleano, description: 'Nada que corregir y el router respondió' },
+        avisos: lista(texto),
+        error: {
+            ...nulable(objeto({ motivo: enumerado(MOTIVOS_API), detalle: texto })),
+            description: 'El router no respondió o rechazó un comando (lenguaje simple); null si todo bien',
+        },
+    }),
+)

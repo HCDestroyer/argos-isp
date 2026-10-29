@@ -32,6 +32,8 @@ export const PERMISOS = {
     'servicios.limitar': 'Limitar la velocidad de servicios',
     'servicios.quitar_limite': 'Quitar el límite de velocidad',
     'servicios.retirar': 'Retirar servicios',
+    'servicios.sincronizar_router':
+        'Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió',
     'servicios.activar_instalacion':
         'Activar la instalación de un servicio pendiente (lo pasa a activo e inicia la facturación)',
     'servicios.desconectar': 'Desconectar la sesión PPPoE de un servicio',
@@ -379,6 +381,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'servicios.quitar_limite',
             'servicios.activar_instalacion',
             'servicios.desconectar',
+            'servicios.sincronizar_router',
             'servicios.ver_credenciales',
             'servicios.agregar_adicional',
             'servicios.editar_adicional',
@@ -421,6 +424,7 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             // instala lo que vende Iris (contratos/instalacion.md): tiene servicios.crear
             'servicios.activar_instalacion',
             'servicios.desconectar',
+            'servicios.sincronizar_router',
             'servicios.ver_credenciales',
             'servicios.agregar_adicional',
             'servicios.editar_adicional',

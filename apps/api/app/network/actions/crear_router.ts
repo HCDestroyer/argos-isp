@@ -6,6 +6,30 @@ import { vincularExterno, type IdExterno } from '#core/ids_externos'
 import { exigirEmpresaActiva } from '#core/empresas'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { ValidacionFallida } from '#shared/errores'
+import { X509Certificate } from 'node:crypto'
+import { MENSAJE_PROPOSITO } from '#network/diagnostico_routeros'
+
+/**
+ * La `api_ca` debe ser el certificado de una CA (`basicConstraints CA:TRUE`): pegar el del servicio
+ * (`argosisp-api`) hace fallar la verificación con `unsuitable certificate purpose` (caso real del PM).
+ * 422 en `api_ca` con lo que hay que revisar.
+ */
+export function exigirCaValida(pem: string | null | undefined) {
+    if (!pem) return
+    let esCa: boolean
+    try {
+        esCa = new X509Certificate(pem).ca
+    } catch {
+        throw new ValidacionFallida([
+            {
+                field: 'api_ca',
+                rule: 'pem',
+                message: 'No es un certificado PEM válido (-----BEGIN CERTIFICATE-----)',
+            },
+        ])
+    }
+    if (!esCa) throw new ValidacionFallida([{ field: 'api_ca', rule: 'ca', message: MENSAJE_PROPOSITO }])
+}
 
 /** 422 en `zona_id` si la zona no existe. */
 export async function exigirZona(trx: TransactionClientContract, zonaId: number | null | undefined) {
@@ -121,6 +145,7 @@ export default class CrearRouter extends DomainAction<EntradaCrearRouter, Router
             await exigirEmpresaActiva(t.trx, datos.empresa_sugerida_id, 'empresa_sugerida_id')
         }
         await exigirZona(t.trx, datos.zona_id)
+        exigirCaValida(datos.api_ca)
         const [fila] = (await t.trx
             .insertQuery()
             .table('network.routers')

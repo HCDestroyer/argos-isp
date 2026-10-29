@@ -1,6 +1,6 @@
 import type { Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
-import { auditableRouter, avisarRadius } from '#network/actions/crear_router'
+import { auditableRouter, avisarRadius, exigirCaValida } from '#network/actions/crear_router'
 import { verRouter } from '#network/consultas/routers'
 import { configWireguard } from '#network/conexion/config'
 import { USUARIO_API, auditableConexion, filaConexion, type FilaConexion } from '#network/conexion/consultas'
@@ -39,6 +39,7 @@ export async function aplicarRegistro(
 ): Promise<RespuestaRegistro> {
     const routerId = conexion.router_id
     const publicKey = datos.public_key
+    exigirCaValida(datos.api_ca)
     const wg = await configWireguard(t.trx)
     const otra = await t.trx
         .from('network.routers_conexion')
