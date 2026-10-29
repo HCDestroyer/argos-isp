@@ -4,6 +4,7 @@ import {
     auditableRouter,
     avisarRadius,
     columnasRouter,
+    exigirCaValida,
     exigirZona,
     type DatosRouter,
 } from '#network/actions/crear_router'
@@ -90,6 +91,7 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
             await exigirEmpresaActiva(t.trx, datos.empresa_sugerida_id, 'empresa_sugerida_id')
         }
         if (datos.zona_id !== antes.zona_id) await exigirZona(t.trx, datos.zona_id)
+        exigirCaValida(datos.api_ca)
         await actualizarConVersion(t.trx, 'network.routers', id, version, columnasRouter(datos))
         const despues = await verRouter(id, t.trx)
 

@@ -56270,6 +56270,7 @@
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
+                        "servicios.sincronizar_router",
                         "servicios.suspender",
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
@@ -56603,6 +56604,7 @@
                         "servicios.quitar_limite",
                         "servicios.reactivar",
                         "servicios.retirar",
+                        "servicios.sincronizar_router",
                         "servicios.suspender",
                         "servicios.ver",
                         "servicios.ver_credencial_adicional",
@@ -63415,6 +63417,110 @@
         "x-implementado": true
       }
     },
+    "/api/v1/servicios/{id}/sincronizar-router": {
+      "post": {
+        "operationId": "serviciosSincronizarRouter",
+        "summary": "Sincronizar ya el servicio con su MikroTik (cola, address-list, lease y ARP)",
+        "description": "Ejecuta `routeros.aplicar_servicio` en el acto y devuelve lo corregido (`cambios[]`) o `ya_estaba_bien`. Idempotente y con candado por servicio; cada comando queda en `audit.red`. Si el router no responde, 200 con `error` (`motivo`, `detalle`). 422 `servicio_pendiente_instalacion`; 422 `router_sin_api` (router inactivo o sin usuario y clave de la API).",
+        "tags": [
+          "servicios"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "panel": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Clave única por intento lógico; repetirla devuelve la misma respuesta",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de la sincronización",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SincronizacionServicio"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin el permiso servicios.sincronizar_router; o CSRF inválido con la cookie del panel (`csrf_invalido`)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No encontrado",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Petición idempotente en curso",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-permiso": "servicios.sincronizar_router",
+        "x-implementado": true
+      }
+    },
     "/api/v1/servicios/{id}/suspender": {
       "post": {
         "operationId": "serviciosSuspender",
@@ -64345,6 +64451,7 @@
                             "servicios.quitar_limite",
                             "servicios.reactivar",
                             "servicios.retirar",
+                            "servicios.sincronizar_router",
                             "servicios.suspender",
                             "servicios.ver",
                             "servicios.ver_credencial_adicional",
@@ -71253,12 +71360,17 @@
             ],
             "enum": [
               "sin_credenciales",
-              "no_responde",
+              "sin_certificado",
+              "certificado_no_confiable",
+              "certificado_proposito",
+              "puerto_cerrado",
+              "protocolo",
               "credenciales",
-              "certificado",
+              "politicas",
+              "no_responde",
               "respuesta"
             ],
-            "description": "Solo en `api`: por qué falló"
+            "description": "Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta"
           },
           "datos": {
             "type": [
@@ -71266,7 +71378,7 @@
               "null"
             ],
             "additionalProperties": true,
-            "description": "`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }"
+            "description": "`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)"
           }
         }
       },
@@ -83789,6 +83901,7 @@
           "servicios.quitar_limite",
           "servicios.reactivar",
           "servicios.retirar",
+          "servicios.sincronizar_router",
           "servicios.suspender",
           "servicios.ver",
           "servicios.ver_credencial_adicional",
@@ -84015,6 +84128,7 @@
           "Quitar el límite de velocidad",
           "Reactivar servicios manualmente",
           "Retirar servicios",
+          "Sincronizar ya un servicio con su MikroTik (cola, address-list, lease y ARP) y ver qué se corrigió",
           "Suspender servicios manualmente",
           "Ver servicios",
           "Ver la credencial de un adicional de un servicio (queda auditado)",
@@ -96196,6 +96310,7 @@
               "servicios.quitar_limite",
               "servicios.reactivar",
               "servicios.retirar",
+              "servicios.sincronizar_router",
               "servicios.suspender",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
@@ -96299,6 +96414,7 @@
               "servicios.quitar_adicional",
               "servicios.quitar_limite",
               "servicios.reactivar",
+              "servicios.sincronizar_router",
               "servicios.suspender",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
@@ -96348,6 +96464,7 @@
               "servicios.editar",
               "servicios.editar_adicional",
               "servicios.quitar_adicional",
+              "servicios.sincronizar_router",
               "servicios.ver",
               "servicios.ver_credencial_adicional",
               "servicios.ver_credenciales",
@@ -97732,6 +97849,105 @@
           "suspension_manual": {
             "type": "boolean",
             "description": "Suspendido a mano: la promesa no lo reactivaría"
+          }
+        }
+      },
+      "SincronizacionServicio": {
+        "type": "object",
+        "required": [
+          "servicio_id",
+          "router_id",
+          "cambios",
+          "ya_estaba_bien",
+          "avisos",
+          "error"
+        ],
+        "properties": {
+          "servicio_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "router_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cambios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "router_id",
+                "ruta",
+                "comment",
+                "accion"
+              ],
+              "properties": {
+                "router_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "ruta": {
+                  "type": "string",
+                  "description": "Menú de RouterOS (`/queue/simple`, `/ip/arp`…)"
+                },
+                "comment": {
+                  "type": "string",
+                  "description": "`argosisp:servicio:<id>` o `argosisp:plan:<id>`"
+                },
+                "accion": {
+                  "type": "string",
+                  "enum": [
+                    "creado",
+                    "actualizado",
+                    "borrado"
+                  ]
+                },
+                "duplicados": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "ya_estaba_bien": {
+            "type": "boolean",
+            "description": "Nada que corregir y el router respondió"
+          },
+          "avisos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "motivo",
+              "detalle"
+            ],
+            "properties": {
+              "motivo": {
+                "type": "string",
+                "enum": [
+                  "sin_credenciales",
+                  "sin_certificado",
+                  "certificado_no_confiable",
+                  "certificado_proposito",
+                  "puerto_cerrado",
+                  "protocolo",
+                  "credenciales",
+                  "politicas",
+                  "no_responde",
+                  "respuesta"
+                ]
+              },
+              "detalle": {
+                "type": "string"
+              }
+            },
+            "description": "El router no respondió o rechazó un comando (lenguaje simple); null si todo bien"
           }
         }
       },

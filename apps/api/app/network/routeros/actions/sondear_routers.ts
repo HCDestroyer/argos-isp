@@ -2,6 +2,7 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { registrarContactoRouter } from '#network/contacto_router'
 import { routerDispatcher } from '#network/routeros/consultas'
 import type { RouterApi } from '#network/routeros/router'
+import { diagnosticarErrorRouterOS, type DiagnosticoRouterOS } from '#network/diagnostico_routeros'
 import {
     bitacoraRed,
     fabricaPorDefecto,
@@ -20,7 +21,8 @@ export interface ResultadoSondear {
     /** Routers activos con credenciales de API y sin contacto reciente */
     sondeados: number[]
     respondieron: number[]
-    sin_respuesta: Array<{ router_id: number; error: string }>
+    /** `error`: el texto técnico; `motivo`/`detalle`: en lenguaje simple (`diagnostico_routeros.ts`) */
+    sin_respuesta: Array<{ router_id: number; error: string; motivo: string; detalle: string }>
 }
 
 /**
@@ -72,7 +74,14 @@ export default class SondearRouters extends DomainAction<EntradaSondear, Resulta
             resultado.sondeados.push(id)
             const sondeo = await sondearRouter(t, router.api, this.#clientes, 'sondear')
             if (sondeo.ok) resultado.respondieron.push(id)
-            else resultado.sin_respuesta.push({ router_id: id, error: sondeo.error.message })
+            else {
+                resultado.sin_respuesta.push({
+                    router_id: id,
+                    error: sondeo.error.message,
+                    motivo: sondeo.diagnostico.motivo,
+                    detalle: sondeo.diagnostico.detalle,
+                })
+            }
         }
         return resultado
     }
@@ -84,6 +93,9 @@ export type ResultadoSondeo =
           ok: false
           error: Error & { status?: number | null; tipo?: string; codigo?: string | null }
           ms: number
+          host: string | null
+          /** el error en lenguaje simple (`diagnostico_routeros.ts`) */
+          diagnostico: DiagnosticoRouterOS
       }
 
 /**
@@ -118,15 +130,23 @@ export async function sondearRouter(
         return { ok: true, recurso, ms, host: cliente.host }
     } catch (error) {
         const e = error as Error & { status?: number | null; tipo?: string; codigo?: string | null }
+        const host = cliente?.host ?? null
+        const diagnostico = diagnosticarErrorRouterOS(e, host ?? api.host)
         await bitacoraRed.registrar({
             tipo: 'routeros',
             router_id: api.id,
             servicio_id: null,
-            comando: { ...comando, host: cliente?.host ?? null },
-            respuesta: { status: e.status ?? null, error: e.message, tipo_error: e.tipo ?? 'inalcanzable' },
+            comando: { ...comando, host },
+            respuesta: {
+                status: e.status ?? null,
+                error: e.message,
+                tipo_error: e.tipo ?? 'inalcanzable',
+                motivo: diagnostico.motivo,
+                detalle: diagnostico.detalle,
+            },
             ok: false,
         })
-        return { ok: false, error: e, ms: Math.round(performance.now() - inicio) }
+        return { ok: false, error: e, ms: Math.round(performance.now() - inicio), host, diagnostico }
     } finally {
         cliente?.cerrar()
     }
