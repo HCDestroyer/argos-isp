@@ -236,16 +236,16 @@ describe('estado en vivo cuando /portal/estado no responde', () => {
         }
     })
 
-    it('el aviso dice que no se pudo consultar, nunca "Aún no vemos tu servicio activo"', async () => {
+    it('el aviso dice que no se pudo consultar, nunca "Tu servicio sigue sin aparecer activo"', async () => {
         const conFallas = await mountSuspended(EstadoEnVivo, { props: { agotado: true, sinRespuesta: true } })
         montados.push(conFallas)
         expect(conFallas.find('[data-testid="estado-sin-respuesta-agotado"]').text()).toContain('No pudimos consultar el estado')
-        expect(conFallas.text()).not.toContain('Aún no vemos')
+        expect(conFallas.text()).not.toContain('sigue sin aparecer activo')
         expect(conFallas.text()).toContain('Reintentar')
 
         const pagoSinRespuesta = await mountSuspended(EstadoEnVivo, { props: { agotado: true, sinRespuesta: true, pagoEnCurso: true } })
         montados.push(pagoSinRespuesta)
-        expect(pagoSinRespuesta.text()).not.toContain('Aún no recibimos la confirmación')
+        expect(pagoSinRespuesta.text()).not.toContain('Estamos esperando la confirmación')
 
         const vigilando = await mountSuspended(EstadoEnVivo, { props: { vigilando: true, sinRespuesta: true } })
         montados.push(vigilando)

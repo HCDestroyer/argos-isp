@@ -55,11 +55,11 @@ describe('esquema y textos de la promesa', () => {
 
         const mensajes = (datos: { vence_el: string, monto: string }) =>
             esquema.safeParse(datos).error?.issues.map(i => i.message) ?? []
-        expect(mensajes({ vence_el: diaFixture(4), monto: '10' })[0]).toContain('La fecha no puede pasar del')
-        expect(mensajes({ vence_el: diaFixture(-1), monto: '10' })).toContain('La fecha ya pasó')
-        expect(mensajes({ vence_el: '', monto: '10' })).toContain('Elige una fecha')
-        expect(mensajes({ vence_el: diaFixture(1), monto: '525.01' })).toContain('El monto no puede pasar de Q 525.00')
-        expect(mensajes({ vence_el: diaFixture(1), monto: '0' })).toContain('El monto debe ser mayor que 0')
+        expect(mensajes({ vence_el: diaFixture(4), monto: '10' })[0]).toContain('Elige una fecha hasta el')
+        expect(mensajes({ vence_el: diaFixture(-1), monto: '10' })).toContain('Esa fecha ya pasó: elige hoy o un día posterior')
+        expect(mensajes({ vence_el: '', monto: '10' })).toContain('Elige el día en que vas a pagar')
+        expect(mensajes({ vence_el: diaFixture(1), monto: '525.01' })).toContain('El monto no puede pasar de Q 525.00: escribe esa cantidad o menos')
+        expect(mensajes({ vence_el: diaFixture(1), monto: '0' })).toContain('Escribe un monto mayor que Q 0.00')
         expect(mensajes({ vence_el: diaFixture(1), monto: 'Q10' })[0]).toContain('sin la Q')
         expect(mensajes({ vence_el: diaFixture(1), monto: '10.555' })[0]).toContain('hasta 2 decimales')
     })

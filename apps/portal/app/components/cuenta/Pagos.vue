@@ -12,7 +12,7 @@ onMounted(recargar)
         :problema="problema"
         :vacia="items.length === 0"
         :hay-mas="hayMas"
-        texto-vacio="Todavía no tienes pagos registrados"
+        texto-vacio="No tienes pagos registrados"
         icono-vacio="i-lucide-wallet"
         @reintentar="recargar"
         @cargar-mas="cargarMas"

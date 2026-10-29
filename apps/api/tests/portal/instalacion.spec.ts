@@ -118,7 +118,7 @@ test.group('Portal: servicio pendiente de instalación', (group) => {
             200,
         )
         assert.containsSubset(respuesta.body(), { disponible: false, promesa_abierta: null })
-        assert.include(respuesta.body().motivo, 'aún no está instalado')
+        assert.include(respuesta.body().motivo, 'pendiente de instalación')
 
         // Lo mismo sin pasar por HTTP (lo usa también `/cuenta` con sesión).
         const directas = await condicionesPromesa(s.servicioId)
@@ -137,7 +137,7 @@ test.group('Portal: servicio pendiente de instalación', (group) => {
             .json({ vence_el: '2099-01-01', monto: '100.00' })
         respuesta.assertStatus(422)
         assert.equal(respuesta.body().type, 'urn:argosisp:problema:servicio_pendiente_instalacion')
-        assert.include(respuesta.body().detail, 'aún no está instalado')
+        assert.include(respuesta.body().detail, 'pendiente de instalación')
         assert.notInclude(respuesta.body().detail, 'activar-instalacion')
 
         const promesas = await db
@@ -156,7 +156,7 @@ test.group('Portal: servicio pendiente de instalación', (group) => {
         const json = (traducido as Problema).toJSON()
         assert.equal(json.status, 422)
         assert.equal(json.type, 'urn:argosisp:problema:servicio_pendiente_instalacion')
-        assert.include(json.detail!, 'aún no está instalado')
+        assert.include(json.detail!, 'pendiente de instalación')
     })
 
     test('cuenta del portal: el servicio pendiente y su cargo único en las facturas pendientes', async ({

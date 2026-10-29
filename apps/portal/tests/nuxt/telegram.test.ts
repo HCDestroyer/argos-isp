@@ -128,7 +128,7 @@ describe('vincular Telegram', () => {
         const wrapper = await montar()
         const boton = wrapper.find('[data-testid="telegram-vincular"]')
         expect(boton.attributes('disabled')).toBeDefined()
-        expect(wrapper.text()).toContain('aún no está disponible')
+        expect(wrapper.text()).toContain('no está disponible en este momento')
     })
 
     it('Telegram como canal preferido solo se habilita con el chat vinculado', async () => {

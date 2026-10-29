@@ -63,7 +63,7 @@ function conCredito(factura: FacturaPortal): boolean {
         :problema="problema"
         :vacia="filas.length === 0"
         :hay-mas="hayMasFilas"
-        texto-vacio="Todavía no tienes facturas"
+        texto-vacio="No tienes facturas"
         icono-vacio="i-lucide-receipt"
         @reintentar="recargar"
         @cargar-mas="cargarMasFilas"

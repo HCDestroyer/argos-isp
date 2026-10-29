@@ -121,7 +121,7 @@ describe('programa visible', () => {
         for (const premio of PREMIOS_FIXTURE) {
             const t = tarjeta(wrapper, premio.id)
             expect(t.find('[data-testid="canjear"]').attributes('disabled')).toBeDefined()
-            expect(t.find('[data-testid="por-que-no"]').text()).toBe('El canje en línea aún no está activo')
+            expect(t.find('[data-testid="por-que-no"]').text()).toBe('Canjéalo en nuestras oficinas')
         }
         expect(wrapper.find('[data-testid="terminos-puntos"]').text()).toContain('Términos de Puntos Altiplano')
         expect(wrapper.findAll('table')).toHaveLength(0)

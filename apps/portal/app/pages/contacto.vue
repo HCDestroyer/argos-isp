@@ -99,7 +99,8 @@ const enlaces = computed(() => enlacesContacto(empresa.value))
                 color="neutral"
                 variant="subtle"
                 icon="i-lucide-phone-off"
-                title="Aún no hay datos de contacto configurados"
+                title="No hay datos de contacto para mostrar"
+                description="Escríbenos o visítanos en nuestra oficina para ayudarte."
             />
 
             <UCard

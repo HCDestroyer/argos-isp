@@ -108,7 +108,7 @@ const CONTACTANOS = 'Comunícate con nosotros para acordar una fecha de pago.'
  * servicio que reactivar, así que no hay promesa. Sus cargos únicos se pagan en línea o por depósito.
  */
 const INSTALACION_PENDIENTE =
-    'Tu servicio aún no está instalado: las promesas de pago no aplican. Puedes pagar tus cargos en línea o por depósito.'
+    'Tu servicio está pendiente de instalación: las promesas de pago no aplican. Puedes pagar tus cargos en línea o por depósito.'
 
 /**
  * Límites que aplican a una promesa del canal `portal` para el servicio, hoy. Solo lectura y sin
@@ -132,7 +132,7 @@ export async function condicionesPromesa(
     // `ServicioFacturable` de A3 aún no tipa `pendiente_instalacion`, pero en la base puede estarlo.
     const estado = servicio.estado as EstadoServicio
     if (estado === 'retirado') {
-        return NO_DISPONIBLE('Tu servicio está dado de baja.')
+        return NO_DISPONIBLE('Tu servicio está dado de baja. Comunícate con nosotros si quieres reactivarlo.')
     }
     if (estado === 'pendiente_instalacion') {
         return NO_DISPONIBLE(INSTALACION_PENDIENTE)
@@ -376,7 +376,11 @@ export function promesaParaCliente(promesa: ResultadoCrearPromesa): PromesaSolic
 export function errorParaCliente(error: unknown): unknown {
     if (!(error instanceof Problema)) return error
     if (error.code === 'E_PROMESA_ABIERTA') {
-        return new Conflicto('Ya tienes una promesa de pago en curso.', 'promesa_abierta', 'Promesa abierta')
+        return new Conflicto(
+            'Ya tienes una promesa de pago en curso. Puedes verla en tu cuenta; paga antes de su fecha para mantener tu servicio.',
+            'promesa_abierta',
+            'Promesa abierta',
+        )
     }
     if (error.code === 'E_SIN_PLANTILLA') {
         return new ReglaNegocio(
@@ -388,7 +392,10 @@ export function errorParaCliente(error: unknown): unknown {
         return new ReglaNegocio(INSTALACION_PENDIENTE, 'servicio_pendiente_instalacion')
     }
     if (error.code === 'E_SERVICIO_RETIRADO') {
-        return new ReglaNegocio('Tu servicio está dado de baja.', 'servicio_retirado')
+        return new ReglaNegocio(
+            'Tu servicio está dado de baja. Comunícate con nosotros si quieres reactivarlo.',
+            'servicio_retirado',
+        )
     }
     return error
 }
