@@ -69,7 +69,6 @@ import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
-import type { HttpContext } from '@adonisjs/core/http'
 import {
     ConexionRouter,
     PeersWireguard,
