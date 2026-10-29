@@ -148,6 +148,9 @@ export const rutasRouters: RutasFixture = {
         if (typeof cuerpo.zona_id === 'number' && !bd.zonas.some(z => z.id === cuerpo.zona_id)) {
             errores.push({ field: 'zona_id', message: `La zona ${cuerpo.zona_id} no existe`, rule: 'exists' })
         }
+        if (cuerpo.activo !== undefined && typeof cuerpo.activo !== 'boolean') {
+            errores.push({ field: 'activo', message: 'Debe ser verdadero o falso', rule: 'boolean' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -180,6 +183,8 @@ export const rutasRouters: RutasFixture = {
             interfaz_clientes: conexion('interfaz_clientes'),
             // Multiempresa (A1): `empresa_sugerida_id` (null la quita); sin el campo, se conserva.
             empresa_sugerida_id: 'empresa_sugerida_id' in cuerpo ? (cuerpo.empresa_sugerida_id as number | null) : router.empresa_sugerida_id,
+            // Desactivar / activar (`contratos/eliminar.md`: lo que tiene historial se desactiva).
+            activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             version: router.version + 1,
             updated_at: ahora(),
         })

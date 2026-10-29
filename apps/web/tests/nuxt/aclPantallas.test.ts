@@ -243,6 +243,8 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'RecordatorioPagoModal.vue': { permisos: ['notificaciones.editar'], desde: ['pages/notificaciones/index.vue'] },
     'RouterAltaModal.vue': { permisos: ['routers.crear'], desde: ['pages/routers/index.vue'] },
     // Secciones de fichas: leen con el permiso de la ficha que las monta.
+    // Eliminar sin historial (`contratos/eliminar.md`): cada ficha comprueba el suyo.
+    'EliminarRegistroModal.vue': { permisos: ['servicios.eliminar', 'routers.eliminar'], desde: ['pages/servicios/[id].vue', 'pages/routers/[id].vue'], exentos: { 'pages/servicios/[id].vue': ['routers.eliminar'], 'pages/routers/[id].vue': ['servicios.eliminar'] } },
     'PlanRouters.vue': { permisos: ['planes.ver'], desde: ['pages/planes/[id].vue'] },
     'ServicioConfiguracionEfectiva.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
     'ServicioPlanesTemporales.vue': { permisos: ['servicios.ver'], desde: ['pages/servicios/[id].vue'] },
