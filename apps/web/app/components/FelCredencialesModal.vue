@@ -31,7 +31,7 @@ const campos = computed(() => [
 const esquema = computed(() => z.object(Object.fromEntries(campos.value.map(campo => [
     campo.clave,
     campo.obligatorio
-        ? z.string().trim().min(1, 'Obligatorio').max(500, 'Máximo 500 caracteres')
+        ? z.string().trim().min(1, 'Completa este dato').max(500, 'Máximo 500 caracteres')
         : z.string().trim().max(500, 'Máximo 500 caracteres'),
 ]))))
 

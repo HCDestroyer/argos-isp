@@ -16,6 +16,8 @@ export type DatosRouter = paths['/api/v1/routers']['post']['requestBody']['conte
 export type DatosRedIpv4 = paths['/api/v1/routers/{id}/redes-ipv4']['post']['requestBody']['content']['application/json']
 export type DatosIpv6Bloque = paths['/api/v1/routers/{id}/ipv6-bloques']['post']['requestBody']['content']['application/json']
 export type ServicioSinSesion = Schema<'ServicioSinSesion'>
+export type DireccionamientoRouter = Schema<'DireccionamientoRouter'>
+export type OcupacionPool = Schema<'OcupacionPool'>
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
 export function useRouters() {
@@ -75,6 +77,14 @@ export function useRouters() {
         return resolver(api.POST('/api/v1/routers/{id}/ipv6-bloques', { params: { path: { id } }, body: datos }))
     }
 
+    /**
+     * `GET /routers/:id/direccionamiento` (`routers.ver`): redes con su ocupación, bloques con sus
+     * pools, totales por familia y qué recibe un servicio nuevo de cada plan (`contratos/pools.md` §2).
+     */
+    function direccionamiento(id: number): Promise<Resultado<DireccionamientoRouter>> {
+        return resolver(api.GET('/api/v1/routers/{id}/direccionamiento', { params: { path: { id } } }))
+    }
+
     function redesIpv4(id: number): Promise<Resultado<RedIpv4[]>> {
         return resolver(api.GET('/api/v1/routers/{id}/redes-ipv4', { params: { path: { id } } }))
     }
@@ -107,5 +117,5 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/resumen-sesiones', { params: { path: { id }, query: desde ? { desde } : {} } }))
     }
 
-    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, direccionamiento, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

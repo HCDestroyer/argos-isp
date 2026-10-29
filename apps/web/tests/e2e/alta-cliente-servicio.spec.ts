@@ -10,8 +10,9 @@ test('alta de cliente y de su servicio', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
 
-    await page.getByRole('link', { name: 'Nuevo cliente' }).click()
-    await expect(page).toHaveURL(/\/clientes\/nuevo/)
+    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
+    const altaCliente = page.getByRole('dialog', { name: 'Nuevo cliente' })
+    await expect(altaCliente).toBeVisible()
     await page.getByLabel('Nombre', { exact: true }).fill('Lucía Fernanda Pruebas')
     await page.getByLabel('Teléfono').fill('5555-1234')
     await page.getByRole('button', { name: 'Crear cliente' }).click()
@@ -19,17 +20,22 @@ test('alta de cliente y de su servicio', async ({ page }) => {
     await expect(page).toHaveURL(/\/clientes\/\d+$/)
     await expect(page.getByRole('heading', { name: 'Lucía Fernanda Pruebas' }).first()).toBeVisible()
 
-    await page.getByRole('link', { name: 'Nuevo servicio' }).first().click()
-    await expect(page).toHaveURL(/\/servicios\/nuevo\?cliente=\d+/)
+    // El alta del servicio se abre en un panel lateral de la ficha: no se sale del cliente.
+    await page.getByRole('button', { name: 'Nuevo servicio' }).first().click()
+    const alta = page.getByRole('dialog', { name: /^Nuevo servicio/ })
+    await expect(alta).toBeVisible()
 
     await page.getByRole('radio', { name: /RB-Centro/ }).click()
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
-    // IPv4 automática, IPv6 por defecto, credenciales generadas y plantilla: se aceptan tal cual.
-    for (let i = 0; i < 5; i++) {
-        await page.getByRole('button', { name: 'Siguiente' }).click()
+    // IPv4 automática, IPv6 recomendada, credenciales generadas y plantilla: se aceptan tal cual.
+    // Conexión → Red y PPPoE → Instalación y cobro → Resumen.
+    for (let i = 0; i < 3; i++) {
+        await alta.getByRole('button', { name: 'Siguiente' }).click()
     }
+    await expect(alta.locator('[data-prueba="resumen-alta"]')).toContainText('RB-Centro')
     await page.getByRole('button', { name: 'Crear servicio' }).click()
 
+    await expect(alta).toBeHidden()
     await expect(page).toHaveURL(/\/clientes\/\d+\?tab=servicios/)
     const servicio = page.getByRole('link', { name: /^lucia\./ })
     await expect(servicio).toBeVisible()

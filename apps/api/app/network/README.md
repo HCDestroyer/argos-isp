@@ -54,6 +54,15 @@ Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosi
 - `reservarPrefijo(trx, { servicioId, routerId, tipo, tamano })`: conserva el vigente si sigue en un pool válido del router; si no, recupera el anterior del servicio en ese pool si está libre; si no, el primer subprefijo libre (saltando cualquier vigente que se traslape). Advisory lock por pool.
 - `asignarPrefijoEstatico` (modo `estatico`) y `liberarPrefijos` (retiro, cambio de modo). Historial en `network.ipv6_asignaciones`.
 
+## Pools editables, ocupación y migración (`contratos/pools.md`)
+
+- Redes IPv4 con `nombre`, `rango_inicio`/`rango_fin` (solo se entregan IPs del rango, también a mano; fuera quedan reservadas) y DNS. Bloques IPv6 con `nombre` y `proveedor`; un router admite varios bloques y pools de cada tipo.
+- Editar (`PUT /redes-ipv4/:id`, `/ipv6-bloques/:id`, `/ipv6-pools/:id`, con `version`): achicar dejando direcciones asignadas fuera responde 422 con la lista (`reglas_pools.ts`).
+- Ocupación (`ocupacion.ts`) en SQL: `total`, `asignadas`, `libres`, `reservadas`, `porcentaje` en cada red y pool; `GET /routers/:id/direccionamiento` lo resume con lo que recibe cada plan (`consultas/direccionamiento.ts`).
+- Migrar (`migrar_pools.ts`): 422 `pool_con_servicios` si hay servicios y no se pidió `mover_servicios`; con él, `EditarServicio` anidada por servicio (conserva las direcciones de lo que se muda); `simular` revierte todo (`simularEnTransaccion`).
+- Vistas previas IPv6: `POST /ipv6-pools/vista-previa`, `POST /ipv6-bloques/vista-previa`.
+- Mensajes de los campos obligatorios con su motivo (`conMensajes` de `#shared/mensajes_validacion`).
+
 ## Historial de asignaciones (`historial.ts`, tarea 12)
 
 - `network.asignaciones_historial`: tramos `inicio`/`fin` de (router, plan, IPv4, `/64` de enlace en `prefijo_enlace_v6`, delegado en `prefijo_v6`). Un solo tramo abierto por servicio (`fin IS NULL`, índice único).
@@ -75,6 +84,10 @@ Script `.rsc` que conecta un MikroTik a Argos: túnel WireGuard, usuario `argosi
 | `CrearPlan`, `EditarPlan`                         | `planes.crear`, `planes.editar`   | ver "Velocidad" |
 | `ImplementarPlan` (crea o edita `planes_routers`) | `planes.editar`                   | —               |
 | `CrearBloqueIpv6`, `CrearPoolIpv6`                | `ipv6.crear`                      | —               |
+| `EditarRedIpv4`                                   | `redes.editar`                    | —               |
+| `EditarBloqueIpv6`, `EditarPoolIpv6`              | `ipv6.editar`                     | —               |
+| `MigrarRedIpv4`                                   | `redes.migrar`                    | los de `EditarServicio` por cada servicio movido |
+| `MigrarBloqueIpv6`                                | `ipv6.migrar`                     | los de `EditarServicio` por cada servicio movido |
 
 Lecturas en `consultas/routers.ts` y `consultas/planes.ts`.
 
@@ -85,9 +98,9 @@ Eventos: salvo los de velocidad (sección "Velocidad"), los cambios de asignaci�
 - `network.planes.tipo` ∈ `residencial` (por defecto; los planes que ya existían quedaron así), `empresarial`, `dedicado`. Se crea y edita con el plan (`version`, diff en `audit.cambios`). No cambia la velocidad: no emite `plan.velocidad_cambiada` ni otro evento.
 - Visible en `Plan.tipo`, `PlanEfectivo.tipo` y, de solo lectura, en `Servicio.plan_tipo`. Filtro `?tipo=` en `GET /planes` y `GET /servicios` (tipo del plan del servicio).
 - **Reglas, solo advertencias** (`warnings[]` = `{ codigo, mensaje }` en las respuestas de crear y editar; nunca 422):
-  - `plan_dedicado_asimetrico`: plan `dedicado` con `bajada_kbps` ≠ `subida_kbps`.
-  - `plan_dedicado_compartido`: plan `dedicado` con `reuso` (compartición 1:N) ≠ 1.
-  - `servicio_cliente_cf`: servicio (`POST /servicios`, `PUT /servicios/:id`) de un plan `empresarial` o `dedicado` cuyo cliente factura como CF (`tipo_documento_fiscal = 'cf'`).
+    - `plan_dedicado_asimetrico`: plan `dedicado` con `bajada_kbps` ≠ `subida_kbps`.
+    - `plan_dedicado_compartido`: plan `dedicado` con `reuso` (compartición 1:N) ≠ 1.
+    - `servicio_cliente_cf`: servicio (`POST /servicios`, `PUT /servicios/:id`) de un plan `empresarial` o `dedicado` cuyo cliente factura como CF (`tipo_documento_fiscal = 'cf'`).
 
 ### Adicionales incluidos en el plan
 

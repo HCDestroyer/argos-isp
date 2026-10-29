@@ -7,7 +7,7 @@ useHead({ title: 'Clientes · ArgosIsp' })
 
 const route = useRoute()
 const router = useRouter()
-const { puede } = usePermisos()
+const { puede, destinoPermitido } = usePermisos()
 const clientesApi = useClientes()
 
 /** Valor de los `USelect` para "sin filtro" (Reka UI no admite `''` como valor de un ítem). */
@@ -128,6 +128,23 @@ onMounted(async () => {
         planes.value = resultadoPlanes.data.data
     }
 })
+
+/** Alta de cliente en un panel lateral; al guardar se abre su ficha. */
+const altaAbierta = ref(false)
+const toastAlta = useToast()
+
+async function alCrearCliente(nuevo: Cliente) {
+    toastAlta.add({
+        title: 'Cliente creado',
+        description: nuevo.nombre,
+        color: 'success',
+        icon: 'i-lucide-circle-check',
+        actions: puede('servicios.crear')
+            ? [{ label: 'Agregar servicio', to: `/clientes/${nuevo.id}?tab=servicios&nuevo_servicio=1`, color: 'neutral', variant: 'outline' }]
+            : undefined,
+    })
+    await navigateTo(destinoPermitido(`/clientes/${nuevo.id}`))
+}
 </script>
 
 <template>
@@ -139,12 +156,13 @@ onMounted(async () => {
         <template #acciones>
             <UButton
                 v-if="puede('clientes.crear')"
-                to="/clientes/nuevo"
                 icon="i-lucide-user-plus"
                 label="Nuevo cliente"
                 class="glow-brand"
                 :ui="{ label: 'hidden sm:inline' }"
                 aria-label="Nuevo cliente"
+                data-prueba="nuevo-cliente"
+                @click="altaAbierta = true"
             />
         </template>
 
@@ -390,5 +408,10 @@ onMounted(async () => {
                 />
             </template>
         </div>
+        <ClienteSlideover
+            v-if="puede('clientes.crear')"
+            v-model:open="altaAbierta"
+            @guardado="alCrearCliente"
+        />
     </PanelPagina>
 </template>

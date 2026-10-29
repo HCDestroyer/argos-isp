@@ -105,10 +105,10 @@ export function esquemaDeposito(hoy: string, efectivo: Decimal | null) {
             .regex(MONTO, 'Escribe un monto con hasta 2 decimales, sin comas (ej. 600.00)')
             .refine(valor => !MONTO.test(valor) || new Decimal(valor).gt(0), 'El monto debe ser mayor que cero')
             .refine(valor => !MONTO.test(valor) || efectivo === null || new Decimal(valor).lte(efectivo), `No puede superar el efectivo del turno${efectivo ? ` (${formatearQuetzales(efectivo)})` : ''}`),
-        boleta: z.string().trim().min(1, 'El número de boleta es obligatorio').max(80, 'Máximo 80 caracteres'),
+        boleta: z.string().trim().min(1, 'Escribe el número de la boleta de depósito').max(80, 'Máximo 80 caracteres'),
         fecha: z.string()
             .trim()
-            .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
+            .refine(valor => valor === '' || FECHA.test(valor), 'Elige una fecha válida (día, mes y año)')
             .refine(valor => valor === '' || valor <= hoy, 'La fecha del depósito no puede ser futura'),
         cuenta_id: z.number().int().positive().nullable().refine(valor => valor !== null, 'Elige la cuenta que recibe el depósito'),
     })
@@ -140,10 +140,10 @@ export function esquemaTraslado(hoy: string) {
             .trim()
             .regex(MONTO, 'Escribe un monto con hasta 2 decimales, sin comas (ej. 1000.00)')
             .refine(valor => !MONTO.test(valor) || new Decimal(valor).gt(0), 'El monto debe ser mayor que cero'),
-        referencia: z.string().trim().min(1, 'La referencia es obligatoria').max(120, 'Máximo 120 caracteres'),
+        referencia: z.string().trim().min(1, 'Escribe la referencia del movimiento').max(120, 'Máximo 120 caracteres'),
         fecha: z.string()
             .trim()
-            .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
+            .refine(valor => valor === '' || FECHA.test(valor), 'Elige una fecha válida (día, mes y año)')
             .refine(valor => valor === '' || valor <= hoy, 'La fecha no puede ser futura'),
         origen: z.number().int().positive().nullable().refine(valor => valor !== null, 'Elige la cuenta de la que sale'),
         destino: z.number().int().positive().nullable().refine(valor => valor !== null, 'Elige la cuenta a la que llega'),
@@ -331,8 +331,8 @@ export function extractoCuadra(lineas: readonly Pick<LineaLeida, 'monto'>[], sal
 export function esquemaExtracto() {
     return z.object({
         cuenta_id: z.number().int().positive().nullable().refine(valor => valor !== null, 'Elige la cuenta del extracto'),
-        desde: z.string().trim().regex(FECHA, 'Fecha inválida'),
-        hasta: z.string().trim().regex(FECHA, 'Fecha inválida'),
+        desde: z.string().trim().regex(FECHA, 'Elige una fecha válida (día, mes y año)'),
+        hasta: z.string().trim().regex(FECHA, 'Elige una fecha válida (día, mes y año)'),
         saldo_inicial: z.string().trim().regex(MONTO_CON_SIGNO, 'Saldo con signo y hasta 2 decimales (ej. 1250.00)'),
         saldo_final: z.string().trim().regex(MONTO_CON_SIGNO, 'Saldo con signo y hasta 2 decimales (ej. 1250.00)'),
         motivo_no_encadena: z.string().trim().max(500, 'Máximo 500 caracteres')
@@ -443,7 +443,7 @@ export function esquemaRegla() {
         nombre: z.string().trim().min(2, 'El nombre lleva al menos 2 caracteres').max(80, 'Máximo 80 caracteres'),
         cuenta_id: z.number().int().positive().nullable(),
         tipo_condicion: z.enum(['contiene', 'regex']),
-        patron: z.string().trim().min(1, 'El patrón es obligatorio').max(200, 'Máximo 200 caracteres'),
+        patron: z.string().trim().min(1, 'Escribe el texto que identifica el movimiento').max(200, 'Máximo 200 caracteres'),
         monto_min: z.string().trim().refine(valor => valor === '' || MONTO_CON_SIGNO.test(valor), 'Monto con signo y hasta 2 decimales'),
         monto_max: z.string().trim().refine(valor => valor === '' || MONTO_CON_SIGNO.test(valor), 'Monto con signo y hasta 2 decimales'),
         accion: z.enum(['contrapartida', 'cliente']),

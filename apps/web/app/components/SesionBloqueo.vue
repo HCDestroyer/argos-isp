@@ -87,6 +87,9 @@ async function noSoyYo(): Promise<void> {
         title="Sesión bloqueada"
         description="Tu sesión expiró. Escribe tu contraseña para seguir donde estabas."
         :ui="{
+            // Por encima de cualquier modal o panel lateral abierto (un alta a medias, por ejemplo).
+            overlay: 'z-[70]',
+            content: 'z-[71]',
             body: 'flex items-center justify-center',
         }"
     >

@@ -27,6 +27,30 @@ async function alEmitirCargo(resultado: CargoUnicoEmitido) {
 
 const clienteId = computed(() => Number(route.params.id))
 
+/** Alta de servicio en un panel lateral: no se pierde la ficha. `?nuevo_servicio=1` lo abre al llegar. */
+const altaServicioAbierta = ref(route.query.nuevo_servicio === '1')
+
+watch(altaServicioAbierta, (abierta) => {
+    if (!abierta && route.query.nuevo_servicio) {
+        const { nuevo_servicio: _quitado, ...resto } = route.query
+        void router.replace({ query: resto })
+    }
+})
+
+/** Edición del cliente en un panel lateral: al guardar, la ficha muestra la versión nueva. */
+const edicionAbierta = ref(false)
+
+function alEditarCliente(actualizado: Cliente) {
+    cliente.value = actualizado
+    void cargarZona(actualizado.zona_id)
+    toast.add({ title: 'Cambios guardados', description: actualizado.nombre, color: 'success', icon: 'i-lucide-circle-check' })
+}
+
+async function alCrearServicio() {
+    pestana.value = 'servicios'
+    await cargarServicios()
+}
+
 const cliente = shallowRef<Cliente | null>(null)
 const zona = ref<string | null>(null)
 const cargando = ref(true)
@@ -277,10 +301,11 @@ onMounted(cargar)
                     />
                     <UButton
                         v-if="puede('servicios.crear')"
-                        :to="`/servicios/nuevo?cliente=${cliente.id}`"
                         icon="i-lucide-plus"
                         label="Nuevo servicio"
                         class="glow-brand"
+                        data-prueba="nuevo-servicio-cliente"
+                        @click="altaServicioAbierta = true"
                     />
                     <UButton
                         v-if="puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
@@ -293,11 +318,12 @@ onMounted(cargar)
                     />
                     <UButton
                         v-if="puede('clientes.editar')"
-                        :to="`/clientes/${cliente.id}/editar`"
                         icon="i-lucide-pencil"
+                        data-prueba="editar-cliente"
                         label="Editar"
                         color="neutral"
                         variant="outline"
+                        @click="edicionAbierta = true"
                     />
                 </div>
             </div>
@@ -453,6 +479,8 @@ onMounted(cargar)
                     v-else
                     :servicios="servicios"
                     :cargando="cargandoServicios"
+                    :puede-agregar="puede('servicios.crear')"
+                    @agregar="altaServicioAbierta = true"
                 />
             </template>
 
@@ -474,6 +502,18 @@ onMounted(cargar)
                 etiqueta="Línea de tiempo del cliente"
             />
         </div>
+        <ClienteSlideover
+            v-if="cliente && puede('clientes.editar')"
+            v-model:open="edicionAbierta"
+            :cliente="cliente"
+            @guardado="alEditarCliente"
+        />
+        <ServicioAltaSlideover
+            v-if="cliente && puede('servicios.crear')"
+            v-model:open="altaServicioAbierta"
+            :cliente="cliente"
+            @creado="alCrearServicio"
+        />
         <CargoUnicoModal
             v-if="cliente && puede('facturas.emitir_cargo_unico') && puede('facturas.ver')"
             v-model:open="cargoAbierto"

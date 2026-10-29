@@ -70,20 +70,29 @@ export const routers: Schema<'Router'>[] = [
     },
 ]
 
+/** Ocupación antes de calcularla: las rutas devuelven siempre la real (`vistaRed`, `vistaPool`). */
+export const OCUPACION_SIN_CALCULAR: Schema<'OcupacionPool'> = { total: 0, asignadas: 0, libres: 0, reservadas: 0, porcentaje: 0 }
+const SIN_RANGO = { rango_inicio: null, rango_fin: null, dns_primario: null, dns_secundario: null, ocupacion: OCUPACION_SIN_CALCULAR }
+
 export const redesIpv4: Schema<'RedIpv4'>[] = [
-    { id: 1, router_id: 1, cidr: '100.64.10.0/24', gateway: '100.64.10.1', tipo: 'estatico', ...meta },
-    { id: 2, router_id: 1, cidr: '100.64.11.0/24', gateway: null, tipo: 'pool', ...meta },
-    { id: 3, router_id: 2, cidr: '100.64.20.0/23', gateway: '100.64.20.1', tipo: 'estatico', ...meta },
-    { id: 4, router_id: 3, cidr: '100.64.30.0/24', gateway: '100.64.30.1', tipo: 'estatico', ...meta },
+    { id: 1, router_id: 1, nombre: 'Fijas del centro', cidr: '100.64.10.0/24', gateway: '100.64.10.1', tipo: 'estatico', ...SIN_RANGO, dns_primario: '1.1.1.1', dns_secundario: '8.8.8.8', ...meta },
+    { id: 2, router_id: 1, nombre: null, cidr: '100.64.11.0/24', gateway: null, tipo: 'pool', ...SIN_RANGO, ...meta },
+    { id: 3, router_id: 2, nombre: null, cidr: '100.64.20.0/23', gateway: '100.64.20.1', tipo: 'estatico', ...SIN_RANGO, ...meta },
+    { id: 4, router_id: 3, nombre: null, cidr: '100.64.30.0/24', gateway: '100.64.30.1', tipo: 'estatico', ...SIN_RANGO, ...meta },
 ]
 
+const SIN_ESPACIO = { espacio: { pools: 0, porcentaje_en_pools: 0 } }
+
 export const ipv6Bloques: Schema<'Ipv6Bloque'>[] = [
-    { id: 1, router_id: 1, prefijo: '2803:d100:1000::/40', ...meta },
-    { id: 2, router_id: 2, prefijo: '2803:d100:2000::/40', ...meta },
+    { id: 1, router_id: 1, nombre: 'Principal', proveedor: 'Tigo Business', prefijo: '2803:d100:1000::/40', ...SIN_ESPACIO, ...meta },
+    { id: 2, router_id: 2, nombre: null, proveedor: null, prefijo: '2803:d100:2000::/40', ...SIN_ESPACIO, ...meta },
 ]
+
+/** Entrega antes de calcularla (la ruta la recalcula con `entregaPool`). */
+export const ENTREGA_SIN_CALCULAR: Schema<'EntregaPoolIpv6'> = { atributo_radius: 'Delegated-IPv6-Prefix', redes_lan_por_cliente: 1, clientes_maximos: 0, primer_prefijo: '', segundo_prefijo: null, ultimo_prefijo: '' }
 
 /** Pools del bloque del RB-Centro: enlace /64 por servicio y delegación /56, como en el laboratorio. */
 export const ipv6Pools: Schema<'Ipv6Pool'>[] = [
-    { id: 1, bloque_id: 1, prefijo: '2803:d100:1000::/44', tipo: 'enlace', tamano_entrega: 64, nombre_en_router: 'v6-enlace', ...meta },
-    { id: 2, bloque_id: 1, prefijo: '2803:d100:1080::/41', tipo: 'delegacion', tamano_entrega: 56, nombre_en_router: 'v6-pd', ...meta },
+    { id: 1, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2803:d100:1000::/44', tipo: 'enlace', tamano_entrega: 64, nombre_en_router: 'v6-enlace', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
+    { id: 2, bloque_id: 1, router_id: 1, nombre: null, prefijo: '2803:d100:1080::/41', tipo: 'delegacion', tamano_entrega: 56, nombre_en_router: 'v6-pd', ocupacion: OCUPACION_SIN_CALCULAR, entrega: ENTREGA_SIN_CALCULAR, ...meta },
 ]

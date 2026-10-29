@@ -558,6 +558,7 @@ const enPausa = computed(() => {
                         >
                             <UFormField
                                 name="enlace"
+                                required
                                 label="Enlace generado en Horus"
                             >
                                 <UInput
