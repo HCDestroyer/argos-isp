@@ -13,7 +13,7 @@ defineExpose({ recargar })
         :problema="problema"
         :vacia="items.length === 0"
         :hay-mas="hayMas"
-        texto-vacio="Todavía no has canjeado premios"
+        texto-vacio="No has canjeado premios"
         icono-vacio="i-lucide-gift"
         @reintentar="recargar"
         @cargar-mas="cargarMas"

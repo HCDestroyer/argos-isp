@@ -296,7 +296,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                 color="neutral"
                 variant="subtle"
                 icon="i-lucide-landmark"
-                title="Todavía no hay cuentas para depósito"
+                title="No hay cuentas para depósito disponibles"
                 description="Comunícate con nosotros para enviar tu comprobante."
                 data-testid="comprobante-sin-cuentas"
             />
@@ -321,6 +321,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                 <UFormField
                     label="¿Cómo pagaste?"
                     name="metodo"
+                    required
                 >
                     <USelect
                         v-model="estado.metodo"
@@ -333,6 +334,8 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                 <UFormField
                     label="Cuenta a la que pagaste"
                     name="cuenta_bancaria_id"
+                    help="Con ella buscamos tu pago en el estado de cuenta del banco."
+                    required
                 >
                     <URadioGroup
                         v-model="estado.cuenta_bancaria_id"
@@ -348,6 +351,8 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                     v-if="conBanco"
                     label="Banco desde el que transferiste"
                     name="banco_origen_id"
+                    help="Las transferencias se confirman con el banco de origen."
+                    required
                 >
                     <UAlert
                         v-if="problemaBancos"
@@ -374,6 +379,8 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                     <UFormField
                         label="Monto pagado"
                         name="monto"
+                        help="El monto exacto del comprobante."
+                        required
                     >
                         <UInput
                             v-model="estado.monto"
@@ -391,6 +398,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                     <UFormField
                         label="Fecha del pago"
                         name="fecha_deposito"
+                        required
                     >
                         <UInput
                             v-model="estado.fecha_deposito"
@@ -405,7 +413,8 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                 <UFormField
                     label="Número de referencia o boleta"
                     name="referencia"
-                    help="Como aparece en el comprobante del banco."
+                    help="Como aparece en el comprobante del banco. Con ella confirmamos tu pago."
+                    required
                 >
                     <UInput
                         v-model="estado.referencia"
@@ -420,6 +429,7 @@ async function enviar(evento: FormSubmitEvent<DatosComprobante>) {
                     label="Foto o PDF del comprobante"
                     name="archivo"
                     help="JPG, PNG, WebP o PDF de hasta 5 MB. Que se lean el monto y la referencia."
+                    required
                 >
                     <UFileUpload
                         v-model="estado.archivo"

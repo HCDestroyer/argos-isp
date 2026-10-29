@@ -17,6 +17,7 @@ import {
     type ReglasPromesaParciales,
 } from '#billing/reglas_promesa'
 import { diasEntre } from '#billing/periodos'
+import { ServicioPendienteInstalacion } from '#core/instalacion'
 
 /**
  * Simulador de promesas (`POST /promesas/simular`, A3 + A4) y límites de una promesa (A5,
@@ -131,6 +132,10 @@ export async function simularPromesa(
     if (servicio.estado === 'retirado') {
         throw new ReglaNegocio('El servicio está retirado', 'servicio_retirado')
     }
+    // igual que `CrearPromesaPago`: un pendiente de instalación no recibe promesas
+    if (servicio.estado === 'pendiente_instalacion') {
+        throw new ServicioPendienteInstalacion('simular una promesa de pago sobre')
+    }
     const efectiva = await configuracionDeServicio(cliente, servicio)
     if (!efectiva) throw new ReglaNegocio('El servicio no tiene plantilla de facturación', 'sin_plantilla')
     const config = entrada.reglas_promesa
@@ -215,6 +220,10 @@ export async function limitesPromesa(
     cliente: QueryClientContract = db.connection(),
 ): Promise<LimitesPromesa> {
     const servicio = await leerServicio(cliente, servicioId)
+    // como `CrearPromesaPago`: un pendiente de instalación no tiene límites que ofrecer (pedido A5)
+    if (servicio.estado === 'pendiente_instalacion') {
+        throw new ServicioPendienteInstalacion('ofrecer una promesa de pago sobre')
+    }
     const config = await configuracionDeServicio(cliente, servicio)
     if (!config) throw new ReglaNegocio('El servicio no tiene plantilla de facturación', 'sin_plantilla')
     const datos = await datosEvaluacion(cliente, servicio, config, {

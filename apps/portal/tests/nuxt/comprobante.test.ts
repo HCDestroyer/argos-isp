@@ -89,8 +89,8 @@ describe('esquema del comprobante', () => {
     it('espejo del validador: método, cuenta, referencia, monto, fecha no futura y archivo', () => {
         expect(esquema.safeParse(valido).success).toBe(true)
         expect(esquema.safeParse({ ...valido, archivo: archivo('boleta.pdf', 'application/pdf') }).success).toBe(true)
-        expect(mensajes({ fecha_deposito: '2026-10-17' })).toEqual(['fecha_deposito: La fecha del depósito no puede ser posterior a hoy'])
-        expect(mensajes({ monto: '0' })).toEqual(['monto: El monto debe ser mayor que 0'])
+        expect(mensajes({ fecha_deposito: '2026-10-17' })).toEqual(['fecha_deposito: La fecha del pago no puede ser posterior a hoy: elige hoy o un día anterior'])
+        expect(mensajes({ monto: '0' })).toEqual(['monto: Escribe un monto mayor que Q 0.00'])
         expect(mensajes({ monto: 'Q275' })[0]).toContain('sin la Q')
         expect(mensajes({ referencia: '  ' })).toEqual(['referencia: Escribe el número de referencia o de boleta'])
         expect(mensajes({ cuenta_bancaria_id: undefined })).toEqual(['cuenta_bancaria_id: Elige la cuenta a la que depositaste'])

@@ -25,6 +25,10 @@ reporte valorizado, salida por premio, `marcar_reparada` y fechas pasadas en con
 
 ## Reglas
 
+- `POST /servicios/:id/equipos` acepta `{ unidad_id }` o `{ serie }` (contrato Iris §3; `unidadParaComodato` de
+  `comodato.ts`): exactamente uno (422 `unidad_o_serie`); la serie se busca sin distinguir mayúsculas en la
+  empresa del servicio (404 si no existe). Un servicio `pendiente_instalacion` sí recibe comodatos.
+
 - `inventario.movimientos` es solo inserción (trigger y `REVOKE`). `inventario.saldos` es la
   proyección por producto × bodega que mantiene un trigger; `cantidad >= 0`, `valor >= 0` y sin valor
   sin existencia.
@@ -44,6 +48,10 @@ reporte valorizado, salida por premio, `marcar_reparada` y fechas pasadas en con
   `1.2.01.NN / 1.1.14` y alta del activo (`ledger.activos.unidad_id`); devolución `1.1.14 (valor en
   libros) + 1.2.02 / 1.2.01` sin resultado; pérdida con `activos.dar_de_baja` (5.3.06).
 - Con el inventario sin usar, compras, facturas y cargos únicos se comportan igual que antes.
+- Origen Iris (`origen_externo.ts`, `contratos/inventario.md` «Origen Iris»): consumo, comodato,
+  devolución y pérdida aceptan `origen_tipo = iris_orden` + `origen_id`; se guardan en el movimiento
+  como `origen_externo_tipo`/`origen_externo_id` (aparte del origen interno) y salen en el kardex,
+  el historial de la unidad y los eventos. La pérdida, sin kardex, solo en la auditoría.
 
 ## Eventos
 

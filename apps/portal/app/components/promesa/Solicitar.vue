@@ -312,6 +312,8 @@ function corregir() {
                     <UFormField
                         label="¿Qué día vas a pagar?"
                         name="vence_el"
+                        help="Mantienes tu servicio hasta ese día; paga a más tardar en esa fecha."
+                        required
                     >
                         <UInput
                             v-model="estado.vence_el"
@@ -325,6 +327,8 @@ function corregir() {
                     <UFormField
                         label="¿Cuánto vas a pagar?"
                         name="monto"
+                        help="Lo que te comprometes a pagar en esa fecha."
+                        required
                     >
                         <UInput
                             v-model="estado.monto"
