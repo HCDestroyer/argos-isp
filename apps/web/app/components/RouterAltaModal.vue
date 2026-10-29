@@ -7,7 +7,9 @@ import * as z from 'zod'
  * Alta de un router (`POST /routers`, `routers.crear`, A1): nombre, host de la API REST, IP del NAS,
  * secreto RADIUS y credenciales de la API (se guardan cifrados; nunca vuelven), modo de seguridad y
  * colas. La conexión fina (puerto, TLS, CA, DHCP) se ajusta después en «Conexión» y la capacidad en
- * «Velocidad»; el modo de colas después del alta solo cambia con su acción.
+ * «Velocidad»; el modo de colas después del alta solo cambia con su acción. Si ese MikroTik ya
+ * está registrado (misma API o misma IP del NAS), la API responde 409 `router_duplicado`: se marca
+ * el campo y se explica qué router es y qué hacer (`contratos/routers.md` §2).
  */
 const abierto = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ creado: [router: RouterNas] }>()
@@ -33,6 +35,7 @@ const formulario = useTemplateRef('formulario')
 const estado = reactive<Entrada>(vacio())
 const enviando = ref(false)
 const problema = ref<Problem | null>(null)
+const duplicado = computed(() => esRouterDuplicado(problema.value))
 
 watch(abierto, (valor) => {
     if (valor) {
@@ -192,8 +195,33 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                     v-model="estado.activo"
                     label="Activo"
                 />
+                <UAlert
+                    v-if="problema && duplicado"
+                    color="error"
+                    variant="subtle"
+                    icon="i-lucide-copy"
+                    title="Ese MikroTik ya está registrado"
+                    data-prueba="router-duplicado"
+                >
+                    <template #description>
+                        <div class="flex flex-col gap-1.5">
+                            <p>{{ problema.detail }}</p>
+                            <ul class="list-disc pl-5">
+                                <li
+                                    v-for="(error, indice) in problema.errors ?? []"
+                                    :key="indice"
+                                >
+                                    {{ error.message }}
+                                </li>
+                            </ul>
+                            <p>
+                                Registrarlo otra vez haría que cada registro borre las colas del otro y que las sesiones RADIUS se atribuyan a uno solo. Usa el router existente; si ya hay dos registros, únelos desde Routers.
+                            </p>
+                        </div>
+                    </template>
+                </UAlert>
                 <ProblemaAlerta
-                    v-if="problema"
+                    v-else-if="problema"
                     :problema="problema"
                 />
             </UForm>

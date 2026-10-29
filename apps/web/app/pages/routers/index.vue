@@ -6,7 +6,8 @@ import type { TableColumn } from '@nuxt/ui'
  * de velocidad y la capacidad del enlace. "Velocidad" abre el
  * panel para cambiar la capacidad y el modo de colas (`contratos/velocidad.md`); "Conexión", los
  * cinco datos de la API REST de RouterOS (`contratos/routeros.md`). "Nuevo router" (`routers.crear`);
- * redes IPv4 y bloques y pools IPv6 en la ficha de cada router.
+ * redes IPv4 y bloques y pools IPv6 en la ficha de cada router. Arriba, el aviso de routers
+ * duplicados (el mismo MikroTik registrado dos veces) con «Unir» (`contratos/routers.md`).
  */
 definePageMeta({ permiso: 'routers.ver' })
 
@@ -58,6 +59,16 @@ function abrirConexion(router: RouterNas) {
     conexionAbierta.value = true
 }
 
+function alUnir() {
+    void lista.recargar()
+}
+
+/** Nombre del router al que se unió uno absorbido (si está en la página). */
+function unidoA(router: RouterNas): string {
+    const destino = lista.filas.value.find(r => r.id === router.unido_a_id)
+    return destino ? `Unido a ${destino.nombre}` : `Unido al router ${router.unido_a_id}`
+}
+
 function alActualizar(router: RouterNas) {
     seleccionado.value = router
     void lista.recargar()
@@ -91,6 +102,7 @@ onMounted(() => void lista.recargar())
         </template>
 
         <div class="flex flex-col gap-4">
+            <RoutersDuplicadosAviso @unido="alUnir" />
             <ProblemaAlerta
                 v-if="lista.problema.value"
                 :problema="lista.problema.value"
@@ -113,7 +125,16 @@ onMounted(() => void lista.recargar())
                                     class="hover:text-primary"
                                 >{{ row.original.nombre }}</ULink>
                                 <UBadge
-                                    v-if="!row.original.activo"
+                                    v-if="row.original.unido_a_id"
+                                    :label="unidoA(row.original)"
+                                    icon="i-lucide-merge"
+                                    color="neutral"
+                                    variant="subtle"
+                                    size="sm"
+                                    :data-prueba="`unido-${row.original.id}`"
+                                />
+                                <UBadge
+                                    v-else-if="!row.original.activo"
                                     label="Inactivo"
                                     color="neutral"
                                     variant="subtle"

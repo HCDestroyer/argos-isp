@@ -16,6 +16,10 @@ export type DatosRouter = paths['/api/v1/routers']['post']['requestBody']['conte
 export type DatosRedIpv4 = paths['/api/v1/routers/{id}/redes-ipv4']['post']['requestBody']['content']['application/json']
 export type DatosIpv6Bloque = paths['/api/v1/routers/{id}/ipv6-bloques']['post']['requestBody']['content']['application/json']
 export type ServicioSinSesion = Schema<'ServicioSinSesion'>
+export type GrupoRoutersDuplicados = Schema<'GrupoRoutersDuplicados'>
+export type RouterDuplicado = GrupoRoutersDuplicados['routers'][number]
+export type UnionRouters = Schema<'UnionRouters'>
+export type DatosUnirRouters = paths['/api/v1/routers/{id}/unir']['post']['requestBody']['content']['application/json']
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
 export function useRouters() {
@@ -107,5 +111,27 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/resumen-sesiones', { params: { path: { id }, query: desde ? { desde } : {} } }))
     }
 
-    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    /**
+     * `GET /routers/duplicados?router_id=` (`routers.ver`, `contratos/routers.md` §2): grupos de
+     * routers activos que parecen el mismo MikroTik, con la clave compartida. Con `routerId`, solo
+     * el grupo de ese router (lista vacía si no tiene duplicados).
+     */
+    function duplicados(routerId?: number): Promise<Resultado<GrupoRoutersDuplicados[]>> {
+        return resolver(api.GET('/api/v1/routers/duplicados', { params: { query: routerId ? { router_id: routerId } : {} } }))
+    }
+
+    /**
+     * `POST /routers/:id/unir` (`routers.unir`, solo admin; §3): `id` queda y absorbe a
+     * `absorber_id`. `version` es la del que queda (409 si cambió). Con `simular: true` devuelve
+     * lo que pasaría, sus avisos y sus `bloqueos` sin guardar nada. Los servicios pasan con
+     * `motivo: 'union_routers'`: coa no desconecta a nadie.
+     */
+    function unir(id: number, datos: DatosUnirRouters, claveIdempotencia?: string): Promise<Resultado<UnionRouters>> {
+        return resolver(api.POST('/api/v1/routers/{id}/unir', {
+            params: { path: { id }, header: claveIdempotencia ? { 'Idempotency-Key': claveIdempotencia } : {} },
+            body: datos,
+        }))
+    }
+
+    return { duplicados, unir, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

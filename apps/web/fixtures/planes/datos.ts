@@ -85,4 +85,6 @@ export const planesPorRouter: Record<number, number[]> = {
     1: [1, 2, 3],
     2: [1, 2, 4],
     3: [1],
+    // El duplicado del RB-Centro: el plan 1 está en los dos (al unir gana el que queda) y el 4 solo aquí.
+    4: [1, 4],
 }

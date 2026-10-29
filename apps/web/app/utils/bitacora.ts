@@ -288,6 +288,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'routeros.sondear': 'Sondeo de routers con fallas',
     'routers.cambiar_control_velocidad': 'Modo de colas del router cambiado',
     'routers.marcar_migrado': 'Fecha de migración al nuevo RADIUS marcada',
+    'routers.unir': 'Routers duplicados unidos (el mismo MikroTik)',
     'sesiones.completar_prefijo': 'Prefijo IPv6 de la sesión completado',
     'sesiones.desconectar': 'Desconexión de sesión solicitada',
     // Inventario (A3)

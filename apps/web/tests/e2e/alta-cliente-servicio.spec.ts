@@ -22,7 +22,7 @@ test('alta de cliente y de su servicio', async ({ page }) => {
     await page.getByRole('link', { name: 'Nuevo servicio' }).first().click()
     await expect(page).toHaveURL(/\/servicios\/nuevo\?cliente=\d+/)
 
-    await page.getByRole('radio', { name: /RB-Centro/ }).click()
+    await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     // IPv4 automática, IPv6 por defecto, credenciales generadas y plantilla: se aceptan tal cual.
     for (let i = 0; i < 5; i++) {

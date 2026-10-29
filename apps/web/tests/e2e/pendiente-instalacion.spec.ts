@@ -19,7 +19,7 @@ test('alta pendiente de instalación y activación con planta', async ({ page })
 
     await page.getByRole('link', { name: 'Nuevo servicio' }).first().click()
     await expect(page).toHaveURL(/\/servicios\/nuevo\?cliente=\d+/)
-    await page.getByRole('radio', { name: /RB-Centro/ }).click()
+    await page.getByRole('radio', { name: /RB-Centro(?! PCQ)/ }).click()
     await page.getByRole('radio', { name: /Hogar 10 Mbps/ }).click()
     for (let i = 0; i < 4; i++) {
         await page.getByRole('button', { name: 'Siguiente' }).click()

@@ -69,7 +69,8 @@ async function guardar(evento: FormSubmitEvent<SalidaConexionRouter>) {
             formulario.value?.setErrors(errores)
         }
         const campos = new Set(Object.keys(estado))
-        if (!errores.length || errores.some(e => !e.name || !campos.has(e.name))) {
+        // 409 `router_duplicado` (A1): otra URL de la API que ya usa otro router; se explica siempre.
+        if (esRouterDuplicado(resultado.problema) || !errores.length || errores.some(e => !e.name || !campos.has(e.name))) {
             problema.value = resultado.problema
         }
         return
@@ -201,7 +202,8 @@ async function guardar(evento: FormSubmitEvent<SalidaConexionRouter>) {
                 <ProblemaAlerta
                     v-if="problema"
                     :problema="problema"
-                    :reintentar="problema.status === 409 ? recargar : undefined"
+                    :reintentar="problema.status === 409 && !esRouterDuplicado(problema) ? recargar : undefined"
+                    :con-errores="esRouterDuplicado(problema)"
                     data-prueba="router-conexion-error"
                 />
             </UForm>

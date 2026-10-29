@@ -61,7 +61,7 @@ test('routers: estado en línea desconocido y último contacto en la lista y la 
     await ir(page, 'Routers', /\/routers$/)
     await expect(page.locator('[data-prueba="en-linea-1"]:visible').first()).toHaveText('Desconocido', { timeout: 15_000 })
     await expect(page.locator('[data-prueba="ultimo-contacto-1"]:visible').first()).toHaveText('Nunca respondió')
-    await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro' }).click()
+    await page.locator('[data-prueba="tabla-routers"]').getByRole('link', { name: 'RB-Centro', exact: true }).click()
     await expect(page).toHaveURL(/\/routers\/1$/)
     await expect(page.locator('[data-prueba="en-linea-1"]')).toHaveText('Desconocido')
     await expect(page.getByText('Nunca respondió')).toBeVisible()

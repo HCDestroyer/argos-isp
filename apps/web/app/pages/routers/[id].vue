@@ -5,7 +5,8 @@ import type { Problem } from '@argosisp/contracts'
  * Ficha del router: destino del autologin desde Horus (`/routers/:id`, `rutaDestino` de A1), "Ver
  * en Horus", su estado en línea con el último contacto (`en_linea` null = desconocido) y su
  * direccionamiento (redes IPv4, bloques y pools IPv6). La velocidad y la conexión se cambian desde
- * la lista de routers.
+ * la lista de routers. Si el router está registrado dos veces, el aviso de duplicados con «Unir»;
+ * si ya se unió a otro (`unido_a_id`), el enlace al que quedó (`contratos/routers.md`).
  */
 definePageMeta({ permiso: 'routers.ver' })
 
@@ -30,6 +31,19 @@ async function cargar() {
 }
 
 onMounted(cargar)
+
+/** Sube al unir para volver a leer el direccionamiento (redes y bloques que llegaron o se fueron). */
+const lecturas = ref(0)
+
+function alUnir(resultado: UnionRouters) {
+    lecturas.value++
+    // Si esta ficha era la del absorbido, el router que sigue en uso es el que quedó.
+    if (resultado.absorbido_id === routerId.value) {
+        nas.value = resultado.absorbido
+        return
+    }
+    nas.value = resultado.router
+}
 
 const contacto = computed(() => ESTADOS_ROUTER[nas.value ? estadoContactoRouter(nas.value) : 'desconocido'])
 
@@ -64,6 +78,23 @@ const control = computed(() => {
             />
         </template>
 
+        <UAlert
+            v-if="!cargando && nas?.unido_a_id"
+            color="info"
+            variant="subtle"
+            icon="i-lucide-merge"
+            title="Este router se unió a otro"
+            description="Era el mismo MikroTik registrado dos veces: sus servicios, sesiones, redes y planes pasaron al router que quedó. Este registro queda desactivado con su historial."
+            :actions="[{ label: 'Ver el router que quedó', to: `/routers/${nas.unido_a_id}`, icon: 'i-lucide-arrow-right', color: 'info', variant: 'outline' }]"
+            class="mx-auto mb-4 w-full max-w-4xl"
+            data-prueba="router-unido"
+        />
+        <RoutersDuplicadosAviso
+            v-if="!cargando && nas?.activo"
+            :router-id="nas.id"
+            class="mx-auto mb-4 w-full max-w-4xl"
+            @unido="alUnir"
+        />
         <USkeleton
             v-if="cargando"
             class="h-40 w-full"
@@ -130,6 +161,7 @@ const control = computed(() => {
         </section>
         <RouterDireccionamiento
             v-if="nas"
+            :key="lecturas"
             :router-id="nas.id"
             class="mx-auto mt-6 w-full max-w-4xl"
         />

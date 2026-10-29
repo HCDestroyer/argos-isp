@@ -48,7 +48,7 @@ import { camposPersonalizados } from './camposPersonalizados/datos'
 import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosIniciales, unidadesIniciales } from './inventario/datos'
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
-import { ipv6Bloques, ipv6Pools, redesIpv4, routers } from './routers/datos'
+import { ipv6Bloques, ipv6Pools, redesIpv4, routers, secretosRadius } from './routers/datos'
 import { servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
@@ -96,6 +96,8 @@ interface BaseFixtures {
     servicios: Schema<'Servicio'>[]
     zonas: Schema<'Zona'>[]
     routers: Schema<'Router'>[]
+    /** Secreto RADIUS en claro por router (solo fixtures; `routers.unir` los compara). */
+    secretosRadius: Record<number, string | null>
     redesIpv4: Schema<'RedIpv4'>[]
     ipv6Bloques: Schema<'Ipv6Bloque'>[]
     ipv6Pools: Schema<'Ipv6Pool'>[]
@@ -286,6 +288,7 @@ function inicial(): BaseFixtures {
         servicios,
         zonas,
         routers,
+        secretosRadius,
         redesIpv4,
         ipv6Bloques,
         ipv6Pools,

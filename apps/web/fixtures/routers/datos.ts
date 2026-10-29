@@ -8,11 +8,15 @@ const conexion = { api_url: null, api_tls_verificar: true, tiene_api_ca: false, 
 const empresa = { empresa_sugerida_id: null }
 // Contacto (A1): sin fuente periódica que lo mida, como devuelve la API por defecto.
 export const SIN_CONTACTO = { en_linea: null, ultimo_contacto: null }
+// Duplicados (A1, `contratos/routers.md`): serial que leyó el sondeo y unión; la API siempre los envía.
+export const SIN_UNION = { unido_a_id: null }
 
 export const routers: Schema<'Router'>[] = [
     {
         id: 1,
         nombre: 'RB-Centro',
+        serial: 'HE0812ABC9',
+        ...SIN_UNION,
         host: '10.10.0.1',
         api_usuario: 'argos',
         tiene_api_password: true,
@@ -32,6 +36,8 @@ export const routers: Schema<'Router'>[] = [
     {
         id: 2,
         nombre: 'CCR-Mixco',
+        serial: 'D4E2071F3B11',
+        ...SIN_UNION,
         host: '10.20.0.1',
         api_usuario: 'argos',
         tiene_api_password: true,
@@ -52,6 +58,8 @@ export const routers: Schema<'Router'>[] = [
     {
         id: 3,
         nombre: 'RB-Bodega (respaldo)',
+        serial: null,
+        ...SIN_UNION,
         host: '10.30.0.1',
         api_usuario: null,
         tiene_api_password: false,
@@ -68,13 +76,43 @@ export const routers: Schema<'Router'>[] = [
         ...empresa,
         ...meta,
     },
+    {
+        // El mismo MikroTik del RB-Centro registrado otra vez «para usar árbol PCQ» (reporte del PM):
+        // misma API (10.10.0.1:443) y mismo serial. Lo detecta `GET /routers/duplicados`.
+        id: 4,
+        nombre: 'RB-Centro PCQ',
+        serial: 'HE0812ABC9',
+        ...SIN_UNION,
+        host: '10.10.0.1',
+        api_usuario: 'argos',
+        tiene_api_password: true,
+        tiene_radius_secret: true,
+        nas_ip: '10.10.0.2',
+        modo_seguridad: 'radius',
+        control_velocidad: 'arbol_pcq',
+        capacidad_bajada_kbps: null,
+        capacidad_subida_kbps: null,
+        modo_velocidad: 'pcq',
+        activo: true,
+        ...conexion,
+        ...SIN_CONTACTO,
+        ...empresa,
+        ...meta,
+    },
 ]
+
+/**
+ * Secreto RADIUS en claro de cada router, solo para que los fixtures comparen como `routers.unir`
+ * (422 `secreto_radius_distinto`). La API nunca lo devuelve (`tiene_radius_secret`).
+ */
+export const secretosRadius: Record<number, string | null> = { 1: 'lab-secreto', 2: 'mixco-secreto', 3: 'bodega-secreto', 4: 'lab-secreto' }
 
 export const redesIpv4: Schema<'RedIpv4'>[] = [
     { id: 1, router_id: 1, cidr: '100.64.10.0/24', gateway: '100.64.10.1', tipo: 'estatico', ...meta },
     { id: 2, router_id: 1, cidr: '100.64.11.0/24', gateway: null, tipo: 'pool', ...meta },
     { id: 3, router_id: 2, cidr: '100.64.20.0/23', gateway: '100.64.20.1', tipo: 'estatico', ...meta },
     { id: 4, router_id: 3, cidr: '100.64.30.0/24', gateway: '100.64.30.1', tipo: 'estatico', ...meta },
+    { id: 5, router_id: 4, cidr: '100.64.12.0/24', gateway: null, tipo: 'pool', ...meta },
 ]
 
 export const ipv6Bloques: Schema<'Ipv6Bloque'>[] = [
