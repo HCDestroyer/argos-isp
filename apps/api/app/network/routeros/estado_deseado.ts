@@ -1,6 +1,12 @@
 import type { EstadoServicioConPendiente } from '#shared/eventos'
 import { rateLimitServicio, type ControlVelocidad, type VelocidadPlan } from '#network/velocidad'
-import { conPadreSimple, listaPlan, nombrePadre } from '#network/routeros/velocidad_router'
+import {
+    nombreTipoHoja,
+    padreCliente,
+    velocidadConExtras,
+    type Estrategia,
+} from '#network/estrategia_velocidad'
+import { listaPlan } from '#network/routeros/velocidad_router'
 import type { Propiedades, RutaRouterOS } from '#network/routeros/cliente'
 
 /**
@@ -86,6 +92,15 @@ export interface ServicioRed {
     sesion?: { ipv4: string | null; enlace: string | null; delegado: string | null } | null
     /** Velocidad efectiva del plan en el router (plantilla + excepciones) */
     velocidad: VelocidadPlan
+    /** Estrategia efectiva vigente para su tipo de conexión (`contratos/control-velocidad.md`) */
+    estrategia: Estrategia
+    /** Estrategia PPPoE del plan en el router (decide el perfil `plan-<id>`, aunque el servicio sea WISP) */
+    estrategia_pppoe: Estrategia
+    /**
+     * PPPoE con sesión abierta: la estrategia vigente cuando conectó (la anterior si conectó antes del
+     * último cambio; la conserva hasta reconectar). null sin sesión o fuera de PPPoE.
+     */
+    estrategia_sesion: Estrategia | null
 }
 
 /** Datos del router que entran en los objetos. */
@@ -193,12 +208,18 @@ export function estadoDeseado(
 ): EstadoDeseado {
     const id = servicio.servicio_id
     const vacio = estadoVacio(id)
-    const arbol = router.control_velocidad === 'arbol_pcq'
     const cuenta = servicio.estado === 'activo' || servicio.estado === 'limitado'
     if (servicio.estado === 'retirado' || servicio.estado === 'pendiente_instalacion') return vacio
+    // Estrategia con la que está limitado: la de su sesión PPPoE (la anterior si conectó antes del cambio).
+    const e =
+        servicio.tipo_conexion === 'pppoe' && servicio.estrategia_sesion
+            ? servicio.estrategia_sesion
+            : servicio.estrategia
+    const arbol = e.aplicacion === 'arbol_pcq'
     if (servicio.tipo_conexion === 'pppoe') {
         // PPPoE: la cola y el corte vienen de RADIUS. En el árbol, sus direcciones (de la sesión
-        // abierta) van a la lista del plan; sin sesión, nada.
+        // abierta) van a la lista del plan; sin sesión, nada. En `pcq_plan` van al `target` de la
+        // cola del plan (objeto del router, `velocidad_router.ts`).
         if (!arbol || !cuenta || !servicio.sesion) return vacio
         const v6: Array<[SufijoV6, string]> = []
         if (servicio.sesion.enlace) v6.push(['enlace', servicio.sesion.enlace])
@@ -214,14 +235,17 @@ export function estadoDeseado(
     const comment = commentServicio(id)
     const presentes: ObjetoDeseado[] = []
     const avisos: string[] = []
+    const velocidad = velocidadConExtras(servicio.velocidad, e.extras)
     const rateLimit =
         servicio.estado === 'suspendido'
             ? suspendido.rateLimit
-            : rateLimitServicio(servicio.velocidad, servicio.estado)
+            : rateLimitServicio(velocidad, servicio.estado)
+    const colaPropia = e.aplicacion === 'cola_simple'
+    const tipoHoja = colaPropia ? nombreTipoHoja(e.tipo_cola) : null
 
-    // En el árbol no hay cola simple por servicio, salvo el suspendido (como la dinámica del PPPoE
-    // suspendido, que `aaa` crea con el rate-limit mínimo).
-    if (!arbol || servicio.estado === 'suspendido') {
+    // Cola por servicio solo en `cola_simple`; en el árbol y en `pcq_plan`, solo el suspendido (como
+    // la dinámica del PPPoE suspendido, que `aaa` crea con el rate-limit mínimo).
+    if (colaPropia || servicio.estado === 'suspendido') {
         presentes.push({
             ruta: '/queue/simple',
             comment,
@@ -229,12 +253,10 @@ export function estadoDeseado(
                 name: `argosisp-servicio-${id}`,
                 target: [`${servicio.ipv4}/32`, ...servicio.prefijos_v6].join(','),
                 ...propiedadesCola(rateLimit),
-                // Reuso en modo simple: hija de la cola padre del plan (`velocidad_router.ts`). Un
-                // suspendido no cuenta para el padre ni cuelga de él (igual que PPPoE con `suspendido`).
-                parent:
-                    cuenta && conPadreSimple(router.control_velocidad, servicio.velocidad)
-                        ? nombrePadre(servicio.plan_id)
-                        : 'none',
+                ...(tipoHoja ? { queue: `${tipoHoja}/${tipoHoja}` } : {}),
+                // Hija del padre del plan o del router (`velocidad_router.ts`). Un suspendido no cuenta
+                // para el padre ni cuelga de él (igual que PPPoE con `suspendido`).
+                parent: cuenta && colaPropia ? padreCliente(e, servicio.plan_id, velocidad.reuso) : 'none',
                 disabled: 'no',
             },
         })

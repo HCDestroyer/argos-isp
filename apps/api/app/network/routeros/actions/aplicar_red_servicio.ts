@@ -108,7 +108,9 @@ export default class AplicarRedServicio extends DomainAction<EntradaAplicarRed, 
                 !deseado ||
                 servicio.tipo_conexion !== 'pppoe' ||
                 historial.includes(routerId) ||
-                router?.red.control_velocidad === 'arbol_pcq'
+                router?.red.control_velocidad === 'arbol_pcq' ||
+                servicio.estrategia.aplicacion === 'arbol_pcq' ||
+                servicio.estrategia_sesion?.aplicacion === 'arbol_pcq'
             let estado: EstadoDeseado = estadoVacio(input.servicio_id)
             if (deseado && router) estado = estadoDeseado(servicio, router.red, perfilSuspendido())
 

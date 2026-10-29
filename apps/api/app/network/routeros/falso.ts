@@ -39,7 +39,15 @@ export interface OpcionesFalso {
     tls?: { cert: string; key: string }
 }
 
-const VELOCIDADES = new Set(['max-limit', 'limit-at', 'burst-limit', 'burst-threshold', 'pcq-rate'])
+const VELOCIDADES = new Set([
+    'max-limit',
+    'limit-at',
+    'burst-limit',
+    'burst-threshold',
+    'pcq-rate',
+    'pcq-burst-rate',
+    'pcq-burst-threshold',
+])
 const MULT: Record<string, number> = { k: 1e3, K: 1e3, M: 1e6, G: 1e9 }
 
 /** Propiedades obligatorias y únicas por menú (las que valida RouterOS y nos importan). */
@@ -54,6 +62,19 @@ const ESQUEMA: Record<RutaRouterOS, { requeridas: string[]; unicas: string[][] }
     '/ip/dhcp-server/lease': { requeridas: ['address', 'mac-address'], unicas: [['mac-address', 'server']] },
     '/ip/arp': { requeridas: ['address', 'interface'], unicas: [['address', 'interface']] },
     '/ppp/profile': { requeridas: ['name'], unicas: [['name']] },
+    '/ip/firewall/filter': { requeridas: ['chain'], unicas: [] },
+    '/ip/firewall/nat': { requeridas: ['chain'], unicas: [] },
+    '/ipv6/firewall/filter': { requeridas: ['chain'], unicas: [] },
+    '/ipv6/firewall/nat': { requeridas: ['chain'], unicas: [] },
+    '/interface/list': { requeridas: ['name'], unicas: [['name']] },
+}
+
+function hostDeUrl(url: string): string {
+    try {
+        return new URL(url).hostname.replace(/^\[|\]$/g, '')
+    } catch {
+        return url
+    }
 }
 
 function velocidad(valor: string): string {
@@ -97,7 +118,22 @@ const VALORES_POR_DEFECTO: Partial<Record<RutaRouterOS, Record<string, string>>>
     },
     '/ip/firewall/mangle': { passthrough: 'true' },
     '/ipv6/firewall/mangle': { passthrough: 'true' },
+    '/ip/firewall/filter': { action: 'accept', log: 'false' },
+    '/ip/firewall/nat': { action: 'accept', log: 'false' },
+    '/ipv6/firewall/filter': { action: 'accept', log: 'false' },
+    '/ipv6/firewall/nat': { action: 'accept', log: 'false' },
 }
+
+/** Interface-lists que trae RouterOS. */
+const LISTAS_DE_FABRICA = new Set(['all', 'none', 'dynamic', 'static'])
+
+/** Menús con orden: `PUT` agrega al final y `POST <menú>/move` reordena. */
+const ORDENADOS = new Set<RutaRouterOS>([
+    '/ip/firewall/filter',
+    '/ip/firewall/nat',
+    '/ipv6/firewall/filter',
+    '/ipv6/firewall/nat',
+])
 
 /** Tipos de cola que trae RouterOS (`/queue/type print`); los demás deben existir en la tabla. */
 const TIPOS_DE_FABRICA = new Set([
@@ -118,6 +154,10 @@ export class RouterOSFalso {
     readonly password: string
     readonly peticiones: PeticionRecibida[] = []
     retrasoMs = 0
+    /** `version` de `/system/resource` (para probar CAKE y fq_codel con RouterOS 6) */
+    version = '7.24.5 (stable)'
+    /** Hosts (o IPs) que el router alcanza con `/tool/fetch` y `/ping`; vacío = todos */
+    alcanzables: Set<string> | null = null
     readonly #tablas = new Map<RutaRouterOS, ObjetoRouterOS[]>()
     /** Menús de solo lectura (bindings DHCPv6, PPP activas): la prueba los llena a mano */
     readonly #lectura = new Map<RutaLectura, ObjetoRouterOS[]>()
@@ -259,7 +299,30 @@ export class RouterOSFalso {
         const camino = url.pathname.slice('/rest'.length)
 
         if (camino === '/system/resource' && metodo === 'GET') {
-            return this.#json(res, 200, { 'board-name': 'falso', version: '7.24.5 (stable)', uptime: '1d' })
+            return this.#json(res, 200, { 'board-name': 'falso', version: this.version, uptime: '1d' })
+        }
+        // Diagnóstico: `/tool/fetch` (`url`, `output=none`) y `/ping` (`address`, `count`).
+        if ((camino === '/tool/fetch' || camino === '/ping') && metodo === 'POST') {
+            const destino = camino === '/ping' ? (cuerpo?.address ?? '') : hostDeUrl(cuerpo?.url ?? '')
+            const llega = this.alcanzables === null || this.alcanzables.has(destino)
+            if (camino === '/ping') {
+                const n = Number(cuerpo?.count ?? 3)
+                return this.#json(
+                    res,
+                    200,
+                    Array.from({ length: n }, (_, i) => ({
+                        seq: String(i),
+                        host: destino,
+                        ...(llega ? { time: '1ms', ttl: '64' } : { status: 'timeout' }),
+                        sent: String(i + 1),
+                        received: String(llega ? i + 1 : 0),
+                    })),
+                )
+            }
+            if (!llega) {
+                return this.#error(res, 400, 'Bad Request', `failure: connection timeout (${destino})`)
+            }
+            return this.#json(res, 200, [{ status: 'finished', downloaded: '1', total: '1', duration: '1s' }])
         }
 
         const soloLectura = RUTAS_LECTURA.find((r) => camino === r)
@@ -273,6 +336,18 @@ export class RouterOSFalso {
         }
         const ruta = RUTAS.find((r) => camino === r || camino.startsWith(`${r}/`))
         if (!ruta) return this.#error(res, 400, 'Bad Request', 'no such command prefix')
+        if (metodo === 'POST' && camino === `${ruta}/move`) {
+            if (!ORDENADOS.has(ruta)) return this.#error(res, 400, 'Bad Request', 'no such command')
+            const tabla = this.tabla(ruta)
+            const origen = tabla.findIndex((o) => o['.id'] === cuerpo?.numbers)
+            if (origen < 0) return this.#error(res, 400, 'Bad Request', 'no such item')
+            const [objeto] = tabla.splice(origen, 1)
+            const destino = tabla.findIndex((o) => o['.id'] === cuerpo?.destination)
+            // Sin destino (o inexistente) va al final, como RouterOS.
+            if (destino < 0) tabla.push(objeto!)
+            else tabla.splice(destino, 0, objeto!)
+            return this.#json(res, 200, [])
+        }
         const id = camino.length > ruta.length ? decodeURIComponent(camino.slice(ruta.length + 1)) : null
         const tabla = this.tabla(ruta)
         const indice = id === null ? -1 : tabla.findIndex((o) => o['.id'] === id)
@@ -333,6 +408,35 @@ export class RouterOSFalso {
         if (ruta === '/queue/simple' && props.parent && props.parent !== 'none') {
             if (!existe('/queue/simple', props.parent)) return `input does not match any value of parent`
         }
+        const tipoExiste = (nombre: string) => TIPOS_DE_FABRICA.has(nombre) || existe('/queue/type', nombre)
+        if (ruta === '/queue/simple' && props.queue) {
+            if (!props.queue.split('/').every(tipoExiste)) return `input does not match any value of queue`
+        }
+        if (ruta === '/ppp/profile' && props['queue-type'] && !tipoExiste(props['queue-type'])) {
+            return `input does not match any value of queue-type`
+        }
+        if (ruta.endsWith('/firewall/filter') || ruta.endsWith('/firewall/nat')) {
+            const lista = props['in-interface-list']
+            if (lista && !LISTAS_DE_FABRICA.has(lista) && !existe('/interface/list', lista)) {
+                return `input does not match any value of in-interface-list`
+            }
+        }
+        if (
+            ruta === '/queue/type' &&
+            props.kind &&
+            !['pcq', 'sfq', 'fq-codel', 'cake', 'red', 'pfifo', 'bfifo', 'mq-pfifo', 'none'].includes(
+                props.kind,
+            )
+        ) {
+            return `input does not match any value of kind`
+        }
+        if (
+            ruta === '/queue/type' &&
+            (props.kind === 'cake' || props.kind === 'fq-codel') &&
+            !this.version.startsWith('7')
+        ) {
+            return `input does not match any value of kind`
+        }
         if (ruta === '/ppp/profile' && props['parent-queue'] && props['parent-queue'] !== 'none') {
             if (!existe('/queue/simple', props['parent-queue'])) {
                 return `input does not match any value of parent-queue`
@@ -366,7 +470,11 @@ export class RouterOSFalso {
         if (ruta === '/queue/tree' && this.tabla('/queue/tree').some((o) => o.parent === nombre)) {
             return 'queue has children'
         }
-        if (ruta === '/queue/type' && this.tabla('/queue/tree').some((o) => o.queue === nombre)) {
+        const enUsoTipo =
+            this.tabla('/queue/tree').some((o) => o.queue === nombre) ||
+            this.tabla('/queue/simple').some((o) => (o.queue ?? '').split('/').includes(nombre)) ||
+            this.tabla('/ppp/profile').some((o) => o['queue-type'] === nombre)
+        if (ruta === '/queue/type' && enUsoTipo) {
             return 'can not remove type that is in use'
         }
         return null

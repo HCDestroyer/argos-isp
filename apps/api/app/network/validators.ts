@@ -12,6 +12,7 @@ import {
     versionEsperada,
 } from '#shared/validadores'
 import { CONTROLES_VELOCIDAD } from '#network/velocidad'
+import { APLICACIONES, PADRES, TIPOS_COLA } from '#network/estrategia_velocidad'
 import { TIPOS_PLAN } from '#network/tipos_plan'
 import { RESULTADOS_EVENTO_RED, TIPOS_EVENTO_RED } from '#network/sesiones/eventos_red'
 
@@ -376,3 +377,97 @@ export const desconectarSesionValidator = vine.compile(
 
 /** `GET /routers/:id/vista-previa-control?a=` (A2): modo al que se cambiaría. */
 export const vistaPreviaControlValidator = vine.compile(vine.object({ a: vine.enum(CONTROLES_VELOCIDAD) }))
+
+/*
+|--------------------------------------------------------------------------
+| Control de velocidad por capas (A2, `contratos/control-velocidad.md`)
+|--------------------------------------------------------------------------
+*/
+
+const extrasEstrategia = () =>
+    vine.object({
+        rafaga: vine.boolean(),
+        prioridad: vine.boolean(),
+        garantizado: vine.boolean(),
+        excluir_fasttrack: vine.boolean(),
+    })
+
+const estrategiaCompleta = () =>
+    vine.object({
+        aplicacion: vine.enum(APLICACIONES),
+        padre: vine.enum(PADRES),
+        tipo_cola: vine.enum(TIPOS_COLA),
+        extras: extrasEstrategia(),
+    })
+
+const estrategiaParcial = () =>
+    vine
+        .object({
+            aplicacion: vine.enum(APLICACIONES).nullable().optional(),
+            padre: vine.enum(PADRES).nullable().optional(),
+            tipo_cola: vine.enum(TIPOS_COLA).nullable().optional(),
+            extras: vine
+                .object({
+                    rafaga: vine.boolean().nullable().optional(),
+                    prioridad: vine.boolean().nullable().optional(),
+                    garantizado: vine.boolean().nullable().optional(),
+                    excluir_fasttrack: vine.boolean().nullable().optional(),
+                })
+                .nullable()
+                .optional(),
+        })
+        .nullable()
+        .optional()
+
+const estrategiasRouter = () =>
+    vine.object({
+        pppoe: estrategiaCompleta(),
+        ip_estatica: estrategiaCompleta(),
+        dhcp_fija: estrategiaCompleta(),
+    })
+
+const excepcionEstrategia = () =>
+    vine
+        .object({
+            pppoe: estrategiaParcial(),
+            ip_estatica: estrategiaParcial(),
+            dhcp_fija: estrategiaParcial(),
+        })
+        .nullable()
+
+const reconectar = () =>
+    vine.boolean().optional().meta({
+        description:
+            'Disconnect por lotes a las sesiones PPPoE para que entren ya con la estrategia nueva. Por defecto no: conservan lo anterior hasta reconectar',
+    })
+
+export const cambiarEstrategiaVelocidadValidator = vine.compile(
+    vine.object({
+        version: versionEsperada(),
+        estrategia_velocidad: estrategiasRouter(),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+        reconectar: reconectar(),
+    }),
+)
+
+export const estrategiaPlanRouterValidator = vine.compile(
+    vine.object({
+        version: versionEsperada().optional(),
+        estrategia_velocidad: excepcionEstrategia(),
+        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+        reconectar: reconectar(),
+    }),
+)
+
+export const vistaPreviaEstrategiaValidator = vine.compile(
+    vine.object({
+        estrategia_velocidad: estrategiasRouter().optional(),
+        planes: vine
+            .array(vine.object({ plan_id: idEntidad(), estrategia_velocidad: excepcionEstrategia() }))
+            .maxLength(500)
+            .optional(),
+        reconectar: reconectar(),
+    }),
+)
+
+export const sincronizarPlanValidator = vine.compile(vine.object({ router_id: idEntidad().optional() }))

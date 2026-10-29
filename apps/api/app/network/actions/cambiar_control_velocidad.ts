@@ -3,6 +3,8 @@ import { actualizarConVersion } from '#shared/version'
 import { auditableRouter } from '#network/actions/crear_router'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import type { ControlVelocidad } from '#network/velocidad'
+import { estrategiasDeControl } from '#network/estrategia_velocidad'
+import { refrescarAaaAlConfirmar } from '#core/aaa'
 
 export interface EntradaCambiarControlVelocidad {
     id: number
@@ -28,8 +30,11 @@ export default class CambiarControlVelocidad extends DomainAction<
         t.fijarEntidad('router', input.id)
         const antes = await verRouter(input.id, t.trx)
         if (antes.control_velocidad === input.control_velocidad) return antes
+        // La estrategia por capas equivalente (contratos/control-velocidad.md §6): este atajo obsoleto
+        // deja el router como lo dejaba el modo de antes.
         await actualizarConVersion(t.trx, 'network.routers', input.id, input.version, {
             control_velocidad: input.control_velocidad,
+            estrategia_velocidad: JSON.stringify(estrategiasDeControl(input.control_velocidad)),
         })
         const despues = await verRouter(input.id, t.trx)
         await t.registrarCambios(
@@ -46,6 +51,8 @@ export default class CambiarControlVelocidad extends DomainAction<
             campos: ['control_velocidad'],
             motivo: input.motivo ?? null,
         })
+        // `aaa:user:*` lleva `control_velocidad` y `velocidad` (perfil y rate-limit por estrategia).
+        refrescarAaaAlConfirmar(t, { routerId: input.id })
         return despues
     }
 }

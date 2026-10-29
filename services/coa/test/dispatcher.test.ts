@@ -137,6 +137,22 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
             'disconnect',
         )
         assert.equal(decidir(config([]), servicio(), SUSPENDIDO).accion, 'nada')
+        // Estrategia por capas (control-velocidad.md §7): pcq_plan sin CoA de velocidad; perfil del
+        // plan → Disconnect al cambiar de plan; radius_rate_limit sin perfil del plan → CoA.
+        assert.equal(
+            decidir(estado('activo', 'limitado'), servicio({ estado: 'limitado', aplicacion: 'pcq_plan' }), SUSPENDIDO)
+                .accion,
+            'nada',
+        )
+        assert.equal(
+            decidir(config(['plan']), servicio({ aplicacion: 'perfil_ppp', grupo: 'plan-3' }), SUSPENDIDO).accion,
+            'disconnect',
+        )
+        assert.equal(
+            decidir(config(['plan']), servicio({ aplicacion: 'radius_rate_limit', grupo: null, reuso: 4 }), SUSPENDIDO)
+                .accion,
+            'coa',
+        )
     })
 
     it('leerEvento: ignora otros eventos y rechaza payloads fuera del catálogo', () => {
@@ -371,6 +387,50 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
         const otra = await dispatcher.procesar(desconexion(20))
         assert.equal(otra.sesiones[0]?.resultado, 'ya_procesado')
         assert.equal(nas.recibidos.length, 1)
+    })
+
+    const velocidad = (id: number | string, estado: 'activo' | 'limitado' = 'activo') => ({
+        id,
+        evento: 'sesion.velocidad_solicitada',
+        payload: {
+            sesion_id: 5,
+            servicio_id: 101,
+            nas_ip: '127.0.0.1',
+            acct_session_id: '81a00009',
+            user_ppp: 'cliente-101',
+            estado,
+            rate_limit: '10M/40M 0/0 0/0 0/0 8 10M/40M',
+            motivo: 'sincronizar plan 3',
+        },
+        requestId: 'req-v',
+    })
+
+    it('sincronizar plan: CoA-Request (nunca Disconnect) con el rate-limit del evento; el duplicado no repite', async () => {
+        almacen.abiertas.set(5, { ...sesion({ id: 5, acct_session_id: '81a00009' }), servicio_id: 101 })
+        almacen.servicios.set(101, servicio({ estado: 'activo' }))
+        assert.equal(dispatcher.acepta('sesion.velocidad_solicitada'), true)
+        const r = await dispatcher.procesar(velocidad(40))
+        assert.deepEqual(r.sesiones, [{ sesion_id: 5, tipo: 'coa', resultado: 'ack', intentos: 1 }])
+        assert.equal(nas.recibidos[0]?.codigo, 'CoA-Request')
+        assert.equal(nas.recibidos[0]?.atributos['Mikrotik-Rate-Limit'], '10M/40M 0/0 0/0 0/0 8 10M/40M')
+        assert.equal(almacen.red[0]?.comando.evento, 'sesion.velocidad_solicitada')
+        assert.equal(almacen.red[0]?.comando.razon, 'velocidad: sincronizar plan 3')
+        const otra = await dispatcher.procesar(velocidad(40))
+        assert.equal(otra.sesiones[0]?.resultado, 'ya_procesado')
+        assert.equal(nas.recibidos.length, 1)
+    })
+
+    it('sincronizar plan con el servicio ya en otro estado o la sesión cerrada: no envía nada', async () => {
+        almacen.abiertas.set(5, { ...sesion({ id: 5 }), servicio_id: 101 })
+        almacen.servicios.set(101, servicio({ estado: 'suspendido' }))
+        assert.equal((await dispatcher.procesar(velocidad(41))).decision?.accion, 'nada')
+        almacen.abiertas.delete(5)
+        assert.equal((await dispatcher.procesar(velocidad(42))).decision?.accion, 'nada')
+        assert.equal(nas.recibidos.length, 0)
+        await assert.rejects(
+            dispatcher.procesar({ ...velocidad(43), payload: { ...velocidad(43).payload, rate_limit: '' } }),
+            EventoInvalido,
+        )
     })
 
     it('desconexión manual de una sesión ya cerrada: no envía nada', async () => {

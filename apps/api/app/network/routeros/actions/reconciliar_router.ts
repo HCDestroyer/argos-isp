@@ -11,16 +11,22 @@ import {
     type RutaServicio,
 } from '#network/routeros/estado_deseado'
 import {
+    estrategiasEnUso,
     necesitaVelocidad,
     planesDeRouter,
+    redesV4DeRouter,
     routerDispatcher,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
+import { configCorte, estadoCorteRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import {
+    aplicarCorte,
     aplicarEstado,
     asegurarVelocidad,
+    leerCorteRouter,
+    pideFasttrack,
     enTransicion,
     fabricaPorDefecto,
     leerVelocidadRouter,
@@ -39,7 +45,7 @@ import {
 export interface EntradaReconciliar {
     router_id: number
     /** `periodico` (red de seguridad), `recuperado` (el router volvió), `plan` (cambió la velocidad), `manual` */
-    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control'
+    motivo: 'periodico' | 'recuperado' | 'plan' | 'manual' | 'control' | 'conexion'
     evento_id?: string | null
 }
 
@@ -130,6 +136,33 @@ export default class ReconciliarRouterOS extends DomainAction<EntradaReconciliar
                     evento_id: input.evento_id ?? null,
                     request_id: t.ctx.requestId,
                     motivo: `reconciliar: ${input.motivo}`,
+                }
+                // Versión de RouterOS (CAKE y fq_codel necesitan la 7): se guarda si cambió.
+                if (router.con_credenciales) {
+                    const recurso = await cliente.probar()
+                    const version = typeof recurso.version === 'string' ? recurso.version.slice(0, 100) : null
+                    if (version && version !== router.velocidad.routeros_version) {
+                        await t.trx
+                            .from('network.routers')
+                            .where('id', input.router_id)
+                            .update({ routeros_version: version })
+                        router.velocidad.routeros_version = version
+                    }
+                }
+                // Corte y FastTrack (siempre, sea cual sea la estrategia): la lista de interfaces, el
+                // perfil suspendido, las listas y las reglas, en orden (corte_router.ts).
+                if (router.con_credenciales) {
+                    const lecturaCorte = await leerCorteRouter(cliente)
+                    const corte = estadoCorteRouter(
+                        configCorte(),
+                        {
+                            fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
+                            redes_v4: await redesV4DeRouter(input.router_id, t.trx),
+                        },
+                        lecturaCorte.get('/ppp/profile') ?? [],
+                    )
+                    salida.avisos.push(...corte.avisos)
+                    salida.correcciones.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctxPlan)))
                 }
                 const lecturaVelocidad = conVelocidad ? await leerVelocidadRouter(cliente) : null
                 nodosArbol = lecturaVelocidad?.get('/queue/tree')?.length ?? null

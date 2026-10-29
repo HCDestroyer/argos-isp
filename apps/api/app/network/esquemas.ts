@@ -15,6 +15,7 @@ import {
     type EsquemaJson,
 } from '#shared/openapi/esquemas'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { APLICACIONES, PADRES, TIPOS_CONEXION, TIPOS_COLA } from '#network/estrategia_velocidad'
 
 /**
  * Schemas de respuesta del módulo network. Credenciales (api_password, radius_secret) nunca salen;
@@ -22,6 +23,69 @@ import { TIPOS_PLAN } from '#network/tipos_plan'
  */
 
 const kbpsNulable = (descripcion: string): EsquemaJson => ({ ...nulable(entero), description: descripcion })
+
+/*
+|--------------------------------------------------------------------------
+| Control de velocidad por capas (A2, `contratos/control-velocidad.md`)
+|--------------------------------------------------------------------------
+*/
+
+const extrasVelocidad = objeto({
+    rafaga: { ...booleano, description: 'burst-* del plan (en PCQ: pcq-burst-*)' },
+    prioridad: { ...booleano, description: 'priority del plan (1–8); false = 8' },
+    garantizado: { ...booleano, description: 'limit-at (CIR); false = 0' },
+    excluir_fasttrack: {
+        ...booleano,
+        description: 'Reglas `argosisp:top sin fasttrack` para argos-clientes antes de FastTrack',
+    },
+})
+
+export const EstrategiaVelocidad = definirEsquema(
+    'EstrategiaVelocidad',
+    objeto({
+        aplicacion: { ...enumerado(APLICACIONES), description: 'Capa 1: cómo se limita a cada cliente' },
+        padre: { ...enumerado(PADRES), description: 'Capa 2: agregación' },
+        tipo_cola: { ...enumerado(TIPOS_COLA), description: 'Capa 3: cola de las hojas o del PCQ' },
+        extras: extrasVelocidad,
+    }),
+)
+
+export const EstrategiasRouter = definirEsquema(
+    'EstrategiasRouter',
+    objeto(Object.fromEntries(TIPOS_CONEXION.map((t) => [t, EstrategiaVelocidad]))),
+)
+
+const enumNulable = (valores: readonly string[]): EsquemaJson => ({
+    type: ['string', 'null'],
+    enum: [...valores, null],
+})
+
+const parcialVelocidad = objeto(
+    {
+        aplicacion: enumNulable(APLICACIONES),
+        padre: enumNulable(PADRES),
+        tipo_cola: enumNulable(TIPOS_COLA),
+        extras: nulable(
+            objeto(
+                {
+                    rafaga: nulable(booleano),
+                    prioridad: nulable(booleano),
+                    garantizado: nulable(booleano),
+                    excluir_fasttrack: nulable(booleano),
+                },
+                ['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack'],
+            ),
+        ),
+    },
+    ['aplicacion', 'padre', 'tipo_cola', 'extras'],
+)
+
+export const ExcepcionEstrategia = definirEsquema(
+    'ExcepcionEstrategia',
+    objeto(Object.fromEntries(TIPOS_CONEXION.map((t) => [t, nulable(parcialVelocidad)])), [
+        ...TIPOS_CONEXION,
+    ]),
+)
 
 export const Router = definirEsquema(
     'Router',
@@ -37,7 +101,16 @@ export const Router = definirEsquema(
         control_velocidad: {
             ...enumerado(['simple', 'arbol_pcq']),
             description:
-                'simple: cola por servicio; arbol_pcq: queue tree + PCQ por plan (contratos/velocidad.md)',
+                'Obsoleto, derivado de estrategia_velocidad: arbol_pcq si PPPoE va por árbol, si no simple',
+        },
+        estrategia_velocidad: {
+            ...EstrategiasRouter,
+            description:
+                'Estrategia de control de velocidad por tipo de conexión (contratos/control-velocidad.md)',
+        },
+        routeros_version: {
+            ...nulable(texto),
+            description: 'Versión de RouterOS leída de /system/resource; null = no se sabe',
         },
         capacidad_bajada_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
         capacidad_subida_kbps: kbpsNulable('Capacidad del enlace (techo del padre global); null = sin techo'),
@@ -197,6 +270,11 @@ export const PlanRouter = definirEsquema(
         rafaga_umbral_pct: { ...nulable(entero), description: 'null = hereda del plan' },
         rafaga_segundos: { ...nulable(entero), description: 'null = hereda del plan' },
         prioridad: { ...nulable(entero), description: 'null = hereda del plan' },
+        estrategia_velocidad: {
+            ...nulable(ExcepcionEstrategia),
+            description:
+                'Estrategia propia del plan en este router, parcial por tipo de conexión; null = hereda la del router',
+        },
         ...auditable,
     }),
 )
@@ -438,6 +516,219 @@ export const VistaPreviaVelocidad = definirEsquema(
             max_limit_kbps: parKbps,
             limit_at_kbps: parKbps,
             activos: { type: 'integer', minimum: 0, description: 'Con 0 se calcula como 1' },
+        }),
+    }),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Control de velocidad por capas: vista previa, matriz, sincronizar, reconciliar y corte (A2)
+|--------------------------------------------------------------------------
+*/
+
+const problemaEstrategia = objeto({
+    field: {
+        ...texto,
+        description: 'Capa con el problema, p. ej. estrategia_velocidad.ip_estatica.aplicacion',
+    },
+    rule: {
+        ...texto,
+        description:
+            'aplicacion_tipo, tipo_cola, version, familia_router, plan_consistente, familia_plan o enum',
+    },
+    message: { ...texto, description: 'El porqué, en lenguaje simple' },
+})
+
+const advertenciaEstrategia = objeto({
+    regla: {
+        ...texto,
+        description:
+            'sin_techo, reuso_dedicado, sin_padre_prioridad, fasttrack, version_desconocida o fuera_del_techo',
+    },
+    mensaje: texto,
+})
+
+/** `POST /routers/:id/vista-previa-estrategia` (`contratos/control-velocidad.md` §4). */
+export const VistaPreviaEstrategia = definirEsquema(
+    'VistaPreviaEstrategia',
+    objeto({
+        router_id: id,
+        valida: { ...booleano, description: 'false: la combinación no es válida (ver errores)' },
+        errores: lista(problemaEstrategia),
+        advertencias: lista(advertenciaEstrategia),
+        de: EstrategiasRouter,
+        a: EstrategiasRouter,
+        planes: lista(
+            objeto({ plan_id: id, de: nulable(ExcepcionEstrategia), a: nulable(ExcepcionEstrategia) }),
+        ),
+        crear: lista(objetoVistaPreviaEstrategia()),
+        actualizar: lista(objetoVistaPreviaEstrategia()),
+        borrar: lista(objetoVistaPreviaEstrategia()),
+        menus: lista(objeto({ ruta: texto, crear: entero, actualizar: entero, borrar: entero })),
+        servicios: { ...entero, description: 'Servicios cuya estrategia cambia' },
+        lotes: { ...entero, description: 'Lotes de 50 servicios en que el worker los migra' },
+        sesiones_coa: {
+            ...entero,
+            description: 'Sesiones PPPoE vivas que reciben el rate-limit nuevo por CoA',
+        },
+        sesiones_conservan: {
+            ...entero,
+            description: 'Sesiones PPPoE que conservan lo anterior hasta reconectar por su cuenta',
+        },
+        sesiones_a_desconectar: {
+            ...entero,
+            description: 'Solo con reconectar: sesiones que reciben Disconnect',
+        },
+        orden: lista(enumerado(['preparar', 'lotes', 'terminar'])),
+    }),
+)
+
+function objetoVistaPreviaEstrategia() {
+    return objeto({
+        ruta: texto,
+        clave: { ...texto, description: '`comment` del objeto (o `name` en `/queue/type`)' },
+        nombre: nulable(texto),
+    })
+}
+
+/** `GET /red/control-velocidad/matriz`: capas, compatibilidades y reglas (la pantalla no las copia). */
+export const MatrizControlVelocidad = definirEsquema(
+    'MatrizControlVelocidad',
+    objeto({
+        aplicaciones: lista(
+            objeto({
+                valor: enumerado(APLICACIONES),
+                familia: enumerado(['simple', 'arbol']),
+                tipos_conexion: lista(enumerado(TIPOS_CONEXION)),
+                tipos_cola: lista(enumerado(TIPOS_COLA)),
+                coa_en_vivo: { ...booleano, description: 'La velocidad de una sesión viva cambia por CoA' },
+            }),
+        ),
+        tipos_cola: lista(objeto({ valor: enumerado(TIPOS_COLA), routeros_minimo: nulable(texto) })),
+        padres: lista(objeto({ valor: enumerado(PADRES) })),
+        extras: lista(
+            objeto({
+                valor: enumerado(['rafaga', 'prioridad', 'garantizado', 'excluir_fasttrack']),
+                por_defecto: booleano,
+            }),
+        ),
+        reglas: lista(
+            objeto({
+                rule: { ...texto, description: 'El mismo `rule` de los errores 422' },
+                mensaje: texto,
+            }),
+        ),
+        advertencias: lista(texto),
+        atajos: objeto({ simple: EstrategiasRouter, arbol_pcq: EstrategiasRouter }),
+    }),
+)
+
+/** `POST /planes/:id/sincronizar` (`contratos/control-velocidad.md` §5). */
+export const SincronizacionPlan = definirEsquema(
+    'SincronizacionPlan',
+    objeto({
+        plan_id: id,
+        aaa_reescritos: { ...entero, description: 'Servicios PPPoE del plan cuyo aaa:user:* se reescribe' },
+        routers: lista(
+            objeto({
+                router_id: id,
+                nombre: texto,
+                servicios: entero,
+                sesiones_actualizadas: {
+                    ...entero,
+                    description:
+                        'Sesiones PPPoE vivas a las que se pidió CoA con la velocidad nueva (sin desconectar)',
+                },
+                sesiones_sin_coa: {
+                    ...entero,
+                    description:
+                        'Sesiones abiertas sin CoA (PCQ del plan, suspendidas o con otra estrategia)',
+                },
+                colas_cambiadas: {
+                    ...entero,
+                    description: 'Objetos que el reconciliador creó, corrigió o borró',
+                },
+                reconciliado: { ...booleano, description: 'false: el router no tiene API (solo RADIUS)' },
+                errores: lista(texto),
+            }),
+        ),
+    }),
+)
+
+/** `GET /routers/:id/vista-previa-reconciliar`: lo que «Reconciliar ahora» haría, sin escribir. */
+export const VistaPreviaReconciliar = definirEsquema(
+    'VistaPreviaReconciliar',
+    objeto({
+        router_id: id,
+        cambios: lista(
+            objeto({
+                ruta: texto,
+                clave: texto,
+                accion: enumerado(['crear', 'actualizar', 'borrar', 'mover']),
+                grupo: enumerado(['servicio', 'velocidad', 'corte']),
+            }),
+        ),
+        menus: lista(
+            objeto({ ruta: texto, crear: entero, actualizar: entero, borrar: entero, mover: entero }),
+        ),
+        avisos: lista(texto),
+        error: { ...nulable(texto), description: 'El router no respondió o no tiene credenciales' },
+    }),
+)
+
+/** `POST /routers/:id/reconciliar` («Reconciliar ahora»). */
+export const ResultadoReconciliacion = definirEsquema(
+    'ResultadoReconciliacion',
+    objeto({
+        router_id: id,
+        servicios: entero,
+        correcciones: lista(
+            objeto({
+                ruta: texto,
+                comment: texto,
+                accion: enumerado(['creado', 'actualizado', 'borrado', 'movido']),
+            }),
+        ),
+        avisos: lista(texto),
+        error: nulable(texto),
+        errores_velocidad: lista(texto),
+    }),
+)
+
+/** `GET /routers/:id/diagnostico-corte`: el chequeo `corte` de «Probar conexión». */
+export const DiagnosticoCorte = definirEsquema(
+    'DiagnosticoCorte',
+    objeto({
+        router_id: id,
+        ok: booleano,
+        problemas: lista(
+            objeto({
+                codigo: enumerado([
+                    'sin_api',
+                    'router_no_responde',
+                    'faltan_reglas',
+                    'reglas_desordenadas',
+                    'falta_lista_suspendidos',
+                    'falta_perfil_suspendido',
+                    'walled_garden',
+                    'portal_sin_configurar',
+                    'portal_inalcanzable',
+                ]),
+                mensaje: { ...texto, description: 'Qué falla y qué hacer, en lenguaje simple' },
+                reconciliar: { ...booleano, description: '«Reconciliar ahora» lo arregla' },
+            }),
+        ),
+        faltan: lista(
+            objeto({
+                ruta: texto,
+                clave: texto,
+                accion: enumerado(['crear', 'actualizar', 'borrar', 'mover']),
+            }),
+        ),
+        portal: objeto({
+            url: nulable(texto),
+            alcanzable: { ...nulable(booleano), description: 'null: no se probó (sin URL del portal)' },
+            detalle: nulable(texto),
         }),
     }),
 )
