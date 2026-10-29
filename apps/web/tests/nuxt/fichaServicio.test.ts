@@ -72,7 +72,7 @@ describe('ficha de servicio · composables', () => {
     it('un 501 de la API llega como Problem sin romper', async () => {
         simularFalla('POST /api/v1/servicios/:id/suspender', 501)
         const resultado = await useServicios().ejecutar(5, 'suspender', 'Prueba', nuevaClaveIdempotencia())
-        expect(!resultado.ok && resultado.problema.title).toBe('No implementado')
+        expect(!resultado.ok && resultado.problema.title).toBe('Operación no disponible')
         expect((await servicio(5)).estado).toBe('activo')
     })
 

@@ -21,7 +21,7 @@ router
 router
     .post('/__pruebas/idempotente-falla', async () => {
         ejecuciones++
-        throw new NoImplementado('prueba')
+        throw new NoImplementado()
     })
     .use([middleware.auth(), middleware.idempotencia()])
 

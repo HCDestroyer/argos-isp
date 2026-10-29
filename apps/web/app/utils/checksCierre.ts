@@ -65,7 +65,7 @@ export function mesDeCheck(periodo: string): string {
 }
 
 /** Nota de la supervisión: obligatoria, como `motivo()` del validador de la API. */
-export const esquemaNotaCheck = z.string().trim().min(3, 'La nota es obligatoria (mínimo 3 caracteres)').max(500, 'Hasta 500 caracteres')
+export const esquemaNotaCheck = z.string().trim().min(3, 'Escribe una nota (al menos 3 caracteres)').max(500, 'Hasta 500 caracteres')
 
 export interface CheckPendiente {
     clave: string

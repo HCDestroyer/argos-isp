@@ -42,7 +42,7 @@ function alCorrer(r: ResultadoCorte) {
     <ConfirmacionModal
         v-model:open="abierto"
         :titulo="servicioId ? 'Evaluar el corte de este servicio' : 'Correr el corte ahora'"
-        :efecto="servicioId ? 'Vence sus facturas pendientes y decide su estado con las reglas de su plantilla.' : 'Vence lo pendiente y decide el estado de los servicios cuya hora de corte ya pasó hoy. Es lo mismo que hace el cron; los cortes y reactivaciones se aplican de inmediato.'"
+        :efecto="servicioId ? 'Vence sus facturas pendientes y decide su estado con las reglas de su plantilla.' : 'Vence lo pendiente y decide el estado de los servicios cuya hora de corte ya pasó hoy. Es lo mismo que hace el corte automático; los cortes y reactivaciones se aplican de inmediato.'"
         confirmar="Correr"
         icono="i-lucide-scissors"
         color="warning"

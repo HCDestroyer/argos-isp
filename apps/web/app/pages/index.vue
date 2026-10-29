@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
 
+// El cajero entra directo a su caja (`rutaInicio`); el resto ve el tablero.
+definePageMeta({
+    middleware: [() => {
+        const destino = rutaInicio(useUsuarioActual().value)
+        if (destino !== '/') {
+            return navigateTo(destino, { replace: true })
+        }
+    }],
+})
+
 const { usuario } = useAuth()
 const { puede, enlace } = usePermisos()
 

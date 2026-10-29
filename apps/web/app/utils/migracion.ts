@@ -59,7 +59,7 @@ export function localGuatemala(instante: string): string {
 /** Espejo de `marcarMigradoValidator` (A2): motivo de 3 a 500; fecha opcional (vacía = ahora), no futura. */
 export function esquemaMarcarMigrado(ahora: Date = new Date()) {
     return z.object({
-        desde: z.string().refine(valor => valor === '' || instanteGuatemala(valor) !== null, 'Fecha y hora no válidas')
+        desde: z.string().refine(valor => valor === '' || instanteGuatemala(valor) !== null, 'Elige una fecha y una hora válidas')
             .refine(valor => valor === '' || new Date(instanteGuatemala(valor) ?? 0).getTime() <= ahora.getTime(), 'No puede ser futura'),
         motivo: z.string().trim().min(3, 'Al menos 3 caracteres').max(500, 'Máximo 500 caracteres'),
     })

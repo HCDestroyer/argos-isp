@@ -1,3 +1,4 @@
+import { hostname } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import type { ModoDegradado } from './fuentes.ts'
 import type { PerfilSuspendido } from './perfil.ts'
@@ -24,6 +25,19 @@ export interface Config {
         /** Cada cuántos segundos se copia `aaa:user:*` (0 = nunca, solo lo visto al autorizar). */
         espejoSegundos: number
         max: number
+    }
+    /**
+     * Clientes de FreeRADIUS por evento (`src/clientes/consumidor.ts`). Apagado sin
+     * `AAA_CLIENTES_EVENTOS=1`: entonces se regeneran a mano (`argosisp radius-clientes`).
+     */
+    clientes: {
+        activo: boolean
+        dir: string
+        stream: string
+        grupo: string
+        consumidor: string
+        excluirNasIps: string[]
+        db: { host: string; port: number; user: string; password: string | undefined; database: string }
     }
 }
 
@@ -76,6 +90,22 @@ export function leerConfig(env: NodeJS.ProcessEnv = process.env): Config {
             ruta: env.AAA_DEGRADADO_RUTA || undefined,
             espejoSegundos: numero(env.AAA_DEGRADADO_ESPEJO_S, 300),
             max: numero(env.AAA_DEGRADADO_MAX, 200_000),
+        },
+        clientes: {
+            activo: env.AAA_CLIENTES_EVENTOS === '1',
+            dir: env.AAA_CLIENTS_DIR || fileURLToPath(new URL('../freeradius/clients.d', import.meta.url)),
+            stream: env.AAA_CLIENTES_STREAM || 'argos:eventos',
+            // Un grupo por nodo: cada nodo aaa tiene su FreeRADIUS y su clients.d.
+            grupo: env.AAA_CLIENTES_GRUPO || `radius-clientes:${env.AAA_NODO || hostname()}`,
+            consumidor: env.AAA_NODO || hostname(),
+            excluirNasIps: env.RADIUS_LAB_NAS_IP ? [env.RADIUS_LAB_NAS_IP] : [],
+            db: {
+                host: env.DB_HOST ?? '127.0.0.1',
+                port: numero(env.DB_PORT, 5432),
+                user: env.DB_USER ?? 'argosisp',
+                password: env.DB_PASSWORD,
+                database: env.DB_DATABASE ?? 'argosisp',
+            },
         },
     }
 }

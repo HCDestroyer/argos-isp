@@ -122,7 +122,7 @@ describe('cobro rápido · composables y reglas', () => {
         sesionFixture('fixture-cajero')
         simularFalla('POST /api/v1/pagos', 501)
         const noImplementado = await usePagos().registrar({ cliente_id: 2, metodo: 'deposito', monto: '10.00', referencia: 'X-1' }, nuevaClaveIdempotencia())
-        expect(!noImplementado.ok && noImplementado.problema.title).toBe('No implementado')
+        expect(!noImplementado.ok && noImplementado.problema.title).toBe('Operación no disponible')
     })
 
     it('Pago.servicios[] muestra la reactivación de inmediato, sin sondeo', async () => {

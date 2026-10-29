@@ -60,7 +60,9 @@ export abstract class DomainAction<Entrada, Salida> {
         let t: Transaccion | undefined
 
         const anidada = Boolean(opciones.trx)
+        const simulada = opciones.trx ? simulaciones.has(opciones.trx) : false
         const ejecutar = async (trx: TransactionClientContract) => {
+            if (simulada) simulaciones.add(trx)
             t = new Transaccion(trx, ctx)
             transacciones.set(trx, t)
             const salida = await this.handle(input, t)
@@ -85,7 +87,8 @@ export abstract class DomainAction<Entrada, Salida> {
         try {
             salida = opciones.trx ? await opciones.trx.transaction(ejecutar) : await db.transaction(ejecutar)
         } catch (error) {
-            await this.auditarError(ctx, entrada, t?.entidadActual, error, t?.empresaAuditoria)
+            // en una simulación nada queda escrito, tampoco el error
+            if (!simulada) await this.auditarError(ctx, entrada, t?.entidadActual, error, t?.empresaAuditoria)
             throw error
         }
 
@@ -144,6 +147,30 @@ type Registro = Record<string, unknown>
 
 /** Trabajo posterior al COMMIT (invalidar cachés, avisar a workers). */
 export type GanchoConfirmacion = () => Promise<void> | void
+
+/**
+ * Transacciones de una simulación (`simularEnTransaccion`): todo se revierte al terminar, así que
+ * las acciones anidadas en ellas tampoco escriben la auditoría de sus errores aparte.
+ */
+const simulaciones = new WeakSet<TransactionClientContract>()
+
+/**
+ * Corre `fn` con una `Transaccion` que **siempre** se revierte: para vistas previas que ejecutan la
+ * lógica real de las acciones (con acciones anidadas por `{ trx: t.trx }`) sin dejar nada escrito
+ * (ni cambios, ni auditoría, ni eventos, ni ganchos posteriores al COMMIT).
+ */
+export async function simularEnTransaccion<T>(
+    ctx: ContextoAccion,
+    fn: (t: Transaccion) => Promise<T>,
+): Promise<T> {
+    const trx = await db.transaction()
+    simulaciones.add(trx)
+    try {
+        return await fn(new Transaccion(trx, ctx))
+    } finally {
+        await trx.rollback()
+    }
+}
 
 /** Transacción Lucid → unidad de trabajo de la acción que la abrió (para acciones anidadas). */
 const transacciones = new WeakMap<TransactionClientContract, Transaccion>()

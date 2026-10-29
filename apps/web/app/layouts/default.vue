@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { CommandPaletteGroup, CommandPaletteItem, NavigationMenuItem } from '@nuxt/ui'
+import type { SeccionPanel } from '~/utils/navegacion'
 
 const { puede } = usePermisos()
 const comprobantes = useComprobantes()
@@ -39,15 +40,31 @@ const gruposVisibles = computed(() => GRUPOS_PANEL
 /** El grupo de la página actual se abre solo (al cambiar de grupo, el menú se vuelve a montar). */
 const grupoActual = computed(() => grupoDeRuta(route.path)?.id ?? null)
 
+/** Inicio de cada usuario: el cajero entra a su caja (`rutaInicio`). */
+const inicio = computed(() => rutaInicio(useUsuarioActual().value))
+
+function itemSeccion(seccion: SeccionPanel): NavigationMenuItem {
+    return {
+        'label': seccion.etiqueta,
+        'icon': seccion.icono,
+        'to': seccion.ruta,
+        'aria-label': seccion.etiqueta,
+        'badge': contadores.value[seccion.id] ? { label: contadores.value[seccion.id], color: 'warning' as const, variant: 'subtle' as const } : undefined,
+        'onSelect': cerrarMovil,
+    }
+}
+
 const items = computed<NavigationMenuItem[]>(() => [
     {
         'label': 'Inicio',
         'icon': 'i-lucide-house',
-        'to': '/',
+        'to': inicio.value,
         'aria-label': 'Inicio',
         'onSelect': cerrarMovil,
     },
-    ...gruposVisibles.value.map((grupo) => {
+    // Accesos directos (Cobrar, Caja): sueltos, siempre a la vista.
+    ...gruposVisibles.value.filter(grupo => grupo.plano).flatMap(grupo => grupo.secciones.map(itemSeccion)),
+    ...gruposVisibles.value.filter(grupo => !grupo.plano).map((grupo) => {
         const pendientes = grupo.secciones.map(seccion => contadores.value[seccion.id]).find(Boolean)
         return {
             'label': grupo.etiqueta,
@@ -55,14 +72,7 @@ const items = computed<NavigationMenuItem[]>(() => [
             'aria-label': grupo.etiqueta,
             'defaultOpen': grupo.id === grupoActual.value,
             'badge': pendientes ? { label: pendientes, color: 'warning' as const, variant: 'subtle' as const } : undefined,
-            'children': grupo.secciones.map(seccion => ({
-                'label': seccion.etiqueta,
-                'icon': seccion.icono,
-                'to': seccion.ruta,
-                'aria-label': seccion.etiqueta,
-                'badge': contadores.value[seccion.id] ? { label: contadores.value[seccion.id], color: 'warning' as const, variant: 'subtle' as const } : undefined,
-                'onSelect': cerrarMovil,
-            })),
+            'children': grupo.secciones.map(itemSeccion),
         }
     }),
 ])
@@ -71,7 +81,7 @@ const items = computed<NavigationMenuItem[]>(() => [
 const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => [
     {
         id: 'inicio',
-        items: [{ label: 'Inicio', suffix: 'Tablero y accesos', icon: 'i-lucide-house', to: '/' }],
+        items: [{ label: 'Inicio', suffix: 'Tablero y accesos', icon: 'i-lucide-house', to: inicio.value }],
     },
     ...gruposVisibles.value.map(grupo => ({
         id: grupo.id,
@@ -109,7 +119,7 @@ const gruposBusqueda = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() =>
         >
             <template #header="{ collapsed }">
                 <NuxtLink
-                    to="/"
+                    :to="inicio"
                     class="flex min-w-0 items-center gap-2 px-1 font-semibold text-highlighted"
                     aria-label="ArgosIsp, inicio"
                 >

@@ -38,7 +38,7 @@ const enteroNulable = (min: number, max: number) => z.number().int('Solo enteros
  */
 export const esquemaPremio = z.object({
     tipo: z.enum(['descuento_factura', 'mes_gratis', 'mejora_plan', 'bien', 'boletos']),
-    nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(120, 'Máximo 120 caracteres'),
+    nombre: z.string().trim().min(1, 'Escribe el nombre').max(120, 'Máximo 120 caracteres'),
     costo_puntos: z.number({ message: 'Escribe los puntos' }).int('Puntos enteros').min(1, 'Al menos 1 punto').max(10_000_000, 'Máximo 10 000 000'),
     descuento_tipo: z.enum(['monto', 'porcentaje']),
     descuento_valor: montoOpcional,
