@@ -76,6 +76,8 @@ Con `Authorization: Bearer <INTERNAL_TOKEN>` (el de `internal/aaa/*`):
 
 - `RADIUS_BIND_IP` = la `.1`; los contenedores alcanzan las `/32` por la ruta del host y salen con origen `.1` (enmascarado de Docker), así que `COA_ORIGEN_IP` queda vacía. Detalle: `infra/wireguard/README.md`.
 - El cliente de FreeRADIUS de un router con túnel es su `ip_tunel` (es el origen de sus `Access-Request`): `argosisp radius-clientes` / `clients.d` deben usarla como dirección del NAS (A1/A2).
+- **Clientes por evento (A2):** con `AAA_CLIENTES_EVENTOS=1`, cada nodo `aaa` consume `argos:eventos` (grupo `radius-clientes:<nodo>`, en `$`) y, con `router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada` (y al arrancar), regenera todo `clients.d` desde `network.routers` (`ipaddr = nas_ip`, que A1 deja en `ip_tunel` al registrar). Si cambió algún archivo, avisa por el FIFO `clients.d/.recargar`; el contenedor de FreeRADIUS corre `services/aaa/freeradius/recargar.sh` como entrypoint, valida con `freeradius -C` y reinicia `radiusd` (~1 s; FreeRADIUS 3.2 no relee clientes con HUP). Sin TTL ni sondeo. Detalle: `services/aaa/README.md`, «Clientes por evento».
+- **CoA:** `coa` no ata el socket a una IP si `COA_ORIGEN_IP` está vacía; el origen lo pone la ruta y, con el enmascarado del host, es la `.1` (`services/coa/test/nas.test.ts`, «origen de los CoA»). El destino es el `nas_ip` de la sesión (el `NAS-IP-Address` del accounting = `src-address` del script = `ip_tunel`). Las sesiones abiertas antes de registrar el túnel conservan su `nas_ip` viejo hasta que reconectan.
 
 
 ## 7. API de A1 (rama `a1/conexion-routers`)
