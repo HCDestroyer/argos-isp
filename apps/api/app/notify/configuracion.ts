@@ -47,7 +47,7 @@ export const DESCRIPCION_AVISOS: Record<TipoAviso, string> = {
         'Factura emitida o anulada y periodos sin costo (`factura.emitida`, `factura.anulada`, `bonificacion.registrada`)',
     vencimiento: 'Factura vencida (`factura.vencida`)',
     recordatorio: 'Recordatorios de pago antes y después del vencimiento (`recordatorio.1` a `.3`)',
-    corte: 'Cambio de estado del servicio: limitado, suspendido, reactivado (`servicio.estado_cambiado`)',
+    corte: 'Cambio de estado del servicio: limitado, suspendido, reactivado (`servicio.estado_cambiado`) y bienvenida al activar la instalación (`servicio.instalacion_activada`)',
     pago: 'Pago registrado, también a los dueños de facturas pagadas por otro (`pago.*`)',
     promesa: 'Promesas de pago (`promesa.*`)',
     comprobante: 'Comprobantes de depósito recibidos, aprobados o rechazados (`comprobante.*`)',
@@ -60,7 +60,7 @@ export function tipoDeAviso(evento: string): TipoAviso | null {
     if (evento === 'factura.vencida') return 'vencimiento'
     if (evento.startsWith('factura.') || evento === 'bonificacion.registrada') return 'factura'
     if (evento.startsWith('recordatorio.')) return 'recordatorio'
-    if (evento === 'servicio.estado_cambiado') return 'corte'
+    if (evento === 'servicio.estado_cambiado' || evento === 'servicio.instalacion_activada') return 'corte'
     if (evento.startsWith('pago.')) return 'pago'
     if (evento.startsWith('promesa.')) return 'promesa'
     if (evento.startsWith('comprobante.')) return 'comprobante'

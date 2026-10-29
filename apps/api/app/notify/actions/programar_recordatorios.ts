@@ -45,7 +45,9 @@ export const VENTANA_DIAS = 7
  * `vencida` y `total > pagado` (`pagado` ya incluye lo acreditado por notas). Quedan fuera
  * `por_certificar` (aún no es un documento cobrable), `pagada`, `anulada`, `castigada` (su `pagado`
  * es solo lo cobrado: el resto se dio por incobrable), `acreditada` (cubierta por notas internas) y
- * cualquier factura sustituida (`billing.sustituciones`), aunque su fila siguiera viva.
+ * cualquier factura sustituida (`billing.sustituciones`), aunque su fila siguiera viva. Tampoco
+ * las de un servicio `pendiente_instalacion` (el cargo único anticipado de la instalación): corte,
+ * mora y recordatorios no aplican mientras está pendiente (`contratos/instalacion.md` §3).
  *
  * Para cada factura así toma el recordatorio activo más reciente cuyo momento ya pasó: `(vence_en + dias) a la hora del recordatorio` en America/Guatemala.
  * Así, si el cron se detuvo, al volver no manda tres avisos atrasados: manda el último que toca.
@@ -88,6 +90,11 @@ export default class ProgramarRecordatorios extends DomainAction<
                     AND f.total > f.pagado
                     AND NOT EXISTS (
                         SELECT 1 FROM billing.sustituciones su WHERE su.original_id = f.id
+                    )
+                    -- servicio pendiente de instalación: sin recordatorios (contratos/instalacion.md §3)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM core.servicios s
+                        WHERE s.id = f.servicio_id AND s.estado = 'pendiente_instalacion'
                     )
                     AND m.momento <= ?::timestamptz
                     AND m.momento >= f.emitida_en
