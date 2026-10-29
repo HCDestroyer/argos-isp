@@ -98,7 +98,7 @@ Cualquier caché (autorización RADIUS en Redis, mapa `ip → servicio_id`, cat�
     - Sondeo de contacto de los routers: `routeros.sondear` (cron cada 5 min) solo deja fila si algún router no respondió o falló; cada GET enviado queda igual en `audit.red`.
     - Proyecciones derivadas que se refrescan por evento (el refresco del dashboard): no dejan fila; son una caché del dato, no una acción de nadie.
     - Estado deseado de RouterOS sin cambios: `routeros.aplicar_servicio` y `routeros.reconciliar` solo dejan fila si corrigieron algo, fallaron o la validación de velocidad rechazó la configuración. Cada comando que sí se envía queda igual en `audit.red`.
-    - Estado del túnel WireGuard: `routers.registrar_estado_wireguard` (el agente reporta el último handshake cada pocos segundos) solo deja fila cuando un router pasa de pendiente a conectado o al revés; el registro, la rotación y la clave pegada a mano se auditan siempre.
+    - Estado del túnel WireGuard: `routers.registrar_estado_wireguard` (el agente reporta el último handshake cada pocos segundos) solo deja fila cuando un router pasa de pendiente a conectado o al revés, o cuando cambia la clave del servidor; el registro, la rotación y la clave pegada a mano se auditan siempre.
 - `audit.cambios`: diff por campo en clientes, servicios, planes, plantillas, reglas. Datos sensibles (contraseñas PPPoE, credenciales, tokens) se registran como `***`.
 - Actualizaciones masivas nunca usan `Model.query().update()`; pasan por una acción que registra cada fila.
 - `audit.red`: cada CoA, Disconnect o comando a RouterOS con la respuesta del equipo.
