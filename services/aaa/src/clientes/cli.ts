@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import { claveDesdeEntorno } from '../cifrado.ts'
-import { escribirClientes, leerRouters } from './generar.ts'
+import { escribirClientes, huboCambio, leerRouters } from './generar.ts'
 
 /**
  * `pnpm aaa:clients`: genera `services/aaa/freeradius/clients.d/router-<id>.conf` desde
@@ -33,12 +33,15 @@ try {
     })
     console.log(`clients.d: ${dir}`)
     for (const a of r.escritos) console.log(`  escrito   ${a}`)
+    for (const a of r.sinCambios) console.log(`  igual     ${a}`)
     for (const a of r.borrados) console.log(`  borrado   ${a}`)
     for (const o of r.omitidos) console.log(`  omitido   router ${o.id} (${o.nombre}): ${o.motivo}`)
     for (const o of r.errores) console.error(`  ERROR     router ${o.id} (${o.nombre}): ${o.motivo}`)
-    console.log(
-        'Reinicia FreeRADIUS para cargar los clientes: docker compose -f infra/docker-compose.yml restart freeradius',
-    )
+    if (huboCambio(r)) {
+        console.log(
+            'Reinicia FreeRADIUS para cargar los clientes: docker compose -f infra/docker-compose.yml restart freeradius',
+        )
+    } else console.log('Sin cambios: FreeRADIUS ya tiene estos clientes.')
     process.exitCode = r.errores.length > 0 ? 1 : 0
 } catch (e) {
     console.error(`aaa:clients: ${(e as Error).message}`)

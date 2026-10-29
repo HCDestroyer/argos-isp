@@ -5,7 +5,13 @@ import { join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
 import pg from 'pg'
 import { cifrar } from '../src/cifrado.ts'
-import { escribirClientes, leerRouters, renderCliente, type RouterRadius } from '../src/clientes/generar.ts'
+import {
+    escribirClientes,
+    huboCambio,
+    leerRouters,
+    renderCliente,
+    type RouterRadius,
+} from '../src/clientes/generar.ts'
 import { CLAVE } from './ayudas.ts'
 import { CONF, exec, IMAGEN_FREERADIUS, motivoSinDocker } from './docker.ts'
 
@@ -70,6 +76,28 @@ describe('aaa:clients · generación', () => {
         assert.deepEqual((await readdir(dir)).sort(), ['otro.conf', 'router-1.conf', 'router-2.conf'])
         assert.equal((await stat(join(dir, 'router-1.conf'))).mode & 0o777, 0o640)
         assert.match(await readFile(join(dir, 'router-2.conf'), 'utf8'), /secret = "secreto-dos-1234"/)
+    })
+
+    it('un archivo con el mismo contenido no se reescribe: sin cambios no hay que recargar', async () => {
+        const routers = [
+            router(1, '192.0.2.1', 'secreto-uno-1234'),
+            router(2, '2001:db8::2', 'secreto-dos-1234'),
+        ]
+        const antes = (await stat(join(dir, 'router-1.conf'))).mtimeMs
+        const r = await escribirClientes({ routers, clave: CLAVE, dir })
+        assert.deepEqual(r.escritos, [])
+        assert.deepEqual(r.sinCambios, ['router-1.conf', 'router-2.conf'])
+        assert.deepEqual(r.borrados, [])
+        assert.equal(huboCambio(r), false)
+        assert.equal((await stat(join(dir, 'router-1.conf'))).mtimeMs, antes)
+        const otro = await escribirClientes({
+            routers: [router(1, '10.255.0.2', 'secreto-uno-1234'), routers[1]!],
+            clave: CLAVE,
+            dir,
+        })
+        assert.deepEqual(otro.escritos, ['router-1.conf'])
+        assert.equal(huboCambio(otro), true)
+        assert.match(await readFile(join(dir, 'router-1.conf'), 'utf8'), /ipaddr = 10\.255\.0\.2$/m)
     })
 
     it('un secret que no descifra es error y conserva el archivo anterior', async () => {

@@ -1,4 +1,4 @@
-import { chmod, mkdir, readdir, rename, unlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { isIP } from 'node:net'
 import { join } from 'node:path'
 import type { Pool } from 'pg'
@@ -9,7 +9,9 @@ import { descifrar } from '../cifrado.ts'
  * `freeradius/clients.d/` (`pnpm aaa:clients`). `clients.conf` los incluye con `$INCLUDE clients.d/`.
  *
  * Los archivos llevan el secret en claro: están en `.gitignore` y se escriben con permisos 0640.
- * FreeRADIUS lee los clientes solo al arrancar: después de generar hay que reiniciarlo.
+ * FreeRADIUS lee los clientes solo al arrancar: después de generar hay que reiniciarlo (a mano con
+ * `argosisp radius-clientes`, o por evento con `consumidor.ts` y `freeradius/recargar.sh`). Un
+ * archivo con el mismo contenido no se reescribe, así `cambio` dice si hace falta recargar.
  */
 
 export interface RouterRadius {
@@ -71,7 +73,10 @@ export function renderCliente(router: RouterRadius, secret: string): string {
 }
 
 export interface ResultadoGeneracion {
+    /** Archivos nuevos o con contenido distinto */
     escritos: string[]
+    /** Archivos que ya tenían el mismo contenido (no se tocan) */
+    sinCambios: string[]
     borrados: string[]
     /** Sin cliente: excluidos o sin secret (su archivo anterior se borra). */
     omitidos: { id: number; nombre: string; motivo: string }[]
@@ -93,7 +98,13 @@ export async function escribirClientes(opciones: {
 }): Promise<ResultadoGeneracion> {
     const { routers, clave, dir } = opciones
     const excluir = new Set((opciones.excluirNasIps ?? []).filter(Boolean))
-    const resultado: ResultadoGeneracion = { escritos: [], borrados: [], omitidos: [], errores: [] }
+    const resultado: ResultadoGeneracion = {
+        escritos: [],
+        sinCambios: [],
+        borrados: [],
+        omitidos: [],
+        errores: [],
+    }
     await mkdir(dir, { recursive: true })
 
     for (const router of routers) {
@@ -117,6 +128,11 @@ export async function escribirClientes(opciones: {
             continue
         }
         const archivo = nombreArchivo(router)
+        const anterior = await readFile(join(dir, archivo), 'utf8').catch(() => null)
+        if (anterior === contenido) {
+            resultado.sinCambios.push(archivo)
+            continue
+        }
         const temporal = join(dir, `.${archivo}.tmp`)
         await writeFile(temporal, contenido, { mode: 0o640 })
         await chmod(temporal, 0o640)
@@ -126,7 +142,11 @@ export async function escribirClientes(opciones: {
 
     // Un error transitorio (secret mal cifrado, IP inválida) no debe dejar sin RADIUS a un router que ya
     // funcionaba: se conserva su archivo anterior.
-    const vigentes = new Set([...resultado.escritos, ...resultado.errores.map(nombreArchivo)])
+    const vigentes = new Set([
+        ...resultado.escritos,
+        ...resultado.sinCambios,
+        ...resultado.errores.map(nombreArchivo),
+    ])
     for (const archivo of await readdir(dir)) {
         if (PATRON_ARCHIVO.test(archivo) && !vigentes.has(archivo)) {
             await unlink(join(dir, archivo))
@@ -134,4 +154,9 @@ export async function escribirClientes(opciones: {
         }
     }
     return resultado
+}
+
+/** ¿La generación cambió algo que FreeRADIUS deba volver a leer? */
+export function huboCambio(r: ResultadoGeneracion): boolean {
+    return r.escritos.length > 0 || r.borrados.length > 0
 }
