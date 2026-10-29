@@ -64,18 +64,22 @@ describe('direccionamiento del router explicado', () => {
         useUsuarioActual().value = null
     })
 
-    it('muestra cuántas IP y cuántos clientes caben, el bloque a escala y el ejemplo de cada cliente', async () => {
+    it('muestra la ocupación de redes y pools, el bloque a escala y lo que recibe cada cliente', async () => {
         const vista = await mountSuspended(RouterDireccionamiento, { props: { routerId: 1 } })
         await esperar(() => expect(vista.find('[data-prueba="clientes-bloque-1"]').exists()).toBe(true))
-        expect(vista.get('[data-prueba="capacidad-red-1"]').text()).toBe('253 IP utilizables')
-        expect(vista.get('[data-prueba="capacidad-red-2"]').text()).toBe('254 IP utilizables')
+        // Red 1: 254 hosts, el gateway reservado; los servicios del RB-Centro tienen IP en ella.
+        const red = vista.get('[data-prueba="ocupacion-red-1"]')
+        expect(red.text()).toMatch(/% · Con espacio/)
+        expect(red.text()).toContain('de 253 IP en uso · 1 reservadas')
         expect(vista.get('[data-prueba="clientes-bloque-1"]').text()).toBe('Caben 32,768 clientes')
-        expect(vista.get('[data-prueba="caben-pool-1"]').text()).toBe('1,048,576 × /64')
+        expect(vista.get('[data-prueba="ocupacion-pool-1"]').text()).toContain('de 1,048,576 prefijos en uso')
+        expect(vista.get('[data-prueba="entrega-pool-2"]').text()).toContain('Delegated-IPv6-Prefix')
+        expect(vista.get('[data-prueba="entrega-pool-2"]').text()).toContain('256 redes /64 en su casa')
+        expect(vista.get('[data-bloque="1"]').text()).toContain('de Tigo Business')
         expect(vista.findAll('[data-prueba="barra-bloque-1"] span')).toHaveLength(2)
         const explicacion = vista.get('[data-prueba="ipv6-explicacion"]')
         expect(explicacion.text()).toContain('Cliente 1: 2803:d100:1000::/64')
         expect(explicacion.text()).toContain('Cliente 1: 2803:d100:1080::/56')
-        expect(explicacion.text()).toContain('Prefijo delegado (PD) · /56')
         expect(vista.get('[data-prueba="ipv6-capacidad"]').text()).toContain('Caben 32,768 clientes con IPv6 completa')
     })
 

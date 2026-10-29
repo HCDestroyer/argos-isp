@@ -3,7 +3,8 @@ import type { RutasFixture } from '~/utils/fetchFixtures'
 import { bd } from '../bd'
 import { ahora, conPermiso, cuerpoObjeto, datosInvalidos, empresasDeLista, idDe, noEncontrado, paginar, registrarAccion, versionCambiada } from '../comun'
 import { rateLimitServicio, velocidadDePlan } from '../planes/velocidad'
-import { SIN_CONTACTO } from './datos'
+import { ENTREGA_SIN_CALCULAR, OCUPACION_SIN_CALCULAR, SIN_CONTACTO } from './datos'
+import { vistaBloque, vistaPool, vistaRed } from './pools'
 import { vistaPreviaControl } from './vistaPrevia'
 
 function existeRouter(id: number | null): boolean {
@@ -209,14 +210,14 @@ export const rutasRouters: RutasFixture = {
     'GET /api/v1/routers/:id/redes-ipv4': conPermiso('redes.ver', (solicitud) => {
         const id = idDe(solicitud)
         return existeRouter(id)
-            ? { status: 200, cuerpo: bd.redesIpv4.filter(red => red.router_id === id) }
+            ? { status: 200, cuerpo: bd.redesIpv4.filter(red => red.router_id === id).map(vistaRed) }
             : noEncontrado('el router')
     }),
 
     'GET /api/v1/routers/:id/ipv6-bloques': conPermiso('ipv6.ver', (solicitud) => {
         const id = idDe(solicitud)
         return existeRouter(id)
-            ? { status: 200, cuerpo: bd.ipv6Bloques.filter(bloque => bloque.router_id === id) }
+            ? { status: 200, cuerpo: bd.ipv6Bloques.filter(bloque => bloque.router_id === id).map(vistaBloque) }
             : noEncontrado('el router')
     }),
 
@@ -282,10 +283,26 @@ export const rutasRouters: RutasFixture = {
         if (bd.redesIpv4.some(r => r.cidr === cidr)) {
             return datosInvalidos([{ field: 'cidr', message: `La red ${cidr} se solapa con otra ya registrada`, rule: 'solapamiento' }])
         }
-        const red: Schema<'RedIpv4'> = { id: Math.max(0, ...bd.redesIpv4.map(r => r.id)) + 1, router_id: id, cidr, gateway: typeof cuerpo.gateway === 'string' ? cuerpo.gateway : null, tipo: cuerpo.tipo === 'estatico' ? 'estatico' : 'pool', version: 1, created_at: ahora(), updated_at: ahora() }
+        const opcional = (campo: string): string | null => (typeof cuerpo[campo] === 'string' && (cuerpo[campo] as string).trim() !== '' ? (cuerpo[campo] as string).trim() : null)
+        const red: Schema<'RedIpv4'> = {
+            id: Math.max(0, ...bd.redesIpv4.map(r => r.id)) + 1,
+            router_id: id,
+            nombre: opcional('nombre'),
+            cidr,
+            gateway: opcional('gateway'),
+            tipo: cuerpo.tipo === 'estatico' ? 'estatico' : 'pool',
+            rango_inicio: opcional('rango_inicio'),
+            rango_fin: opcional('rango_fin'),
+            dns_primario: opcional('dns_primario'),
+            dns_secundario: opcional('dns_secundario'),
+            ocupacion: OCUPACION_SIN_CALCULAR,
+            version: 1,
+            created_at: ahora(),
+            updated_at: ahora(),
+        }
         bd.redesIpv4.push(red)
         registrarAccion(solicitud, 'redes.crear', { tipo: 'red_ipv4', id: red.id }, cuerpo)
-        return { status: 201, cuerpo: red }
+        return { status: 201, cuerpo: vistaRed(red) }
     }),
 
     'POST /api/v1/routers/:id/ipv6-bloques': conPermiso('ipv6.crear', (solicitud) => {
@@ -293,23 +310,25 @@ export const rutasRouters: RutasFixture = {
         if (!existeRouter(id) || id === null) {
             return noEncontrado('el router')
         }
-        const prefijo = String(cuerpoObjeto(solicitud).prefijo ?? '').trim()
+        const cuerpo = cuerpoObjeto(solicitud)
+        const prefijo = String(cuerpo.prefijo ?? '').trim()
         if (!CIDR_V6.test(prefijo)) {
             return datosInvalidos([{ field: 'prefijo', message: 'El prefijo debe estar en notación CIDR', rule: 'regex' }])
         }
         if (bd.ipv6Bloques.some(b => b.prefijo === prefijo)) {
             return datosInvalidos([{ field: 'prefijo', message: `El bloque ${prefijo} se solapa con otro`, rule: 'solapamiento' }])
         }
-        const bloque: Schema<'Ipv6Bloque'> = { id: Math.max(0, ...bd.ipv6Bloques.map(b => b.id)) + 1, router_id: id, prefijo, version: 1, created_at: ahora(), updated_at: ahora() }
+        const texto = (campo: string): string | null => (typeof cuerpo[campo] === 'string' && (cuerpo[campo] as string).trim() !== '' ? (cuerpo[campo] as string).trim() : null)
+        const bloque: Schema<'Ipv6Bloque'> = { id: Math.max(0, ...bd.ipv6Bloques.map(b => b.id)) + 1, router_id: id, nombre: texto('nombre'), proveedor: texto('proveedor'), prefijo, espacio: { pools: 0, porcentaje_en_pools: 0 }, version: 1, created_at: ahora(), updated_at: ahora() }
         bd.ipv6Bloques.push(bloque)
-        registrarAccion(solicitud, 'ipv6.crear', { tipo: 'ipv6_bloque', id: bloque.id }, { prefijo })
-        return { status: 201, cuerpo: bloque }
+        registrarAccion(solicitud, 'ipv6.crear', { tipo: 'ipv6_bloque', id: bloque.id }, cuerpo)
+        return { status: 201, cuerpo: vistaBloque(bloque) }
     }),
 
     'GET /api/v1/ipv6-bloques/:id/pools': conPermiso('ipv6.ver', (solicitud) => {
         const id = idDe(solicitud)
         return bd.ipv6Bloques.some(b => b.id === id)
-            ? { status: 200, cuerpo: bd.ipv6Pools.filter(p => p.bloque_id === id) }
+            ? { status: 200, cuerpo: bd.ipv6Pools.filter(p => p.bloque_id === id).map(vistaPool) }
             : noEncontrado('el bloque')
     }),
 
@@ -335,9 +354,23 @@ export const rutasRouters: RutasFixture = {
         if (bd.ipv6Pools.some(p => p.prefijo === prefijo)) {
             return datosInvalidos([{ field: 'prefijo', message: `El pool ${prefijo} ya existe`, rule: 'solapamiento' }])
         }
-        const pool: Schema<'Ipv6Pool'> = { id: Math.max(0, ...bd.ipv6Pools.map(p => p.id)) + 1, bloque_id: bloque.id, prefijo, tipo, tamano_entrega: tamano, nombre_en_router: typeof cuerpo.nombre_en_router === 'string' ? cuerpo.nombre_en_router : null, version: 1, created_at: ahora(), updated_at: ahora() }
+        const pool: Schema<'Ipv6Pool'> = {
+            id: Math.max(0, ...bd.ipv6Pools.map(p => p.id)) + 1,
+            bloque_id: bloque.id,
+            router_id: bloque.router_id,
+            nombre: typeof cuerpo.nombre === 'string' && cuerpo.nombre.trim() ? cuerpo.nombre.trim() : null,
+            prefijo,
+            tipo,
+            tamano_entrega: tamano,
+            nombre_en_router: typeof cuerpo.nombre_en_router === 'string' && cuerpo.nombre_en_router ? cuerpo.nombre_en_router : null,
+            ocupacion: OCUPACION_SIN_CALCULAR,
+            entrega: ENTREGA_SIN_CALCULAR,
+            version: 1,
+            created_at: ahora(),
+            updated_at: ahora(),
+        }
         bd.ipv6Pools.push(pool)
         registrarAccion(solicitud, 'ipv6.crear', { tipo: 'ipv6_pool', id: pool.id }, cuerpo)
-        return { status: 201, cuerpo: pool }
+        return { status: 201, cuerpo: vistaPool(pool) }
     }),
 }

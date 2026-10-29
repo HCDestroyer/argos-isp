@@ -197,6 +197,13 @@ const ABIERTOS_DESDE: Record<string, { permisos: string[], desde: string[], exen
     'RouterVelocidad.vue': { permisos: ['routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
     // Menú de acciones del router: lo montan la lista y la ficha (las dos con `routers.ver`).
     'RouterAcciones.vue': { permisos: ['routers.ver'], desde: ['pages/routers/index.vue', 'pages/routers/[id].vue'] },
+    // Direccionamiento del router (contratos/pools.md): lo monta la ficha (`routers.ver`) y abre los
+    // modales solo con el permiso de cada acción; `redes.ver` lo da quien puede editar la red.
+    'RouterDireccionamiento.vue': { permisos: ['routers.ver'], desde: ['pages/routers/[id].vue'] },
+    'RedIpv4Modal.vue': { permisos: ['redes.crear', 'redes.editar', 'redes.ver'], desde: ['components/RouterDireccionamiento.vue'], exentos: { 'components/RouterDireccionamiento.vue': ['redes.ver'] } },
+    'Ipv6BloqueModal.vue': { permisos: ['ipv6.crear', 'ipv6.editar'], desde: ['components/RouterDireccionamiento.vue'] },
+    'Ipv6PoolModal.vue': { permisos: ['ipv6.crear', 'ipv6.editar'], desde: ['components/RouterDireccionamiento.vue'] },
+    'PoolMigrarModal.vue': { permisos: ['redes.migrar', 'ipv6.migrar', 'routers.ver'], desde: ['components/RouterDireccionamiento.vue'], exentos: { 'components/RouterDireccionamiento.vue': ['routers.ver'] } },
     'RouterEditarModal.vue': { permisos: ['routers.editar', 'routers.ver'], desde: ['components/RouterAcciones.vue'], exentos: { 'components/RouterAcciones.vue': ['routers.ver'] } },
     'ServicioCambiarEmpresaModal.vue': { permisos: ['servicios.cambiar_empresa'], desde: ['pages/servicios/[id].vue'] },
     // Solo se monta con `puedeActivarInstalacion` (servicios.activar_instalacion); recarga con el servicios.ver de la página.

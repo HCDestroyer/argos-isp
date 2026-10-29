@@ -194,3 +194,28 @@ export function capacidadIpv4(cidr: string, conGateway: boolean): number | null 
     const utiles = largo >= 31 ? total : total - 2
     return Math.max(0, utiles - (conGateway ? 1 : 0))
 }
+
+/** Estado de ocupación de una red o un pool: icono + texto + color. */
+export function estadoOcupacion(porcentaje: number): { etiqueta: string, color: 'success' | 'warning' | 'error', icono: string } {
+    if (porcentaje >= 90) {
+        return { etiqueta: 'Casi lleno', color: 'error', icono: 'i-lucide-circle-alert' }
+    }
+    if (porcentaje >= 75) {
+        return { etiqueta: 'Se está llenando', color: 'warning', icono: 'i-lucide-triangle-alert' }
+    }
+    return { etiqueta: 'Con espacio', color: 'success', icono: 'i-lucide-circle-check' }
+}
+
+/** Título en lenguaje simple de los rechazos de pools (`contratos/pools.md`), con qué hacer. */
+export const RECHAZOS_POOLS: Record<string, { titulo: string, ayuda: string }> = {
+    ips_asignadas_fuera: { titulo: 'Hay IPs en uso que quedarían fuera', ayuda: 'Estos servicios usan una IP que ya no estaría en la red o en su rango. Cambia su IP o amplía el rango.' },
+    prefijos_asignados_fuera: { titulo: 'Hay prefijos en uso que quedarían fuera del pool', ayuda: 'Estos servicios usan un prefijo que ya no cabría en el pool. Agranda el pool o cámbiales el prefijo antes.' },
+    pools_fuera_del_bloque: { titulo: 'Hay pools que quedarían fuera del bloque', ayuda: 'Achica o borra esos pools antes de achicar el bloque.' },
+    pool_con_asignaciones: { titulo: 'El pool tiene prefijos en uso', ayuda: 'El tipo y el tamaño que entrega solo se cambian cuando ningún servicio usa el pool.' },
+    pool_con_servicios: { titulo: 'Hay servicios usando estas direcciones', ayuda: 'Marca «Mover también los servicios» para que pasen al otro router conservando sus direcciones.' },
+    servicio_no_migrable: { titulo: 'Un servicio no puede pasar al otro router', ayuda: 'Revisa que su plan esté disponible en el router de destino y que este tenga pools con espacio.' },
+    red_traslapada: { titulo: 'La red se cruza con otra', ayuda: 'Elige un rango que no use otra red registrada.' },
+    bloque_traslapado: { titulo: 'El bloque se cruza con otro', ayuda: 'Revisa el prefijo: ya hay un bloque que usa parte de ese rango.' },
+    pool_traslapado: { titulo: 'El pool se cruza con otro', ayuda: 'Usa «Sugerir» para tomar un prefijo libre del bloque.' },
+    router_inactivo: { titulo: 'El router de destino está inactivo', ayuda: 'Actívalo en «Editar» o elige otro router.' },
+}
