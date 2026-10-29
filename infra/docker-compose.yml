@@ -439,6 +439,22 @@ services:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js horus:worker'"]
 
+  # Webhooks Argos → Iris (A6, contratos/iris.md §2.3): grupo `iris` del bus y entrega firmada
+  # con reintentos. Sin conector Iris activo con receptor no envía nada (solo confirma los eventos).
+  iris-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, iris:worker]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js iris:worker'"]
+
   web:
     image: argosisp/web:${IMAGE_TAG:-dev}
     build:

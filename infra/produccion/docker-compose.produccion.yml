@@ -339,6 +339,13 @@ services:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js horus:worker'"]
 
+  iris-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, iris:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js iris:worker'"]
+
   web:
     image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-web:${ARGOSISP_VERSION}
     restart: unless-stopped
