@@ -159,6 +159,7 @@ test.group('billing · pagos bancarios', () => {
                 .from('audit.outbox')
                 .where('evento', 'pago.registrado')
                 .whereRaw(`(payload->>'pago_id')::bigint = ?`, [pago.id])
+                .orderBy('id', 'asc')
             assert.equal(evento.payload.metodo, caso.metodo)
             await afirmarLibroCuadrado(assert)
         }

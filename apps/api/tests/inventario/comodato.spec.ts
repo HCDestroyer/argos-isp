@@ -88,6 +88,7 @@ async function eventos(nombre: string, unidadId: number) {
         .from('audit.outbox')
         .where('evento', nombre)
         .whereRaw(`payload->>'unidad_id' = ?`, [String(unidadId)])
+        .orderBy('id', 'asc')
 }
 
 test.group('Inventario · fase B', (group) => {

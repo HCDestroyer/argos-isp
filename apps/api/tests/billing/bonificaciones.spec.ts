@@ -58,7 +58,10 @@ test.group('Facturación · bonificaciones (nunca una factura de Q0)', (group) =
 
         const primera = await generar(s.servicioId, '2026-11-01')
         assert.include(primera, { generadas: 1, bonificadas: 1 })
-        const [b] = await db.from('billing.bonificaciones').where('servicio_id', s.servicioId)
+        const [b] = await db
+            .from('billing.bonificaciones')
+            .where('servicio_id', s.servicioId)
+            .orderBy('id', 'asc')
         assert.include(b, {
             clave_unica: `${s.servicioId}-2026-10-01`,
             origen: 'mes_gratis',

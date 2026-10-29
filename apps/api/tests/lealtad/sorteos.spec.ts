@@ -937,14 +937,23 @@ test.group('Lealtad · sorteos', (group) => {
             .from('audit.outbox')
             .where('evento', 'sorteo.ganador_notificado')
             .whereRaw(`(payload->>'sorteo_id')::bigint = ?`, [ejecutado.id])
+            .orderBy('id', 'asc')
         assert.lengthOf(eventos, 3)
-        assert.include(eventos[0]!.payload, { cliente_id: titulares[0]!.cliente_id, tipo: 'titular' })
+        // un evento por titular, sin depender del orden de emisión
+        const porCliente = (filas: Array<{ cliente_id: number }>) =>
+            filas.map((f) => Number(f.cliente_id)).sort((x, y) => x - y)
+        assert.deepEqual(porCliente(eventos.map((ev) => ev.payload)), porCliente(titulares))
+        const delPrimero = eventos.find(
+            (ev) => Number(ev.payload.cliente_id) === Number(titulares[0]!.cliente_id),
+        )
+        assert.include(delPrimero?.payload, { cliente_id: titulares[0]!.cliente_id, tipo: 'titular' })
         // idempotente
         await new NotificarGanadoresSorteo().execute({ id: ejecutado.id }, e.ctx)
         const otra = await db
             .from('audit.outbox')
             .where('evento', 'sorteo.ganador_notificado')
             .whereRaw(`(payload->>'sorteo_id')::bigint = ?`, [ejecutado.id])
+            .orderBy('id', 'asc')
         assert.lengthOf(otra, 3)
 
         // el plazo aún corre: 422
