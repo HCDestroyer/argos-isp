@@ -40,9 +40,10 @@ export type RutaRouterOS = (typeof RUTAS)[number]
 
 /**
  * Menús que ArgosIsp solo lee (nunca escribe): bindings de DHCPv6-PD para conocer el prefijo que
- * el router delegó a una sesión PPPoE en modo `radius_pool`, y las sesiones PPP activas.
+ * el router delegó a una sesión PPPoE en modo `radius_pool`, las sesiones PPP activas y los clientes
+ * RADIUS del router (`routers.probar_conexion`).
  */
-export const RUTAS_LECTURA = ['/ipv6/dhcp-server/binding', '/ppp/active'] as const
+export const RUTAS_LECTURA = ['/ipv6/dhcp-server/binding', '/ppp/active', '/radius'] as const
 export type RutaLectura = (typeof RUTAS_LECTURA)[number]
 
 /** Un objeto tal como lo devuelve RouterOS: todas las propiedades son texto. */

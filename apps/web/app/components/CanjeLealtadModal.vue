@@ -24,7 +24,7 @@ const esquema = z.object({
     cliente_id: z.number().int().min(1, 'Elige el cliente'),
     servicio_id: z.number({ message: 'Elige el servicio' }).int().min(1, 'Elige el servicio').nullable().refine(v => v !== null, 'Elige el servicio'),
     premio_id: z.number({ message: 'Elige el premio' }).int().min(1, 'Elige el premio').nullable().refine(v => v !== null, 'Elige el premio'),
-    factura_id: z.number().int().min(1, 'Factura inválida').nullable(),
+    factura_id: z.number().int().min(1, 'Elige una factura de la lista').nullable(),
 })
 type Entrada = z.input<typeof esquema>
 const estado = reactive<Entrada>({ cliente_id: 0, servicio_id: null, premio_id: null, factura_id: null })

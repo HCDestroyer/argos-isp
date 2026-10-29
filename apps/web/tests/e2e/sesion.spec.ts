@@ -17,7 +17,7 @@ async function vencerSesion(page: Page): Promise<void> {
 async function altaAMediasYBloqueo(page: Page, nombre: string) {
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Clientes', /\/clientes$/)
-    await page.getByRole('link', { name: 'Nuevo cliente' }).click()
+    await page.getByRole('button', { name: 'Nuevo cliente' }).click()
     await page.getByLabel('Nombre', { exact: true }).fill(nombre)
     await page.getByLabel('Teléfono').fill('5555-4321')
     await vencerSesion(page)
@@ -36,9 +36,9 @@ async function altaAMediasYBloqueo(page: Page, nombre: string) {
 
 test('expira con el alta a medias: se desbloquea, el formulario sigue y el alta se repite', async ({ page }) => {
     const ventana = await altaAMediasYBloqueo(page, 'Rosa Bloqueo Pruebas')
-    // Debajo, la página sigue montada con lo escrito.
+    // Debajo, el panel lateral del alta sigue abierto con lo escrito.
     await expect(page.getByLabel('Nombre', { exact: true })).toHaveValue('Rosa Bloqueo Pruebas')
-    await expect(page).toHaveURL(/\/clientes\/nuevo/)
+    await expect(page).toHaveURL(/\/clientes$/)
 
     await ventana.getByLabel('Contraseña').fill('clave-de-prueba')
     await ventana.getByRole('button', { name: 'Desbloquear' }).click()

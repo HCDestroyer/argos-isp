@@ -81,6 +81,12 @@ El conector viene apagado: sin token generado Horus no lee nada, y nada de Argos
     - Rutas locales: cliente → `/clientes/:id`, servicio → `/servicios/:id`, router → `/routers/:id`. Sin permiso sobre el recurso, el panel recibe el 403 de siempre.
     - `GET /me/vinculaciones` y `POST /me/vinculaciones/:id/quitar` (las propias); `POST /vinculaciones/revocar { usuario_id?, conector? }` (`vinculaciones.revocar`, admin) con un cambio en `audit.cambios` por fila. Todo auditado: `sso.emitir`, `auth.sso_canjear`, `auth.sso_vincular`, `vinculaciones.quitar`, `vinculaciones.revocar`. `ticket` y `token_*` se enmascaran en la auditoría.
 
+## Integración Iris (`integraciones_iris.ts`, `usuario_tecnico.ts`; contrato `.claude/integration/contratos/iris.md` §1)
+
+- Usuario técnico «Iris» (`iris@integraciones.argosisp.local`, rol `integracion_iris`) con los permisos de §1.1 que existen en `permisos.ts` (`PERMISOS_IRIS`, incluido `servicios.activar_instalacion`). Lo crean `GenerarTokenIris` (`iris.generar_token`) o el canje del enlace; `RevocarTokenIris` (`iris.revocar_token`). El helper `asegurarUsuarioTecnico` lo comparte con Horus.
+- Autologin con Argos de destino: `EmitirTicketSso` recibe `conector` (`horus` o `iris`) desde la ruta (`/integraciones/<conector>/sso/tickets`); mismas reglas para los dos (409 `iris_apagado` con el conector enlazado apagado).
+- El resto del conector (configuración, enlace, «Ver en Iris», resolver) está en `app/integraciones/iris` (README propio).
+
 ## Servicios
 
 | Acción                                                                                           | Permiso                                                                                          | Eventos                                                                                                                                                              |

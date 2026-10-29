@@ -122,7 +122,7 @@ describe('tarea 12 · caja', () => {
     it('con GET /cajas en 501 la página muestra el error y ningún monto', async () => {
         simularFalla('GET /api/v1/cajas', 501)
         const vista = await mountSuspended(PaginaCaja)
-        await esperar(() => expect(vista.text()).toContain('No implementado'))
+        await esperar(() => expect(vista.text()).toContain('Operación no disponible'))
         expect(vista.text()).toContain('Reintentar')
         expect(vista.text()).not.toContain('Q ')
         expect(vista.find('[data-prueba="turno-abierto"]').exists()).toBe(false)

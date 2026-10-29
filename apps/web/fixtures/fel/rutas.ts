@@ -351,7 +351,7 @@ export function rutasFel(detalle: (factura: Factura) => Schema<'FacturaDetalle'>
             }
             const actual = configuracionFel(empresa)
             if (version !== actual.version) {
-                return conflicto('conflicto_version', 'Conflicto de versión', `La configuración FEL de la empresa ${empresa} fue modificado por otra sesión; recarga y vuelve a intentar`)
+                return conflicto('conflicto_version', 'Conflicto de versión', `La configuración FEL de la empresa ${empresa} cambió en otra sesión; recarga y vuelve a intentar`)
             }
             if (modo !== 'desactivada' && !proveedor) {
                 return datosInvalidos([{ field: 'proveedor', message: 'Elige el certificador', rule: 'required' }])

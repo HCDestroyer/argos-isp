@@ -24,6 +24,8 @@ export interface PaqueteRecibido {
     firmaValida: boolean
     messageAuthenticator: boolean
     respondido: string | null
+    /** IP de origen con la que llegó el paquete (la que el router compara con su `/radius`) */
+    origen: string
 }
 
 export class NasSimulado {
@@ -70,6 +72,7 @@ export class NasSimulado {
             firmaValida: valido,
             messageAuthenticator: 'Message-Authenticator' in (decodificado.attributes as object),
             respondido: null,
+            origen: remoto.address,
         }
         if (valido && modo !== 'silencio') {
             const codigo = modo === 'ack' ? `${tipo}-ACK` : `${tipo}-NAK`

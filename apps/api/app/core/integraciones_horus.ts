@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
 import type { Permiso } from '#core/permisos'
 import type { TokenApiVista } from '#core/consultas/acl'
+import { tokensUsuarioTecnico, usuarioTecnico, type DefinicionUsuarioTecnico } from '#core/usuario_tecnico'
 
 /**
  * Integración con Horus Flow (contrato `.claude/integration/contratos/horus.md` §1.2): un usuario
@@ -21,25 +22,21 @@ export const PERMISOS_HORUS = [
     'sso.emitir',
 ] as const satisfies readonly Permiso[]
 
+export const USUARIO_TECNICO_HORUS: DefinicionUsuarioTecnico = {
+    sistema: 'horus',
+    nombre: NOMBRE_USUARIO_HORUS,
+    email: EMAIL_USUARIO_HORUS,
+    rol: ROL_HORUS,
+    descripcionRol: 'Integración Horus Flow: resolver IPs y leer clientes y servicios',
+    permisos: PERMISOS_HORUS,
+}
+
 /** Id del usuario técnico Horus, o null si nunca se generó un token. */
-export async function usuarioHorus(cliente: QueryClientContract = db.connection()): Promise<number | null> {
-    const fila = (await cliente
-        .from('core.usuarios')
-        .whereRaw('lower(email) = ?', [EMAIL_USUARIO_HORUS])
-        .select('id')
-        .first()) as { id: number } | null
-    return fila ? Number(fila.id) : null
+export function usuarioHorus(cliente: QueryClientContract = db.connection()): Promise<number | null> {
+    return usuarioTecnico(EMAIL_USUARIO_HORUS, cliente)
 }
 
 /** Tokens del usuario Horus (vigentes y revocados), los más nuevos primero; nunca su valor. */
-export async function listarTokensHorus(
-    cliente: QueryClientContract = db.connection(),
-): Promise<TokenApiVista[]> {
-    const usuarioId = await usuarioHorus(cliente)
-    if (usuarioId === null) return []
-    return (await cliente
-        .from('core.tokens_api')
-        .where('usuario_id', usuarioId)
-        .select('id', 'usuario_id', 'nombre', 'alcances', 'ultimo_uso', 'revocado_en', 'created_at')
-        .orderBy('id', 'desc')) as TokenApiVista[]
+export function listarTokensHorus(cliente: QueryClientContract = db.connection()): Promise<TokenApiVista[]> {
+    return tokensUsuarioTecnico(EMAIL_USUARIO_HORUS, cliente)
 }

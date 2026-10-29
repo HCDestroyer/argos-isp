@@ -14,17 +14,30 @@ export interface SeccionPanel {
 }
 
 /**
- * Grupo plegable del menú (decisión del PM: menú resumido). Sin permiso para ninguna de sus
+ * Grupo plegable del menú (menú resumido). Sin permiso para ninguna de sus
  * secciones, el grupo no aparece; el de la página actual se abre solo.
  */
 export interface GrupoSecciones {
     id: string
     etiqueta: string
     icono: string
+    /** Sus secciones van sueltas en el menú (sin grupo plegable). */
+    plano?: boolean
     secciones: SeccionPanel[]
 }
 
 export const GRUPOS_PANEL: GrupoSecciones[] = [
+    {
+        // Accesos directos del día a día: van sueltos bajo «Inicio», sin grupo plegable.
+        id: 'directo',
+        etiqueta: 'Accesos directos',
+        icono: 'i-lucide-zap',
+        plano: true,
+        secciones: [
+            { id: 'cobro', etiqueta: 'Cobrar', descripcion: 'Cobro rápido: buscar cliente, ver lo que debe, registrar y dar recibo.', icono: 'i-lucide-hand-coins', ruta: '/cobro', permiso: 'pagos.registrar' },
+            { id: 'caja', etiqueta: 'Caja', descripcion: 'Abrir la caja, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },
+        ],
+    },
     {
         id: 'operacion',
         etiqueta: 'Operación',
@@ -32,7 +45,7 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         secciones: [
             { id: 'clientes', etiqueta: 'Clientes', descripcion: 'Búsqueda, fichas, datos fiscales y estado de cuenta.', icono: 'i-lucide-users', ruta: '/clientes', permiso: 'clientes.ver' },
             { id: 'servicios', etiqueta: 'Servicios', descripcion: 'Servicios PPPoE, sesiones activas y acciones de corte.', icono: 'i-lucide-wifi', ruta: '/servicios', permiso: 'servicios.ver' },
-            { id: 'migracion', etiqueta: 'Migración de router', descripcion: 'Quién volvió a conectarse desde que el router pasó al nuevo aaa, y fallos de red.', icono: 'i-lucide-arrow-right-left', ruta: '/routers/migracion', permiso: 'routers.ver' },
+            { id: 'migracion', etiqueta: 'Migración de router', descripcion: 'Quién volvió a conectarse desde que el router pasó al nuevo servidor RADIUS, y fallos de red.', icono: 'i-lucide-arrow-right-left', ruta: '/routers/migracion', permiso: 'routers.ver' },
         ],
     },
     {
@@ -40,7 +53,6 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Cobros',
         icono: 'i-lucide-coins',
         secciones: [
-            { id: 'cobro', etiqueta: 'Cobrar', descripcion: 'Cobro rápido: buscar cliente, ver lo que debe, registrar y dar recibo.', icono: 'i-lucide-hand-coins', ruta: '/cobro', permiso: 'pagos.registrar' },
             { id: 'facturas', etiqueta: 'Facturas', descripcion: 'Avisos de cobro emitidos, vencidos y anulados.', icono: 'i-lucide-receipt-text', ruta: '/facturas', permiso: 'facturas.ver' },
             { id: 'pagos', etiqueta: 'Pagos', descripcion: 'Registro y anulación de pagos.', icono: 'i-lucide-banknote', ruta: '/pagos', permiso: 'pagos.ver' },
             { id: 'comprobantes', etiqueta: 'Comprobantes', descripcion: 'Depósitos y transferencias por verificar: aprobar registra el pago y reactiva.', icono: 'i-lucide-file-check-2', ruta: '/comprobantes', permiso: 'comprobantes.ver' },
@@ -61,7 +73,6 @@ export const GRUPOS_PANEL: GrupoSecciones[] = [
         etiqueta: 'Contabilidad',
         icono: 'i-lucide-calculator',
         secciones: [
-            { id: 'caja', etiqueta: 'Caja', descripcion: 'Turnos, cobros del turno y cierre con arqueo.', icono: 'i-lucide-wallet', ruta: '/caja', permiso: 'cajas.ver' },
             { id: 'libro', etiqueta: 'Libro', descripcion: 'Libro diario, libro mayor, cierre mensual e integridad de la cadena.', icono: 'i-lucide-book-open', ruta: '/libro', permiso: 'libro.ver' },
             { id: 'bloqueos-libro', etiqueta: 'Bloqueos del libro', descripcion: 'Bloqueos por tipo, bloqueo duro, excepciones y procesos detenidos por un bloqueo.', icono: 'i-lucide-lock', ruta: '/libro/bloqueos', permiso: 'libro.ver' },
             { id: 'libros-legales', etiqueta: 'Libros legales', descripcion: 'Diario, Mayor, Ventas y Compras con folio: vista previa, emisión, historial y habilitaciones.', icono: 'i-lucide-book-marked', ruta: '/libros', permiso: 'libros.ver' },

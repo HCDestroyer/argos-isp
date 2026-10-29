@@ -405,6 +405,19 @@ export const PLANTILLAS_BASE: PlantillaBase[] = [
             '{{#estado.es_retirado}}Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} fue dado de baja.{{/estado.es_retirado}}' +
             portal,
     ),
+    // Bienvenida: `servicio.estado_cambiado` de `pendiente_instalacion` a `activo` (`instalacion.ts`).
+    // Nunca lleva credenciales PPPoE (`{{servicio.usuario}}` no se usa aquí).
+    ...ambos(
+        'servicio.instalacion_activada',
+        '¡Bienvenido! Tu servicio de internet ya está activo',
+        'Gracias por elegirnos. Tu servicio{{#servicio.plan}} {{servicio.plan}}{{/servicio.plan}} ya está instalado y funcionando' +
+            '{{#servicio.velocidad}}, con {{servicio.velocidad}}{{/servicio.velocidad}}.' +
+            '{{^servicio.velocidad}}.{{/servicio.velocidad}}' +
+            '{{#cliente.codigo}}\n\nTu código de cliente es {{cliente.codigo}}: tenlo a mano para pagar o pedir soporte.{{/cliente.codigo}}' +
+            '{{#empresa.instrucciones_pago}}\n\nCómo pagar: {{empresa.instrucciones_pago}}{{/empresa.instrucciones_pago}}' +
+            portal +
+            '{{#empresa.soporte.texto}}\n\n¿Dudas? Escríbenos: {{empresa.soporte.texto}}{{/empresa.soporte.texto}}',
+    ),
     ...ambos(
         'pago.registrado',
         'Pago recibido: {{pago.monto_q}}',

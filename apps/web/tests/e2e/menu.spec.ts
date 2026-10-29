@@ -2,13 +2,14 @@ import { expect, test } from '@playwright/test'
 import { entrar } from './ayudas'
 
 /**
- * Menú resumido (decisión del PM): grupos plegables con el de la página abierto, barra compacta
+ * Menú resumido: grupos plegables con el de la página abierto, barra compacta
  * recordada por usuario y buscador de secciones con Ctrl/Cmd+K filtrado por permisos.
  */
 test('buscador de secciones con Ctrl+K, solo con las permitidas', async ({ page }) => {
     await entrar(page, 'cajero@argos.test')
-    // El atajo vive en el layout: esperar a que la página de inicio esté pintada.
-    await expect(page.getByRole('heading', { name: /^Hola,/ })).toBeVisible()
+    // El cajero entra directo a su caja; el atajo vive en el layout: esperar a que esté pintada.
+    await expect(page).toHaveURL(/\/caja$/)
+    await expect(page.locator('[data-prueba="turno-abierto"]')).toBeVisible()
     const buscador = page.getByRole('dialog')
     await expect(async () => {
         await page.keyboard.press('ControlOrMeta+k')
@@ -19,11 +20,11 @@ test('buscador de secciones con Ctrl+K, solo con las permitidas', async ({ page 
     await buscador.getByPlaceholder('Ir a una sección…').fill('Caja')
     await buscador.getByRole('option', { name: /^Caja/ }).click()
     await expect(page).toHaveURL(/\/caja/)
-    // El grupo de la página actual se abre solo.
+    // Caja y Cobrar son accesos directos: sueltos en el menú, siempre a la vista.
     const lateral = page.locator('#dashboard-sidebar-principal')
     if (await lateral.isVisible()) {
         await expect(lateral.getByRole('link', { name: 'Caja', exact: true })).toBeVisible()
-        await expect(lateral.getByRole('link', { name: 'Cobrar', exact: true })).toHaveCount(0)
+        await expect(lateral.getByRole('link', { name: 'Cobrar', exact: true })).toBeVisible()
     }
 })
 

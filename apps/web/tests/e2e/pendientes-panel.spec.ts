@@ -75,19 +75,21 @@ test('router nuevo con red IPv4, bloque y pool IPv6; plan implementado en él', 
     await direccionamiento.locator('[data-prueba="agregar-red"]').click()
     let modal = page.getByRole('dialog', { name: 'Agregar red IPv4' })
     await campo(modal, 'red-cidr').fill('100.64.40.0/24')
-    await modal.locator('[data-prueba="direccionamiento-guardar"]').click()
+    await modal.locator('[data-prueba="red-guardar"]').click()
     await expect(direccionamiento.locator('[data-prueba="redes-router"]')).toContainText('100.64.40.0/24')
+    await expect(direccionamiento.locator('[data-prueba="redes-router"]')).toContainText('0 % · Con espacio')
 
+    // El bloque con la división sugerida: dos pools en un paso.
     await direccionamiento.locator('[data-prueba="agregar-bloque"]').click()
     modal = page.getByRole('dialog', { name: 'Agregar bloque IPv6' })
     await campo(modal, 'bloque-prefijo').fill('2803:d100:4000::/40')
-    await modal.locator('[data-prueba="direccionamiento-guardar"]').click()
+    await campo(modal, 'bloque-proveedor').fill('Proveedor Norte')
+    await expect(modal.locator('[data-prueba="bloque-clientes"]')).toContainText('Caben 32,768 clientes')
+    await modal.locator('[data-prueba="bloque-guardar"]').click()
     const bloque = direccionamiento.locator('[data-bloque]').filter({ hasText: '2803:d100:4000::/40' })
     await expect(bloque).toBeVisible()
-    await bloque.getByRole('button', { name: /Agregar pool/ }).click()
-    modal = page.getByRole('dialog', { name: /Pool en 2803:d100:4000::\/40/ })
-    await campo(modal, 'pool-prefijo').fill('2803:d100:4080::/41')
-    await modal.locator('[data-prueba="direccionamiento-guardar"]').click()
+    await expect(bloque).toContainText('de Proveedor Norte')
+    await expect(bloque).toContainText('Enlace · /64')
     await expect(bloque).toContainText('Delegación · /56')
 
     // Sin `page.goto`: recargar reinicia los fixtures y el router nuevo desaparecería.

@@ -77,7 +77,7 @@ async function guardar(evento: FormSubmitEvent<SalidaConexionRouter>) {
     reiniciar(resultado.data)
     emit('actualizado', resultado.data)
     abierto.value = false
-    toast.add({ title: `${resultado.data.nombre}: conexión guardada`, description: 'El dispatcher usa estos datos en el próximo comando a RouterOS.', icon: 'i-lucide-circle-check', color: 'success' })
+    toast.add({ title: `${resultado.data.nombre}: conexión guardada`, description: 'Se usan desde el próximo comando al router.', icon: 'i-lucide-circle-check', color: 'success' })
 }
 </script>
 
