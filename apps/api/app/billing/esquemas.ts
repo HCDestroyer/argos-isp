@@ -1202,68 +1202,85 @@ export const ReglaSimulada = definirEsquema(
 
 export const SimulacionPromesa = definirEsquema(
     'SimulacionPromesa',
-    objeto({
-        servicio_id: id,
-        cliente_id: id,
-        canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
-        vence_en: instante,
-        monto: { ...Dinero, description: 'Total vencido que cubriría la promesa (lo calcula Argos)' },
-        facturas: { ...lista(FacturaCubierta), description: 'Facturas vencidas que cubriría, la más antigua primero' },
-        evaluada_en: instante,
-        resultado: {
-            ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
-            description: 'Lo que deciden las reglas (igual que al crear con estos datos)',
-        },
-        regla: { ...nulable(texto), description: 'Primera regla que falla o requiere_aprobacion' },
-        motivo: texto,
-        resultado_creacion: {
-            ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion', 'error']),
-            description: 'error: crear respondería 422/409 por alguna validación',
-        },
-        reglas: { ...lista(ReglaSimulada), description: 'Todas las reglas, en el orden en que se evalúan' },
-        validaciones: lista(
-            objeto({
-                campo: enumerado(['monto', 'vence_en', 'servicio_id']),
-                ok: booleano,
-                regla: texto,
-                detalle: texto,
+    objeto(
+        {
+            servicio_id: id,
+            cliente_id: id,
+            canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
+            vence_en: instante,
+            monto: { ...Dinero, description: 'Total vencido que cubriría la promesa (lo calcula Argos)' },
+            facturas: {
+                ...lista(FacturaCubierta),
+                description: 'Facturas vencidas que cubriría, la más antigua primero',
+            },
+            evaluada_en: instante,
+            resultado: {
+                ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
+                description: 'Lo que deciden las reglas (igual que al crear con estos datos)',
+            },
+            regla: { ...nulable(texto), description: 'Primera regla que falla o requiere_aprobacion' },
+            motivo: texto,
+            resultado_creacion: {
+                ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion', 'error']),
+                description: 'error: crear respondería 422/409 por alguna validación',
+            },
+            reglas: {
+                ...lista(ReglaSimulada),
+                description: 'Todas las reglas, en el orden en que se evalúan',
+            },
+            validaciones: lista(
+                objeto({
+                    campo: enumerado(['monto', 'vence_en', 'servicio_id']),
+                    ok: booleano,
+                    regla: texto,
+                    detalle: texto,
+                }),
+            ),
+            deuda: objeto({
+                pendiente: Dinero,
+                vencida: Dinero,
+                pagado_pendientes: Dinero,
+                facturas_vencidas: entero,
             }),
-        ),
-        deuda: objeto({
-            pendiente: Dinero,
-            vencida: Dinero,
-            pagado_pendientes: Dinero,
-            facturas_vencidas: entero,
-        }),
-        historial: objeto({
-            ventana: entero,
-            resueltas: entero,
-            cumplidas: entero,
-            cumplimiento_pct: nulable(entero),
-        }),
-        siguiente_facturacion: nulable(fecha),
-        limites: objeto({
-            habilitadas: booleano,
-            permitido: booleano,
-            requiere_aprobacion: booleano,
-            plazo_max_dias: entero,
-            fecha_maxima: { ...fecha, description: 'Último día en que puede vencer' },
+            historial: objeto({
+                ventana: entero,
+                resueltas: entero,
+                cumplidas: entero,
+                cumplimiento_pct: nulable(entero),
+            }),
             siguiente_facturacion: nulable(fecha),
-            deuda_pendiente: Dinero,
-            deuda_vencida: Dinero,
-            deuda_maxima: nulable(Dinero),
-            abono_requerido: Dinero,
-            abono_pagado: Dinero,
-            max_por_periodo: entero,
-            en_periodo: entero,
-            monto_promesa: { ...Dinero, description: 'Total vencido que cubriría una promesa creada ahora' },
-            facturas: { ...lista(FacturaCubierta), description: 'Facturas vencidas que cubriría' },
-        }),
-        suspension_manual: {
-            ...booleano,
-            description: 'Suspendido a mano: la promesa no lo reactivaría',
+            limites: objeto(
+                {
+                    habilitadas: booleano,
+                    permitido: booleano,
+                    requiere_aprobacion: booleano,
+                    plazo_max_dias: entero,
+                    fecha_maxima: { ...fecha, description: 'Último día en que puede vencer' },
+                    siguiente_facturacion: nulable(fecha),
+                    deuda_pendiente: Dinero,
+                    deuda_vencida: Dinero,
+                    deuda_maxima: nulable(Dinero),
+                    abono_requerido: Dinero,
+                    abono_pagado: Dinero,
+                    max_por_periodo: entero,
+                    en_periodo: entero,
+                    monto_promesa: {
+                        ...Dinero,
+                        description: 'Total vencido que cubriría una promesa creada ahora',
+                    },
+                    facturas: { ...lista(FacturaCubierta), description: 'Facturas vencidas que cubriría' },
+                },
+                // siempre vienen; opcionales en el esquema hasta que A4 migre sus fixtures (a3.md)
+                ['monto_promesa', 'facturas'],
+            ),
+            suspension_manual: {
+                ...booleano,
+                description: 'Suspendido a mano: la promesa no lo reactivaría',
+            },
         },
-    }),
+        // siempre viene; opcional en el esquema hasta que A4 migre sus fixtures (a3.md)
+        ['facturas'],
+    ),
 )
 
 /** Marca de la empresa en un recibo (multiempresa: el recibo lleva una sección por empresa). */

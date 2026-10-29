@@ -3,7 +3,12 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { aTexto } from '#ledger/dinero'
 import { bloquearCliente } from '#billing/cobros'
-import { avanceDePromesa, type AvancePromesa, type EstadoPromesa, type ReglaCumplimiento } from '#billing/promesas'
+import {
+    avanceDePromesa,
+    type AvancePromesa,
+    type EstadoPromesa,
+    type ReglaCumplimiento,
+} from '#billing/promesas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
 /**

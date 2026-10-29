@@ -16539,7 +16539,7 @@ export interface components {
             /** @description Total vencido que cubriría la promesa (lo calcula Argos) */
             monto: components["schemas"]["Dinero"];
             /** @description Facturas vencidas que cubriría, la más antigua primero */
-            facturas: components["schemas"]["FacturaCubierta"][];
+            facturas?: components["schemas"]["FacturaCubierta"][];
             /** Format: date-time */
             evaluada_en: string;
             /**
@@ -16598,9 +16598,9 @@ export interface components {
                 max_por_periodo: number;
                 en_periodo: number;
                 /** @description Total vencido que cubriría una promesa creada ahora */
-                monto_promesa: components["schemas"]["Dinero"];
+                monto_promesa?: components["schemas"]["Dinero"];
                 /** @description Facturas vencidas que cubriría */
-                facturas: components["schemas"]["FacturaCubierta"][];
+                facturas?: components["schemas"]["FacturaCubierta"][];
             };
             /** @description Suspendido a mano: la promesa no lo reactivaría */
             suspension_manual: boolean;

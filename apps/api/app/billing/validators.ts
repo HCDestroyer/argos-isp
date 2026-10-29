@@ -614,7 +614,8 @@ export const simularPromesaValidator = vine.compile(
         vence_en: instanteIso().optional().meta({ description: 'Por defecto: el fin de mañana (Guatemala)' }),
         monto: dinero().optional().meta({
             deprecated: true,
-            description: 'Obsoleto: se ignora. La simulación responde el total vencido que cubriría (monto y facturas)',
+            description:
+                'Obsoleto: se ignora. La simulación responde el total vencido que cubriría (monto y facturas)',
         }),
         evaluar_en: instanteIso()
             .optional()

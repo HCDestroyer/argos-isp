@@ -623,7 +623,13 @@ export interface AvancePromesa {
  */
 export async function avanceDePromesa(
     cliente: QueryClientContract,
-    promesa: { id: number; servicio_id: number; created_at: Date; monto: string; regla_cumplimiento: ReglaCumplimiento },
+    promesa: {
+        id: number
+        servicio_id: number
+        created_at: Date
+        monto: string
+        regla_cumplimiento: ReglaCumplimiento
+    },
 ): Promise<AvancePromesa> {
     const pagos = cliente
         .from('billing.pagos_aplicaciones as a')
@@ -641,7 +647,10 @@ export async function avanceDePromesa(
         const fila = (await pagos
             .whereIn(
                 'a.factura_id',
-                cliente.from('billing.promesas_facturas').where('promesa_id', promesa.id).select('factura_id'),
+                cliente
+                    .from('billing.promesas_facturas')
+                    .where('promesa_id', promesa.id)
+                    .select('factura_id'),
             )
             .first()) as { pagado: string }
         const saldo = (await cliente

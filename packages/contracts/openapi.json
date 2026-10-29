@@ -96046,7 +96046,6 @@
           "canal",
           "vence_en",
           "monto",
-          "facturas",
           "evaluada_en",
           "resultado",
           "regla",
@@ -96235,9 +96234,7 @@
               "abono_requerido",
               "abono_pagado",
               "max_por_periodo",
-              "en_periodo",
-              "monto_promesa",
-              "facturas"
+              "en_periodo"
             ],
             "properties": {
               "habilitadas": {

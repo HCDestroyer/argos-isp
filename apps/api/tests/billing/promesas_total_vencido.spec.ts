@@ -55,8 +55,10 @@ const pagoRegistrado = (clienteId: number) =>
         payload: { cliente_id: clienteId },
     })
 
-const estadoPromesa = async (id: number) =>
-    (await db.from('billing.promesas').where('id', id).select('estado').firstOrFail()).estado as string
+async function estadoPromesa(id: number): Promise<string> {
+    const fila = await db.from('billing.promesas').where('id', id).select('estado').firstOrFail()
+    return fila.estado
+}
 
 test.group('billing · promesas: cubren todo lo vencido', () => {
     test('crear calcula el total vencido (mora incluida) y guarda las facturas que cubre', async ({
@@ -65,7 +67,8 @@ test.group('billing · promesas: cubren todo lo vencido', () => {
         const { servicioId } = await servicioCortado({
             plantilla: { mora_tipo: 'fija', mora_valor: '25.00' },
         })
-        const vencidas = (await facturasDe(servicioId)).filter((f) => f.estado === 'vencida')
+        const facturas = await facturasDe(servicioId)
+        const vencidas = facturas.filter((f) => f.estado === 'vencida')
         assert.sameMembers(
             vencidas.map((f) => f.tipo),
             ['servicio', 'servicio', 'mora', 'mora'],
@@ -169,10 +172,12 @@ test.group('billing · promesas: cubren todo lo vencido', () => {
         // noviembre se emite y vence con la promesa activa
         await generar(servicioId, '2026-11-01')
         await new VencerFacturas().execute({ servicio_id: servicioId, hasta: '2026-11-07' }, contextoPrueba())
-        const noviembre = (await facturasDe(servicioId)).find((f) => f.periodo === '2026-11-01')!
+        const facturas = await facturasDe(servicioId)
+        const noviembre = facturas.find((f) => f.periodo === '2026-11-01')!
         assert.equal(noviembre.estado, 'vencida')
-        assert.lengthOf((await verPromesa(promesa.id)).facturas, 2)
-        assert.equal((await verPromesa(promesa.id)).monto, '300.00')
+        const vista = await verPromesa(promesa.id)
+        assert.lengthOf(vista.facturas, 2)
+        assert.equal(vista.monto, '300.00')
 
         // pagar septiembre y octubre la cumple aunque noviembre siga vencida
         await pagar(clienteId, '300.00')
