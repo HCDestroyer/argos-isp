@@ -24,23 +24,28 @@ Las piezas se editan en `piezas/` y se arman con `node infra/mikrotik/armar.mjs`
 1. En el panel: ficha del router → **Script de conexión**. Si administras el router desde una IP fija (tu oficina), escríbela en «IPs de administración»: Winbox y SSH solo quedarán abiertos para esas IPs y para el túnel. Marca «incluir configuración de servicio» solo en un router nuevo que ArgosIsp va a configurar completo (PPPoE, perfiles y corte).
 2. Descarga el archivo. **Lleva claves:** no lo guardes ni lo mandes por chat. Vale 24 horas y para un solo registro.
 3. En Winbox: **Files** → arrastra el archivo. Luego **New Terminal** y escribe `/import file-name=argosisp-conexion.rsc verbose=yes`. (También puedes copiar todo el texto y pegarlo en New Terminal.)
-4. Al final debe decir `argosisp: listo`. En menos de un minuto el panel muestra el router **conectado**.
-5. Si dice `FALTA un paso`, el router no pudo registrarse (sin internet, token vencido o RouterOS viejo): copia la **clave pública** que muestra, y en el panel → Conexión → **Pegar clave pública**.
+4. Al final debe decir `argosisp: listo`: registrado, túnel con handshake y gestión restringida. En menos de un minuto el panel muestra el router **conectado**.
+5. Si dice `AVISO la gestión NO se restringió`, algo falló y **el router se queda como estaba** (sin reglas de drop nuevas ni `address=` en los servicios). Debajo dice qué falló: el registro (sin internet, token usado o vencido, certificado no verificado, RouterOS viejo) o el túnel (sin handshake: servidor sin `ARGOSISP_WIREGUARD=1`, UDP bloqueado, red NAT de WSL). Corrígelo, genera un script **nuevo** (el token es de un solo uso) y vuelve a correrlo.
+6. Si dice `FALTA un paso`, copia la **clave pública** que muestra y en el panel → Conexión → **Pegar clave pública**. Si además muestra la CA (`-----BEGIN CERTIFICATE-----`), pégala en el panel: ficha del router → Acciones → **Conexión de la API** → CA propia (PEM) → «Cargar una CA» (o «Reemplazar por otra») → **Guardar conexión**.
 
-Si administras por Winbox desde la red local, no pierdes el acceso: MAC-Winbox sigue funcionando y la sesión abierta no se corta. Puedes volver a correr el script cuantas veces quieras: solo toca lo que lleva comentario `argosisp:` y conserva la interfaz `wg-argos` y su clave.
+**Nunca te deja fuera:** la gestión (`www-ssl`, Winbox, SSH) solo se restringe si el registro respondió OK **y** el túnel tiene handshake, y aun así se conserva el acceso desde la IP de **las sesiones abiertas** (`/user active`, incluida la que corre el script; RouterOS no marca cuál es la propia, así que se conservan todas las que tienen IP, menos `argosisp-api`). Una sesión de MAC-Winbox o de consola no tiene IP: en ese caso queda MAC-Winbox, que el script nunca apaga. La sesión abierta no se corta. Si aun así quedaste fuera (p. ej. con el script de la 1.3.0), usa el **rescate** de abajo.
+
+Puedes volver a correr el script cuantas veces quieras: solo toca lo que lleva comentario `argosisp:`, conserva la interfaz `wg-argos` y su clave, y la gestión de la ejecución anterior se rehace solo si esta vez el registro y el túnel funcionan (con el token ya usado se queda como estaba).
 
 **Qué hace, en orden:**
 
 | Paso | Qué queda en el router |
 | --- | --- |
 | C0 | Comprueba RouterOS 7 (si no, se detiene sin tocar nada) |
-| C1 | Borra lo que dejó una ejecución anterior: reglas `argosisp:gestion`, lista `argosisp-admin`, `/radius` de ArgosIsp |
+| C1 | Borra los `/radius` de ArgosIsp de una ejecución anterior. La gestión anterior (reglas `argosisp:gestion`, `argosisp-admin`, `address=`) **no** se toca aquí: la rehace C4 solo si todo funcionó |
 | C2 | Interfaz WireGuard `wg-argos` (MTU 1420; la crea una vez y la **clave privada no sale del router**) y la IP `/32` del túnel con ruta solo hacia la `.1` del servidor |
-| API | CA y certificado de `www-ssl` (CN y SAN con la IP del túnel; si ya había uno con otra IP, lo regenera), grupo `argosisp-api` y usuario `argosisp-api` que solo entra desde la `.1` |
-| C3 | Se registra: `POST /api/v1/routers/conexion/registrar` con el token, su clave pública, la versión de RouterOS y la CA del certificado (para que ArgosIsp lo verifique). Con la respuesta agrega el peer del servidor (keepalive 25 s). Si el registro falla, usa los datos del servidor que trae el script |
+| API | CA `argosisp-ca` (se exporta a `argosisp-ca.crt`), grupo `argosisp-api` y usuario `argosisp-api` que solo entra desde la `.1` |
+| C3 | Se registra: `POST /api/v1/routers/conexion/registrar` con el token, su clave pública, la versión de RouterOS y la CA (para que ArgosIsp verifique el certificado). Con la respuesta agrega el peer del servidor (keepalive 25 s). Si el registro falla, usa los datos del servidor que trae el script y dice qué paso falló |
+| Cert. | `argosisp-www` (firmado por `argosisp-ca`) con SAN = IP del túnel **y** la IP con que ArgosIsp llegaba antes (`apiIpAnterior`, del `api_url` del router): sirve por los dos caminos mientras se migra. Va a `www-ssl` solo si el registro respondió OK (ArgosIsp ya conoce la CA) o si `www-ssl` no tenía certificado o ya usaba `argosisp-www`. Un certificado ajeno (p. ej. `argos-api` firmado por tu `argos-ca`) se queda en `www-ssl` y **no se borra**: solo se borran `argosisp-www` y su temporal `argosisp-www-nuevo` |
 | RADIUS | `/radius` hacia la `.1` con el secreto del router y `src-address` = su IP del túnel; `/radius incoming` en 3799; `/ppp aaa` con RADIUS y accounting |
-| C4 | Apaga `telnet`, `ftp`, `www`, `api`, `api-ssl`, el servidor de bandwidth-test, RoMON y MAC-Telnet. `www-ssl`, `winbox` y `ssh` solo desde la red del túnel y `argosisp-admin` |
-| C5 | Reglas `argosisp:gestion` al **inicio** de `input`: CoA, REST y ping solo desde la `.1` por el túnel; Winbox, SSH y `www-ssl` desde `argosisp-admin`; el resto de los puertos de gestión y cualquier conexión nueva por el túnel se descartan. Solo conexiones nuevas hacia el propio router: **no toca el tráfico de los clientes** |
+| C4 | Espera el handshake del túnel (hasta 40 s). **Solo si el registro respondió OK y hay handshake**: apaga `telnet`, `ftp`, `www`, `api`, `api-ssl`, el servidor de bandwidth-test, RoMON y MAC-Telnet; `www-ssl`, `winbox` y `ssh` solo desde la red del túnel, `argosisp-admin` y las IPs de las sesiones abiertas (que también entran en `argosisp-admin`). Si no, no cambia nada |
+| C5 | (solo con C4 aplicado) Reglas `argosisp:gestion` al **inicio** de `input`: CoA, REST y ping solo desde la `.1` por el túnel; Winbox, SSH y `www-ssl` desde `argosisp-admin`; el resto de los puertos de gestión y cualquier conexión nueva por el túnel se descartan. Solo conexiones nuevas hacia el propio router: **no toca el tráfico de los clientes** |
+| C6 | `listo`, o `AVISO` con qué falló (registro, túnel) y cómo reintentar; con el registro fallido, la CA para pegarla en el panel |
 
 El puerto UDP de WireGuard del router no se abre: el router inicia el túnel y las respuestas del servidor entran como conexión establecida.
 
@@ -49,8 +54,25 @@ El puerto UDP de WireGuard del router no se abre: el router inicia el túnel y l
 | RouterOS | Resultado |
 | --- | --- |
 | 7.24.5 | Registro con verificación del certificado de ArgosIsp (raíces incluidas en RouterOS, `builtin-trust-store`), túnel con handshake, REST por el túnel con `argosisp-api` verificando el certificado del router por IP, CoA aceptado desde la `.1`, `Access-Request` llegando a la `.1:1812`. Pegado en un CHR limpio sin IPs de administración: Winbox, SSH y `www-ssl` dejan de responder desde fuera. Re-ejecutado con el token ya usado: no corta el túnel y avisa que ya estaba conectado. Con «servicio» sobre un router con `lab.rsc`: reglas `argosisp:gestion` primero, luego las `argosisp:top` del corte y FastTrack OK |
+| 7.24.5 (#181, sin encierro) | Con un Argos simulado y un segundo CHR como servidor WireGuard, `admin` vacío y un `argos-ca`/`argos-api` propio en `www-ssl`. **Registro 410 y túnel caído:** sin reglas ni `address=`, la LAN sigue llegando a `www-ssl`, SSH y Winbox, `www-ssl` sigue con `argos-api`, AVISO con los dos motivos. **Registro OK y túnel caído:** no restringe; `www-ssl` pasa a `argosisp-www` con SAN `IP:<túnel>,IP:<LAN>` (verificado con `openssl -verify_ip` por las dos IPs con la CA que recibió Argos); `argos-ca` y `argos-api` siguen. **Registro OK y handshake:** restringe; la LAN deja de llegar (timeout), la IP de la sesión SSH que lo corrió (`10.0.2.2`) entra en `argosisp-admin` y sigue entrando, REST desde la `.1` por el túnel OK. **Re-ejecución** con el token usado: se queda como estaba (7 reglas, 1 entrada) y AVISO + CA; con registro OK: rehecho sin duplicados. **Pegado por la consola** con `admin`: restringe a túnel + admins y avisa que no hay sesión con IP. **Rescate** por consola: vuelve el acceso; túnel, RADIUS y certificados siguen. En 7.2x las conexiones abiertas aparecen en `/ip service` como entradas dinámicas con el mismo nombre (`ssh`, `winbox`): por eso el script usa `/ip service set ssh …` y no `[find where name=…]` |
 | 7.16.2 | Igual, pero sin `builtin-trust-store`: el registro solo verifica el certificado si la CA de ArgosIsp está importada; si no, cae al paso de pegar la clave |
 | 7.12.1 | Sin `:serialize`: el registro falla, el resto se aplica y el script pide pegar la clave (por eso `:serialize`/`:deserialize` se cargan con `:parse`) |
+
+### Si quedaste fuera: rescate de la gestión
+
+`rescate-gestion.rsc` deshace **solo** lo `argosisp:gestion`: las reglas de filtro, la lista `argosisp-admin` y el `address=` (`available-from`) de `www-ssl`, `winbox` y `ssh`. No toca el túnel, RADIUS, el usuario `argosisp-api`, los certificados ni el tráfico de los clientes. Pégalo en una terminal que no dependa de la IP: **Winbox por MAC** (Neighbors → la MAC del router → Connect → New Terminal) o la **consola** (serial, monitor o la del hipervisor):
+
+```
+/ip firewall filter remove [find where comment~"^argosisp:gestion"]
+/ip firewall address-list remove [find where list="argosisp-admin"]
+/ip service set www-ssl address=""
+/ip service set winbox address=""
+/ip service set ssh address=""
+```
+
+Cada línea es independiente (si una falla, las demás se aplican). En 7.17+ RouterOS muestra un aviso `Deprecation warning: address` y lo aplica igual (es `available-from`); `address` funciona en todas las 7.x. Probado por consola serial en CHR 7.24.5 sobre un router restringido: la LAN vuelve a llegar a `www-ssl`, SSH y Winbox, y el túnel, RADIUS y los certificados siguen.
+
+Después, corrige lo que falló y vuelve a correr un script nuevo: ya no restringe si el registro o el túnel fallan.
 
 Las plantillas son ASCII y no llevan comentarios dentro del bloque: el terminal de RouterOS no maneja UTF-8 al pegar y cuenta las llaves de los comentarios (`armar.mjs` las limpia; los comentarios siguen en las piezas).
 
