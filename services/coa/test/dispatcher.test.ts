@@ -139,6 +139,29 @@ describe('decidir (tabla del PM, RouterOS 7.24.5)', () => {
         assert.equal(decidir(config([]), servicio(), SUSPENDIDO).accion, 'nada')
     })
 
+    it('config: router con motivo union_routers (mismo MikroTik) → nada; otro cambio de router sigue en Disconnect', () => {
+        const config = (campos: string[], motivo?: string) =>
+            leerEvento('servicio.config_cambiada', {
+                servicio_id: 101,
+                campos,
+                ...(motivo ? { motivo } : {}),
+            })!
+        assert.deepEqual(decidir(config(['router'], 'union_routers'), servicio(), SUSPENDIDO), {
+            accion: 'nada',
+            razon: 'unión de routers: mismo equipo, la sesión sigue',
+        })
+        assert.equal(decidir(config(['router']), servicio(), SUSPENDIDO).accion, 'disconnect')
+        assert.equal(
+            decidir(config(['router'], 'plan_temporal'), servicio(), SUSPENDIDO).accion,
+            'disconnect',
+        )
+        // La unión no cambia direcciones; si un evento las trajera, siguen reconectando.
+        assert.equal(
+            decidir(config(['router', 'ips'], 'union_routers'), servicio(), SUSPENDIDO).accion,
+            'disconnect',
+        )
+    })
+
     it('leerEvento: ignora otros eventos y rechaza payloads fuera del catálogo', () => {
         assert.equal(leerEvento('pago.registrado', {}), null)
         assert.throws(() => leerEvento('servicio.estado_cambiado', { servicio_id: 'x' }), EventoInvalido)
@@ -313,6 +336,30 @@ describe('Dispatcher (NAS simulado por UDP, almacén en memoria)', () => {
         assert.equal(nas.recibidos.length, 0)
         assert.equal(almacen.red.length, 0)
         assert.equal(almacen.outbox.length, 0)
+    })
+
+    it('unión de routers: con la sesión abierta no envía nada; un cambio de router normal sí desconecta', async () => {
+        almacen.servicios.set(101, servicio({ estado: 'activo' }))
+        const union = await dispatcher.procesar({
+            id: 40,
+            evento: 'servicio.config_cambiada',
+            payload: { servicio_id: 101, empresa_id: 1, campos: ['router'], motivo: 'union_routers' },
+            requestId: 'req-union',
+        })
+        assert.equal(union.decision?.accion, 'nada')
+        assert.equal(nas.recibidos.length, 0)
+        assert.equal(almacen.red.length, 0)
+        assert.equal(almacen.outbox.length, 0)
+
+        const cambio = await dispatcher.procesar({
+            id: 41,
+            evento: 'servicio.config_cambiada',
+            payload: { servicio_id: 101, empresa_id: 1, campos: ['router'] },
+            requestId: 'req-router',
+        })
+        assert.equal(cambio.decision?.accion, 'disconnect')
+        assert.equal(nas.recibidos.length, 1)
+        assert.equal(nas.recibidos[0]?.codigo, 'Disconnect-Request')
     })
 
     it('router sin secret: audit.red sin envío y coa.fallido', async () => {
