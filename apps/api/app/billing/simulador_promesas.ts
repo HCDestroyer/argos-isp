@@ -6,6 +6,7 @@ import { aTexto } from '#ledger/dinero'
 import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import {
+    abonoRequerido,
     datosEvaluacion,
     evaluarReglas,
     type DatosEvaluacion,
@@ -125,8 +126,8 @@ export function limitesDe(datos: DatosEvaluacion): LimitesPromesa {
         deuda_pendiente: aTexto(datos.deuda.pendiente),
         deuda_vencida: aTexto(datos.deuda.vencida),
         deuda_maxima: deudaMaxima === null ? null : aTexto(deudaMaxima),
-        abono_requerido: aTexto(datos.deuda.total_pendientes.times(reglas.abono_inicial_pct).div(100)),
-        abono_pagado: aTexto(datos.deuda.pagado_pendientes),
+        abono_requerido: aTexto(abonoRequerido(datos)),
+        abono_pagado: aTexto(datos.abono.abonado),
         max_por_periodo:
             delCanal.max_por_periodo ??
             (buen ? reglas.max_por_periodo_buen_historial : reglas.max_por_periodo),

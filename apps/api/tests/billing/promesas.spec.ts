@@ -455,6 +455,7 @@ test.group('billing · promesas: evaluarReglas', () => {
         vence_en: gt('2026-10-10T10:00'),
         reglas: normalizarReglasPromesa({}),
         cobertura: { monto: dec('300'), facturas: [] },
+        abono: { abonado: dec('0') },
         deuda: {
             pendiente: dec('300'),
             vencida: dec('300'),
@@ -479,11 +480,13 @@ test.group('billing · promesas: evaluarReglas', () => {
         })
         assert.containSubset(evaluarReglas(base({ reglas })), {
             regla: 'abono_inicial_pct',
-            motivo: 'Debe abonar el 20% de la deuda (Q60.00) antes de prometer; lleva Q0.00',
+            motivo: 'Debe abonar el 20% de la deuda vencida (Q60.00 de Q300.00) antes de prometer; lleva Q0.00',
         })
+        // la base es lo vencido antes de los abonos: 240 vencidos + 60 abonados = 300 → 20 % = 60
         const conAbono = base({
             reglas,
-            deuda: { ...base().deuda, pendiente: dec('240'), pagado_pendientes: dec('60') },
+            cobertura: { monto: dec('240'), facturas: [] },
+            abono: { abonado: dec('60') },
         })
         assert.containSubset(evaluarReglas(conAbono), {
             regla: 'antiguedad_minima_dias',

@@ -11,6 +11,7 @@ import { verPromesa } from '#billing/promesas'
 import { normalizarReglasPromesa } from '#billing/reglas_promesa'
 import { limitesPromesa, simularPromesa } from '#billing/simulador_promesas'
 import {
+    escenario,
     estadoServicio,
     eventosDe,
     facturasDe,
@@ -43,6 +44,13 @@ const prometer = (servicioId: number, extra: Partial<EntradaCrearPromesa> = {}) 
             ...extra,
         },
         contextoPrueba(),
+    )
+
+const abono = (pct: number) => JSON.stringify(normalizarReglasPromesa({ abono_inicial_pct: pct }))
+
+const reglaAbono = (promesa: { resultado_evaluacion: unknown }) =>
+    (promesa.resultado_evaluacion as { reglas: Array<{ regla: string }> }).reglas.find(
+        (r) => r.regla === 'abono_inicial_pct',
     )
 
 const pagar = (clienteId: number, monto: string) =>
@@ -218,25 +226,94 @@ test.group('billing · promesas: cubren todo lo vencido', () => {
         assert.equal(await estadoServicio(servicioId), 'limitado')
     })
 
-    test('el abono inicial se sigue exigiendo antes de prometer; la promesa cubre lo que queda', async ({
+    test('abono que salda una factura completa: cuenta como abono y la promesa cubre lo que falta', async ({
         assert,
     }) => {
-        const { servicioId, clienteId } = await servicioCortado({
-            plantilla: { reglas_promesa: JSON.stringify(normalizarReglasPromesa({ abono_inicial_pct: 50 })) },
-        })
+        const { servicioId, clienteId } = await servicioCortado({ plantilla: { reglas_promesa: abono(50) } })
         const sinAbono = await prometer(servicioId)
         assert.equal(sinAbono.estado, 'rechazada')
         assert.containSubset(sinAbono.resultado_evaluacion, { regla: 'abono_inicial_pct' })
+        assert.containSubset(reglaAbono(sinAbono), { ok: false, valor: '0.00', limite: '150.00' })
         assert.equal(await estadoServicio(servicioId), 'suspendido')
 
-        // septiembre completa y la mitad de octubre: el abono alcanza
-        await pagar(clienteId, '225.00')
+        // Q300 vencidos al 50 % → Q150; el pago salda septiembre completa
+        await pagar(clienteId, '150.00')
         const conAbono = await prometer(servicioId)
         assert.equal(conAbono.estado, 'activa')
-        assert.equal(conAbono.monto, '75.00')
+        assert.containSubset(reglaAbono(conAbono), { ok: true, valor: '150.00', limite: '150.00' })
+        assert.equal(conAbono.monto, '150.00')
         assert.lengthOf(conAbono.facturas, 1)
-        assert.containSubset(conAbono.facturas[0], { periodo: '2026-10-01', monto: '75.00', saldo: '75.00' })
+        assert.containSubset(conAbono.facturas[0], {
+            periodo: '2026-10-01',
+            monto: '150.00',
+            saldo: '150.00',
+        })
         assert.equal(await estadoServicio(servicioId), 'activo')
+    })
+
+    test('abono parcial a una factura: la base sigue siendo lo vencido antes del abono', async ({
+        assert,
+    }) => {
+        const { servicioId, clienteId } = await servicioCortado({ plantilla: { reglas_promesa: abono(25) } })
+        await pagar(clienteId, '74.99')
+        const corta = await prometer(servicioId)
+        assert.containSubset(reglaAbono(corta), { ok: false, valor: '74.99', limite: '75.00' })
+
+        await pagar(clienteId, '0.01')
+        const promesa = await prometer(servicioId)
+        assert.equal(promesa.estado, 'activa')
+        assert.containSubset(reglaAbono(promesa), { ok: true, valor: '75.00', limite: '75.00' })
+        assert.equal(promesa.monto, '225.00')
+        assert.sameMembers(
+            promesa.facturas.map((f) => `${f.periodo}:${f.monto}`),
+            ['2026-09-01:75.00', '2026-10-01:150.00'],
+        )
+        const limites = await limitesPromesa(servicioId, 'portal')
+        assert.include(limites, { abono_requerido: '75.00', abono_pagado: '75.00' })
+    })
+
+    test('abono repartido entre dos facturas', async ({ assert }) => {
+        const { servicioId, clienteId } = await servicioCortado({ plantilla: { reglas_promesa: abono(50) } })
+        await pagar(clienteId, '100.00')
+        const corta = await prometer(servicioId)
+        assert.containSubset(reglaAbono(corta), { ok: false, valor: '100.00', limite: '150.00' })
+
+        // septiembre se salda y Q10.00 van a octubre: Q160 abonados de Q300
+        await pagar(clienteId, '60.00')
+        const promesa = await prometer(servicioId)
+        assert.equal(promesa.estado, 'activa')
+        assert.containSubset(reglaAbono(promesa), { ok: true, valor: '160.00', limite: '150.00' })
+        assert.equal(promesa.monto, '140.00')
+        assert.lengthOf(promesa.facturas, 1)
+        assert.containSubset(promesa.facturas[0], { periodo: '2026-10-01', monto: '140.00' })
+    })
+
+    test('no cuentan como abono los pagos de una mora anterior ya saldada ni los adelantos', async ({
+        assert,
+    }) => {
+        const { servicioId, clienteId } = await escenario({
+            fecha_instalacion: '2026-09-01',
+            plantilla: { hora_corte: '00:00', reglas_promesa: abono(50) },
+        })
+        // septiembre vence y se paga completa: esa mora terminó
+        await generar(servicioId, '2026-09-01')
+        await new VencerFacturas().execute({ servicio_id: servicioId, hasta: '2026-09-07' }, contextoPrueba())
+        await pagar(clienteId, '150.00')
+        // octubre vence; noviembre se emite y se paga por adelantado (aún no vence)
+        await generar(servicioId, '2026-10-01')
+        await new VencerFacturas().execute({ servicio_id: servicioId, hasta: '2026-10-07' }, contextoPrueba())
+        await generar(servicioId, '2026-11-01')
+        const facturas = await facturasDe(servicioId)
+        const noviembre = facturas.find((f) => f.periodo === '2026-11-01')!
+        await new RegistrarPago().execute(
+            { cliente_id: clienteId, metodo: 'caja', monto: '150.00', facturas: [Number(noviembre.id)] },
+            contextoPrueba(),
+        )
+
+        const promesa = await prometer(servicioId)
+        assert.equal(promesa.estado, 'rechazada')
+        // base: solo octubre (Q150) → Q75; nada abonado
+        assert.containSubset(reglaAbono(promesa), { ok: false, valor: '0.00', limite: '75.00' })
     })
 
     test('sin facturas vencidas se rechaza por sin_deuda con monto 0', async ({ assert }) => {
