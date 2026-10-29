@@ -210,6 +210,14 @@ esperar_version "$V1"
 codigo="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: cualquiera.example' http://127.0.0.1/corte)"
 [ "$codigo" -lt 500 ] || fallar "/corte por HTTP respondió $codigo"
 cli estado > /dev/null
+# Clientes de FreeRADIUS por evento (contratos/conexion-routers.md §6.4): la imagen trae recargar.sh
+# y es el PID 1 del contenedor (el FIFO .recargar lo crea aaa con el primer cambio de clientes)
+cli compose exec -T freeradius sh -c 'test -x /usr/local/bin/argosisp-recargar.sh &&
+    tr "\0" " " < /proc/1/cmdline | grep -q argosisp-recargar.sh' ||
+    fallar "freeradius no corre recargar.sh como entrypoint"
+# shellcheck disable=SC2016  # se expande dentro del contenedor
+cli compose exec -T aaa sh -c 'test "$AAA_CLIENTES_EVENTOS" = 1' || fallar "aaa sin AAA_CLIENTES_EVENTOS=1"
+cli radius-clientes > /dev/null || fallar "argosisp radius-clientes (respaldo manual) falló"
 # Script de conexión de routers: la imagen de la API trae las plantillas de infra/mikrotik y el
 # compose apunta ROUTERS_MIKROTIK_DIR a ellas (sin eso, 503 plantillas_no_disponibles)
 # shellcheck disable=SC2016  # se expande dentro del contenedor

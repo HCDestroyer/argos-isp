@@ -564,15 +564,35 @@ services:
       AAA_INTERIM_SEGUNDOS: ${AAA_INTERIM_SEGUNDOS:-300}
       # GET /metrics (job aaa de Prometheus). Vacío = abierto en la red interna.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # Clientes de FreeRADIUS por evento (A2, contratos/conexion-routers.md §6.4): con
+      # router.conexion_* (y al arrancar) regenera clients.d desde network.routers y avisa a
+      # freeradius por el FIFO clients.d/.recargar. 0 = solo a mano (pnpm aaa:clients).
+      AAA_CLIENTES_EVENTOS: ${AAA_CLIENTES_EVENTOS:-1}
+      # Nombre del nodo: grupo radius-clientes:<nodo> del stream (el segundo nodo, aaa2)
+      AAA_NODO: aaa
+      AAA_CLIENTS_DIR: /radius-clientes
+      # Cliente fijo mikrotik-lab de clients.conf: no se genera otro con la misma IP
+      RADIUS_LAB_NAS_IP: ${RADIUS_LAB_NAS_IP:-}
+      # Lectura de network.routers con el usuario de la aplicación (no hay uno de solo lectura)
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_USER: ${DB_APP_USER:-argosisp_api}
+      DB_PASSWORD: ${DB_APP_PASSWORD:-argosisp_api}
+      DB_DATABASE: argosisp
     # Último perfil conocido del modo degradado (A2: AAA_DEGRADADO_RUTA de la imagen,
     # /var/lib/argosisp-aaa/ultimo-conocido.json, dueño node, 0600). Con un segundo nodo, un volumen
     # propio por nodo (aaa2-datos).
     volumes:
       - aaa-datos:/var/lib/argosisp-aaa
+      # clients.d escribible (la misma carpeta que lee freeradius; los .conf y el FIFO no se commitean,
+      # services/aaa/.gitignore). La carpeta del repo debe ser escribible por el uid 1000 (node).
+      - ../services/aaa/freeradius/clients.d:/radius-clientes
     ports:
       - 127.0.0.1:${AAA_PORT_HOST:-3100}:3100
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       <<: *node-healthcheck
@@ -652,7 +672,9 @@ services:
     profiles: [lab]
     image: freeradius/freeradius-server:3.2.10
     restart: unless-stopped
-    # Log a stdout (docker logs). Para depurar: command: [-X]
+    # recargar.sh (A2) en lugar del entrypoint de la imagen: corre `freeradius -f` con estos argumentos
+    # y lo reinicia cuando aaa regenera clients.d (FIFO .recargar). Log a stdout; para depurar: [-X]
+    entrypoint: [/usr/local/bin/argosisp-recargar.sh]
     command: [-l, stdout]
     environment:
       TZ: UTC
@@ -665,6 +687,7 @@ services:
       - ../services/aaa/freeradius/sites-enabled:/etc/freeradius/sites-enabled:ro
       - ../services/aaa/freeradius/clients.conf:/etc/freeradius/clients.conf:ro
       - ../services/aaa/freeradius/clients.d:/etc/freeradius/clients.d:ro
+      - ../services/aaa/freeradius/recargar.sh:/usr/local/bin/argosisp-recargar.sh:ro
     ports:
       - ${RADIUS_BIND_IP:-127.0.0.1}:1812:1812/udp
       - ${RADIUS_BIND_IP:-127.0.0.1}:1813:1813/udp
