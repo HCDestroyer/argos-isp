@@ -391,7 +391,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (s: ServicioCreado) => Promise
         codigo: 'importacion',
         preparar: (s) =>
             insertar('importacion.filas_origen', {
-                origen: 'mikrowisp',
+                origen: 'prueba_eliminar',
                 tabla: 'servicios',
                 id_externo: unico('mw'),
                 linea: 1,

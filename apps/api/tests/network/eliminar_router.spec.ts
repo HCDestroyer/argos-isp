@@ -165,7 +165,7 @@ const BLOQUEOS: Array<{ codigo: string; preparar: (r: RouterPrueba) => Promise<u
         codigo: 'importacion',
         preparar: (r) =>
             db.table('importacion.filas_origen').insert({
-                origen: 'mikrowisp',
+                origen: 'prueba_eliminar',
                 tabla: 'routers',
                 id_externo: unico('mw'),
                 linea: 1,
