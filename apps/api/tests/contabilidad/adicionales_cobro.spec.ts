@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBdMayusculas } from '#tests/billing/ayudas_billing'
 import { prepararEmpresas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { periodosHasta } from '#billing/periodos'
 import EmitirFactura from '#billing/actions/emitir_factura'
@@ -46,7 +47,7 @@ test.group('Auditor contable · adicionales cobrados', (group) => {
         const e = await prepararEmpresas()
         const s = await servicioEn(e.B, { precio: '150.00', instalacion: '2026-10-01' })
         const tv = await new CrearAdicional().execute(
-            { empresa_id: e.B, codigo: unico('TV').toUpperCase(), nombre: 'Usuario de IPTV' },
+            { empresa_id: e.B, codigo: await unicoBdMayusculas('TV'), nombre: 'Usuario de IPTV' },
             e.ctx,
         )
         const asignar = async (identificador: string, alta: string, baja: string | null) => {
@@ -100,7 +101,7 @@ test.group('Auditor contable · adicionales cobrados', (group) => {
         // instalación a mitad de octubre: el periodo de octubre va prorrateado, el adicional también
         const s = await servicioEn(e.B, { precio: '150.00', instalacion: '2026-10-16' })
         const tv = await new CrearAdicional().execute(
-            { empresa_id: e.B, codigo: unico('TV').toUpperCase(), nombre: 'IPTV' },
+            { empresa_id: e.B, codigo: await unicoBdMayusculas('TV'), nombre: 'IPTV' },
             e.ctx,
         )
         const a = await new AgregarAdicionalServicio().execute(

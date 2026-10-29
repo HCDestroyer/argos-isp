@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { CUENTAS } from '#ledger/plan_cuentas'
 import { CUENTAS_GT } from '#fiscal/l10n/gt/cuentas'
 import { cuadreCompras, libroCompras } from '#fiscal/libros'
@@ -58,7 +59,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: haceMeses(2, 10),
                 condicion: 'credito',
                 lineas: [
@@ -71,7 +72,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'NCRE',
-                numero: unico('NC'),
+                numero: await unicoBd('NC'),
                 fecha_documento: haceMeses(2, 20),
                 condicion: 'credito',
                 compra_referencia_id: fact.id,
@@ -85,7 +86,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: haceMeses(1, 3),
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Cable', tipo: 'bien', total: '2240.00' }],
@@ -96,7 +97,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
             {
                 proveedor_id: pequeno.id,
                 tipo_documento: 'FPEQ',
-                numero: unico('P'),
+                numero: await unicoBd('P'),
                 fecha_documento: haceMeses(1, 4),
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Conectores', tipo: 'bien', total: '95.00' }],
@@ -108,7 +109,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
             {
                 proveedor_id: otraEmpresa.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: haceMeses(1, 5),
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Energía', categoria: 'energia', total: '336.00' }],
@@ -134,7 +135,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
                 egreso_id: egreso.id,
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('E'),
+                numero: await unicoBd('E'),
                 fecha_documento: haceMeses(0),
                 lineas: [{ descripcion: 'Energía', categoria: 'energia', total: '560.00' }],
             },
@@ -198,8 +199,8 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
                 caja_id: cajaId,
                 empresa_id: e.B,
                 retenciones: [
-                    { codigo: 'RET_IVA_ESP', numero: unico('CT'), monto: '2.41' },
-                    { codigo: 'RET_ISR_OPC', numero: unico('ISR'), monto: '8.09' },
+                    { codigo: 'RET_IVA_ESP', numero: await unicoBd('CT'), monto: '2.41' },
+                    { codigo: 'RET_ISR_OPC', numero: await unicoBd('ISR'), monto: '8.09' },
                 ],
             },
             e.ctx,
@@ -225,7 +226,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
                 metodo: 'deposito',
                 monto: '39.50',
                 cuenta_bancaria_id: e.cuentas.get(e.B)!,
-                referencia: unico('T'),
+                referencia: await unicoBd('T'),
                 empresa_id: e.B,
             },
             e.ctx,
@@ -301,7 +302,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('S'),
+                numero: await unicoBd('S'),
                 fecha_documento: haceMeses(4, 2),
                 condicion: 'credito',
                 retenciones: [],
@@ -336,7 +337,7 @@ test.group('Auditor contable · fase 5 (compras y retenciones)', (group) => {
             {
                 proveedor_id: opcional.id,
                 tipo_documento: 'FACT',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: haceMeses(0),
                 condicion: 'contado',
                 metodo: 'caja',

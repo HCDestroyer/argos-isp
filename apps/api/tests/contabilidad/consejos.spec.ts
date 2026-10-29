@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
+import { estado, soloEmpresaPrincipal, usuarioConRoles } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { crearEmpresaFila } from '#tests/core/fabricas'
 import { servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, huellaTablas } from '#tests/contabilidad/verificar_libro'
@@ -53,7 +54,7 @@ async function compra(e: EmpresasGt, empresaId: number, total: string) {
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('D'),
+            numero: await unicoBd('D'),
             fecha_documento: HOY,
             periodo_iva: `${MES}-01`,
             condicion: 'credito',
@@ -291,7 +292,7 @@ test.group('Auditor contable · consejos fiscales', (group) => {
             client
                 .post('/api/v1/fiscal/consejos/fel_desactivada/ocultar')
                 .bearerToken(restringido.token)
-                .headers({ 'Idempotency-Key': unico('ocu') })
+                .headers({ 'Idempotency-Key': await unicoBd('ocu') })
                 .json({ motivo: 'auditoría' }),
             201,
         )
@@ -310,7 +311,7 @@ test.group('Auditor contable · consejos fiscales', (group) => {
         const otra = await client
             .post('/api/v1/fiscal/consejos/fel_desactivada/ocultar')
             .bearerToken(restringido.token)
-            .headers({ 'Idempotency-Key': unico('ocu') })
+            .headers({ 'Idempotency-Key': await unicoBd('ocu') })
             .json({ empresa_id: e.C })
         assert.equal(otra.status(), 403)
         const trasAjena = await huellaTablas()

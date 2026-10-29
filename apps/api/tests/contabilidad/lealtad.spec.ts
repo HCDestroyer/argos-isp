@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
-import { generar } from '#tests/billing/ayudas_billing'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { generar, unicoBd } from '#tests/billing/ayudas_billing'
 import { crearClienteFila } from '#tests/core/fabricas'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
@@ -192,7 +192,7 @@ test.group('Auditor contable · lealtad, fase 1', (group) => {
                      SELECT empresa_id, programa_id, cliente_id, 'ajuste', -51, 'ajuste', ?, 'prueba' FROM lealtad.movimientos WHERE id = ?
                      RETURNING id)
                  INSERT INTO lealtad.consumos (movimiento_id, lote_id, puntos) SELECT id, ?, 51 FROM salida`,
-                [unico('sobre'), lote.movimiento.id, lote.movimiento.id],
+                [await unicoBd('sobre'), lote.movimiento.id, lote.movimiento.id],
             )
             .then(() => true)
             .catch(() => false)
@@ -217,6 +217,8 @@ test.group('Auditor contable · lealtad, fase 1', (group) => {
             { empresa_id: e.B, cliente_id: clienteId, puntos: 50, motivo: 'bienvenida' },
             e.ctx,
         )
+        // una clave por salida, tomadas antes de abrir la carrera
+        const claves = [await unicoBd('carrera'), await unicoBd('carrera')]
         const salida = (trx: Awaited<ReturnType<typeof db.transaction>>) =>
             trx.rawQuery(
                 `WITH salida AS (
@@ -224,7 +226,7 @@ test.group('Auditor contable · lealtad, fase 1', (group) => {
                      SELECT empresa_id, programa_id, cliente_id, 'ajuste', -30, 'ajuste', ?, 'carrera' FROM lealtad.movimientos WHERE id = ?
                      RETURNING id)
                  INSERT INTO lealtad.consumos (movimiento_id, lote_id, puntos) SELECT id, ?, 30 FROM salida`,
-                [unico('carrera'), lote.movimiento.id, lote.movimiento.id],
+                [claves.shift()!, lote.movimiento.id, lote.movimiento.id],
             )
         const a = await db.transaction()
         const b = await db.transaction()

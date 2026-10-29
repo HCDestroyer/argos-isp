@@ -2,7 +2,8 @@ import { test } from '@japa/runner'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { errorDe, saldoCuenta, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -48,7 +49,7 @@ async function compra(e: EmpresasGt, empresaId: number, total: string) {
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('D'),
+            numero: await unicoBd('D'),
             fecha_documento: HOY,
             periodo_iva: `${MES}-01`,
             condicion: 'credito',
@@ -348,7 +349,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('D'),
+                numero: await unicoBd('D'),
                 fecha_documento: `${ANTERIOR}-10`,
                 periodo_iva: `${ANTERIOR}-01`,
                 condicion: 'credito',
@@ -456,7 +457,7 @@ test.group('Auditor contable · declaraciones de IVA y PC', (group) => {
                 {
                     proveedor_id: proveedor.id,
                     tipo_documento: 'FACT',
-                    numero: unico('D'),
+                    numero: await unicoBd('D'),
                     fecha_documento: fecha,
                     periodo_iva: `${fecha.slice(0, 7)}-01`,
                     condicion: 'credito',

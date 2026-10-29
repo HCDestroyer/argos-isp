@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { errorDe, saldoCuenta, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -79,7 +80,7 @@ async function comprar(
         {
             proveedor_id: proveedor.id,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F'),
             fecha_documento: fecha,
             condicion: 'credito',
             lineas: [
@@ -238,7 +239,7 @@ test.group('Auditor contable · inventario fase C', (group) => {
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: hoyGuatemala(),
                 condicion: 'credito',
                 lineas: [
@@ -249,7 +250,7 @@ test.group('Auditor contable · inventario fase C', (group) => {
                         cantidad: 2,
                         producto_id: router.id,
                         bodega_id: bodega.id,
-                        unidades: [{ serie: unico('RT') }, { serie: unico('RT') }],
+                        unidades: [{ serie: await unicoBd('RT') }, { serie: await unicoBd('RT') }],
                     },
                 ],
             } as never,
@@ -563,12 +564,12 @@ test.group('Auditor contable · inventario fase C', (group) => {
         })
         await comprar(e, e.B, cable.id, bodega.id, 10, '56.00')
         const proveedor = await proveedorEn(e.B, e.ctx)
-        const series = [unico('RT'), unico('RT')]
+        const series = [await unicoBd('RT'), await unicoBd('RT')]
         const compra = await new RegistrarCompra().execute(
             {
                 proveedor_id: proveedor.id,
                 tipo_documento: 'FACT',
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 fecha_documento: hoyGuatemala(),
                 condicion: 'credito',
                 lineas: [

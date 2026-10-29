@@ -1,7 +1,8 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { prepararEmpresas, servicioFacturado } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 
@@ -47,7 +48,7 @@ async function facturaDirecta(
             servicio_id: null,
             tipo: 'servicio',
             periodo: '2026-09-01',
-            clave_unica: unico('fac'),
+            clave_unica: await unicoBd('fac'),
             vence_en: '2026-09-10',
             estado: 'vencida',
             subtotal: '100.00',

@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { soloEmpresaPrincipal } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { crearClienteFila } from '#tests/core/fabricas'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import AnularPago from '#billing/actions/anular_pago'
@@ -105,7 +106,7 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
                     metodo: 'deposito',
                     monto: '150.00',
                     cuenta_bancaria_id: e.cuentas.get(e.B)!,
-                    referencia: unico('BOL'),
+                    referencia: await unicoBd('BOL'),
                     facturas: [c.facturas[0]!.id],
                 },
                 e.ctx,
@@ -126,7 +127,7 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
         const factura = await new ImportarFacturaPendiente().execute(
             {
                 origen: 'auditoria',
-                id_externo: unico('f'),
+                id_externo: await unicoBd('f'),
                 cliente_id: s.clienteId,
                 empresa_id: e.B,
                 cargo_unico: true,
@@ -170,12 +171,12 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
                     },
                     e.ctx,
                 ),
-            () =>
+            async () =>
                 new RegistrarPagoHistorico().execute(
                     {
                         historico: true,
                         origen: 'auditoria',
-                        id_externo: unico('p'),
+                        id_externo: await unicoBd('p'),
                         cliente_id: s.clienteId,
                         metodo: 'deposito',
                         monto: '10.00',
@@ -184,11 +185,11 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
                     },
                     e.ctx,
                 ),
-            () =>
+            async () =>
                 new ImportarFacturaPendiente().execute(
                     {
                         origen: 'auditoria',
-                        id_externo: unico('f'),
+                        id_externo: await unicoBd('f'),
                         cliente_id: s.clienteId,
                         empresa_id: e.B,
                         cargo_unico: true,
@@ -202,11 +203,11 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
                     { asiento_id: manual.id, motivo: 'en el mes cerrado', fecha: '2026-09-30' },
                     e.ctx,
                 ),
-            () =>
+            async () =>
                 new RegistrarSaldoInicial().execute(
                     {
                         origen: 'auditoria',
-                        id_externo: unico('s'),
+                        id_externo: await unicoBd('s'),
                         cliente_id: s.clienteId,
                         monto: '10.00',
                         fecha: '2026-09-12',
@@ -255,7 +256,7 @@ test.group('Auditor contable · multiempresa, cierres e importación (6, 7, 8)',
             {
                 historico: true,
                 origen: 'auditoria',
-                id_externo: unico('p'),
+                id_externo: await unicoBd('p'),
                 cliente_id: s.clienteId,
                 metodo: 'deposito',
                 monto: '100.00',

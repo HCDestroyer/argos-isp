@@ -5,6 +5,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { errorDe, lineas, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
 import { proveedorEn } from '#tests/ledger/ayudas_compras'
@@ -126,7 +127,7 @@ async function lineaDeCompra(e: EmpresasGt, total: string, cuenta: string, canti
             proveedor_id: Number(proveedor.id),
             tipo_documento: 'FACT',
             serie: 'A',
-            numero: unico('R'),
+            numero: await unicoBd('R'),
             fecha_documento: hoyGuatemala(),
             condicion: 'credito',
             lineas: [{ descripcion: 'Router Wi-Fi 6', tipo: 'bien', cuenta, total, cantidad }],

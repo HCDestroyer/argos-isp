@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
-import { estado, soloEmpresaPrincipal, unico } from '#tests/ayudas'
-import { generar } from '#tests/billing/ayudas_billing'
+import { estado, soloEmpresaPrincipal } from '#tests/ayudas'
+import { generar, unicoBd } from '#tests/billing/ayudas_billing'
 import { ConsumidorBilling } from '#billing/consumidor'
 import { ConsumidorResumenes } from '#billing/reportes/resumenes'
 import VencerFacturas from '#billing/actions/vencer_facturas'
@@ -32,7 +32,7 @@ test.group('Auditor contable · idempotencia (11)', (group) => {
                 .json(cuerpo)
 
         const inicio = await contarAsientos([e.B])
-        const clavePago = unico('pago')
+        const clavePago = await unicoBd('pago')
         const cuerpoPago = { cliente_id: s.clienteId, metodo: 'caja', monto: '200.00' }
         const primero = await estado(post('/pagos', clavePago, cuerpoPago), 201)
         const conPago = await contarAsientos([e.B])
@@ -48,7 +48,7 @@ test.group('Auditor contable · idempotencia (11)', (group) => {
         assert.equal(await contarAsientos([e.B]), conPago)
 
         const factura = s.facturas[1]!
-        const claveNota = unico('nota')
+        const claveNota = await unicoBd('nota')
         await estado(
             post(`/facturas/${factura.id}/notas-credito`, claveNota, { monto: '10.00', motivo: 'auditoría' }),
             201,
@@ -60,7 +60,7 @@ test.group('Auditor contable · idempotencia (11)', (group) => {
         })
         assert.equal(await contarAsientos([e.B]), conNota)
 
-        const claveAnular = unico('anular')
+        const claveAnular = await unicoBd('anular')
         await estado(post(`/pagos/${primero.body().id}/anular`, claveAnular, { motivo: 'auditoría' }), 200)
         const conAnulacion = await contarAsientos([e.B])
         const repetida = await post(`/pagos/${primero.body().id}/anular`, claveAnular, {
@@ -82,7 +82,7 @@ test.group('Auditor contable · idempotencia (11)', (group) => {
                 .post('/api/v1/pasarela/cobros')
                 .bearerToken(e.token)
                 .header('X-Empresa-Id', String(e.B))
-                .header('Idempotency-Key', unico('cobro'))
+                .header('Idempotency-Key', await unicoBd('cobro'))
                 .json({ cliente_id: s.clienteId }),
             201,
         )

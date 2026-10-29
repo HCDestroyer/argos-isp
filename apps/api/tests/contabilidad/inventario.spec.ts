@@ -2,6 +2,7 @@ import { test } from '@japa/runner'
 import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { soloEmpresaPrincipal, unico } from '#tests/ayudas'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { errorDe, saldoCuenta, servicioEn } from '#tests/contabilidad/ayudas_contabilidad'
 import { afirmarLibro, verificarLibro } from '#tests/contabilidad/verificar_libro'
 import { prepararEmpresasGt, type EmpresasGt } from '#tests/ledger/ayudas_bancos'
@@ -106,7 +107,7 @@ async function compra(
         {
             proveedor_id: p.id,
             tipo_documento: 'FACT',
-            numero: unico('F'),
+            numero: await unicoBd('F'),
             fecha_documento: hoyGuatemala(),
             condicion: 'credito',
             ...extra,
@@ -449,12 +450,16 @@ test.group('Auditor contable · inventario fase A', (group) => {
             proveedor,
         )
         await compra(e, e.B, { total: '112.00', cantidad: 1, producto_id: producto.id, bodega_id: bodega.id })
-        const ncre = (total: string, cantidad: number, numero = unico('NC')) =>
+        const ncre = async (total: string, cantidad: number, numero?: string) =>
             compra(
                 e,
                 e.B,
                 { total, cantidad, producto_id: producto.id, bodega_id: bodega.id },
-                { tipo_documento: 'NCRE', compra_referencia_id: original.id, numero },
+                {
+                    tipo_documento: 'NCRE',
+                    compra_referencia_id: original.id,
+                    numero: numero ?? (await unicoBd('NC')),
+                },
                 proveedor,
             )
         const primera = await ncre('3.33', 1)
