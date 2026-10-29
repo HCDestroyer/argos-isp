@@ -109,7 +109,7 @@ async function canjeado() {
                         v-else-if="premios && premiosDe(puntos.empresa.id).length === 0"
                         class="text-sm text-muted"
                     >
-                        Pronto habrá premios para canjear.
+                        No hay premios para canjear en este momento.
                     </p>
                     <PuntosPremios
                         v-else-if="premios"

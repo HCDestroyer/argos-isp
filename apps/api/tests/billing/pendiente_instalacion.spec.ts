@@ -11,6 +11,7 @@ import EmitirFactura from '#billing/actions/emitir_factura'
 import VencerFacturas from '#billing/actions/vencer_facturas'
 import EjecutarCorte from '#billing/actions/ejecutar_corte'
 import CrearPromesaPago from '#billing/actions/crear_promesa_pago'
+import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
 import { altasBajas } from '#billing/reportes/reportes'
 import { limitesPromesa } from '#billing/simulador_promesas'
 import { Problema } from '#shared/errores'
@@ -473,5 +474,107 @@ test.group('billing · servicio pendiente de instalación', () => {
         assert.equal(factura.estado, 'vencida')
         assert.equal(await estadoServicio(servicioId), 'limitado')
         await afirmarLibroCuadrado(assert)
+    })
+
+    test('8. mora con vencimiento efectivo: factura importada con aplicar_mora sobre un pendiente; sin mora antes, la primera al día siguiente, la segunda al mes, sin duplicar; libro cuadrado', async ({
+        assert,
+    }) => {
+        const { servicioId } = await pendiente({
+            alta: '2026-09-01T12:00:00Z',
+            plantilla: {
+                dias_gracia: 5,
+                mora_tipo: 'fija',
+                mora_valor: '25.00',
+                mora_recurrente: true,
+                hora_corte: '00:00',
+            },
+        })
+        const importada = await new ImportarFacturaPendiente().execute(
+            {
+                origen: 'csv',
+                id_externo: unico('inst'),
+                servicio_id: servicioId,
+                emitida_en: '2026-09-05',
+                vence_en: '2026-09-10',
+                total: '300.00',
+                concepto: 'INSTALACION',
+                aplicar_mora: true,
+                hoy: '2026-09-08',
+            },
+            contextoPrueba(),
+        )
+        assert.equal(importada.estado, 'emitida')
+        // instalada el 20 sep: vence efectivo = max(10 sep, 20 sep + 5) = 25 sep
+        await activar(servicioId, '2026-09-20T15:00:00Z')
+
+        const vencer = (hasta: string) =>
+            new VencerFacturas().execute({ servicio_id: servicioId, hasta }, contextoPrueba())
+        const moras = async () => {
+            const filas = await db
+                .from('billing.facturas')
+                .where('factura_origen_id', importada.factura_id)
+                .where('tipo', 'mora')
+                .orderBy('id')
+                .select('total', 'clave_unica')
+            return filas.map((f) => [f.clave_unica, f.total])
+        }
+        const clave = (n: number) => `mora-${importada.factura_id}-${n}`
+
+        // hasta la fecha efectiva inclusive: ni vencida ni mora
+        assert.include(await vencer('2026-09-25'), { vencidas: 0, moras: 0, errores: 0 })
+        assert.deepEqual(await moras(), [])
+        const fila = await db.from('billing.facturas').where('id', importada.factura_id).firstOrFail()
+        assert.equal(fila.estado, 'emitida')
+
+        // al día siguiente: vencida y la primera mora; repetir no duplica
+        assert.include(await vencer('2026-09-26'), { vencidas: 1, moras: 1, errores: 0 })
+        assert.include(await vencer('2026-09-26'), { vencidas: 0, moras: 0 })
+        assert.deepEqual(await moras(), [[clave(1), '25.00']])
+
+        // un mes después del vencimiento efectivo todavía una; al cumplirse el mes, la segunda
+        assert.include(await vencer('2026-10-25'), { moras: 0 })
+        assert.include(await vencer('2026-10-26'), { moras: 1, errores: 0 })
+        assert.include(await vencer('2026-10-26'), { moras: 0 })
+        assert.deepEqual(await moras(), [
+            [clave(1), '25.00'],
+            [clave(2), '25.00'],
+        ])
+        await afirmarLibroCuadrado(assert)
+    })
+
+    test('9. activar en el instante exacto del alta (microsegundos): instalado_en queda después de created_at y factura como activado desde pendiente', async ({
+        assert,
+    }) => {
+        // el alta trae microsegundos; JS solo ve milisegundos (…:00.123), anterior a created_at
+        const { servicioId } = await pendiente({
+            alta: '2026-09-01T12:00:00.123456Z',
+            fecha_instalacion: '2026-08-25',
+            plantilla: { ciclo: 'dia_fijo', dia: 1, prorrateo: true },
+        })
+        await activar(servicioId, '2026-09-01T12:00:00.123Z')
+        const { rows } = await db.rawQuery(
+            `SELECT instalado_en > created_at AS despues,
+                    (instalado_en - created_at)::text AS diferencia,
+                    to_char(fecha_instalacion, 'YYYY-MM-DD') AS fecha_instalacion
+             FROM core.servicios WHERE id = ?`,
+            [servicioId],
+        )
+        assert.isTrue(rows[0].despues)
+        assert.equal(rows[0].diferencia, '00:00:00.000001')
+        assert.equal(rows[0].fecha_instalacion, '2026-08-25')
+        // el primer periodo cuenta desde instalado_en (1 sep), no desde la fecha prevista (25 ago)
+        await generar(servicioId, '2026-09-01')
+        assert.deepEqual(await resumen(servicioId), [['2026-09-01', '150.00']])
+
+        // sin microsegundos, el mismo instante del alta también queda 1 µs después
+        const otro = await pendiente({ alta: '2026-09-01T12:00:00Z' })
+        await activar(otro.servicioId, '2026-09-01T12:00:00Z')
+        const { rows: r2 } = await db.rawQuery(
+            `SELECT instalado_en > created_at AS despues,
+                    to_char(instalado_en AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS instalado
+             FROM core.servicios WHERE id = ?`,
+            [otro.servicioId],
+        )
+        assert.deepEqual({ ...r2[0] }, { despues: true, instalado: '2026-09-01T12:00:00.000001' })
     })
 })

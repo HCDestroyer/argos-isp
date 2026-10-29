@@ -118,7 +118,13 @@ export async function archivoDeLaPeticion(ctx: HttpContext): Promise<ArchivoComp
     const archivos = ctx.request.files('archivo')
     if (archivos.length > 1) {
         throw errorComprobanteParaCliente(
-            new ValidacionFallida([{ field: 'archivo', rule: 'unico', message: 'Más de un archivo' }]),
+            new ValidacionFallida([
+                {
+                    field: 'archivo',
+                    rule: 'unico',
+                    message: 'Adjunta un solo archivo: la foto o el PDF del comprobante',
+                },
+            ]),
         )
     }
     const archivo = archivos[0]

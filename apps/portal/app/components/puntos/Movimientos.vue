@@ -10,7 +10,7 @@ const props = defineProps<{
         v-if="props.movimientos.length === 0"
         class="text-sm text-muted"
     >
-        Aún no tienes movimientos de puntos.
+        No tienes movimientos de puntos.
     </p>
     <UCard
         v-else
