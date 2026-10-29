@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
-import { meAdmin } from '~~/fixtures/auth/sesiones'
+import { meAdmin, PERMISOS_PENDIENTES } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { permisosDelContrato } from '~~/herramientas/permisosContrato'
 import { UApp } from '#components'
@@ -45,7 +45,8 @@ describe('permisos de los fixtures desde el contrato', () => {
         const enumContrato = [...spec.paths['/api/v1/roles']!.post.requestBody.content['application/json'].schema.properties.permisos.items.enum].sort()
         expect(permisosDelContrato(OPENAPI).map(p => p.nombre)).toEqual(enumContrato)
         expect(bd.roles.find(r => r.nombre === 'admin')?.permisos).toEqual(enumContrato)
-        expect([...meAdmin.permisos].sort()).toEqual(enumContrato)
+        // Más los permisos de contratos escritos cuyo código aún no llega al OpenAPI (`PERMISOS_PENDIENTES`).
+        expect([...meAdmin.permisos].sort()).toEqual([...enumContrato, ...PERMISOS_PENDIENTES].sort())
         // la descripción es el resumen del endpoint que pide el permiso
         expect(permisosDelContrato(OPENAPI).find(p => p.nombre === 'campos_personalizados.activar')?.descripcion).toBe('Volver a activar un campo personalizado')
         // los demás roles base solo traen permisos que existen

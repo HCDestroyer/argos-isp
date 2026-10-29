@@ -44,6 +44,21 @@ const columnas: TableColumn<PlanRouter>[] = [
     { id: 'acciones', header: '', meta: { class: { td: 'text-right w-0' } } },
 ]
 
+/* Velocidad del plan en un router y sincronizar (`contratos/control-velocidad.md`). */
+const seleccionada = shallowRef<PlanRouter | null>(null)
+const estrategiaAbierta = ref(false)
+const sincronizarAbierto = ref(false)
+
+function abrirEstrategia(implementacion: PlanRouter) {
+    seleccionada.value = implementacion
+    estrategiaAbierta.value = true
+}
+
+function abrirSincronizar(implementacion: PlanRouter) {
+    seleccionada.value = implementacion
+    sincronizarAbierto.value = true
+}
+
 /* Formulario */
 const abierto = ref(false)
 const editando = shallowRef<PlanRouter | null>(null)
@@ -155,16 +170,38 @@ const VELOCIDAD: { campo: 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | '
                 <span class="font-mono text-xs">{{ [row.original.profile_ppp, row.original.pool_ipv4, row.original.pool_ipv6_enlace, row.original.pool_ipv6_delegacion].filter(Boolean).join(' · ') || '—' }}</span>
             </template>
             <template #acciones-cell="{ row }">
-                <UButton
-                    v-if="puede('planes.editar')"
-                    icon="i-lucide-pencil"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    :aria-label="`Editar la implementación en ${nombreRouter(row.original.router_id)}`"
-                    :data-prueba="`editar-implementacion-${row.original.router_id}`"
-                    @click="abrir(row.original)"
-                />
+                <div class="flex justify-end gap-1">
+                    <UButton
+                        v-if="puede('routers.cambiar_control_velocidad') && puede('routers.ver')"
+                        icon="i-lucide-sliders-horizontal"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="`Velocidad del plan en ${nombreRouter(row.original.router_id)}`"
+                        :data-prueba="`estrategia-plan-${row.original.router_id}`"
+                        @click="abrirEstrategia(row.original)"
+                    />
+                    <UButton
+                        v-if="puede('planes.sincronizar')"
+                        icon="i-lucide-refresh-cw"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="`Sincronizar el plan en ${nombreRouter(row.original.router_id)}`"
+                        :data-prueba="`sincronizar-plan-${row.original.router_id}`"
+                        @click="abrirSincronizar(row.original)"
+                    />
+                    <UButton
+                        v-if="puede('planes.editar')"
+                        icon="i-lucide-pencil"
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="`Editar la implementación en ${nombreRouter(row.original.router_id)}`"
+                        :data-prueba="`editar-implementacion-${row.original.router_id}`"
+                        @click="abrir(row.original)"
+                    />
+                </div>
             </template>
             <template #empty>
                 <UEmpty
@@ -322,5 +359,21 @@ const VELOCIDAD: { campo: 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | '
                 </div>
             </template>
         </USlideover>
+
+        <EstrategiaPlanModal
+            v-if="seleccionada && puede('routers.cambiar_control_velocidad') && puede('routers.ver')"
+            v-model:open="estrategiaAbierta"
+            :plan="plan"
+            :router-id="seleccionada.router_id"
+            :implementacion="seleccionada"
+            @guardado="cargar"
+        />
+        <SincronizarPlanModal
+            v-if="seleccionada && puede('planes.sincronizar')"
+            v-model:open="sincronizarAbierto"
+            :plan="plan"
+            :router-id="seleccionada.router_id"
+            :nombre-router="nombreRouter(seleccionada.router_id)"
+        />
     </UPageCard>
 </template>
