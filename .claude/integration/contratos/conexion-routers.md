@@ -70,7 +70,7 @@ Con `Authorization: Bearer <INTERNAL_TOKEN>` (el de `internal/aaa/*`):
 
 - `GET /api/v1/internal/wireguard/peers` → `{ data: [{ router_id, public_key, ip_tunel }] }`, todos los vigentes, sin paginar. El agente reconcilia la lista completa (no aplica diferencias).
 - `POST /api/v1/internal/wireguard/estado` → `204`, cuerpo `{ servidor: { public_key, ip, red, puerto, interfaz, modo }, peers: [{ public_key, ultimo_handshake (ISO o null), endpoint, rx_bytes, tx_bytes }], generado_en }`. Llega cuando cambia algo, como mucho cada 60 s y al menos cada 10 min. Argos guarda la clave del servidor y `ultimo_handshake` por router sin auditoría por fila (telemetría, como el Interim-Update); `conectado` = handshake de menos de 3 min. El cambio pendiente ↔ conectado sí es un hecho (A1 decide si emite evento).
-- Eventos que escucha el agente (grupo `wireguard`): `router.conexion_registrada`, `router.conexion_rotada` y **`router.conexion_eliminada`** (propuesta de A6: al borrar o retirar un router con túnel, para quitar su peer; `{ router_id, empresa_id }`). El grupo se crea en `$`: lo anterior lo cubre la reconciliación al arrancar.
+- Eventos que escucha el agente (grupo `wireguard`): `router.conexion_registrada`, `router.conexion_rotada`, **`router.conexion_eliminada`** (propuesta de A6: al borrar o retirar un router con túnel, para quitar su peer; `{ router_id, empresa_id }`) y `router.eliminado` (router sin historial borrado con su conexión; `contratos/eliminar.md` §8.2: el peer sale de la lista y su /32 queda libre). El grupo se crea en `$`: lo anterior lo cubre la reconciliación al arrancar.
 
 ### 6.4 RADIUS y CoA por el túnel
 

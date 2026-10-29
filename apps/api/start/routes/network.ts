@@ -992,7 +992,8 @@ const conexion: Ruta[] = [
         descripcion:
             'Lista completa, sin paginar, de los routers activos con clave pública registrada y su IP del túnel ' +
             '(`contratos/conexion-routers.md` §6.3). El agente reconcilia la lista entera al arrancar y con ' +
-            '`router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`.',
+            '`router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y `router.eliminado` ' +
+            '(un router eliminado ya no tiene fila de conexión: su peer sale de la lista).',
         etiqueta: 'interno',
         seguridad: 'interno',
         permiso: null,
