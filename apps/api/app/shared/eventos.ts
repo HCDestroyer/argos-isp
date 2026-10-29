@@ -272,6 +272,15 @@ export interface CatalogoEventos {
         empresa_id: number | null
     }
     /**
+     * Cambió la dirección del NAS o el secreto RADIUS de un router (`routers.crear`, `routers.editar`,
+     * registro por el túnel). A2 regenera su cliente de FreeRADIUS. Nunca lleva el valor del secreto.
+     */
+    'router.radius_cambiado': {
+        router_id: number
+        empresa_id: number | null
+        campos: Array<'nas_ip' | 'radius_secret'>
+    }
+    /**
      * Servicios adicionales de un servicio (decisión del PM, 19 oct; `contratos/adicionales.md`):
      * streaming, IPTV… Nunca llevan la credencial. A3 factura los `cobrado`; A5 los muestra en el
      * portal. No cambian nada en la red (`aaa-cache` y `routeros` los ignoran).
@@ -1050,6 +1059,7 @@ export const EVENTOS = [
     'router.conexion_registrada',
     'router.conexion_rotada',
     'router.conexion_eliminada',
+    'router.radius_cambiado',
     'cliente.actualizado',
     'sesion.iniciada',
     'sesion.terminada',

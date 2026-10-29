@@ -254,6 +254,14 @@ test.group('Conexión de routers · API', (group) => {
             .where('evento', 'router.conexion_registrada')
             .whereRaw("(payload->>'router_id')::bigint = ?", [routerId])
         assert.deepEqual(eventos[0].payload, { router_id: routerId, empresa_id: null, ip_tunel: ipTunel })
+        // nas_ip pasó a la IP del túnel: FreeRADIUS debe regenerar el cliente
+        const radius = await db
+            .from('audit.outbox')
+            .where('evento', 'router.radius_cambiado')
+            .whereRaw("(payload->>'router_id')::bigint = ?", [routerId])
+            .orderBy('id', 'desc')
+            .firstOrFail()
+        assert.deepEqual(radius.payload, { router_id: routerId, empresa_id: null, campos: ['nas_ip'] })
         for (const campo of ['api_password', 'api_ca']) {
             const cambio = await db
                 .from('audit.cambios')

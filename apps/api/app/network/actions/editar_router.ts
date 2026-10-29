@@ -1,6 +1,12 @@
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { actualizarConVersion } from '#shared/version'
-import { auditableRouter, columnasRouter, exigirZona, type DatosRouter } from '#network/actions/crear_router'
+import {
+    auditableRouter,
+    avisarRadius,
+    columnasRouter,
+    exigirZona,
+    type DatosRouter,
+} from '#network/actions/crear_router'
 import { verRouter, type RouterVista } from '#network/consultas/routers'
 import { exigirEmpresaActiva } from '#core/empresas'
 import { ValidacionFallida } from '#shared/errores'
@@ -93,7 +99,8 @@ export default class EditarRouter extends DomainAction<EntradaEditarRouter, Rout
         if (datos.api_password && a.api_password) a.api_password = 'anterior'
         if (datos.radius_secret && a.radius_secret) a.radius_secret = 'anterior'
         if (typeof datos.api_ca === 'string' && a.api_ca) a.api_ca = 'anterior'
-        await t.registrarCambios({ tipo: 'router', id }, a, d)
+        const cambiados = await t.registrarCambios({ tipo: 'router', id }, a, d)
+        await avisarRadius(t, despues, cambiados)
         if (antes.activo !== despues.activo) await avisarTunel(t, despues)
         if (
             antes.capacidad_bajada_kbps !== despues.capacidad_bajada_kbps ||

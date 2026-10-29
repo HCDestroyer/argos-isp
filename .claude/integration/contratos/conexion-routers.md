@@ -97,3 +97,4 @@ Con `Authorization: Bearer <INTERNAL_TOKEN>` (el de `internal/aaa/*`):
 - Render: port de `render.mjs` en `apps/api/app/network/conexion/render.ts`, con espejo de `render.test.mjs`. Los archivos se leen de `ROUTERS_MIKROTIK_DIR` (imagen) o de `infra/mikrotik`.
 - `router.conexion_eliminada { router_id, empresa_id }`: al desactivar un router con túnel (no hay borrado de routers); al reactivarlo, otra vez `router.conexion_registrada`. Un router inactivo no sale en los peers.
 - El cambio `pendiente` ↔ `conectado` no emite evento (nadie lo consume): queda en `audit.cambios`.
+- `router.radius_cambiado { router_id, empresa_id, campos[] }` (`campos` ⊂ `nas_ip`, `radius_secret`; nunca el secreto): sale al crear un router, al editar alguno de esos dos campos y al registrarse por el túnel (cambia `nas_ip`). A2 lo escucha para regenerar el cliente de FreeRADIUS.
