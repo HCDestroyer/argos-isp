@@ -119,35 +119,6 @@ async function exigirMigracion(
     }
 }
 
-/** 403 si el actor no tiene además `permiso` (la ruta ya exigió el suyo). */
-async function exigirPermisoExtra(ctx: HttpContext, permiso: Permiso, motivo: string) {
-    const usuario = ctx.auth.user
-    const alcance = usuario ? await alcanceDePermiso(usuario.id, permiso, alcancesDelToken(ctx)) : null
-    if (!alcance) throw new Prohibido(`Para ${motivo} necesitas además el permiso ${permiso}`)
-    return alcance
-}
-
-/**
- * Migrar pools (`contratos/pools.md` §3): alcance sobre el router de origen y el de destino;
- * mudar también bloques o redes pide el permiso de esa familia, y mover servicios pide
- * `servicios.editar` con alcance sobre el destino.
- */
-async function exigirMigracion(
-    ctx: HttpContext,
-    origen: number,
-    cuerpo: { router_id: number; mover_servicios?: boolean },
-    extra: { permiso: Permiso; ids: number[] | undefined; motivo: string },
-) {
-    exigirAlcance(ctx.alcance, { router: [origen] })
-    exigirAlcance(ctx.alcance, { router: [cuerpo.router_id] })
-    if (extra.ids?.length) await exigirPermisoExtra(ctx, extra.permiso, extra.motivo)
-    if (cuerpo.mover_servicios) {
-        const alcance = await exigirPermisoExtra(ctx, 'servicios.editar', 'mover los servicios del pool')
-        exigirAlcance(alcance, { router: [origen] })
-        exigirAlcance(alcance, { router: [cuerpo.router_id] })
-    }
-}
-
 // A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
 registrarSeccionMetricas('routeros', leerMetricasRouterOS)
 
