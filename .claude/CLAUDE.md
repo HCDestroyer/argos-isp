@@ -177,6 +177,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | `plan.velocidad_cambiada` | núcleo | plan_id, router_id (null = todos), campos[] |
 | `router.control_cambiado` | núcleo | router_id, de, a, capacidad_bajada_kbps, capacidad_subida_kbps, campos[], motivo |
 | `router.conexion_generada` / `router.conexion_registrada` / `router.conexion_rotada` / `router.conexion_eliminada` | núcleo (conexión WireGuard) | router_id, empresa_id; generada: actor; registrada: ip_tunel. Nunca claves ni secretos (`contratos/conexion-routers.md`) |
+| `router.radius_cambiado` | núcleo | router_id, empresa_id, campos[] (`nas_ip`, `radius_secret`; nunca el valor); al crear, editar o registrar el túnel. Lo consume `aaa` para regenerar los clientes de FreeRADIUS |
 | `routeros.fallido` | network (RouterOS) | servicio_id (o null), router_id, operacion, error |
 | `fiscal.localizacion_instalada` | fiscal | empresa_id, pais, codigo, de_codigo |
 | `fiscal.parametros_cambiados` | fiscal | empresa_id (null = global), claves[], vigente_desde |
