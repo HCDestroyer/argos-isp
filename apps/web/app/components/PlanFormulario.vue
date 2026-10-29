@@ -377,6 +377,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                         <UFormField
                             label="Umbral"
                             name="rafaga_umbral_pct"
+                            required
                             help="% de la velocidad máxima bajo el que vuelve a ganar ráfaga."
                         >
                             <UInputNumber
@@ -391,6 +392,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                         <UFormField
                             label="Tiempo"
                             name="rafaga_segundos"
+                            required
                             help="Segundos de promedio (burst-time)."
                         >
                             <UInputNumber
@@ -526,6 +528,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlan>) {
                     <UFormField
                         label="Prefijo delegado IPv6"
                         name="tamano_prefijo_delegado"
+                        required
                     >
                         <USelect
                             v-model="estado.tamano_prefijo_delegado"

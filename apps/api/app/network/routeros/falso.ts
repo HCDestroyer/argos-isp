@@ -259,7 +259,12 @@ export class RouterOSFalso {
         const camino = url.pathname.slice('/rest'.length)
 
         if (camino === '/system/resource' && metodo === 'GET') {
-            return this.#json(res, 200, { 'board-name': 'falso', version: '7.24.5 (stable)', uptime: '1d' })
+            return this.#json(res, 200, {
+                'board-name': 'falso',
+                version: '7.24.5 (stable)',
+                uptime: '1d',
+                'cpu-load': '3',
+            })
         }
 
         const soloLectura = RUTAS_LECTURA.find((r) => camino === r)

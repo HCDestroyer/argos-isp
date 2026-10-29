@@ -50,7 +50,7 @@ describe('fallos de las capturas 06 y 07', () => {
         await esperar(() => expect(wrapper.text()).toContain('Reintentar'))
 
         const texto = wrapper.text()
-        expect(texto).toContain('No implementado')
+        expect(texto).toContain('Operación no disponible')
         expect(texto).not.toContain('Al día')
         expect(texto).not.toContain('Q 0.00')
         expect(texto).not.toContain('Saldo')

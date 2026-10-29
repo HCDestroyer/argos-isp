@@ -1,6 +1,7 @@
 /*
 |--------------------------------------------------------------------------
-| Rutas de integraciones (A6): conector Horus Flow (`contratos/horus.md`)
+| Rutas de integraciones (A6): conector Horus Flow (`contratos/horus.md`) y webhooks a Iris
+| (`contratos/iris.md` §2.3; el resto del conector Iris es de A1, `start/routes/iris.ts`)
 |--------------------------------------------------------------------------
 */
 import type { HttpContext } from '@adonisjs/core/http'
@@ -37,6 +38,13 @@ import {
 } from '#integraciones/horus/consultas'
 import { listarEnviosHorus, listarRecibidosHorus } from '#integraciones/horus/listados'
 import { autenticarWebhook } from '#integraciones/horus/receptor'
+import {
+    EnvioIris,
+    ResumenEnviosIris,
+    listarEnviosIris,
+    listarEnviosIrisValidator,
+    resumenEnviosIris,
+} from '#integraciones/iris/envios_panel'
 import ConfigurarHorus from '#integraciones/horus/actions/configurar_horus'
 import ProbarHorus from '#integraciones/horus/actions/probar_horus'
 import RecibirWebhookHorus from '#integraciones/horus/actions/recibir_webhook_horus'
@@ -269,6 +277,30 @@ const integraciones: Ruta[] = [
         query: v.listarEnviosHorusValidator,
         respuesta: { status: 200, descripcion: 'Página de envíos', esquema: pagina(EnvioHorus) },
         handler: (ctx, { query }) => listarEnviosHorus(query, empresasDeLaLista(ctx.empresa)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/iris/envios',
+        operacion: 'irisEnviosListar',
+        resumen: 'Webhooks enviados a Iris: estado, intentos y próximo reintento',
+        descripcion:
+            'Contrato Iris §2.3. Reintentos a 1 min, 5 min, 30 min, 2 h y 12 h; después `fallido`. ' +
+            '`descartado`: el conector se apagó antes de enviarlo.',
+        etiqueta: 'integraciones',
+        permiso: 'iris.ver',
+        query: listarEnviosIrisValidator,
+        respuesta: { status: 200, descripcion: 'Página de envíos', esquema: pagina(EnvioIris) },
+        handler: (ctx, { query }) => listarEnviosIris(query, empresasDeLaLista(ctx.empresa)),
+    }),
+    definirRuta({
+        metodo: 'get',
+        ruta: '/integraciones/iris/envios/resumen',
+        operacion: 'irisEnviosResumen',
+        resumen: 'Estado de los webhooks a Iris: destino, alcance, pendientes, fallidos y último error',
+        etiqueta: 'integraciones',
+        permiso: 'iris.ver',
+        respuesta: { status: 200, descripcion: 'Resumen', esquema: ResumenEnviosIris },
+        handler: (ctx) => resumenEnviosIris(empresasDeLaLista(ctx.empresa)),
     }),
     definirRuta({
         metodo: 'get',

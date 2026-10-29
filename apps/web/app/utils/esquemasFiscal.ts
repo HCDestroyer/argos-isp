@@ -178,7 +178,7 @@ export function esquemaRegimen(primera: boolean, hoy: string) {
         motivo: z.string().trim().max(500, 'Máximo 500 caracteres'),
     }).superRefine((datos, ctx) => {
         if (datos.aviso_fecha && !FECHA.test(datos.aviso_fecha)) {
-            ctx.addIssue({ code: 'custom', path: ['aviso_fecha'], message: 'Fecha inválida' })
+            ctx.addIssue({ code: 'custom', path: ['aviso_fecha'], message: 'Elige una fecha válida (día, mes y año)' })
         }
         if (primera || !FECHA.test(datos.vigente_desde)) {
             return
@@ -211,7 +211,7 @@ const opcional = (maximo: number) => z.string().trim().max(maximo, `Máximo ${ma
 /** Establecimiento: código SAT entero > 0 (solo al crear), nombre 1-150, dirección 300, municipio y departamento 100. */
 export const esquemaEstablecimiento = z.object({
     codigo: z.string().trim().regex(/^[1-9]\d{0,5}$/, 'Código de establecimiento de la SAT (número entero mayor que 0)').transform(Number),
-    nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(150, 'Máximo 150 caracteres'),
+    nombre: z.string().trim().min(1, 'Escribe el nombre').max(150, 'Máximo 150 caracteres'),
     direccion: opcional(300),
     municipio: opcional(100),
     departamento: opcional(100),
@@ -232,7 +232,7 @@ const entero = (campo: string) => z.string().trim().regex(/^[1-9]\d{0,3}$/, `${c
 export const esquemaFrase = z.object({
     tipo_frase: entero('Tipo de frase'),
     escenario: entero('Escenario'),
-    texto: z.string().trim().min(1, 'El texto de la frase es obligatorio').max(500, 'Máximo 500 caracteres'),
+    texto: z.string().trim().min(1, 'Escribe el texto de la frase').max(500, 'Máximo 500 caracteres'),
     tipos_dte: z.array(z.string()).min(1, 'Elige al menos un tipo de DTE'),
     vigente_desde: fecha(),
     resolucion_numero: z.string().trim().max(60, 'Máximo 60 caracteres'),

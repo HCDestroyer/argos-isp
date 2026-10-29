@@ -29,7 +29,7 @@ export function aProblema(error: unknown, status: number): Problem {
     if (esProblema(error)) {
         return error
     }
-    return { type: 'about:blank', title: status === 501 ? 'Aún no implementado en la API' : 'Error inesperado', status }
+    return { type: 'about:blank', title: status === 501 ? 'Función no disponible' : 'Error inesperado', status }
 }
 
 interface RespuestaApi<T> {

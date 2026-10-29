@@ -25,22 +25,23 @@ test('cierre de caja con faltante y motivo obligatorio', async ({ page }) => {
     await expect(turno.locator('[data-prueba="turno-esperado"]')).toContainText('Q 800.00')
     await expect(turno.locator('[data-prueba="sin-esperado"]')).toHaveCount(0)
 
-    await turno.getByRole('button', { name: 'Cerrar turno' }).click()
+    await turno.getByRole('button', { name: 'Cerrar caja' }).click()
     const modal = page.getByRole('dialog')
     await expect(modal.locator('[data-prueba="cierre-esperado"]')).toContainText('Q 800.00')
     await modal.getByLabel('Efectivo contado').fill('795.00')
     await expect(modal.locator('[data-prueba="cierre-diferencia"]')).toContainText('5.00')
 
-    await modal.getByRole('button', { name: 'Cerrar turno' }).click()
+    await modal.getByRole('button', { name: 'Cerrar caja' }).click()
     await expect(modal).toContainText('Hay diferencia: explica el motivo')
 
     await modal.getByLabel('Motivo de la diferencia').fill('Faltaron Q 5.00: vuelto mal entregado')
-    await modal.getByRole('button', { name: 'Cerrar turno' }).click()
+    await modal.getByRole('button', { name: 'Cerrar caja' }).click()
 
     const resultado = page.locator('[data-prueba="resultado-cierre"]')
     await expect(resultado).toContainText('Esperado Q 800.00')
     await expect(resultado).toContainText('contado Q 795.00')
     await expect(resultado).toContainText('Faltante Q 5.00')
     await expect(page.locator('[data-caja="1"]')).toContainText('Cerrada')
-    await expect(page.getByRole('button', { name: 'Abrir turno' })).toBeVisible()
+    // Cerrada: el estado vacío ofrece «Abrir caja» como acción principal.
+    await expect(page.locator('[data-prueba="caja-cerrada"]').getByRole('button', { name: 'Abrir caja' })).toBeVisible()
 })

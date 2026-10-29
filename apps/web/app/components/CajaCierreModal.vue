@@ -82,6 +82,7 @@ async function enviar(evento: FormSubmitEvent<DatosCierreFormulario>) {
     enviando.value = false
     if (resultado.ok) {
         abierto.value = false
+        void useMiCaja().refrescar()
         emit('hecho', resultado.data)
         return
     }
@@ -95,7 +96,7 @@ async function enviar(evento: FormSubmitEvent<DatosCierreFormulario>) {
 <template>
     <UModal
         v-model:open="abierto"
-        title="Cerrar turno"
+        title="Cerrar caja"
         :description="`${caja.nombre} · abierto ${formatearFechaHora(turno.abierto_en)}`"
         :dismissible="!enviando"
         :ui="{ content: 'sm:max-w-xl' }"
@@ -236,7 +237,7 @@ async function enviar(evento: FormSubmitEvent<DatosCierreFormulario>) {
                 <UButton
                     type="submit"
                     form="form-cierre-caja"
-                    label="Cerrar turno"
+                    label="Cerrar caja"
                     icon="i-lucide-lock"
                     :loading="enviando"
                 />

@@ -13,8 +13,10 @@
 # `argosisp` (no cambian entre versiones) y los respaldos en BACKUP_HOST_DIR.
 #
 # Diferencias con infra/docker-compose.yml (desarrollo y laboratorio): sin `build`, sin Mailpit
-# (SMTP desde el panel), nada publicado salvo el proxy (80 y 443) y FreeRADIUS (1812/1813 UDP);
-# RADIUS, aaa y coa siempre (no es un perfil); el portal va detrás del proxy con HTTPS.
+# (SMTP desde el panel), nada publicado salvo el proxy (80 y 443), FreeRADIUS (1812/1813 UDP en
+# RADIUS_BIND_IP) y, con ARGOSISP_WIREGUARD=1 (perfil `wireguard`, lo activa `argosisp`), el UDP de
+# WireGuard; RADIUS, aaa y coa siempre (no es un perfil); el portal va detrás del proxy con HTTPS.
+# Con WireGuard, RADIUS_BIND_IP es la .1 del túnel: RADIUS no se publica hacia internet.
 
 name: argosisp
 
@@ -76,6 +78,32 @@ x-api-env: &api-env
   NOTIFY_CRON_TOLERANCIA_MIN: ${NOTIFY_CRON_TOLERANCIA_MIN:-30}
   NOTIFY_EMPRESA_NOMBRE: ${NOTIFY_EMPRESA_NOMBRE:-ArgosIsp}
   NOTIFY_EMPRESA_TELEFONO: ${NOTIFY_EMPRESA_TELEFONO:-}
+  # Túnel WireGuard de los routers (contratos/conexion-routers.md): red del túnel (IPAM de las /32),
+  # puerto UDP y endpoint público que el script de conexión le da al router.
+  ARGOSISP_WIREGUARD: ${ARGOSISP_WIREGUARD:-0}
+  ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+  ARGOSISP_WG_PUERTO: ${ARGOSISP_WG_PUERTO:-51820}
+  ARGOSISP_WG_ENDPOINT: ${ARGOSISP_WG_ENDPOINT:-${DOMINIO_API}}
+  # ?incluir=servicio del script de conexión (app/network/conexion/servicio.ts): datos de la red del
+  # ISP que Argos no guarda por router. Sin valor por defecto (no se inventan rangos): si falta
+  # alguno, el panel muestra la lista (422 servicio_incompleto). Solo se derivan el portal
+  # (DOMINIO_PORTAL), el rate-limit del corte y la interfaz de clientes. infra/produccion/.env.example
+  ROUTERS_MIKROTIK_DIR: ${ROUTERS_MIKROTIK_DIR:-/app/mikrotik}
+  ROUTEROS_INTERFAZ_CLIENTES: ${ROUTEROS_INTERFAZ_CLIENTES:-}
+  ROUTERS_SERVICIO_SUSP_RATE_LIMIT: ${AAA_SUSPENDIDO_RATE_LIMIT:-256k/256k}
+  ROUTERS_SERVICIO_PORTAL_FQDN: ${ROUTERS_SERVICIO_PORTAL_FQDN:-${DOMINIO_PORTAL}}
+  ROUTERS_SERVICIO_WAN_INTERFAZ: ${ROUTERS_SERVICIO_WAN_INTERFAZ:-}
+  ROUTERS_SERVICIO_PPP_LOCAL_V4: ${ROUTERS_SERVICIO_PPP_LOCAL_V4:-}
+  ROUTERS_SERVICIO_POOL_V4_RANGOS: ${ROUTERS_SERVICIO_POOL_V4_RANGOS:-}
+  ROUTERS_SERVICIO_CLIENTES_V4: ${ROUTERS_SERVICIO_CLIENTES_V4:-}
+  ROUTERS_SERVICIO_CLIENTES_V6: ${ROUTERS_SERVICIO_CLIENTES_V6:-}
+  ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO:-}
+  ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO: ${ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO:-}
+  ROUTERS_SERVICIO_PORTAL_V4: ${ROUTERS_SERVICIO_PORTAL_V4:-}
+  ROUTERS_SERVICIO_PORTAL_V6: ${ROUTERS_SERVICIO_PORTAL_V6:-}
+  ROUTERS_SERVICIO_WALLED_GARDEN: ${ROUTERS_SERVICIO_WALLED_GARDEN:-}
+  ROUTERS_SERVICIO_DNS_V4: ${ROUTERS_SERVICIO_DNS_V4:-}
+  ROUTERS_SERVICIO_DNS_V6: ${ROUTERS_SERVICIO_DNS_V6:-}
   INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN:?Falta AAA_INTERNAL_TOKEN en .env}
   METRICS_TOKEN: ${METRICS_TOKEN:-}
   AAA_PPP_KEY: ${AAA_PPP_KEY:?Falta AAA_PPP_KEY en .env}
@@ -339,6 +367,13 @@ services:
       <<: *proceso-vivo
       test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js horus:worker'"]
 
+  iris-worker:
+    <<: *proceso-fondo
+    command: [node, ace.js, iris:worker]
+    healthcheck:
+      <<: *proceso-vivo
+      test: [CMD-SHELL, "tr '\\0' ' ' < /proc/1/cmdline | grep -q 'ace.js iris:worker'"]
+
   web:
     image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-web:${ARGOSISP_VERSION}
     restart: unless-stopped
@@ -411,6 +446,11 @@ services:
       DB_PASSWORD: ${DB_APP_PASSWORD}
       DB_DATABASE: argosisp
       AAA_CLIENTS_DIR: /radius-clientes
+      # Clientes por evento (A2, contratos/conexion-routers.md §6.4): con router.conexion_* (y al
+      # arrancar) regenera clients.d y avisa a freeradius por el FIFO .recargar. 0 = solo
+      # `argosisp radius-clientes`, que sigue sirviendo de respaldo manual.
+      AAA_CLIENTES_EVENTOS: ${AAA_CLIENTES_EVENTOS:-1}
+      AAA_NODO: aaa
     volumes:
       - aaa-datos:/var/lib/argosisp-aaa
       - radius-clientes:/radius-clientes
@@ -471,6 +511,9 @@ services:
   freeradius:
     image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-freeradius:${ARGOSISP_VERSION}
     restart: unless-stopped
+    # recargar.sh (A2, en la imagen): corre `freeradius -f -l stdout` y lo reinicia cuando aaa
+    # regenera clients.d. El FIFO funciona aunque el volumen esté montado de solo lectura.
+    entrypoint: [/usr/local/bin/argosisp-recargar.sh]
     command: [-l, stdout]
     environment:
       TZ: UTC
@@ -489,6 +532,11 @@ services:
     depends_on:
       aaa:
         condition: service_healthy
+      # Con WireGuard, RADIUS_BIND_IP es la .1 del túnel: la interfaz debe existir antes (el
+      # instalador además pone net.ipv4.ip_nonlocal_bind=1 para el arranque del servidor)
+      wireguard:
+        condition: service_healthy
+        required: false
     healthcheck:
       test:
         - CMD-SHELL
@@ -497,6 +545,68 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+
+  # Servidor WireGuard de los routers (perfil wireguard: ARGOSISP_WIREGUARD=1 en el .env). Red del
+  # host: interfaz wg-argos con la .1 de ARGOSISP_WG_RED; publica solo ARGOSISP_WG_PUERTO/udp. Por el
+  # túnel solo entra RADIUS a la .1 y las respuestas de lo que inicia el servidor (REST, CoA).
+  # infra/wireguard/README.md
+  wireguard:
+    profiles: [wireguard]
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-wireguard:${ARGOSISP_VERSION}
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    command: [servidor.sh]
+    stop_grace_period: 15s
+    environment:
+      TZ: UTC
+      ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+      ARGOSISP_WG_PUERTO: ${ARGOSISP_WG_PUERTO:-51820}
+      ARGOSISP_WG_MTU: ${ARGOSISP_WG_MTU:-1420}
+      ARGOSISP_WG_MODO: ${ARGOSISP_WG_MODO:-auto}
+      ARGOSISP_WG_FIREWALL: ${ARGOSISP_WG_FIREWALL:-1}
+    volumes:
+      - wireguard-clave:/clave
+      - wireguard-estado:/estado
+    healthcheck:
+      test: [CMD, salud.sh, servidor]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      start_interval: 2s
+
+  # Agente: aplica los peers de network.routers_conexion (eventos router.conexion_*) y publica en la
+  # API la clave del servidor y el último handshake de cada router.
+  wireguard-agente:
+    profiles: [wireguard]
+    image: ${ARGOSISP_REGISTRO:-ghcr.io/hcdestroyer}/argosisp-wireguard:${ARGOSISP_VERSION}
+    restart: unless-stopped
+    command: [agente.sh]
+    environment:
+      TZ: UTC
+      API_INTERNAL_URL: http://api:3333/api/v1/
+      INTERNAL_TOKEN: ${AAA_INTERNAL_TOKEN}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      ARGOSISP_WG_RED: ${ARGOSISP_WG_RED:-10.255.0.0/16}
+      ARGOSISP_WG_ESTADO_CADA_S: ${ARGOSISP_WG_ESTADO_CADA_S:-60}
+    volumes:
+      - wireguard-estado:/estado
+    depends_on:
+      wireguard:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test: [CMD, salud.sh, agente]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 3m
 
   # Proxy con TLS (Let's Encrypt) para la API, el panel y el portal, y HTTP del portal de corte
   # (dst-nat de TCP/80 de los suspendidos). config/proxy/Caddyfile.
@@ -555,3 +665,6 @@ volumes:
   aaa-datos:
   comprobantes:
   radius-clientes:
+  # WireGuard: clave privada del servidor (solo `wireguard`) y estado compartido con el agente
+  wireguard-clave:
+  wireguard-estado:

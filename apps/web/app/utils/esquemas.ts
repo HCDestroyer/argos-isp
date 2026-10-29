@@ -6,7 +6,7 @@ import * as z from 'zod'
  */
 export const esquemaLogin = z.object({
     email: z.email('Escribe un correo válido').trim().toLowerCase(),
-    password: z.string('La contraseña es obligatoria').min(1, 'La contraseña es obligatoria'),
+    password: z.string('Escribe tu contraseña').min(1, 'Escribe tu contraseña'),
 })
 
 export type DatosLogin = z.output<typeof esquemaLogin>

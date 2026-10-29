@@ -42,7 +42,7 @@ watch(abierto, (valor) => {
 })
 
 const itemsSeguridad: SelectItem[] = [
-    { label: 'RADIUS', value: 'radius', description: 'Recomendado; el que exige la migración a aaa' },
+    { label: 'RADIUS', value: 'radius', description: 'Recomendado: el router autentica y corta por RADIUS' },
     { label: 'API de RouterOS', value: 'api' },
 ]
 const itemsControl: SelectItem[] = (Object.keys(CONTROLES_VELOCIDAD) as ControlVelocidad[]).map(c => ({ label: CONTROLES_VELOCIDAD[c].etiqueta, value: c, icon: CONTROLES_VELOCIDAD[c].icono }))

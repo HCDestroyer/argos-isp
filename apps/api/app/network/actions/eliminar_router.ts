@@ -20,7 +20,7 @@ const DEPENDIENTES = [
     'network.planes_routers',
     'network.routers_contacto',
     'network.routers_migracion_aaa',
-    // conexión WireGuard (`a1/conexion-routers`); ON DELETE CASCADE, se borra explícita si existe
+    // conexión WireGuard (`contratos/conexion-routers.md`); ON DELETE CASCADE, se borra explícita
     'network.routers_conexion',
 ] as const
 
@@ -32,8 +32,8 @@ const DEPENDIENTES = [
  *
  * Borra sus redes IPv4, sus bloques y pools IPv6 (sin asignaciones), sus `planes_routers`, su
  * contacto, su migración AAA y su conexión WireGuard. `audit.acciones` guarda la foto
- * (credenciales como `***`). Emite `router.eliminado` (FreeRADIUS regenera clientes; el agente
- * WireGuard borra el peer).
+ * (credenciales como `***`). Emite `router.eliminado` (FreeRADIUS regenera clientes) y, si tenía
+ * túnel registrado, antes `router.conexion_eliminada` (el agente WireGuard quita el peer).
  */
 export default class EliminarRouter extends DomainAction<EntradaEliminarRouter, SalidaEliminarRouter> {
     readonly nombre = 'routers.eliminar'
@@ -71,6 +71,13 @@ export default class EliminarRouter extends DomainAction<EntradaEliminarRouter, 
                 ? await t.trx.from('network.ipv6_pools').whereIn('bloque_id', bloqueIds)
                 : [],
         }
+        // Con túnel registrado, el `wireguard-agente` y los clientes de FreeRADIUS lo sacan con
+        // `router.conexion_eliminada` (lo que ya escuchan al desactivarlo).
+        const tunel = await t.trx
+            .from('network.routers_conexion')
+            .where('router_id', id)
+            .whereNotNull('public_key')
+            .first()
         const existentes = new Set<string>()
         for (const tabla of DEPENDIENTES) {
             const r = (await t.trx.rawQuery('SELECT to_regclass(?) IS NOT NULL AS existe', [tabla])) as {
@@ -97,6 +104,7 @@ export default class EliminarRouter extends DomainAction<EntradaEliminarRouter, 
         const antes: Record<string, unknown> = { ...fila }
         delete antes.nas_ip_texto
         await t.registrarCambios({ tipo: 'router', id }, antes, null)
+        if (tunel) await t.emit('router.conexion_eliminada', { router_id: id, empresa_id: empresaId })
         await t.emit('router.eliminado', { router_id: id, empresa_id: empresaId })
         return { id, eliminado: true }
     }

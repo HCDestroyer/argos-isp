@@ -1,5 +1,6 @@
 import vine from '@vinejs/vine'
 import { reglasPaginacion } from '#shared/paginacion'
+import { conMensajes, MENSAJE_VERSION } from '#shared/mensajes_validacion'
 import {
     cidrV4,
     dinero,
@@ -70,6 +71,18 @@ const camposConexionApi = {
     }),
 }
 
+/** Credencial del router en el alta (vacía o null = sin ella); en auditoría siempre `***`. */
+const credencialRouter = (descripcion: string) =>
+    vine
+        .string()
+        .maxLength(200)
+        .nullable()
+        .optional()
+        .meta({ description: `${descripcion}. Vacía o null = sin credencial` })
+
+const zonaRouter = () =>
+    idEntidad().nullable().optional().meta({ description: 'Zona del router (opcional); 422 si no existe' })
+
 const camposRouter = {
     nombre: vine.string().trim().minLength(2).maxLength(100),
     host: vine
@@ -79,21 +92,14 @@ const camposRouter = {
         .maxLength(255)
         .meta({ description: 'Host o IP de la API REST de RouterOS' }),
     api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
-    api_password: vine
-        .string()
-        .maxLength(200)
-        .nullable()
-        .optional()
-        .meta({ description: 'Se guarda cifrada' }),
-    radius_secret: vine
-        .string()
-        .maxLength(200)
-        .nullable()
-        .optional()
-        .meta({ description: 'Se guarda cifrado' }),
+    api_password: credencialRouter('Clave del usuario de la API REST. Se guarda cifrada'),
+    radius_secret: credencialRouter(
+        'Secreto RADIUS del NAS (el mismo que usa FreeRADIUS). Se guarda cifrado',
+    ),
     nas_ip: ipv4(),
     modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
     empresa_sugerida_id: empresaSugerida(),
+    zona_id: zonaRouter(),
     control_velocidad: vine.enum(CONTROLES_VELOCIDAD).optional().meta({
         description:
             'simple (cola por servicio, por defecto) o arbol_pcq (queue tree + PCQ por plan). Después del alta solo con POST /routers/:id/cambiar-control-velocidad',
@@ -104,33 +110,68 @@ const camposRouter = {
     activo: vine.boolean().optional(),
 }
 
-export const crearRouterValidator = vine.compile(vine.object(camposRouter))
+const MENSAJES_ROUTER = {
+    'nombre.required': 'El nombre es obligatorio: así reconoces el router en el panel y en los servicios',
+    'host.required':
+        'El host es obligatorio: es la IP o el nombre con el que el sistema llega a la API del router',
+    'nas_ip.required':
+        'La IP del NAS es obligatoria: es la IP con la que el router habla con RADIUS y a la que se envían los CoA',
+    'nas_ip.ipAddress': 'La IP del NAS debe ser una IPv4, por ejemplo 10.0.0.1',
+}
 
-export const editarRouterValidator = vine.compile(
-    vine.object({
-        version: versionEsperada(),
-        nombre: camposRouter.nombre.optional(),
-        host: vine.string().trim().minLength(1).maxLength(255).optional(),
-        api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
-        api_password: vine.string().maxLength(200).nullable().optional(),
-        radius_secret: vine.string().maxLength(200).nullable().optional(),
-        nas_ip: ipv4().optional(),
-        modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
-        empresa_sugerida_id: empresaSugerida(),
-        capacidad_bajada_kbps: capacidad(),
-        capacidad_subida_kbps: capacidad(),
-        ...camposConexionApi,
-        activo: vine.boolean().optional(),
-    }),
+export const crearRouterValidator = conMensajes(vine.compile(vine.object(camposRouter)), MENSAJES_ROUTER)
+
+export const editarRouterValidator = conMensajes(
+    vine.compile(
+        vine.object({
+            version: versionEsperada(),
+            nombre: camposRouter.nombre.optional(),
+            host: vine.string().trim().minLength(1).maxLength(255).optional(),
+            api_usuario: vine.string().trim().maxLength(100).nullable().optional(),
+            api_password: vine
+                .string()
+                .maxLength(200)
+                .nullable()
+                .optional()
+                .meta({ description: 'Clave nueva de la API REST (cifrada). Vacía o null = no cambiar' }),
+            radius_secret: vine.string().maxLength(200).nullable().optional().meta({
+                description: 'Secreto RADIUS nuevo (cifrado; el de FreeRADIUS). Vacío o null = no cambiar',
+            }),
+            quitar_api_password: vine
+                .boolean()
+                .optional()
+                .meta({ description: 'Borra la clave de la API (422 si además llega api_password)' }),
+            quitar_radius_secret: vine
+                .boolean()
+                .optional()
+                .meta({ description: 'Borra el secreto RADIUS (422 si además llega radius_secret)' }),
+            nas_ip: ipv4().optional(),
+            modo_seguridad: vine.enum(['radius', 'api'] as const).optional(),
+            empresa_sugerida_id: empresaSugerida(),
+            zona_id: zonaRouter(),
+            capacidad_bajada_kbps: capacidad(),
+            capacidad_subida_kbps: capacidad(),
+            ...camposConexionApi,
+            activo: vine.boolean().optional(),
+        }),
+    ),
+    { ...MENSAJES_ROUTER, ...MENSAJE_VERSION },
 )
 
 /** `POST /routers/:id/cambiar-control-velocidad` (solo admin; la ejecución en el router es de A2). */
-export const cambiarControlVelocidadValidator = vine.compile(
-    vine.object({
-        version: versionEsperada(),
-        control_velocidad: vine.enum(CONTROLES_VELOCIDAD),
-        motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
-    }),
+export const cambiarControlVelocidadValidator = conMensajes(
+    vine.compile(
+        vine.object({
+            version: versionEsperada(),
+            control_velocidad: vine.enum(CONTROLES_VELOCIDAD),
+            motivo: vine.string().trim().minLength(3).maxLength(500).optional(),
+        }),
+    ),
+    {
+        ...MENSAJE_VERSION,
+        'control_velocidad.required':
+            'El control de velocidad es obligatorio: «simple» crea una cola por servicio y «arbol_pcq» un árbol de colas por plan',
+    },
 )
 
 export const listarRoutersValidator = vine.compile(
@@ -143,23 +184,237 @@ export const listarRoutersValidator = vine.compile(
 |--------------------------------------------------------------------------
 */
 
-export const crearRedIpv4Validator = vine.compile(
-    vine.object({
-        cidr: cidrV4(),
-        gateway: ipv4().nullable().optional(),
-        tipo: vine.enum(['estatico', 'pool'] as const),
+const MENSAJES_RED_IPV4 = {
+    'cidr.required':
+        'La red es obligatoria (por ejemplo 100.64.10.0/24): de ella salen las IPs que reciben los clientes',
+    'cidr.regex': 'Escribe la red en notación CIDR, por ejemplo 100.64.10.0/24',
+    'tipo.required':
+        'El tipo es obligatorio: «estatico» si el sistema entrega una IP fija a cada servicio, «pool» si es el rango del pool del router',
+    'gateway.ipAddress': 'El gateway debe ser una IPv4, por ejemplo 100.64.10.1',
+    'rango_inicio.ipAddress': 'El inicio del rango debe ser una IPv4 de la red',
+    'rango_fin.ipAddress': 'El fin del rango debe ser una IPv4 de la red',
+    'dns_primario.ipAddress': 'El DNS primario debe ser una IPv4',
+    'dns_secundario.ipAddress': 'El DNS secundario debe ser una IPv4',
+}
+
+/** Campos editables de una red IPv4 (`contratos/pools.md` §1). */
+const camposRedIpv4 = {
+    nombre: vine
+        .string()
+        .trim()
+        .maxLength(100)
+        .nullable()
+        .optional()
+        .meta({ description: 'Nombre para reconocer la red en el panel («Clientes zona norte»)' }),
+    gateway: ipv4().nullable().optional().meta({
+        description: 'Puerta de enlace de los clientes; no se asigna a ningún servicio',
     }),
+    rango_inicio: ipv4().nullable().optional().meta({
+        description:
+            'Primera IP que el sistema entrega a servicios; null (con rango_fin) = toda la red. Fuera del rango las IPs quedan reservadas',
+    }),
+    rango_fin: ipv4()
+        .nullable()
+        .optional()
+        .meta({ description: 'Última IP que el sistema entrega a servicios' }),
+    dns_primario: ipv4().nullable().optional().meta({ description: 'DNS para los clientes de la red' }),
+    dns_secundario: ipv4().nullable().optional(),
+}
+
+export const crearRedIpv4Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            cidr: cidrV4(),
+            tipo: vine.enum(['estatico', 'pool'] as const),
+            ...camposRedIpv4,
+        }),
+    ),
+    MENSAJES_RED_IPV4,
 )
 
-export const crearBloqueIpv6Validator = vine.compile(vine.object({ prefijo: prefijoV6() }))
+/** `PUT /redes-ipv4/:id`: todo opcional menos `version`. */
+export const editarRedIpv4Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            version: versionEsperada(),
+            cidr: cidrV4().optional().meta({
+                description:
+                    'Agrandar o achicar la red; 422 con la lista si alguna IP asignada quedaría fuera',
+            }),
+            tipo: vine.enum(['estatico', 'pool'] as const).optional(),
+            ...camposRedIpv4,
+        }),
+    ),
+    { ...MENSAJES_RED_IPV4, ...MENSAJE_VERSION },
+)
 
-export const crearPoolIpv6Validator = vine.compile(
-    vine.object({
-        prefijo: prefijoV6(),
-        tipo: vine.enum(['enlace', 'delegacion'] as const),
-        tamano_entrega: vine.enum([64, 56, 48] as const).meta({ type: 'integer' }),
-        nombre_en_router: vine.string().trim().maxLength(100).nullable().optional(),
+const MENSAJES_MIGRAR = {
+    ...MENSAJE_VERSION,
+    'router_id.required': 'El router de destino es obligatorio: es el router al que pasa el pool',
+    'router_id.number': 'El router de destino debe ser el id de un router',
+}
+
+/** Campos comunes de `POST /redes-ipv4/:id/migrar` y `POST /ipv6-bloques/:id/migrar`. */
+const camposMigrar = {
+    version: versionEsperada(),
+    router_id: idEntidad().meta({ description: 'Router de destino' }),
+    mover_servicios: vine
+        .boolean()
+        .optional()
+        .meta({
+            description:
+                'false (por defecto): si algún servicio usa direcciones del pool responde 422 con la lista. ' +
+                'true: los servicios pasan al router de destino conservando sus direcciones del pool',
+        }),
+    simular: vine.boolean().optional().meta({
+        description:
+            'true = no guarda nada: devuelve lo que pasaría (servicios y direcciones antes y después)',
     }),
+}
+
+export const migrarRedIpv4Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            ...camposMigrar,
+            bloques_ipv6: vine.array(idEntidad()).maxLength(50).distinct().optional().meta({
+                description:
+                    'Bloques IPv6 del mismo router que se mudan junto con la red (así los servicios conservan también sus prefijos)',
+            }),
+        }),
+    ),
+    MENSAJES_MIGRAR,
+)
+
+export const migrarBloqueIpv6Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            ...camposMigrar,
+            redes_ipv4: vine.array(idEntidad()).maxLength(50).distinct().optional().meta({
+                description:
+                    'Redes IPv4 del mismo router que se mudan junto con el bloque (así los servicios conservan también su IPv4)',
+            }),
+        }),
+    ),
+    MENSAJES_MIGRAR,
+)
+
+const MENSAJES_BLOQUE_IPV6 = {
+    'prefijo.required':
+        'El prefijo es obligatorio (por ejemplo 2001:db8:100::/40): es el bloque que te asignó tu proveedor y de él se recortan los pools',
+    'prefijo.regex': 'Escribe el prefijo en notación CIDR, por ejemplo 2001:db8:100::/40',
+}
+
+const camposBloqueIpv6 = {
+    nombre: vine.string().trim().maxLength(100).nullable().optional().meta({
+        description: 'Nombre para reconocer el bloque en el panel',
+    }),
+    proveedor: vine.string().trim().maxLength(100).nullable().optional().meta({
+        description: 'Proveedor que asignó el bloque (un router puede tener bloques de varios proveedores)',
+    }),
+}
+
+export const crearBloqueIpv6Validator = conMensajes(
+    vine.compile(vine.object({ prefijo: prefijoV6(), ...camposBloqueIpv6 })),
+    MENSAJES_BLOQUE_IPV6,
+)
+
+export const editarBloqueIpv6Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            version: versionEsperada(),
+            prefijo: prefijoV6().optional().meta({
+                description: 'Agrandar o achicar el bloque; 422 con la lista si algún pool quedaría fuera',
+            }),
+            ...camposBloqueIpv6,
+        }),
+    ),
+    { ...MENSAJES_BLOQUE_IPV6, ...MENSAJE_VERSION },
+)
+
+const MENSAJES_POOL_IPV6 = {
+    'prefijo.required':
+        'El prefijo es obligatorio (por ejemplo 2001:db8:100::/48): es la parte del bloque de la que salen los prefijos de los clientes',
+    'prefijo.regex': 'Escribe el prefijo en notación CIDR, por ejemplo 2001:db8:100::/48',
+    'tipo.required':
+        'El tipo es obligatorio: «enlace» entrega un /64 para la conexión PPPoE y «delegacion» el prefijo que el router del cliente reparte en su red',
+    'tamano_entrega.required':
+        'El tamaño de entrega es obligatorio: es el prefijo que recibe cada servicio (/64 en enlace; /56 o /48 en delegación)',
+    'tamano_entrega.enum': 'El tamaño de entrega debe ser 64, 56 o 48',
+}
+
+const camposPoolIpv6 = {
+    nombre: vine.string().trim().maxLength(100).nullable().optional().meta({
+        description: 'Nombre para reconocer el pool en el panel',
+    }),
+    nombre_en_router: vine.string().trim().maxLength(100).nullable().optional().meta({
+        description: 'Nombre del pool en RouterOS (modo radius_pool)',
+    }),
+}
+
+const tamanoEntrega = (description?: string) =>
+    vine
+        .enum([64, 56, 48] as const)
+        .meta(description ? { type: 'integer', description } : { type: 'integer' })
+
+export const crearPoolIpv6Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            prefijo: prefijoV6(),
+            tipo: vine.enum(['enlace', 'delegacion'] as const),
+            tamano_entrega: tamanoEntrega(),
+            ...camposPoolIpv6,
+        }),
+    ),
+    MENSAJES_POOL_IPV6,
+)
+
+export const editarPoolIpv6Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            version: versionEsperada(),
+            prefijo: prefijoV6().optional().meta({
+                description:
+                    'Agrandar o achicar el pool; 422 con la lista si algún prefijo asignado quedaría fuera',
+            }),
+            tipo: vine
+                .enum(['enlace', 'delegacion'] as const)
+                .optional()
+                .meta({
+                    description: 'Solo se cambia si el pool no tiene prefijos asignados',
+                }),
+            tamano_entrega: tamanoEntrega('Solo se cambia si el pool no tiene prefijos asignados').optional(),
+            ...camposPoolIpv6,
+        }),
+    ),
+    { ...MENSAJES_POOL_IPV6, ...MENSAJE_VERSION },
+)
+
+/** `POST /ipv6-pools/vista-previa`: qué entregaría un pool, sin guardar. */
+export const vistaPreviaPoolIpv6Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            prefijo: prefijoV6(),
+            tipo: vine.enum(['enlace', 'delegacion'] as const),
+            tamano_entrega: tamanoEntrega(),
+        }),
+    ),
+    MENSAJES_POOL_IPV6,
+)
+
+/** `POST /ipv6-bloques/vista-previa`: cómo repartir un bloque entre enlace y delegación. */
+export const vistaPreviaBloqueIpv6Validator = conMensajes(
+    vine.compile(
+        vine.object({
+            prefijo: prefijoV6(),
+            tamano_delegado: tamanoEntrega('Prefijo delegado por cliente (el del plan: /56 por defecto)'),
+        }),
+    ),
+    {
+        ...MENSAJES_BLOQUE_IPV6,
+        'tamano_delegado.required':
+            'El tamaño delegado es obligatorio: es el prefijo que recibe cada cliente para su red (el del plan, /56 por defecto)',
+        'tamano_delegado.enum': 'El tamaño delegado debe ser 64, 56 o 48',
+    },
 )
 
 /*
@@ -249,44 +504,64 @@ const camposPlan = {
     activo: vine.boolean().optional(),
 }
 
-export const crearPlanValidator = vine.compile(vine.object(camposPlan))
+const MENSAJES_PLAN = {
+    'nombre.required': 'El nombre es obligatorio: es como aparece el plan en servicios y facturas',
+    'precio.required': 'El precio es obligatorio: es lo que se factura cada periodo por el plan',
+    'precio.regex': 'El precio debe ser un monto con hasta 2 decimales, por ejemplo 150.00',
+    'bajada_kbps.required':
+        'La velocidad de bajada es obligatoria: es la velocidad máxima de descarga del cliente, en kbps',
+    'subida_kbps.required':
+        'La velocidad de subida es obligatoria: es la velocidad máxima de carga del cliente, en kbps',
+    'bajada_limitada_kbps.required':
+        'La bajada limitada es obligatoria: es la velocidad de descarga que queda cuando el servicio se limita por mora',
+    'subida_limitada_kbps.required':
+        'La subida limitada es obligatoria: es la velocidad de carga que queda cuando el servicio se limita por mora',
+}
+
+export const crearPlanValidator = conMensajes(vine.compile(vine.object(camposPlan)), MENSAJES_PLAN)
 
 /** `POST /planes/vista-previa`: los campos de velocidad del formulario de planes, sin guardar. */
-export const vistaPreviaPlanValidator = vine.compile(
-    vine.object({
-        bajada_kbps: kbps(),
-        subida_kbps: kbps(),
-        bajada_limitada_kbps: kbps().min(1),
-        subida_limitada_kbps: kbps().min(1),
-        ...camposVelocidadPlan(),
-        rate_limit_override: vine.string().trim().maxLength(200).nullable().optional().meta({
-            description: 'Como en planes_routers: reemplaza la cadena de estado activo',
+export const vistaPreviaPlanValidator = conMensajes(
+    vine.compile(
+        vine.object({
+            bajada_kbps: kbps(),
+            subida_kbps: kbps(),
+            bajada_limitada_kbps: kbps().min(1),
+            subida_limitada_kbps: kbps().min(1),
+            ...camposVelocidadPlan(),
+            rate_limit_override: vine.string().trim().maxLength(200).nullable().optional().meta({
+                description: 'Como en planes_routers: reemplaza la cadena de estado activo',
+            }),
+            activos: vine.number().withoutDecimals().min(0).max(100_000).optional().meta({
+                description: 'Servicios activos del plan en el router para la cola padre (por defecto 1)',
+            }),
         }),
-        activos: vine.number().withoutDecimals().min(0).max(100_000).optional().meta({
-            description: 'Servicios activos del plan en el router para la cola padre (por defecto 1)',
-        }),
-    }),
+    ),
+    MENSAJES_PLAN,
 )
 
-export const editarPlanValidator = vine.compile(
-    vine.object({
-        version: versionEsperada(),
-        nombre: camposPlan.nombre.optional(),
-        precio: dinero().optional(),
-        bajada_kbps: kbps().optional(),
-        subida_kbps: kbps().optional(),
-        bajada_limitada_kbps: kbps().min(1).optional(),
-        subida_limitada_kbps: kbps().min(1).optional(),
-        ...camposVelocidadPlan(),
-        dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
-        tamano_prefijo_delegado: vine
-            .enum([64, 56, 48] as const)
-            .optional()
-            .meta({ type: 'integer' }),
-        tipo: vine.enum(TIPOS_PLAN).optional(),
-        global: vine.boolean().optional(),
-        activo: vine.boolean().optional(),
-    }),
+export const editarPlanValidator = conMensajes(
+    vine.compile(
+        vine.object({
+            version: versionEsperada(),
+            nombre: camposPlan.nombre.optional(),
+            precio: dinero().optional(),
+            bajada_kbps: kbps().optional(),
+            subida_kbps: kbps().optional(),
+            bajada_limitada_kbps: kbps().min(1).optional(),
+            subida_limitada_kbps: kbps().min(1).optional(),
+            ...camposVelocidadPlan(),
+            dual_stack: vine.enum(['ambos', 'v4', 'v6'] as const).optional(),
+            tamano_prefijo_delegado: vine
+                .enum([64, 56, 48] as const)
+                .optional()
+                .meta({ type: 'integer' }),
+            tipo: vine.enum(TIPOS_PLAN).optional(),
+            global: vine.boolean().optional(),
+            activo: vine.boolean().optional(),
+        }),
+    ),
+    { ...MENSAJES_PLAN, ...MENSAJE_VERSION },
 )
 
 export const listarPlanesValidator = vine.compile(
@@ -347,12 +622,18 @@ export const resumenSesionesRouterValidator = vine.compile(
 )
 
 /** `POST /routers/:id/marcar-migrado` (A2): `desde` omitido = ahora; null = desmarcar. */
-export const marcarRouterMigradoValidator = vine.compile(
-    vine.object({
-        desde: instanteIso().nullable().optional(),
-        motivo: vine.string().trim().minLength(3).maxLength(500),
-        version: vine.number().withoutDecimals().min(0).optional(),
-    }),
+export const marcarRouterMigradoValidator = conMensajes(
+    vine.compile(
+        vine.object({
+            desde: instanteIso().nullable().optional(),
+            motivo: vine.string().trim().minLength(3).maxLength(500),
+            version: vine.number().withoutDecimals().min(0).optional(),
+        }),
+    ),
+    {
+        'motivo.required':
+            'El motivo es obligatorio: queda en la bitácora para saber por qué se marcó o desmarcó la migración',
+    },
 )
 
 /** `GET /red/eventos` (A2): lectura de `audit.red`. `desde` inclusive, `hasta` exclusive. */
@@ -370,12 +651,112 @@ export const listarEventosRedValidator = vine.compile(
     }),
 )
 
-export const desconectarSesionValidator = vine.compile(
-    vine.object({ motivo: vine.string().trim().minLength(3).maxLength(500) }),
+export const desconectarSesionValidator = conMensajes(
+    vine.compile(vine.object({ motivo: vine.string().trim().minLength(3).maxLength(500) })),
+    {
+        'motivo.required':
+            'El motivo es obligatorio: queda en la bitácora del servicio junto con la desconexión',
+    },
 )
-
-/** `GET /routers/:id/vista-previa-control?a=` (A2): modo al que se cambiaría. */
-export const vistaPreviaControlValidator = vine.compile(vine.object({ a: vine.enum(CONTROLES_VELOCIDAD) }))
 
 /** `DELETE /routers/:id?version=` (`contratos/eliminar.md`). */
 export const eliminarRouterValidator = vine.compile(vine.object({ version: versionEsperada() }))
+
+/** `GET /routers/:id/vista-previa-control?a=` (A2): modo al que se cambiaría. */
+export const vistaPreviaControlValidator = conMensajes(
+    vine.compile(vine.object({ a: vine.enum(CONTROLES_VELOCIDAD) })),
+    {
+        'a.required':
+            'Indica el control de velocidad al que cambiarías (simple o arbol_pcq) para ver qué se crea y qué se borra',
+    },
+)
+
+/*
+|--------------------------------------------------------------------------
+| Conexión de routers por WireGuard (contratos/conexion-routers.md)
+|--------------------------------------------------------------------------
+*/
+
+/** Clave pública WireGuard: 32 bytes en base64 (44 caracteres). */
+const clavePublicaWg = () =>
+    vine
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$/)
+        .meta({ description: 'Clave pública WireGuard del router (base64, 44 caracteres)' })
+
+/** `GET /routers/:id/script-conexion?admin=&incluir=` */
+export const scriptConexionValidator = vine.compile(
+    vine.object({
+        admin: vine
+            .string()
+            .trim()
+            .maxLength(2000)
+            .optional()
+            .meta({
+                description:
+                    'IPs o redes IPv4 separadas por coma para la lista argosisp-admin (winbox y ssh). ' +
+                    'Vacía: gestión solo por el túnel',
+            }),
+        incluir: vine
+            .enum(['servicio'])
+            .optional()
+            .meta({ description: '`servicio`: suma PPPoE, perfiles y corte; por defecto solo conexión' }),
+    }),
+)
+
+/** `POST /routers/conexion/registrar` (lo manda el script del router, contrato §6.1). */
+export const registrarConexionValidator = vine.compile(
+    vine.object({
+        token: vine.string().trim().minLength(16).maxLength(128),
+        public_key: clavePublicaWg(),
+        routeros_version: vine
+            .string()
+            .trim()
+            .maxLength(100)
+            .nullable()
+            .optional()
+            .meta({ description: 'Versión de RouterOS del equipo (`/system resource version`)' }),
+        api_ca: vine
+            .string()
+            .trim()
+            .maxLength(20_000)
+            .regex(/^-----BEGIN CERTIFICATE-----/)
+            .nullable()
+            .optional()
+            .meta({
+                description:
+                    'PEM de la CA propia del router (argosisp-ca.crt); vacío = no cambia. Argos verifica con ella ' +
+                    'el certificado de www-ssl',
+            }),
+    }),
+)
+
+/** `POST /routers/:id/conexion/clave`: pegar la clave a mano. */
+export const conexionClaveValidator = vine.compile(vine.object({ public_key: clavePublicaWg() }))
+
+/** `POST /internal/wireguard/estado` (wireguard-agente, contrato §6.3). */
+export const estadoWireguardValidator = vine.compile(
+    vine.object({
+        servidor: vine.object({
+            public_key: clavePublicaWg(),
+            ip: vine.string().trim().maxLength(64).nullable().optional(),
+            red: vine.string().trim().maxLength(64).nullable().optional(),
+            puerto: vine.number().withoutDecimals().min(1).max(65535).nullable().optional(),
+            interfaz: vine.string().trim().maxLength(64).nullable().optional(),
+            modo: vine.string().trim().maxLength(64).nullable().optional(),
+        }),
+        peers: vine
+            .array(
+                vine.object({
+                    public_key: clavePublicaWg(),
+                    ultimo_handshake: instanteIso().nullable(),
+                    endpoint: vine.string().trim().maxLength(100).nullable().optional(),
+                    rx_bytes: vine.number().min(0).nullable().optional(),
+                    tx_bytes: vine.number().min(0).nullable().optional(),
+                }),
+            )
+            .maxLength(65_536),
+        generado_en: instanteIso().nullable().optional(),
+    }),
+)

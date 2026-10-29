@@ -73,6 +73,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 <UFormField
                     label="Días respecto al vencimiento"
                     name="dias"
+                    required
                     :help="typeof estado.dias === 'number' ? diasRecordatorio(estado.dias) : 'Negativo = antes; 0 = el día que vence; positivo = después.'"
                 >
                     <UInputNumber
@@ -86,6 +87,7 @@ async function enviar(evento: FormSubmitEvent<z.output<typeof esquema>>) {
                 <UFormField
                     label="Hora"
                     name="hora"
+                    required
                     help="Hora de Guatemala."
                 >
                     <UInput

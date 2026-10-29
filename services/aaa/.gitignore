@@ -1,3 +1,5 @@
 # Generados por `pnpm aaa:clients`: llevan el secret RADIUS en claro.
 freeradius/clients.d/*.conf
 freeradius/clients.d/.*.tmp
+# FIFO de recarga de FreeRADIUS (src/clientes/recarga.ts)
+freeradius/clients.d/.recargar

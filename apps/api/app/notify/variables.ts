@@ -32,6 +32,8 @@ export interface Destinatario {
     email: string | null
     canalPreferido: CanalNotificacion
     telegramChatId: string | null
+    /** código de cliente (`core.clientes.codigo`); `{{cliente.codigo}}` */
+    codigo?: string | null
 }
 
 function entero(valor: unknown): number | null {
@@ -93,7 +95,7 @@ export async function cargarDestinatario(
     const fila = await cliente
         .from('core.clientes')
         .where('id', clienteId)
-        .select('id', 'nombre', 'email', 'canal_preferido', 'telegram_chat_id')
+        .select('id', 'nombre', 'email', 'canal_preferido', 'telegram_chat_id', 'codigo')
         .first()
     if (!fila) return null
     return {
@@ -102,6 +104,7 @@ export async function cargarDestinatario(
         email: fila.email || null,
         canalPreferido: fila.canal_preferido,
         telegramChatId: fila.telegram_chat_id || null,
+        codigo: fila.codigo || null,
     }
 }
 
@@ -267,16 +270,37 @@ async function variablesServicio(
         .from('core.servicios as s')
         .leftJoin('network.planes as p', 'p.id', 's.plan_id')
         .where('s.id', servicioId)
-        .select('s.id', 's.user_ppp', 's.estado', 's.direccion', 'p.nombre as plan')
+        .select(
+            's.id',
+            's.user_ppp',
+            's.estado',
+            's.direccion',
+            'p.nombre as plan',
+            'p.bajada_kbps',
+            'p.subida_kbps',
+        )
         .first()
     if (!fila) return null
+    const bajada = mbps(fila.bajada_kbps)
+    const subida = mbps(fila.subida_kbps)
     return {
         id: fila.id,
         usuario: fila.user_ppp,
         estado: fila.estado,
         direccion: fila.direccion ?? '',
         plan: fila.plan ?? '',
+        bajada_mbps: bajada,
+        subida_mbps: subida,
+        velocidad: bajada && subida ? `${bajada} Mbps de bajada / ${subida} Mbps de subida` : '',
     }
+}
+
+/** kbps del plan → Mbps en texto (`50`, `2.5`); '' sin dato. */
+export function mbps(kbps: unknown): string {
+    const n = Number(kbps)
+    if (kbps === null || kbps === undefined || !Number.isFinite(n) || n <= 0) return ''
+    const valor = n / 1000
+    return Number.isInteger(valor) ? String(valor) : String(Math.round(valor * 10) / 10)
 }
 
 function variablesEstado(payload: Payload): Variables {
@@ -445,6 +469,7 @@ export async function construirVariables(
             id: destinatario.clienteId,
             nombre: destinatario.nombre,
             email: destinatario.email ?? '',
+            codigo: destinatario.codigo ?? '',
         },
     }
 
@@ -494,7 +519,9 @@ export async function construirVariables(
         }
     }
 
-    if (evento === 'servicio.estado_cambiado') variables.estado = variablesEstado(payload)
+    if (evento === 'servicio.estado_cambiado' || evento === 'servicio.instalacion_activada') {
+        variables.estado = variablesEstado(payload)
+    }
 
     if (evento.startsWith('recordatorio.')) {
         variables.recordatorio = {

@@ -265,6 +265,71 @@ test.group('Routers · eliminar sin historial', () => {
         assert.notInclude(JSON.stringify(cambios), 'radius-secreto')
     })
 
+    test('con túnel registrado: borra la conexión y emite router.conexion_eliminada', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const id = await crearRouterFila()
+        const octeto = (id % 250) + 2
+        await db.table('network.routers_conexion').insert({
+            router_id: id,
+            ip_tunel: `10.254.${Math.floor(id / 250) % 250}.${octeto}/32`,
+            public_key: `${unico('k')
+                .replace(/[^A-Za-z0-9]/g, '')
+                .padEnd(43, 'A')
+                .slice(0, 43)}=`,
+            estado: 'conectado',
+            registrado_en: new Date().toISOString(),
+        })
+        const requestId = unico('req')
+        await estado(
+            client
+                .delete(`/api/v1/routers/${id}`)
+                .qs({ version: 1 })
+                .bearerToken(token)
+                .header('X-Request-Id', requestId),
+            204,
+        )
+        assert.isNull(await db.from('network.routers_conexion').where('router_id', id).first())
+        const eventos = await db
+            .from('audit.outbox')
+            .where({ request_id: requestId })
+            .orderBy('id')
+            .select('evento', 'payload')
+        assert.deepEqual(
+            eventos.map((e) => e.evento),
+            ['router.conexion_eliminada', 'router.eliminado'],
+        )
+        assert.deepEqual(eventos[0].payload, { router_id: id, empresa_id: null })
+    })
+
+    test('con conexión pendiente (sin clave): no emite router.conexion_eliminada', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const id = await crearRouterFila()
+        await db.table('network.routers_conexion').insert({
+            router_id: id,
+            ip_tunel: `10.253.${Math.floor(id / 250) % 250}.${(id % 250) + 2}/32`,
+        })
+        const requestId = unico('req')
+        await estado(
+            client
+                .delete(`/api/v1/routers/${id}`)
+                .qs({ version: 1 })
+                .bearerToken(token)
+                .header('X-Request-Id', requestId),
+            204,
+        )
+        const eventos = await db.from('audit.outbox').where({ request_id: requestId }).select('evento')
+        assert.deepEqual(
+            eventos.map((e) => e.evento),
+            ['router.eliminado'],
+        )
+    })
+
     for (const [i, caso] of BLOQUEOS.entries()) {
         test(`con ${caso.codigo} (#${i}): 422 router_con_historial y se conserva`, async ({
             client,

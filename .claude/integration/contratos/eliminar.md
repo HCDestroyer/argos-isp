@@ -73,8 +73,8 @@ El estado no importa: un servicio `activo`, `pendiente_instalacion` o `retirado`
 
 ### Router (`routers.eliminar`)
 
-- Borra `network.ipv6_pools` de sus bloques, `network.ipv6_bloques`, `network.redes_ipv4`, `network.planes_routers`, `network.routers_contacto`, `network.routers_migracion_aaa`, `network.routers_conexion` (si existe) y `core.ids_externos` del router; luego `network.routers`. Los planes se conservan.
-- Outbox: `router.eliminado`.
+- Borra `network.ipv6_pools` de sus bloques, `network.ipv6_bloques`, `network.redes_ipv4`, `network.planes_routers`, `network.routers_contacto`, `network.routers_migracion_aaa`, `network.routers_conexion` y `core.ids_externos` del router; luego `network.routers`. Los planes se conservan.
+- Outbox: `router.eliminado` y, si tenía túnel registrado (`routers_conexion.public_key`), antes `router.conexion_eliminada` (lo que ya escuchan el `wireguard-agente` y los clientes de FreeRADIUS, `contratos/conexion-routers.md`).
 
 ### Auditoría (los dos)
 

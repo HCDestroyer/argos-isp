@@ -88,7 +88,7 @@ export function esquemaEgreso(hoy: string) {
         metodo: z.enum(['caja', 'banco', 'cuenta_bancaria']),
         fecha: z.string()
             .trim()
-            .refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida')
+            .refine(valor => valor === '' || FECHA.test(valor), 'Elige una fecha válida (día, mes y año)')
             .refine(valor => valor === '' || valor <= hoy, 'La fecha del egreso no puede ser futura'),
         caja_id: z.number().int().positive().nullable(),
         banco_id: z.number().int().positive().nullable(),
@@ -98,10 +98,10 @@ export function esquemaEgreso(hoy: string) {
         comprobante: z.string().trim().max(100, 'Máximo 100 caracteres'),
     }).superRefine((datos, ctx) => {
         if (datos.metodo === 'caja' && datos.caja_id === null) {
-            ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'La caja es obligatoria' })
+            ctx.addIssue({ code: 'custom', path: ['caja_id'], message: 'Elige la caja de la que sale el dinero' })
         }
         if (datos.metodo === 'cuenta_bancaria' && datos.cuenta_bancaria_id === null) {
-            ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'La cuenta bancaria es obligatoria' })
+            ctx.addIssue({ code: 'custom', path: ['cuenta_bancaria_id'], message: 'Elige la cuenta bancaria de la que sale el dinero' })
         }
     })
 }

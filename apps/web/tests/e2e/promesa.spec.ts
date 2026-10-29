@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar, fijarHoyFixtures, ir } from './ayudas'
 
 /**
  * Prueba obligatoria 4 del brief de A4: "Crear promesa y ver el resultado de evaluación".
@@ -9,6 +9,8 @@ import { entrar, ir } from './ayudas'
  * 409 `promesa_abierta`, como `CrearPromesaPago`.
  */
 test('crear promesa y ver la regla que aplicó', async ({ page }) => {
+    // La promesa vence a 3 días: sin fecha fija, a fin de mes cae en la siguiente facturación.
+    await fijarHoyFixtures(page)
     await entrar(page, 'admin@argos.test')
     await ir(page, 'Servicios', /\/servicios/)
     await page.getByLabel('Buscar servicios').fill('juan.carlos2')
