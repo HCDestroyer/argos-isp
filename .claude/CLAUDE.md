@@ -151,6 +151,7 @@ Reglas que salen de los errores reales de los días 1 y 2. Son tan obligatorias 
 | Evento | Emite | Payload |
 | --- | --- | --- |
 | `servicio.creado` | núcleo | servicio_id, empresa_id, cliente_id, router_id, plan_id |
+| `servicio.eliminado` / `router.eliminado` | núcleo | servicio: servicio_id, empresa_id, cliente_id, router_id; router: router_id, empresa_id. Solo sin historial (`contratos/eliminar.md`); con historial se retira |
 | `servicio.estado_cambiado` | núcleo | servicio_id, empresa_id, de, a, motivo (`instalacion` al activar un `pendiente_instalacion`) |
 | `servicio.config_cambiada` | núcleo | servicio_id, empresa_id, campos (plan, ips, prefijo_v6, router, tipo_conexion, mac, amarre_ip_mac, empresa), empresa_anterior_id (solo con `empresa`); motivo y plan_temporal_id (opcionales, solo con un plan temporal) |
 | `asignacion.cambiada` | núcleo/IPAM | servicio_id, empresa_id, ipv4[], prefijo_enlace_v6, prefijo_delegado_v6, inicio, fin |
