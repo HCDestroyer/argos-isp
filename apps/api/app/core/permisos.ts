@@ -166,6 +166,14 @@ export const PERMISOS = {
     'horus.probar': 'Probar la conexión con Horus Flow con la configuración guardada',
     'horus.abrir': 'Abrir un cliente, servicio o router en Horus Flow sin volver a iniciar sesión',
 
+    'iris.ver': 'Ver el conector con Iris (sin secretos) y los tokens de su usuario técnico (sin el valor)',
+    'iris.configurar':
+        'Configurar el conector con Iris (URL, token iris_pat_, encendido, enlace de conexión); solo admin',
+    'iris.abrir': 'Abrir un ticket, orden o prospecto en Iris sin volver a iniciar sesión',
+    'iris.generar_token':
+        'Generar el token atk_ del usuario técnico Iris (permisos del contrato Iris §1.1); solo admin',
+    'iris.revocar_token': 'Revocar un token del usuario técnico Iris',
+
     'empresas.ver': 'Ver las empresas (NIT) de la instalación',
     'empresas.crear': 'Crear empresas (NIT)',
     'empresas.editar': 'Editar los datos fiscales y de contacto de una empresa',
@@ -277,7 +285,7 @@ export const PERMISOS = {
         'Generar el token de una integración (usuario técnico Horus con ip.resolver, clientes.ver y servicios.ver)',
     'horus.revocar_token': 'Revocar el token de una integración',
     'sso.emitir':
-        'Pedir un ticket de autologin para un usuario del otro sistema (solo el token de la integración Horus)',
+        'Pedir un ticket de autologin para un usuario del otro sistema (solo el token de la integración Horus o Iris)',
     'vinculaciones.revocar': 'Revocar las vinculaciones de autologin de todos los usuarios o de uno',
 } as const satisfies Record<string, string>
 

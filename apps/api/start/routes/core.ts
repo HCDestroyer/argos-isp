@@ -94,6 +94,7 @@ import { listarTramos } from '#network/historial'
 import { TramoAsignacion } from '#network/esquemas'
 import * as v from '#core/validators'
 import adicionales from '#start/routes/adicionales'
+import iris from '#start/routes/iris'
 import CrearEmpresa from '#core/actions/crear_empresa'
 import EditarEmpresaGrupo from '#core/actions/editar_empresa'
 import DesactivarEmpresa from '#core/actions/desactivar_empresa'
@@ -1425,7 +1426,10 @@ integraciones.push(
             if (!tokenId) {
                 throw new Prohibido('Solo el token de la integración Horus puede pedir tickets de autologin')
             }
-            return new EmitirTicketSso().execute({ ...cuerpo, atk_id: tokenId }, ctx.contextoAccion())
+            return new EmitirTicketSso().execute(
+                { ...cuerpo, conector: 'horus', atk_id: tokenId },
+                ctx.contextoAccion(),
+            )
         },
     }),
 )
@@ -1506,5 +1510,6 @@ export default [
     ...bitacora,
     ...ip,
     ...integraciones,
+    ...iris,
     ...interno,
 ]

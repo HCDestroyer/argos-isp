@@ -76,7 +76,7 @@ ArgosIsp corre en un Raspberry Pi con las mismas imágenes (todas son amd64 y ar
 
 Los datos viven en volúmenes de Docker del proyecto `argosisp` (`pgdata`, `redisdata`, `comprobantes`, `caddydata`, `aaa-datos`, `radius-clientes`): no cambian entre versiones.
 
-Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `aaa-vigia`, `web`, `portal`, `api-portal` (si `ARGOSISP_API_PORTAL=si`), `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
+Servicios (`sudo argosisp estado`): `postgres`, `redis`, `backup`, `migrate` y `permisos` (una vez por arranque), `api`, `relay`, `billing-worker`, `fiscal-worker`, `sesiones-worker`, `routeros-worker`, `worker` (notificaciones), `horus-worker`, `iris-worker`, `aaa-vigia`, `web`, `portal`, `api-portal` (si `ARGOSISP_API_PORTAL=si`), `aaa`, `coa`, `freeradius` y `proxy` (Caddy: 80 y 443). Solo el proxy y FreeRADIUS publican puertos. Compose: `infra/produccion/docker-compose.produccion.yml`; variables: `infra/produccion/.env.example`.
 
 ## Conectar los routers por WireGuard
 

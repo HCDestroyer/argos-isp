@@ -67,6 +67,7 @@ const NOMBRES: Record<string, string> = {
     'factura.emitida': 'Factura emitida',
     'factura.vencida': 'Factura vencida',
     'servicio.estado_cambiado': 'Cambio de estado del servicio',
+    'servicio.instalacion_activada': 'Bienvenida al activar la instalación',
     'pago.registrado': 'Pago registrado',
     'pago.registrado.tercero': 'Pago hecho por otro cliente',
     'promesa.creada': 'Promesa creada',
@@ -156,6 +157,9 @@ const SERVICIO = {
     estado: 'activo',
     direccion: 'Zona 1, Quetzaltenango',
     plan: 'Fibra 50M',
+    bajada_mbps: '50',
+    subida_mbps: '10',
+    velocidad: '50 Mbps de bajada / 10 Mbps de subida',
 }
 
 function pagoEjemplo(ahora: DateTime): Variables {
@@ -192,7 +196,7 @@ const LEALTAD = {
 function ejemploDelEvento(evento: string, ahora: DateTime): Variables {
     const v: Variables = {
         evento,
-        cliente: { id: 1234, nombre: 'María López', email: 'maria.lopez@ejemplo.gt' },
+        cliente: { id: 1234, nombre: 'María López', email: 'maria.lopez@ejemplo.gt', codigo: 'CLI-01234' },
     }
     const recordatorio = /^recordatorio\.(\d+)$/.exec(evento)
     if (recordatorio) {
@@ -206,6 +210,18 @@ function ejemploDelEvento(evento: string, ahora: DateTime): Variables {
     if (evento === 'factura.emitida' || evento === 'factura.vencida') {
         v.servicio = SERVICIO
         v.factura = facturaEjemplo(evento === 'factura.vencida' ? -1 : 15, ahora)
+    }
+    if (evento === 'servicio.instalacion_activada') {
+        v.servicio = SERVICIO
+        v.estado = {
+            de: 'pendiente_instalacion',
+            a: 'activo',
+            motivo: 'instalacion',
+            es_activo: true,
+            es_limitado: false,
+            es_suspendido: false,
+            es_retirado: false,
+        }
     }
     if (evento === 'servicio.estado_cambiado') {
         v.servicio = { ...SERVICIO, estado: 'suspendido' }
