@@ -3,17 +3,19 @@ import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { NoEncontrado } from '#shared/errores'
 import { aTexto } from '#ledger/dinero'
 import { bloquearCliente } from '#billing/cobros'
-import { avanceDePromesa, type EstadoPromesa } from '#billing/promesas'
+import { avanceDePromesa, type AvancePromesa, type EstadoPromesa, type ReglaCumplimiento } from '#billing/promesas'
 import EvaluarEstadoServicio from '#billing/actions/evaluar_estado_servicio'
 
 /**
  * Cierre de una promesa: `cumplida`, `incumplida` o `cancelada`. Dos acciones con la misma pieza:
  *
  * - `promesas.cumplir` (`CumplirPromesa`): la llama el consumidor de `pago.registrado` (grupo
- *   `billing`) por cada promesa activa del cliente. Si lo pagado a las facturas del servicio desde
- *   la promesa llega a su monto, o el servicio ya no tiene deuda vencida → `cumplida`,
- *   `promesa.cumplida` y re-evaluación (una promesa parcial cumplida puede volver a limitar o
- *   cortar si quedan vencidas, respetando la hora de corte). Si no, no cambia nada.
+ *   `billing`) por cada promesa activa del cliente. Según su `regla_cumplimiento`
+ *   (`avanceDePromesa` en `promesas.ts`): `facturas` → todas las facturas que cubre quedaron
+ *   saldadas; `monto` (legado) → lo pagado desde la promesa llega a su monto o ya no hay deuda
+ *   vencida. Cumplida → `promesa.cumplida` y re-evaluación (una factura vencida después de la
+ *   promesa, o lo que quede de una legada parcial, vuelve a limitar o cortar respetando la hora de
+ *   corte). Si no, no cambia nada.
  * - `promesas.incumplir` (`IncumplirPromesa`): la llama el cron `incumplirPromesas` con las que
  *   ya vencieron. Una activa se revisa primero como cumplida (el evento del pago pudo no haber
  *   llegado); si no alcanzó → `incumplida`, `promesa.incumplida` y re-evaluación (corta). Una
@@ -49,6 +51,7 @@ export interface FilaPromesa {
     estado: EstadoPromesa
     vence_en: Date
     monto: string
+    regla_cumplimiento: ReglaCumplimiento
     created_at: Date
 }
 
@@ -82,6 +85,7 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
                 'estado',
                 'vence_en',
                 'monto',
+                'regla_cumplimiento',
                 'created_at',
             )
             .firstOrFail()) as FilaPromesa
@@ -140,6 +144,15 @@ export abstract class ResolverPromesa extends DomainAction<EntradaResolverPromes
     }
 }
 
+/** `cierre` de una cumplida o incumplida: pagado, deuda vencida y, con la regla `facturas`, el saldo cubierto. */
+export function detalleAvance(avance: AvancePromesa): Record<string, string> {
+    return {
+        pagado: aTexto(avance.pagado),
+        deuda_vencida: aTexto(avance.vencida),
+        ...(avance.saldo_cubierto ? { saldo_cubierto: aTexto(avance.saldo_cubierto) } : {}),
+    }
+}
+
 export async function siCumplida(t: Transaccion, promesa: FilaPromesa) {
     const avance = await avanceDePromesa(t.trx, promesa)
     if (!avance.cumplida) return { avance, decision: null }
@@ -147,7 +160,7 @@ export async function siCumplida(t: Transaccion, promesa: FilaPromesa) {
         avance,
         decision: {
             estado: 'cumplida' as const,
-            detalle: { pagado: aTexto(avance.pagado), deuda_vencida: aTexto(avance.vencida) },
+            detalle: detalleAvance(avance),
         },
     }
 }

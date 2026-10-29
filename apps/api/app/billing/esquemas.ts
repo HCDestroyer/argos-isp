@@ -15,7 +15,7 @@ import {
     texto,
 } from '#shared/openapi/esquemas'
 import { ESTADOS_SERVICIO, METODOS_PAGO } from '#shared/eventos'
-import { NOMBRES_REGLA } from '#billing/promesas'
+import { NOMBRES_REGLA, REGLAS_CUMPLIMIENTO } from '#billing/promesas'
 import { ORIGENES_EXTERNOS } from '#inventario/origen_externo'
 
 /**
@@ -825,8 +825,13 @@ export const CierrePromesa = definirEsquema(
             por: { ...nulable(id), description: 'Quién la rechazó o canceló' },
             pagado: { ...Dinero, description: 'Cumplida o incumplida: lo pagado mientras estuvo activa' },
             deuda_vencida: { ...Dinero, description: 'Cumplida o incumplida: deuda vencida al resolverse' },
+            saldo_cubierto: {
+                ...Dinero,
+                description:
+                    'Cumplida o incumplida con regla_cumplimiento=facturas: saldo que les quedaba a las facturas cubiertas',
+            },
         },
-        ['motivo', 'por', 'pagado', 'deuda_vencida'],
+        ['motivo', 'por', 'pagado', 'deuda_vencida', 'saldo_cubierto'],
     ),
 )
 
@@ -858,6 +863,25 @@ export const EvaluacionPromesa = definirEsquema(
     ),
 )
 
+const camposFacturaCubierta = {
+    factura_id: id,
+    tipo: { ...enumerado(['servicio', 'mora', 'cargo']), description: 'La mora es su propia factura' },
+    periodo: fecha,
+    vence_en: fecha,
+    monto: { ...Dinero, description: 'Saldo de la factura al crear la promesa (lo que cubre)' },
+}
+
+export const FacturaCubierta = definirEsquema('FacturaCubierta', objeto(camposFacturaCubierta))
+
+export const FacturaPromesa = definirEsquema(
+    'FacturaPromesa',
+    objeto({
+        ...camposFacturaCubierta,
+        saldo: { ...Dinero, description: 'Saldo hoy (0.00 si ya no está pendiente)' },
+        estado: { ...texto, description: 'Estado actual de la factura' },
+    }),
+)
+
 export const Promesa = definirEsquema(
     'Promesa',
     objeto(
@@ -868,7 +892,21 @@ export const Promesa = definirEsquema(
             cliente_id: id,
             cliente_nombre: texto,
             vence_en: instante,
-            monto: Dinero,
+            monto: {
+                ...Dinero,
+                description:
+                    'regla_cumplimiento=facturas: total vencido al crearla (mora incluida), calculado por Argos. monto: el prometido (legado)',
+            },
+            regla_cumplimiento: {
+                ...enumerado(REGLAS_CUMPLIMIENTO),
+                description:
+                    'facturas: se cumple cuando todas las de `facturas` quedan saldadas (promesas nuevas). monto (legado: abiertas al 29 oct e importadas): lo pagado llega al monto o no queda deuda vencida. Siempre presente en la respuesta',
+            },
+            facturas: {
+                ...lista(FacturaPromesa),
+                description:
+                    'Facturas vencidas que cubre, con su saldo al crearla y hoy (vacía con la regla monto). Siempre presente en la respuesta',
+            },
             estado: enumerado([
                 'activa',
                 'cumplida',
@@ -891,7 +929,8 @@ export const Promesa = definirEsquema(
             },
             ...auditable,
         },
-        ['servicio', 'cliente_nombre', 'empresa_id'],
+        // regla_cumplimiento y facturas siempre vienen; opcionales en el esquema hasta que A4 migre sus fixtures (a3.md)
+        ['servicio', 'cliente_nombre', 'empresa_id', 'regla_cumplimiento', 'facturas'],
     ),
 )
 
@@ -1168,7 +1207,8 @@ export const SimulacionPromesa = definirEsquema(
         cliente_id: id,
         canal: enumerado(['portal', 'ia', 'operador', 'supervisor']),
         vence_en: instante,
-        monto: Dinero,
+        monto: { ...Dinero, description: 'Total vencido que cubriría la promesa (lo calcula Argos)' },
+        facturas: { ...lista(FacturaCubierta), description: 'Facturas vencidas que cubriría, la más antigua primero' },
         evaluada_en: instante,
         resultado: {
             ...enumerado(['aprobada', 'rechazada', 'pendiente_aprobacion']),
@@ -1216,6 +1256,8 @@ export const SimulacionPromesa = definirEsquema(
             abono_pagado: Dinero,
             max_por_periodo: entero,
             en_periodo: entero,
+            monto_promesa: { ...Dinero, description: 'Total vencido que cubriría una promesa creada ahora' },
+            facturas: { ...lista(FacturaCubierta), description: 'Facturas vencidas que cubriría' },
         }),
         suspension_manual: {
             ...booleano,

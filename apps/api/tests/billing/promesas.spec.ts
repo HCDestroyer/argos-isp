@@ -26,7 +26,6 @@ const prometer = (servicioId: number, extra: Partial<EntradaCrearPromesa> = {}) 
         {
             servicio_id: servicioId,
             vence_en: gt('2026-10-12T18:00'),
-            monto: '300.00',
             canal: 'operador',
             ahora: gt('2026-10-08T10:00'),
             ...extra,
@@ -173,8 +172,6 @@ test.group('billing · promesas: crear y evaluar', () => {
             }
             throw new Error('se esperaba un error de validación')
         }
-        assert.containSubset(await errorDe({ monto: '300.01' }), [{ field: 'monto', rule: 'monto_maximo' }])
-        assert.containSubset(await errorDe({ monto: '0' }), [{ field: 'monto', rule: 'monto' }])
         assert.containSubset(await errorDe({ vence_en: gt('2026-10-08T09:00') }), [
             { field: 'vence_en', rule: 'futuro' },
         ])
@@ -199,7 +196,7 @@ test.group('billing · promesas: crear y evaluar', () => {
 })
 
 test.group('billing · promesas: cumplir e incumplir', () => {
-    test('cumplida por pago.registrado (idempotente); parcial: vuelve a limitar por la vencida que queda', async ({
+    test('cumplida por pago.registrado (idempotente) solo cuando todas sus facturas quedan pagadas', async ({
         assert,
     }) => {
         const { servicioId, clienteId } = await servicioCortado({
@@ -209,12 +206,13 @@ test.group('billing · promesas: cumplir e incumplir', () => {
                 ),
             },
         })
-        const promesa = await prometer(servicioId, { monto: '150.00' })
+        const promesa = await prometer(servicioId)
+        assert.equal(promesa.monto, '300.00')
         assert.equal(await estadoServicio(servicioId), 'activo')
 
-        // abono menor que lo prometido: sigue activa
+        // abono menor que lo vencido: sigue activa
         await new RegistrarPago().execute(
-            { cliente_id: clienteId, metodo: 'caja', monto: '100.00' },
+            { cliente_id: clienteId, metodo: 'caja', monto: '150.00' },
             contextoPrueba(),
         )
         await pagoRegistrado(clienteId)
@@ -222,27 +220,29 @@ test.group('billing · promesas: cumplir e incumplir', () => {
         assert.equal(sigue.estado, 'activa')
 
         await new RegistrarPago().execute(
-            { cliente_id: clienteId, metodo: 'caja', monto: '50.00' },
+            { cliente_id: clienteId, metodo: 'caja', monto: '150.00' },
             contextoPrueba(),
         )
         await pagoRegistrado(clienteId)
         await pagoRegistrado(clienteId)
         const cumplida = await db.from('billing.promesas').where('id', promesa.id).firstOrFail()
         assert.equal(cumplida.estado, 'cumplida')
-        assert.containSubset(cumplida.resultado_evaluacion.cierre, { estado: 'cumplida', pagado: '150.00' })
+        assert.containSubset(cumplida.resultado_evaluacion.cierre, {
+            estado: 'cumplida',
+            pagado: '300.00',
+            saldo_cubierto: '0.00',
+        })
         assert.lengthOf(await eventosDe('promesa.cumplida', 'promesa_id', promesa.id), 1)
-        // queda octubre vencida → limitado (se limita con 1)
-        assert.equal(await estadoServicio(servicioId), 'limitado')
+        assert.equal(await estadoServicio(servicioId), 'activo')
         await afirmarLibroCuadrado(assert)
 
-        // máximo 1 por periodo: la siguiente se rechaza aunque el historial sea bueno
+        // sin nada vencido no hay promesa que hacer
         const otra = await prometer(servicioId, {
-            monto: '150.00',
             ahora: gt('2026-10-09T10:00'),
             vence_en: gt('2026-10-11T10:00'),
         })
-        assert.containSubset(evaluacion(otra), { regla: 'max_por_periodo' })
-        assert.containSubset(evaluacion(otra).reglas.at(-1), { valor: 1, limite: 1 })
+        assert.containSubset(evaluacion(otra), { regla: 'sin_deuda' })
+        assert.equal(otra.monto, '0.00')
     })
 
     test('incumplida por el cron: promesa.incumplida, vuelve a cortar y bloquea nuevas promesas', async ({
@@ -454,6 +454,7 @@ test.group('billing · promesas: evaluarReglas', () => {
         ahora: gt('2026-10-08T10:00'),
         vence_en: gt('2026-10-10T10:00'),
         reglas: normalizarReglasPromesa({}),
+        cobertura: { monto: dec('300'), facturas: [] },
         deuda: {
             pendiente: dec('300'),
             vencida: dec('300'),
@@ -509,7 +510,12 @@ test.group('billing · promesas: evaluarReglas', () => {
         assert.equal(evaluarReglas(base({ canal: 'supervisor', en_periodo: 2 })).resultado, 'aprobada')
         assert.equal(evaluarReglas(base({ reglas: { ...reglas, habilitadas: false } })).regla, 'habilitadas')
         assert.equal(
-            evaluarReglas(base({ deuda: { ...base().deuda, pendiente: dec('0'), vencida: dec('0') } })).regla,
+            evaluarReglas(
+                base({
+                    deuda: { ...base().deuda, pendiente: dec('0'), vencida: dec('0') },
+                    cobertura: { monto: dec('0'), facturas: [] },
+                }),
+            ).regla,
             'sin_deuda',
         )
     })

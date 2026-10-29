@@ -10,6 +10,7 @@ import { ZONA_NEGOCIO, hoyGuatemala } from '#ledger/fechas'
 import type { ServicioFacturable } from '#billing/configuracion'
 import type { ConfiguracionFacturacion } from '#billing/excepciones'
 import { diasEntre, periodosHasta } from '#billing/periodos'
+import { ESTADOS_PENDIENTES } from '#billing/facturas'
 import type { CanalPromesa, ReglasPromesa } from '#billing/reglas_promesa'
 
 /**
@@ -26,6 +27,35 @@ export const ESTADOS_PROMESA = [
     'rechazada',
 ] as const
 export type EstadoPromesa = (typeof ESTADOS_PROMESA)[number]
+
+/**
+ * Cómo se cumple una promesa (decisión del PM, 29 oct: una promesa cubre todo lo vencido):
+ *
+ * - `facturas`: las creadas por `crearPromesaPago` desde el cambio. Argos calcula el monto (el
+ *   total vencido del servicio al crearla, mora incluida) y guarda las facturas que cubre en
+ *   `billing.promesas_facturas`. Se cumple solo cuando **todas** esas facturas quedan saldadas;
+ *   una factura que vence después no entra en la promesa.
+ * - `monto` (legado): las que estaban abiertas al migrar y las importadas. Se cumple cuando lo
+ *   pagado a las facturas del servicio desde la promesa llega a su `monto`, o no queda deuda vencida.
+ */
+export const REGLAS_CUMPLIMIENTO = ['monto', 'facturas'] as const
+export type ReglaCumplimiento = (typeof REGLAS_CUMPLIMIENTO)[number]
+
+/** Una factura vencida que cubre (o cubriría) la promesa, con su saldo al crearla. */
+export interface FacturaCubierta {
+    factura_id: number
+    tipo: string
+    periodo: string
+    vence_en: string
+    /** saldo de la factura al crear la promesa (string decimal) */
+    monto: string
+}
+
+/** Lo que cubriría una promesa creada ahora: las facturas vencidas con saldo y su total. */
+export interface Cobertura {
+    monto: Dec
+    facturas: FacturaCubierta[]
+}
 
 /** Estados que ocupan el cupo del periodo (las rechazadas y canceladas no cuentan). */
 const ESTADOS_EN_CUPO: readonly EstadoPromesa[] = ['activa', 'cumplida', 'incumplida', 'pendiente_aprobacion']
@@ -94,6 +124,8 @@ export interface DatosEvaluacion {
     reglas: ReglasPromesa
     /** deuda del servicio: pendiente total, vencida y lo ya pagado de las pendientes */
     deuda: { pendiente: Dec; vencida: Dec; total_pendientes: Dec; pagado_pendientes: Dec; vencidas: number }
+    /** lo que cubriría la promesa: las facturas vencidas con saldo (su total = `deuda.vencida`) */
+    cobertura: Cobertura
     /** inicio del servicio (YYYY-MM-DD) */
     inicio: string
     /** inicio del periodo actual y de la siguiente facturación (YYYY-MM-DD) */
@@ -214,17 +246,18 @@ export function evaluarReglas(
         return fin('rechazada', 'canal_permitido', evaluadas.at(-1)!.detalle)
     }
 
-    const conDeuda = datos.deuda.pendiente.gt(0)
+    // la promesa cubre lo vencido: sin facturas vencidas no hay nada que prometer (ni corte que evitar)
+    const conDeuda = datos.cobertura.monto.gt(0)
     if (
         revisar({
             regla: 'sin_deuda',
             ok: conDeuda,
-            valor: aTexto(datos.deuda.pendiente),
+            valor: aTexto(datos.cobertura.monto),
             limite: null,
             origen: 'general',
             detalle: conDeuda
-                ? `El servicio debe Q${aTexto(datos.deuda.pendiente)}`
-                : 'El servicio no tiene facturas pendientes: no hace falta promesa',
+                ? `La promesa cubre Q${aTexto(datos.cobertura.monto)} vencidos en ${PLURAL(datos.cobertura.facturas.length, 'factura', 'facturas')}`
+                : 'El servicio no tiene facturas vencidas: no hace falta promesa',
         })
     ) {
         return fin('rechazada', 'sin_deuda', evaluadas.at(-1)!.detalle)
@@ -473,6 +506,42 @@ export async function deudaDeServicio(cliente: QueryClientContract, servicioId: 
     return { pendiente, vencida, total_pendientes: total, pagado_pendientes: pagado, vencidas }
 }
 
+/**
+ * Facturas vencidas con saldo del servicio, la más antigua primero (mora y cargos incluidos):
+ * lo que cubre una promesa creada ahora.
+ */
+export async function coberturaDeServicio(
+    cliente: QueryClientContract,
+    servicioId: number,
+): Promise<Cobertura> {
+    const filas = (await cliente
+        .from('billing.facturas')
+        .where('servicio_id', servicioId)
+        .where('estado', 'vencida')
+        .whereRaw('total > pagado')
+        .orderBy('vence_en', 'asc')
+        .orderBy('id', 'asc')
+        .select(
+            'id',
+            'tipo',
+            cliente.raw(`to_char(periodo, 'YYYY-MM-DD') as periodo`),
+            cliente.raw(`to_char(vence_en, 'YYYY-MM-DD') as vence_en`),
+            cliente.raw('(total - pagado)::text as saldo'),
+        )) as Array<{ id: number; tipo: string; periodo: string; vence_en: string; saldo: string }>
+    let monto = CERO
+    const facturas = filas.map((f) => {
+        monto = monto.plus(f.saldo)
+        return {
+            factura_id: Number(f.id),
+            tipo: f.tipo,
+            periodo: f.periodo,
+            vence_en: f.vence_en,
+            monto: aTexto(f.saldo),
+        }
+    })
+    return { monto, facturas }
+}
+
 export async function datosEvaluacion(
     cliente: QueryClientContract,
     servicio: ServicioFacturable,
@@ -518,6 +587,7 @@ export async function datosEvaluacion(
         vence_en: entrada.vence_en,
         reglas: config.reglas_promesa,
         deuda: await deudaDeServicio(cliente, servicio.id),
+        cobertura: await coberturaDeServicio(cliente, servicio.id),
         inicio: servicio.inicio,
         periodo_actual: actual?.periodo ?? null,
         siguiente_facturacion: siguiente,
@@ -533,29 +603,73 @@ export async function datosEvaluacion(
 |--------------------------------------------------------------------------
 */
 
+export interface AvancePromesa {
+    /** lo pagado (pagos vigentes) desde la promesa: a las facturas del servicio o, con la regla `facturas`, a las cubiertas */
+    pagado: Dec
+    /** deuda vencida del servicio al revisar */
+    vencida: Dec
+    /** regla `facturas`: saldo que les queda a las facturas cubiertas (null con la regla `monto`) */
+    saldo_cubierto: Dec | null
+    cumplida: boolean
+}
+
 /**
- * Lo pagado a las facturas del servicio desde que se creó la promesa (pagos vigentes). La
- * promesa se cumple si llega a su monto o si el servicio ya no tiene deuda vencida.
+ * Avance de una promesa según su `regla_cumplimiento`:
+ *
+ * - `facturas`: se cumple cuando ninguna de sus facturas cubiertas sigue pendiente (pagada, o
+ *   acreditada/anulada/castigada: ya no se cobra). Una factura vencida después de crearla no cuenta.
+ * - `monto` (legado): se cumple si lo pagado a las facturas del servicio desde la promesa llega a
+ *   su monto, o si el servicio ya no tiene deuda vencida.
  */
 export async function avanceDePromesa(
     cliente: QueryClientContract,
-    promesa: { servicio_id: number; created_at: Date; monto: string },
-): Promise<{ pagado: Dec; vencida: Dec; cumplida: boolean }> {
-    const fila = (await cliente
+    promesa: { id: number; servicio_id: number; created_at: Date; monto: string; regla_cumplimiento: ReglaCumplimiento },
+): Promise<AvancePromesa> {
+    const pagos = cliente
         .from('billing.pagos_aplicaciones as a')
         .join('billing.pagos as p', 'p.id', 'a.pago_id')
         .join('billing.facturas as f', 'f.id', 'a.factura_id')
-        .where('f.servicio_id', promesa.servicio_id)
         .where('p.estado', 'registrado')
         .where('a.created_at', '>=', promesa.created_at)
         // un pago histórico importado después lleva la fecha del origen: si fue antes de la
         // promesa (importada con su `creada_en`), no la cumple aunque su aplicación sea de hoy
         .where((q) => q.where('p.historico', false).orWhere('p.created_at', '>=', promesa.created_at))
         .select(cliente.raw('coalesce(sum(a.monto), 0)::text as pagado'))
-        .first()) as { pagado: string }
-    const pagado = dec(fila.pagado)
     const { vencida } = await deudaDeServicio(cliente, promesa.servicio_id)
-    return { pagado, vencida, cumplida: pagado.gte(dec(promesa.monto)) || vencida.lte(0) }
+
+    if (promesa.regla_cumplimiento === 'facturas') {
+        const fila = (await pagos
+            .whereIn(
+                'a.factura_id',
+                cliente.from('billing.promesas_facturas').where('promesa_id', promesa.id).select('factura_id'),
+            )
+            .first()) as { pagado: string }
+        const saldo = (await cliente
+            .from('billing.promesas_facturas as pf')
+            .join('billing.facturas as f', 'f.id', 'pf.factura_id')
+            .where('pf.promesa_id', promesa.id)
+            .whereIn('f.estado', [...ESTADOS_PENDIENTES])
+            .select(
+                cliente.raw('count(*)::int as pendientes'),
+                cliente.raw('coalesce(sum(f.total - f.pagado), 0)::text as saldo'),
+            )
+            .first()) as { pendientes: number; saldo: string }
+        return {
+            pagado: dec(fila.pagado),
+            vencida,
+            saldo_cubierto: dec(saldo.saldo),
+            cumplida: Number(saldo.pendientes) === 0,
+        }
+    }
+
+    const fila = (await pagos.where('f.servicio_id', promesa.servicio_id).first()) as { pagado: string }
+    const pagado = dec(fila.pagado)
+    return {
+        pagado,
+        vencida,
+        saldo_cubierto: null,
+        cumplida: pagado.gte(dec(promesa.monto)) || vencida.lte(0),
+    }
 }
 
 /*
@@ -572,7 +686,12 @@ export interface PromesaVista {
     cliente_id: number
     cliente_nombre: string
     vence_en: Date
+    /** con la regla `facturas`: lo calcula Argos (total vencido al crearla); nadie lo escribe */
     monto: string
+    /** `facturas` (nuevas) o `monto` (legado: abiertas al migrar e importadas) */
+    regla_cumplimiento: ReglaCumplimiento
+    /** facturas que cubre (vacío con la regla `monto`) */
+    facturas: FacturaPromesa[]
     estado: EstadoPromesa
     canal: CanalPromesa
     aprobada_por: number | null
@@ -580,6 +699,13 @@ export interface PromesaVista {
     version: number
     created_at: Date
     updated_at: Date
+}
+
+/** Factura cubierta por una promesa guardada, con su saldo y estado actuales. */
+export interface FacturaPromesa extends FacturaCubierta {
+    /** saldo hoy (0.00 si ya no está pendiente) */
+    saldo: string
+    estado: string
 }
 
 const COLUMNAS = [
@@ -590,6 +716,21 @@ const COLUMNAS = [
     db.raw('(select cl.nombre from core.clientes cl where cl.id = p.cliente_id) as cliente_nombre'),
     'p.vence_en',
     'p.monto',
+    'p.regla_cumplimiento',
+    db.raw(`coalesce((
+        select json_agg(json_build_object(
+            'factura_id', f.id,
+            'tipo', f.tipo,
+            'periodo', to_char(f.periodo, 'YYYY-MM-DD'),
+            'vence_en', to_char(f.vence_en, 'YYYY-MM-DD'),
+            'monto', pf.monto::text,
+            'saldo', (case when f.estado in ('emitida', 'parcial', 'vencida') then f.total - f.pagado else 0 end)::numeric(14, 2)::text,
+            'estado', f.estado
+        ) order by f.vence_en, f.id)
+        from billing.promesas_facturas pf
+        join billing.facturas f on f.id = pf.factura_id
+        where pf.promesa_id = p.id
+    ), '[]'::json) as facturas`),
     'p.estado',
     'p.canal',
     'p.aprobada_por',

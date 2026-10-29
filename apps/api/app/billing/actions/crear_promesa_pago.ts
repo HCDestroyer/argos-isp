@@ -2,7 +2,7 @@ import { exigirAccesoEmpresa } from '#shared/empresa_activa'
 import { DomainAction, type Transaccion } from '#shared/domain_action'
 import { usuarioDelActor } from '#shared/contexto'
 import { Conflicto, ReglaNegocio, ValidacionFallida } from '#shared/errores'
-import { aTexto, dec, tieneCentavosExactos } from '#ledger/dinero'
+import { aTexto } from '#ledger/dinero'
 import { configuracionDeServicio, leerServicio } from '#billing/configuracion'
 import { bloquearCliente } from '#billing/cobros'
 import {
@@ -31,17 +31,27 @@ import type { EstadoServicio } from '#shared/eventos'
  * | `pendiente_aprobacion` | `pendiente_aprobacion` | espera `POST /promesas/:id/aprobar` |
  * | `rechazada` | `rechazada` | `resultado_evaluacion.regla` dice la regla exacta que falló |
  *
+ * **Una promesa cubre todo lo vencido** (decisión del PM, 29 oct): el monto no lo escribe nadie.
+ * Argos lo calcula como el total vencido del servicio al crearla (las facturas vencidas con saldo,
+ * mora incluida) y guarda cada factura con su saldo en `billing.promesas_facturas`. La promesa
+ * queda con `regla_cumplimiento = 'facturas'`: se cumple solo cuando todas esas facturas quedan
+ * saldadas. Sin nada vencido se rechaza por `sin_deuda`. El abono inicial (`abono_inicial_pct`)
+ * se sigue exigiendo antes de prometer. `monto` en la entrada es obsoleto y se ignora.
+ *
  * `reglas_snapshot` guarda las reglas con que se evaluó. Una suspensión manual se respeta: la
  * promesa queda activa pero el servicio sigue suspendido hasta que un operador lo reactive.
  * Errores (no se guarda nada): servicio retirado o sin plantilla (422), ya tiene una promesa
- * activa o pendiente (409), `vence_en` en el pasado o monto mayor que la deuda (422).
+ * activa o pendiente (409), `vence_en` en el pasado (422). No genera asientos.
  */
 
 export interface EntradaCrearPromesa {
     servicio_id: number
     vence_en: Date
-    /** string decimal "150.00" */
-    monto: string
+    /**
+     * @deprecated Obsoleto desde el 29 oct: se ignora. El monto es el total vencido del servicio,
+     * calculado por Argos al crear la promesa.
+     */
+    monto?: string | null
     canal: CanalPromesa
     /** instante de referencia (pruebas y simulador); por defecto ahora */
     ahora?: Date
@@ -80,16 +90,6 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
 
     protected async handle(input: EntradaCrearPromesa, t: Transaccion): Promise<ResultadoCrearPromesa> {
         const ahora = input.ahora ?? new Date()
-        const monto = dec(input.monto)
-        if (monto.lte(0) || !tieneCentavosExactos(monto)) {
-            throw new ValidacionFallida([
-                {
-                    field: 'monto',
-                    message: 'El monto debe ser mayor que 0 con hasta 2 decimales',
-                    rule: 'monto',
-                },
-            ])
-        }
         if (!(input.vence_en instanceof Date) || Number.isNaN(input.vence_en.getTime())) {
             throw new ValidacionFallida([{ field: 'vence_en', message: 'Fecha inválida', rule: 'fecha' }])
         }
@@ -136,15 +136,8 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
             vence_en: input.vence_en,
             ahora,
         })
-        if (datos.deuda.pendiente.gt(0) && monto.gt(datos.deuda.pendiente)) {
-            throw new ValidacionFallida([
-                {
-                    field: 'monto',
-                    message: `El monto supera la deuda pendiente del servicio (Q${aTexto(datos.deuda.pendiente)})`,
-                    rule: 'monto_maximo',
-                },
-            ])
-        }
+        // el monto es lo vencido al crearla (mora incluida): nadie lo escribe
+        const monto = datos.cobertura.monto
         const evaluacion = evaluarReglas(datos)
         const estado = ESTADO_POR_RESULTADO[evaluacion.resultado]
 
@@ -158,6 +151,7 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
                 vence_en: input.vence_en,
                 monto: aTexto(monto),
                 estado,
+                regla_cumplimiento: 'facturas',
                 canal: input.canal,
                 aprobada_por:
                     estado === 'activa' && input.canal === 'supervisor' ? usuarioDelActor(t.ctx.actor) : null,
@@ -168,6 +162,20 @@ export default class CrearPromesaPago extends DomainAction<EntradaCrearPromesa, 
             .returning('id')) as Array<{ id: number }>
         const promesaId = fila!.id
         t.fijarEntidad('promesa', promesaId)
+        if (datos.cobertura.facturas.length > 0) {
+            await t.trx
+                .insertQuery()
+                .table('billing.promesas_facturas')
+                .multiInsert(
+                    datos.cobertura.facturas.map((f) => ({
+                        promesa_id: promesaId,
+                        factura_id: f.factura_id,
+                        empresa_id: servicio.empresa_id,
+                        monto: f.monto,
+                        ...(input.ahora ? { created_at: ahora } : {}),
+                    })),
+                )
+        }
 
         if (estado !== 'activa') return verPromesa(promesaId, t.trx)
 

@@ -634,13 +634,14 @@ const promesas: Ruta[] = [
         cuerpo: v.crearPromesaValidator,
         idempotente: true,
         descripcion:
-            'Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.',
+            'Una promesa cubre todo lo vencido: Argos calcula `monto` (total vencido del servicio, mora incluida) y guarda las facturas que cubre en `facturas[]` (`regla_cumplimiento = facturas`: se cumple cuando todas quedan saldadas; una factura que vence después no entra). `monto` en el cuerpo es obsoleto y se ignora. Siempre guarda la promesa con su evaluación: `estado` activa (aprobada), rechazada (ver `resultado_evaluacion.regla`; `sin_deuda` si no hay nada vencido) o pendiente_aprobacion. Canal por defecto: `portal`/`ia` según `X-Canal`, si no `operador`; `supervisor` exige el permiso promesas.aprobar. 409 si el servicio ya tiene una promesa activa o pendiente.',
         respuesta: { status: 201, descripcion: 'Promesa evaluada', esquema: Promesa },
         handler: async (ctx, { cuerpo }) => {
             await exigirServicio(ctx, cuerpo.servicio_id)
             const canal = await canalPromesa(ctx, cuerpo.canal)
             return new CrearPromesaPago().execute(
-                { servicio_id: cuerpo.servicio_id, vence_en: cuerpo.vence_en, monto: cuerpo.monto, canal },
+                // `monto` es obsoleto: se ignora (la promesa cubre todo lo vencido)
+                { servicio_id: cuerpo.servicio_id, vence_en: cuerpo.vence_en, canal },
                 ctx.contextoAccion(),
             )
         },
@@ -665,7 +666,6 @@ const promesas: Ruta[] = [
                     cuerpo.canal ??
                     (canalPeticion === 'portal' || canalPeticion === 'ia' ? canalPeticion : 'operador'),
                 vence_en: cuerpo.vence_en,
-                monto: cuerpo.monto,
                 ahora: cuerpo.evaluar_en,
                 reglas_promesa: cuerpo.reglas_promesa,
             })
