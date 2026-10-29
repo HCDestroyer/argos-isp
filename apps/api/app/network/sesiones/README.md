@@ -20,6 +20,16 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 - Un job inválido (contrato roto) falla sin reintentos; un error de Postgres se reintenta con el backoff que fija `aaa` (8 intentos desde 1 s).
 - Cada paquete pasa por una `DomainAction`. Se audita en `audit.acciones` todo salvo el Interim-Update que solo actualiza contadores (`auditarExito()` en `ActualizarSesion`, excepción de la regla 9); si el Interim abre la sesión, o falla, sí se audita.
 
+## Servicio eliminado (`contratos/eliminar.md`)
+
+`node ace sesiones:worker` consume además el grupo **`sesiones`** del bus (`consumidor.ts`; `--sin-eventos` lo apaga en una réplica). Con `servicio.eliminado`:
+
+- Busca sesiones abiertas del `user_ppp` que tenía el servicio y sin `servicio_id` (con la FK, una sesión con el `servicio_id` habría impedido el borrado; solo puede quedar una que el accounting abrió después). El `user_ppp` sale del payload si A1 lo agrega o, si no, del `antes` de `audit.cambios` (`user_ppp` → null) que deja `EliminarServicio`.
+- Lo normal es que no haya ninguna (sin historial = nunca conectó): no se ejecuta nada y no queda fila de auditoría.
+- Si hay, `DesconectarServicioEliminado` (`sesiones.desconectar_eliminado`, sistema, sin permiso de usuario) emite `sesion.desconexion_solicitada` por cada una con `motivo: servicio_eliminado` y el `servicio_id` eliminado; `coa` manda el Disconnect y lo deja en `audit.red`. Se audita en `audit.acciones` (entidad `servicio`).
+- Idempotente en efecto: repetido con la sesión todavía abierta vuelve a pedir el Disconnect (el NAS responde NAK si ya no existe); con la sesión cerrada no hace nada.
+- La autorización en caché (Redis y último perfil conocido de cada nodo) la invalida `services/aaa` con el mismo evento (`services/aaa/README.md`, «Bajas definitivas»).
+
 ## Sesiones colgadas (semana 3)
 
 Cron `cerrar_colgadas` en la cola `sesiones-cron`, dentro de `node ace sesiones:worker` (`colgadas.ts`, acción `CerrarSesionesColgadas`, permiso/nombre `sesiones.cerrar_colgadas`). `--sin-cron` lo apaga en una réplica.
@@ -117,6 +127,7 @@ Uso en la migración del piloto: `services/aaa/RUNBOOK.md`.
 
 ## Pruebas
 
+- `tests/network/sesiones_eliminado.spec.ts`: `servicio.eliminado` sin sesión (nada, sin auditoría), con una sesión abierta después del borrado (Disconnect con su payload, auditoría, repetición mientras siga abierta y nada tras el Stop), `user_ppp` del payload y payload sin id.
 - `tests/network/sesiones_resumen.spec.ts`: `desde`/`hasta` de `GET /sesiones` y `GET /routers/:id/resumen-sesiones` (conteos, retirados y pendientes de instalación fuera, 404/422/403, alcance).
 - `tests/network/caidas_repetidas.spec.ts`: la quinta caída en 120 min emite el aviso con su fila y el payload completo; una vez por ventana y otra pasada la ventana; causas ignoradas y caídas espaciadas no cuentan.
 - `tests/network/sesiones_colgadas.spec.ts`: cierre con `sin_interim`, evento con `motivo`, auditoría, idempotencia, NAS silencioso, lotes, lock, reapertura por Interim, corrección por Stop y programación del job.

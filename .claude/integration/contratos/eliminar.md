@@ -86,8 +86,8 @@ El estado no importa: un servicio `activo`, `pendiente_instalacion` o `retirado`
 
 | Evento | Emite | Payload | Lo consume |
 | --- | --- | --- | --- |
-| `servicio.eliminado` | A1 (`EliminarServicio`) | `servicio_id`, `empresa_id`, `cliente_id`, `router_id` (el router donde estaba) | A2 (`routeros`): limpiar en el router lo que haya creado (hoy ya lo hace con el `asignacion.cambiada` que acompaña). A6: webhook a Iris (quitar la instantánea del servicio). `aaa-cache` lo recibe como `servicio.*` y no escribe nada (el servicio ya no existe) |
-| `router.eliminado` | A1 (`EliminarRouter`) | `router_id`, `empresa_id` (`empresa_sugerida_id` del router, o `null`) | A2: regenerar los clientes de FreeRADIUS. A6: el agente WireGuard borra el peer del router |
+| `servicio.eliminado` | A1 (`EliminarServicio`) | `servicio_id`, `empresa_id`, `cliente_id`, `router_id` (el router donde estaba) | A2 (`routeros`): limpiar en el router lo que haya creado (hoy ya lo hace con el `asignacion.cambiada` que acompaña). A2 (`aaa`, §7) y A2 (`sesiones`, §7). A6: webhook a Iris (quitar la instantánea del servicio). `aaa-cache` lo recibe como `servicio.*` y no escribe nada (el servicio ya no existe) |
+| `router.eliminado` | A1 (`EliminarRouter`) | `router_id`, `empresa_id` (`empresa_sugerida_id` del router, o `null`) | A2 (`aaa`, grupo `radius-clientes:<nodo>`): regenerar los clientes de FreeRADIUS (sale `router-<id>.conf`) y recargar; lápida en las claves `aaa:user:*` con ese `router_id`. A6: el agente WireGuard borra el peer del router |
 
 Los consumidores son idempotentes y no deben buscar la fila: ya no existe. Un evento atrasado de ese servicio o router (`servicio.config_cambiada`, `asignacion.cambiada`) puede llegar después de `*.eliminado`; tratarlo como «no existe».
 
@@ -95,3 +95,16 @@ Los consumidores son idempotentes y no deben buscar la fila: ya no existe. Un ev
 
 - `GET /api/v1/servicios?estado=retirado` (ya existía).
 - `GET /api/v1/routers?activo=false` (ya existía).
+
+## 7. Lo que hace A2 con los eventos
+
+### `aaa` (grupo `radius-clientes:<nodo>`, uno por nodo; `services/aaa/src/bajas.ts`)
+
+- `router.eliminado`: regenera `clients.d` desde `network.routers` (el router ya no está: su archivo se borra) y recarga FreeRADIUS con `recargar.sh`, sin reiniciar el contenedor. Toda clave `aaa:user:*` con ese `router_id` que no sea lápida pasa a lápida y se olvida del último perfil conocido del nodo.
+- `servicio.eliminado`: si `aaa:user:<user_ppp>` sigue con el registro completo de ese `servicio_id` (la lápida de A1 no llegó), lo reemplaza por la lápida `{eliminado, user_ppp, servicio_id, version + 1}`; y olvida el servicio del último perfil conocido (modo degradado). Invalidación por evento, sin TTL.
+- El reemplazo es atómico (solo si la clave sigue con el valor leído) y nunca pisa una lápida: la de A1 gana. Idempotente; un payload sin id se confirma sin efecto.
+
+### API (grupo `sesiones`, `node ace sesiones:worker`)
+
+- `servicio.eliminado`: si quedó una sesión abierta del `user_ppp` del servicio (solo puede ser una sin `servicio_id`, abierta por accounting después del borrado), `sesiones.desconectar_eliminado` emite `sesion.desconexion_solicitada` (`motivo: servicio_eliminado`) y `coa` manda el Disconnect. Sin sesión, no hace nada.
+- El `user_ppp` se toma de `payload.user_ppp` si viene; si no, del `antes` de `audit.cambios` del servicio (`campo = user_ppp`, `despues = null`). Pedido a A1 (`a2.md`): agregar `user_ppp` (o null si no es PPPoE) al payload de `servicio.eliminado`, sin credenciales.
