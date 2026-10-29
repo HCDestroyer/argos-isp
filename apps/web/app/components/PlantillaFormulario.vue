@@ -234,6 +234,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlantilla>) {
                         <UFormField
                             label="Hora del corte"
                             name="hora_corte"
+                            required
                             help="Hora de Guatemala, 24 h."
                         >
                             <UInput
@@ -259,6 +260,7 @@ async function enviar(evento: FormSubmitEvent<SalidaPlantilla>) {
                         <UFormField
                             label="Facturas vencidas para suspender"
                             name="facturas_para_cortar"
+                            required
                         >
                             <UInputNumber
                                 v-model="estado.facturas_para_cortar"

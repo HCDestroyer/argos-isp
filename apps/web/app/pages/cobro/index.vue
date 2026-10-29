@@ -4,7 +4,7 @@ import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
 import Decimal from 'decimal.js'
 
 /**
- * Cobro rápido (pedido del PM): una sola pantalla para buscar al cliente, ver lo que debe,
+ * Cobro rápido: una sola pantalla para buscar al cliente, ver lo que debe,
  * registrar el pago y entregar el recibo. Enter registra; Esc limpia.
  */
 definePageMeta({ permiso: 'pagos.registrar' })
@@ -85,7 +85,7 @@ const cajasActivas = computed(() => cajas.value.filter(c => c.activa))
 const itemsCaja = computed<SelectItem[]>(() => [
     { label: 'Caja principal (automática)', value: CAJA_PRINCIPAL },
     ...cajasActivas.value.map(c => ({
-        label: c.turno_abierto_id === null ? `${c.nombre} · sin turno abierto` : c.nombre,
+        label: c.turno_abierto_id === null ? `${c.nombre} · cerrada` : c.nombre,
         value: String(c.id),
     })),
 ])
@@ -95,6 +95,62 @@ const cajaElegida = computed({
         estado.caja_id = valor === CAJA_PRINCIPAL ? null : Number(valor)
     },
 })
+
+/*
+ * Caja que recibe el efectivo: la elegida o, sin elegir, la del turno abierto del cajero (si no
+ * tiene, la principal). Sin caja abierta el efectivo no entra a ningún turno ni a ningún cierre:
+ * se avisa antes de cobrar y «Abrir caja» la abre en un modal sin salir del cobro.
+ */
+const cajaDestino = computed<Caja | null>(() => (estado.caja_id === null
+    ? (cajasActivas.value.find(c => c.turno_abierto_id !== null && (c.cajero_id === usuario.value?.id || c.turno_abierto_por === usuario.value?.id)) ?? null)
+    : (cajasActivas.value.find(c => c.id === estado.caja_id) ?? null)))
+const cajasLeidas = ref(false)
+const avisoSinCaja = computed<{ titulo: string, detalle: string, opciones: Caja[] } | null>(() => {
+    if (estado.metodo !== 'caja' || !puede('cajas.ver') || !cajasLeidas.value || problemaCajas.value || pago.value) {
+        return null
+    }
+    if (cajaDestino.value?.turno_abierto_id) {
+        return null
+    }
+    if (cajaDestino.value) {
+        return {
+            titulo: `${cajaDestino.value.nombre} está cerrada`,
+            detalle: 'Ábrela para que este cobro entre a su turno y salga en el cierre de caja.',
+            opciones: [cajaDestino.value],
+        }
+    }
+    const cerradas = cajasActivas.value.filter(c => c.turno_abierto_id === null && (c.cajero_id === usuario.value?.id || c.cajero_id === null))
+    return {
+        titulo: 'No tienes una caja abierta',
+        detalle: 'Sin caja abierta, el efectivo entra a la caja principal sin turno y no aparece en ningún cierre. Abre tu caja antes de cobrar.',
+        opciones: cerradas,
+    }
+})
+
+/** Modal «Abrir caja» desde el cobro: con la caja ya elegida o para elegir entre `opciones`. */
+const aperturaAbierta = ref(false)
+const aperturaOpciones = shallowRef<Caja[]>([])
+
+function abrirCaja(opciones: Caja[]) {
+    aperturaOpciones.value = opciones
+    aperturaAbierta.value = true
+}
+
+/** Cajas que se pueden abrir para la empresa de un 422 `caja_no_abierta`. */
+function cajasDeEmpresa(empresaId: number): Caja[] {
+    return cajasActivas.value.filter(c => c.empresa_id === empresaId && c.turno_abierto_id === null)
+}
+
+async function alAbrirCaja(turno: TurnoCaja) {
+    toast.add({ title: 'Caja abierta', description: `Fondo inicial ${formatearQuetzales(turno.fondo_inicial)}. Ya puedes registrar el cobro.`, icon: 'i-lucide-lock-open', color: 'success' })
+    await cargarCajas()
+    if (cajasActivas.value.some(c => c.id === turno.caja_id)) {
+        estado.caja_id = turno.caja_id
+    }
+    if (sinCaja.value) {
+        problemaPago.value = null
+    }
+}
 
 // Datos bancarios (depósito, transferencia, ACH, remesa): banco de origen y cuenta propia de destino.
 const bancos = shallowRef<Banco[]>([])
@@ -341,6 +397,7 @@ async function cargarCajas() {
     const resultado = await useCajas().listar()
     cajas.value = resultado.ok ? resultado.data : []
     problemaCajas.value = resultado.ok ? null : resultado.problema
+    cajasLeidas.value = true
     cajaPorDefecto()
 }
 
@@ -1147,6 +1204,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         />
                     </UFormField>
 
+                    <UAlert
+                        v-if="avisoSinCaja"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-lucide-lock"
+                        :title="avisoSinCaja.titulo"
+                        :description="puede('cajas.abrir') ? avisoSinCaja.detalle : `${avisoSinCaja.detalle} Pide a un supervisor que la abra.`"
+                        :actions="puede('cajas.abrir') && avisoSinCaja.opciones.length ? [{ label: 'Abrir caja', icon: 'i-lucide-lock-open', color: 'warning', variant: 'solid', onClick: () => abrirCaja(avisoSinCaja?.opciones ?? []) }] : []"
+                        data-prueba="aviso-sin-caja"
+                    />
+
                     <UFormField
                         v-if="estado.metodo === 'caja'"
                         label="Caja"
@@ -1322,8 +1390,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                         variant="subtle"
                         icon="i-lucide-lock"
                         :title="`No tienes caja abierta en ${sinCaja.nombre}`"
-                        description="Las facturas marcadas incluyen avisos de esa empresa y el efectivo va a su propia caja. Abre un turno en una caja de esa empresa y vuelve a registrar el cobro."
-                        :actions="puede('cajas.abrir') ? [{ label: 'Abrir caja', icon: 'i-lucide-lock-open', to: '/caja', color: 'warning', variant: 'solid' }] : []"
+                        description="Las facturas marcadas incluyen avisos de esa empresa y el efectivo va a su propia caja. Abre una caja de esa empresa y vuelve a registrar el cobro."
+                        :actions="puede('cajas.abrir') ? [{ label: 'Abrir caja', icon: 'i-lucide-lock-open', color: 'warning', variant: 'solid', onClick: () => abrirCaja(cajasDeEmpresa(sinCaja!.id)) }] : []"
                         data-prueba="caja-no-abierta"
                     />
                     <UAlert
@@ -1376,5 +1444,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', alTeclear))
                 </UForm>
             </UPageCard>
         </div>
+        <CajaAperturaModal
+            v-if="puede('cajas.abrir')"
+            v-model:open="aperturaAbierta"
+            :caja="aperturaOpciones.length === 1 ? aperturaOpciones[0] : null"
+            :opciones="aperturaOpciones"
+            @hecho="alAbrirCaja"
+        />
     </PanelPagina>
 </template>

@@ -23,7 +23,7 @@ const emit = defineEmits<{ guardado: [plantilla: PlantillaNotificacion] }>()
 /** Espejo de `editarPlantillaValidator` (A6): asunto ≤ 300 (vacío = sin asunto), cuerpo 1–4000. */
 const esquema = z.object({
     asunto: z.string().max(300, 'Máximo 300 caracteres'),
-    cuerpo: z.string().min(1, 'El cuerpo es obligatorio').max(4000, 'Máximo 4000 caracteres'),
+    cuerpo: z.string().min(1, 'Escribe el texto del aviso').max(4000, 'Máximo 4000 caracteres'),
     activa: z.boolean(),
 })
 type Entrada = z.input<typeof esquema>

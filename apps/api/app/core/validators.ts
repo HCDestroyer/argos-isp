@@ -495,7 +495,7 @@ export const activarInstalacionValidator = vine.compile(
             .optional()
             .meta({
                 description:
-                    'Referencia de planta de la instalación (pedido A9 de Iris): solo lectura, no se valida contra nada',
+                    'Referencia de planta de la instalación (la envía Iris): solo lectura, no se valida contra nada',
             }),
     }),
 )

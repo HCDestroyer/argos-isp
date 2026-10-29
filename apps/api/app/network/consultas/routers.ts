@@ -6,6 +6,8 @@ import { filtrarPorAlcance, type Alcance } from '#core/acl'
 import { filtrarPorEmpresa } from '#shared/empresa_activa'
 import type { ControlVelocidad } from '#network/velocidad'
 import { sqlContactoRouter } from '#network/contacto_router'
+import { sqlOcupacionRedV4, type Ocupacion } from '#network/ocupacion'
+import { sinCampos } from '#network/consultas/ipv6'
 
 /**
  * Lecturas de routers y redes IPv4. Las credenciales nunca salen: solo `tiene_api_password` y
@@ -53,9 +55,15 @@ export interface RouterVista {
 export interface RedIpv4Vista {
     id: number
     router_id: number
+    nombre: string | null
     cidr: string
     gateway: string | null
     tipo: 'estatico' | 'pool'
+    rango_inicio: string | null
+    rango_fin: string | null
+    dns_primario: string | null
+    dns_secundario: string | null
+    ocupacion: Ocupacion
     version: number
     created_at: string
     updated_at: string
@@ -138,31 +146,42 @@ export async function verRouter(
 }
 
 const COLUMNAS_RED = [
-    'id',
-    'router_id',
-    db.raw('cidr::text AS cidr'),
-    db.raw('host(gateway) AS gateway'),
-    'tipo',
-    'version',
-    'created_at',
-    'updated_at',
+    'r.id',
+    'r.router_id',
+    'r.nombre',
+    db.raw('r.cidr::text AS cidr'),
+    db.raw('host(r.gateway) AS gateway'),
+    'r.tipo',
+    db.raw('host(r.rango_inicio) AS rango_inicio'),
+    db.raw('host(r.rango_fin) AS rango_fin'),
+    db.raw('host(r.dns_primario) AS dns_primario'),
+    db.raw('host(r.dns_secundario) AS dns_secundario'),
+    db.raw(`${sqlOcupacionRedV4('r')} AS ocupacion`),
+    'r.version',
+    'r.created_at',
+    'r.updated_at',
 ]
 
 export async function listarRedesIpv4(routerId: number): Promise<RedIpv4Vista[]> {
     await verRouter(routerId)
     return (await db
-        .from('network.redes_ipv4')
-        .where('router_id', routerId)
-        .orderBy('cidr')
+        .from('network.redes_ipv4 as r')
+        .where('r.router_id', routerId)
+        .orderBy('r.cidr')
         .select(COLUMNAS_RED)) as RedIpv4Vista[]
 }
 
 export async function verRedIpv4(id: number, cliente: QueryClientContract = db.connection()) {
     const fila = (await cliente
-        .from('network.redes_ipv4')
-        .where('id', id)
+        .from('network.redes_ipv4 as r')
+        .where('r.id', id)
         .select(COLUMNAS_RED)
         .first()) as RedIpv4Vista | null
-    if (!fila) throw new NoEncontrado(`La red ${id} no existe`)
+    if (!fila) throw new NoEncontrado(`La red IPv4 ${id} no existe`)
     return fila
+}
+
+/** Campos de una red para `audit.cambios` (sin la ocupación, que es calculada). */
+export function redParaAuditoria(red: RedIpv4Vista) {
+    return sinCampos(red, ['ocupacion'])
 }

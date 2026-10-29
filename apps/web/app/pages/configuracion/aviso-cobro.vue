@@ -316,6 +316,7 @@ onBeforeUnmount(liberarVista)
 
                 <UFormField
                     name="html"
+                    required
                     label="HTML de la plantilla"
                     :help="`${estado.html.length.toLocaleString('es-GT')} / 100,000 caracteres`"
                 >
