@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0](https://github.com/HCDestroyer/argos-isp/compare/v1.1.0...v1.2.0) (2026-10-28)
+
+
+### Funcionalidades
+
+* **infra:** Argos detrás de Nginx Proxy Manager, admin-clave, desinstalar y arreglo de instalar.sh por pipe ([#173](https://github.com/HCDestroyer/argos-isp/issues/173)) ([9563fa8](https://github.com/HCDestroyer/argos-isp/commit/9563fa85772386731fed6fa1372dae1b708bc2e8))
+* **inventario:** origen de la orden de Iris (pedidos Iris A3/A4) ([#172](https://github.com/HCDestroyer/argos-isp/issues/172)) ([c89d2c4](https://github.com/HCDestroyer/argos-isp/commit/c89d2c4b12453ad3e48580bda22a2c42ebffff03))
+* servicio pendiente de instalación (pedidos Iris A1, A6 y A9) ([#175](https://github.com/HCDestroyer/argos-isp/issues/175)) ([23bc36f](https://github.com/HCDestroyer/argos-isp/commit/23bc36fcbbfcba6ec6fdf124814d205499b603c4))
+
+
+### Correcciones
+
+* **core:** límite de login por la IP real del cliente detrás del proxy ([#174](https://github.com/HCDestroyer/argos-isp/issues/174)) ([00fae9b](https://github.com/HCDestroyer/argos-isp/commit/00fae9b14c58e9cc24285fa409334e2c650a03ea))
+
 ## [1.1.0](https://github.com/HCDestroyer/argos-isp/compare/v1.0.0...v1.1.0) (2026-10-24)
 
 
