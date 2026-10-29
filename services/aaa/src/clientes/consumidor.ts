@@ -10,8 +10,8 @@ import type { ResultadoAviso } from './recarga.ts'
  * - Grupo propio por nodo `aaa` (`AAA_CLIENTES_GRUPO`, por defecto `radius-clientes:<nodo>`) sobre
  *   `argos:eventos`: cada nodo tiene su FreeRADIUS y su `clients.d`. Se crea en `$`; lo anterior lo
  *   cubre la regeneración al arrancar.
- * - `router.conexion_registrada`, `router.conexion_rotada` y `router.conexion_eliminada`:
- *   regenera **todos** los clientes desde `network.routers` (como `pnpm aaa:clients`). Así un evento
+ * - `router.conexion_registrada`, `router.conexion_rotada`, `router.conexion_eliminada` y
+ *   `router.radius_cambiado` (A1: `nas_ip` o `radius_secret` al crear o editar un router): regenera **todos** los clientes desde `network.routers` (como `pnpm aaa:clients`). Así un evento
  *   repetido, perdido o fuera de orden no deja clientes de más ni de menos.
  * - Si cambió algún archivo, avisa a FreeRADIUS por el FIFO (`recarga.ts`, `freeradius/recargar.sh`).
  *   Una rotación que no cambia `nas_ip` ni secret no reinicia nada.
@@ -24,6 +24,8 @@ export const EVENTOS_CLIENTES = [
     'router.conexion_registrada',
     'router.conexion_rotada',
     'router.conexion_eliminada',
+    // A1, al crear o editar un router con cambios en `nas_ip` o `radius_secret`
+    'router.radius_cambiado',
 ] as const
 
 export interface LogClientes {

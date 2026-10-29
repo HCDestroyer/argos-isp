@@ -169,6 +169,21 @@ describe('clientes RADIUS por evento (Redis + Postgres reales)', () => {
         assert.equal(recargas.length, antes)
     })
 
+    it('router.radius_cambiado (nas_ip editado en el panel): el nuevo entra, el anterior sale y se recarga', async (t) => {
+        if (motivo) return t.skip(motivo)
+        const NAS_EDITADA = `198.51.101.${n}`
+        const antes = lector.lineas.length
+        await pool.query('UPDATE network.routers SET nas_ip = $1 WHERE id = $2', [NAS_EDITADA, routerId])
+        await publicar('router.radius_cambiado')
+        const texto = await hasta(async () => {
+            const a = await archivo()
+            return a?.includes(NAS_EDITADA) ? a : null
+        })
+        assert.match(texto, new RegExp(`^\\tipaddr = ${NAS_EDITADA.replaceAll('.', '\\.')}$`, 'm'))
+        assert.doesNotMatch(texto, new RegExp(IP_TUNEL.replaceAll('.', '\\.')))
+        await hasta(async () => lector.lineas.slice(antes).some((l) => l.endsWith('router.radius_cambiado')))
+    })
+
     it('router.conexion_eliminada (router desactivado): su cliente sale y se recarga', async (t) => {
         if (motivo) return t.skip(motivo)
         await pool.query('UPDATE network.routers SET activo = false WHERE id = $1', [routerId])
