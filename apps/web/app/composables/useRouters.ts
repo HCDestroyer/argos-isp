@@ -16,6 +16,8 @@ export type DatosRouter = paths['/api/v1/routers']['post']['requestBody']['conte
 export type DatosRedIpv4 = paths['/api/v1/routers/{id}/redes-ipv4']['post']['requestBody']['content']['application/json']
 export type DatosIpv6Bloque = paths['/api/v1/routers/{id}/ipv6-bloques']['post']['requestBody']['content']['application/json']
 export type ServicioSinSesion = Schema<'ServicioSinSesion'>
+/** `GET …/eliminable` (`contratos/eliminar.md` §1): si se puede eliminar y por qué no. */
+export type Eliminable = Schema<'Eliminable'>
 
 /** Routers MikroTik y lo que cuelga de ellos: planes implementados, redes IPv4 y bloques IPv6. */
 export function useRouters() {
@@ -107,5 +109,20 @@ export function useRouters() {
         return resolver(api.GET('/api/v1/routers/{id}/resumen-sesiones', { params: { path: { id }, query: desde ? { desde } : {} } }))
     }
 
-    return { listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
+    /** `GET /routers/:id/eliminable` (`routers.ver`): si nunca se usó y, si no, los motivos. */
+    function eliminable(id: number): Promise<Resultado<Eliminable>> {
+        return resolver(api.GET('/api/v1/routers/{id}/eliminable', { params: { path: { id } } }))
+    }
+
+    /**
+     * `DELETE /routers/:id?version=N` (`routers.eliminar`, solo admin): 204. 409 si otra sesión lo
+     * cambió; 422 `router_con_historial` con los motivos en `errors[]`.
+     */
+    function eliminar(id: number, version: number, claveIdempotencia: string): Promise<Resultado<null>> {
+        return resolverSinCuerpo(api.DELETE('/api/v1/routers/{id}', {
+            params: { path: { id }, query: { version }, header: { 'Idempotency-Key': claveIdempotencia } },
+        }))
+    }
+
+    return { eliminable, eliminar, listar, ver, editar, cambiarControlVelocidad, vistaPreviaControl, planes, redesIpv4, ipv6Bloques, migracionAaa, marcarMigrado, resumenSesiones, crear, agregarRed, agregarBloque }
 }

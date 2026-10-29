@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, TabsItem } from '@nuxt/ui'
 
 /**
  * Routers (A1): lista con su estado en línea y último contacto (`contacto_router.ts`), su control
@@ -12,7 +12,26 @@ definePageMeta({ permiso: 'routers.ver' })
 
 useHead({ title: 'Routers · ArgosIsp' })
 
-const lista = usePaginacionCursor(cursor => useRouters().listar({}, cursor))
+const route = useRoute()
+const router = useRouter()
+
+/**
+ * «Activos» (por defecto) e «Inactivos» (`?activo=false` de la API; en la URL del panel
+ * `?vista=inactivos`): un router desactivado no se mezcla con los que están en uso.
+ */
+type VistaRouters = 'activos' | 'inactivos'
+const vista = ref<VistaRouters>(route.query.vista === 'inactivos' ? 'inactivos' : 'activos')
+const itemsVista: TabsItem[] = [
+    { label: 'Activos', value: 'activos', icon: 'i-lucide-router' },
+    { label: 'Inactivos', value: 'inactivos', icon: 'i-lucide-circle-pause' },
+]
+
+const lista = usePaginacionCursor(cursor => useRouters().listar({ activo: vista.value === 'activos' }, cursor))
+
+watch(vista, async (valor) => {
+    await router.replace({ query: valor === 'inactivos' ? { vista: 'inactivos' } : {} })
+    await lista.recargar()
+})
 const { puede } = usePermisos()
 const toast = useToast()
 const altaAbierta = ref(false)
@@ -91,6 +110,14 @@ onMounted(() => void lista.recargar())
         </template>
 
         <div class="flex flex-col gap-4">
+            <UTabs
+                v-model="vista"
+                :items="itemsVista"
+                :content="false"
+                size="sm"
+                class="self-start"
+                data-prueba="vista-routers"
+            />
             <ProblemaAlerta
                 v-if="lista.problema.value"
                 :problema="lista.problema.value"

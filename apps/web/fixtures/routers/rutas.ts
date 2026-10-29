@@ -122,6 +122,9 @@ export const rutasRouters: RutasFixture = {
             .filter(campo => !capacidadValida(cuerpo[campo]))
             .map(campo => ({ field: campo, message: 'Debe ser un entero entre 1 y 100000000', rule: 'range' }))
         errores.push(...erroresConexion(cuerpo))
+        if (cuerpo.activo !== undefined && typeof cuerpo.activo !== 'boolean') {
+            errores.push({ field: 'activo', message: 'Debe ser verdadero o falso', rule: 'boolean' })
+        }
         if (errores.length) {
             return datosInvalidos(errores)
         }
@@ -141,6 +144,8 @@ export const rutasRouters: RutasFixture = {
             interfaz_clientes: conexion('interfaz_clientes'),
             // Multiempresa (A1): `empresa_sugerida_id` (null la quita); sin el campo, se conserva.
             empresa_sugerida_id: 'empresa_sugerida_id' in cuerpo ? (cuerpo.empresa_sugerida_id as number | null) : router.empresa_sugerida_id,
+            // Desactivar / activar (`contratos/eliminar.md`: lo que tiene historial se desactiva).
+            activo: typeof cuerpo.activo === 'boolean' ? cuerpo.activo : router.activo,
             version: router.version + 1,
             updated_at: ahora(),
         })

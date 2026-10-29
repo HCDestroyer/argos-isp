@@ -58,6 +58,20 @@ export async function resolver<T>(peticion: Promise<RespuestaApi<T>>): Promise<R
     }
 }
 
+/**
+ * Como `resolver`, para una respuesta sin cuerpo (204 de un `DELETE`): openapi-fetch deja `data`
+ * en `undefined`, así que el éxito se lee del `status`.
+ */
+export async function resolverSinCuerpo(peticion: Promise<{ error?: unknown, response: Response }>): Promise<Resultado<null>> {
+    try {
+        const { error, response } = await peticion
+        return response.ok ? { ok: true, data: null } : { ok: false, problema: aProblema(error, response.status) }
+    }
+    catch {
+        return { ok: false, problema: PROBLEMA_SIN_CONEXION }
+    }
+}
+
 /** `errors[]` de un 422 en el formato de `UForm.setErrors()`. */
 export function erroresDeFormulario(problema: Problem): FormError[] {
     return (problema.errors ?? []).map(error => ({ name: error.field, message: error.message }))
