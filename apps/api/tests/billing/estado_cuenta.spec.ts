@@ -1,9 +1,9 @@
 import { test } from '@japa/runner'
-import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
 import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import VencerFacturas from '#billing/actions/vencer_facturas'
-import { cuentaBancariaPrueba, escenario, generar } from '#tests/billing/ayudas_billing'
+import { cuentaBancariaPrueba, escenario, generar, unicoBd } from '#tests/billing/ayudas_billing'
 
 const ruta = (clienteId: number) => `/api/v1/clientes/${clienteId}/estado-cuenta`
 
@@ -69,7 +69,7 @@ test.group('billing · estado de cuenta', () => {
                 metodo: 'deposito',
                 monto: '200.00',
                 cuenta_bancaria_id: bancaria.id,
-                referencia: unico('boleta'),
+                referencia: await unicoBd('boleta'),
             },
             contextoPrueba(),
         )

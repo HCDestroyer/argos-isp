@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { contextoPrueba, estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { errorDe } from '#tests/contabilidad/ayudas_contabilidad'
@@ -21,7 +22,7 @@ async function cajeroConCaja(empresaId: number, admin: ReturnType<typeof context
     const cajero = await usuarioConRoles(['cajero'])
     const ctx = contextoPrueba(cajero.usuario.id)
     const caja = await new CrearCaja().execute(
-        { nombre: unico('Caja'), cajero_id: cajero.usuario.id, empresa_id: empresaId },
+        { nombre: await unicoBd('Caja'), cajero_id: cajero.usuario.id, empresa_id: empresaId },
         admin,
     )
     await new AbrirCaja().execute({ caja_id: caja.id, fondo_inicial: fondo }, ctx)

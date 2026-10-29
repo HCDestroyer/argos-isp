@@ -1,11 +1,11 @@
 import { test } from '@japa/runner'
-import { contextoPrueba, estado, unico, usuarioConRoles } from '#tests/ayudas'
+import { contextoPrueba, estado, usuarioConRoles } from '#tests/ayudas'
 import { hoyGuatemala } from '#ledger/fechas'
 import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
 import RegistrarPagoHistorico from '#billing/actions/registrar_pago_historico'
 import RegistrarPago from '#billing/actions/registrar_pago'
 import EmitirNotaCredito from '#billing/actions/emitir_nota_credito'
-import { escenario, facturasDe, generar } from '#tests/billing/ayudas_billing'
+import { escenario, facturasDe, generar, unicoBd } from '#tests/billing/ayudas_billing'
 
 /**
  * Reportes con histórico (decisión del PM, semana 3): los pagos históricos importados cuentan en
@@ -41,7 +41,7 @@ test.group('billing · reportes con histórico', () => {
         const { servicioId, clienteId } = await escenario({ fecha_instalacion: '2026-09-01' })
         const importada = await new ImportarFacturaPendiente().execute(
             {
-                clave_externa: unico('origen-fact'),
+                clave_externa: await unicoBd('origen-fact'),
                 servicio_id: servicioId,
                 periodo: '2025-02-01',
                 total: '150.00',
@@ -52,7 +52,7 @@ test.group('billing · reportes con histórico', () => {
         await new RegistrarPagoHistorico().execute(
             {
                 historico: true,
-                id_externo: unico('origen-pago'),
+                id_externo: await unicoBd('origen-pago'),
                 cliente_id: clienteId,
                 metodo: 'deposito',
                 monto: '150.00',

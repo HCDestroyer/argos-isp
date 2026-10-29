@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -124,7 +125,7 @@ async function lineaDeCompraBien(e: EmpresasGt): Promise<number> {
             proveedor_id: await proveedorDe(e),
             tipo_documento: 'FACT',
             serie: 'A',
-            numero: unico('R'),
+            numero: await unicoBd('R'),
             fecha_documento: hoyGuatemala(),
             condicion: 'credito',
             lineas: [{ descripcion: 'Router Wi-Fi 6', tipo: 'bien', cuenta: '5.1.03', total: '336.00' }],
@@ -696,7 +697,7 @@ test.group('Lealtad · sorteos', (group) => {
                 proveedor_id: proveedorId,
                 tipo_documento: 'FACT',
                 serie: 'A',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: hoyGuatemala(),
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Router Wi-Fi 6', tipo: 'bien', cuenta: '5.1.03', total: '336.00' }],
@@ -1089,7 +1090,7 @@ test.group('Lealtad · sorteos', (group) => {
                 proveedor_id: await proveedorDe(e),
                 tipo_documento: 'FACT',
                 serie: 'A',
-                numero: unico('R'),
+                numero: await unicoBd('R'),
                 fecha_documento: hoyGuatemala(),
                 condicion: 'credito',
                 lineas: [{ descripcion: 'Routers Wi-Fi 6', tipo: 'bien', cuenta, total, cantidad }],

@@ -5,7 +5,7 @@ import { afirmarLibroCuadrado, saldoTexto } from '#tests/ledger/ayudas_libro'
 import RegistrarSaldoInicial from '#billing/actions/registrar_saldo_inicial'
 import ImportarFacturaPendiente from '#billing/actions/importar_factura_pendiente'
 import RegistrarPago from '#billing/actions/registrar_pago'
-import { escenario, facturasDe, generar, lineasAsiento } from '#tests/billing/ayudas_billing'
+import { escenario, facturasDe, generar, lineasAsiento, unicoBd } from '#tests/billing/ayudas_billing'
 
 /**
  * Tarea 4 (fila de A6): acciones del importador, idempotentes por clave externa y por el libro.
@@ -74,11 +74,11 @@ test.group('billing · importación', () => {
         )
         // otra clave para un periodo ya facturado → 409
         await assert.rejects(
-            () => importar(servicioId, unico('mw-fact'), { periodo: '2026-09-01' }),
+            async () => importar(servicioId, await unicoBd('mw-fact'), { periodo: '2026-09-01' }),
             /ya tiene la factura/,
         )
         // vigente: vence después de hoy
-        const vigente = await importar(servicioId, unico('mw-fact'), {
+        const vigente = await importar(servicioId, await unicoBd('mw-fact'), {
             periodo: '2026-10-01',
             vence_en: '2026-10-20',
         })
@@ -91,7 +91,7 @@ test.group('billing · importación', () => {
         assert,
     }) => {
         const { servicioId, clienteId } = await escenario({ fecha_instalacion: '2026-10-01' })
-        const deuda = unico('mw-saldo')
+        const deuda = await unicoBd('mw-saldo')
         const r = await new RegistrarSaldoInicial().execute(
             { clave_externa: deuda, cliente_id: clienteId, monto: '80.00', fecha: '2026-10-01' },
             contextoPrueba(),
@@ -129,7 +129,12 @@ test.group('billing · importación', () => {
 
         // saldo a favor: se aplica a la próxima factura
         const favor = await new RegistrarSaldoInicial().execute(
-            { clave_externa: unico('mw-favor'), cliente_id: clienteId, monto: '-50.00', fecha: '2026-10-01' },
+            {
+                clave_externa: await unicoBd('mw-favor'),
+                cliente_id: clienteId,
+                monto: '-50.00',
+                fecha: '2026-10-01',
+            },
             contextoPrueba(),
         )
         assert.isNull(favor.factura_id)

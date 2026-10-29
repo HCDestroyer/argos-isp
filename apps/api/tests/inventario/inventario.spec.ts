@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import { unicoBd } from '#tests/billing/ayudas_billing'
 import db from '@adonisjs/lucid/services/db'
 import { estado, soloEmpresaPrincipal, unico, usuarioConRoles } from '#tests/ayudas'
 import { CUENTAS } from '#ledger/plan_cuentas'
@@ -294,7 +295,7 @@ test.group('Inventario · fase A', (group) => {
         assert,
     }) => {
         const e = await prepararEmpresasGt()
-        const sku = unico('router')
+        const sku = await unicoBd('router')
         const producto = await productoEn(e.B, e.ctx, {
             sku,
             cuenta_consumo: CUENTAS.GASTO_OTROS,
@@ -420,12 +421,17 @@ test.group('Inventario · fase A', (group) => {
         const producto = await productoEn(e.B, e.ctx)
         const central = await bodegaEn(e.B, e.ctx)
         const tecnico = await new CrearBodega().execute(
-            { empresa_id: e.B, nombre: unico('Técnico'), tipo: 'tecnico', usuario_id: e.usuarioId },
+            { empresa_id: e.B, nombre: await unicoBd('Técnico'), tipo: 'tecnico', usuario_id: e.usuarioId },
             e.ctx,
         )
         const otraDelMismo = await errorDe(
             new CrearBodega().execute(
-                { empresa_id: e.B, nombre: unico('Técnico'), tipo: 'tecnico', usuario_id: e.usuarioId },
+                {
+                    empresa_id: e.B,
+                    nombre: await unicoBd('Técnico'),
+                    tipo: 'tecnico',
+                    usuario_id: e.usuarioId,
+                },
                 e.ctx,
             ),
         )
@@ -532,7 +538,7 @@ test.group('Inventario · fase A', (group) => {
             new RegistrarCompra().execute(
                 {
                     ...base,
-                    numero: unico('F'),
+                    numero: await unicoBd('F'),
                     lineas: [
                         {
                             descripcion: 'x',
@@ -551,7 +557,7 @@ test.group('Inventario · fase A', (group) => {
             new RegistrarCompra().execute(
                 {
                     ...base,
-                    numero: unico('F'),
+                    numero: await unicoBd('F'),
                     lineas: [{ descripcion: 'x', tipo: 'bien', total: '11.20', producto_id: producto.id }],
                 },
                 e.ctx,
@@ -562,7 +568,7 @@ test.group('Inventario · fase A', (group) => {
             new RegistrarCompra().execute(
                 {
                     ...base,
-                    numero: unico('F'),
+                    numero: await unicoBd('F'),
                     lineas: [
                         { descripcion: 'x', tipo: 'bien', total: '11.20', cuenta: CUENTAS_GT.INVENTARIOS },
                     ],
@@ -575,7 +581,7 @@ test.group('Inventario · fase A', (group) => {
         const normal = await new RegistrarCompra().execute(
             {
                 ...base,
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 lineas: [{ descripcion: 'Papelería', tipo: 'bien', total: '11.20' }],
             },
             e.ctx,
@@ -587,7 +593,7 @@ test.group('Inventario · fase A', (group) => {
         const sinCredito = await new RegistrarCompra().execute(
             {
                 ...base,
-                numero: unico('F'),
+                numero: await unicoBd('F'),
                 credito_fiscal: false,
                 lineas: [
                     {
@@ -610,7 +616,7 @@ test.group('Inventario · fase A', (group) => {
             {
                 ...base,
                 tipo_documento: 'NCRE',
-                numero: unico('NC'),
+                numero: await unicoBd('NC'),
                 compra_referencia_id: sinCredito.id,
                 lineas: [
                     {
@@ -642,7 +648,7 @@ test.group('Inventario · fase A', (group) => {
                 .headers(cabecera)
                 .header('Idempotency-Key', unico('p'))
                 .json({
-                    sku: unico('UTP'),
+                    sku: await unicoBd('UTP'),
                     nombre: 'Cable UTP',
                     tipo: 'material',
                     seguimiento: 'cantidad',
@@ -656,7 +662,7 @@ test.group('Inventario · fase A', (group) => {
                 .post('/api/v1/bodegas')
                 .bearerToken(e.token)
                 .headers(cabecera)
-                .json({ nombre: unico('Central'), tipo: 'bodega' }),
+                .json({ nombre: await unicoBd('Central'), tipo: 'bodega' }),
             201,
         )
         const central = centralRespuesta.body()
@@ -685,7 +691,7 @@ test.group('Inventario · fase A', (group) => {
                 .post('/api/v1/bodegas')
                 .bearerToken(e.token)
                 .headers(cabecera)
-                .json({ nombre: unico('Vehículo'), tipo: 'tecnico', usuario_id: tecnico.usuario.id }),
+                .json({ nombre: await unicoBd('Vehículo'), tipo: 'tecnico', usuario_id: tecnico.usuario.id }),
             201,
         )
         const suya = suyaRespuesta.body()
@@ -694,7 +700,7 @@ test.group('Inventario · fase A', (group) => {
                 .post('/api/v1/bodegas')
                 .bearerToken(e.token)
                 .headers(cabecera)
-                .json({ nombre: unico('Vehículo'), tipo: 'tecnico', usuario_id: otro.usuario.id }),
+                .json({ nombre: await unicoBd('Vehículo'), tipo: 'tecnico', usuario_id: otro.usuario.id }),
             201,
         )
         const ajena = ajenaRespuesta.body()
@@ -830,7 +836,7 @@ test.group('Inventario · fase A', (group) => {
                 .post('/api/v1/productos')
                 .bearerToken(contador.token)
                 .headers(cabecera)
-                .json({ sku: unico('X'), nombre: 'Otro', tipo: 'otro', seguimiento: 'cantidad' }),
+                .json({ sku: await unicoBd('X'), nombre: 'Otro', tipo: 'otro', seguimiento: 'cantidad' }),
             201,
         )
         await afirmarCuadre(assert, e.B)

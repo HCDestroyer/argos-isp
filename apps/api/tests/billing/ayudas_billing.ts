@@ -12,6 +12,33 @@ import CrearCuentaBancaria from '#billing/actions/crear_cuenta_bancaria'
  * acciones de A1 ya tienen sus pruebas). Todo con nombres únicos: ledger y audit no se truncan.
  */
 
+/**
+ * Número que nunca se repite en esta base: el siguiente valor de la secuencia de `tabla.id` (misma
+ * idea que A6 en `tests/notify/ayudas_notify.ts`). Las secuencias de Postgres no retroceden (ni con
+ * rollback) y las comparten todas las conexiones y procesos. `unico()` (8 hex al azar) no lo
+ * garantiza contra una restricción `UNIQUE`: ya hizo fallar una suite completa.
+ */
+export async function siguienteDeSecuencia(tabla: string): Promise<number> {
+    const r = await db.rawQuery('SELECT nextval(pg_get_serial_sequence(?, ?)) AS n', [tabla, 'id'])
+    return Number(r.rows[0].n)
+}
+
+/**
+ * Texto único en la base para una columna con restricción `UNIQUE` (número de documento, referencia,
+ * boleta, serie, SKU, id externo, nombre de plantilla, caja o bodega…): `<prefijo>-<n>` con `n` de
+ * la secuencia de `tabla` (por defecto la de `audit.outbox`, que solo crece). Para lo que no choca
+ * con ninguna restricción (nombres de clientes, textos) basta `unico()`.
+ */
+export async function unicoBd(prefijo: string, tabla = 'audit.outbox'): Promise<string> {
+    return `${prefijo}-${await siguienteDeSecuencia(tabla)}`
+}
+
+/** `unicoBd` en mayúsculas (series, códigos y NIT que la base normaliza a mayúsculas). */
+export async function unicoBdMayusculas(prefijo: string, tabla?: string): Promise<string> {
+    const valor = await unicoBd(prefijo, tabla)
+    return valor.toUpperCase()
+}
+
 export interface OpcionesEscenario {
     precio?: string
     fecha_instalacion?: string
@@ -32,7 +59,7 @@ export async function crearPlantillaFila(campos: Record<string, unknown> = {}): 
     const [fila] = (await db
         .table('billing.plantillas_facturacion')
         .insert({
-            nombre: unico('Plantilla'),
+            nombre: await unicoBd('Plantilla', 'billing.plantillas_facturacion'),
             ciclo: 'dia_fijo',
             dia: 1,
             prorrateo: true,
@@ -146,7 +173,7 @@ export async function cuentaBancariaPrueba(banco = 'Banrural', empresaId = 1) {
     return new CrearCuentaBancaria().execute(
         {
             banco_id: await bancoId(banco),
-            numero: unico('300'),
+            numero: await unicoBd('300', 'billing.cuentas_bancarias'),
             alias: unico('Recaudación'),
             empresa_id: empresaId,
         },
