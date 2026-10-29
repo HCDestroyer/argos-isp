@@ -60,6 +60,9 @@ RUN groupadd -g ${freerad_gid} -r freerad \
 WORKDIR /
 COPY --from=build /usr/local/src/repositories/freeradius-server/scripts/docker/etc/docker-entrypoint.sh.deb /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
+# Recarga de clientes por evento (A2, services/aaa/freeradius/recargar.sh): el compose de producción
+# lo usa como entrypoint. El contexto del build es la raíz del repositorio.
+COPY --chmod=0755 services/aaa/freeradius/recargar.sh /usr/local/bin/argosisp-recargar.sh
 
 # Sin USER, como la oficial: arranca como root (clients.d es el volumen de `permisos`, solo para el
 # uid 1000) y el resto lo decide el radiusd.conf del paquete, igual que con la oficial.

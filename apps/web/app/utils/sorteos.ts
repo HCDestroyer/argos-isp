@@ -290,8 +290,8 @@ export function problemaSorteoLegible(problema: Problem): Problem {
 const textoBases = (maximo: number) => z.string().trim().max(maximo, `Hasta ${maximo} caracteres`)
 
 const esquemaPremio = z.object({
-    nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(200, 'Hasta 200 caracteres'),
-    cantidad: z.number({ message: 'Cantidad inválida' }).int('Sin decimales').min(1, 'Al menos 1').max(100, 'Hasta 100'),
+    nombre: z.string().trim().min(1, 'Escribe el nombre').max(200, 'Hasta 200 caracteres'),
+    cantidad: z.number({ message: 'Escribe cuántos premios hay (de 1 a 100)' }).int('Sin decimales').min(1, 'Al menos 1').max(100, 'Hasta 100'),
     valor: z.string().trim().regex(MONTO, 'Monto con hasta 2 decimales, sin comas').refine(v => !MONTO.test(v) || new Decimal(v).gt(0), 'Mayor que 0'),
     tipo: z.enum(['efectivo', 'bien', 'servicio']),
     premio_id: z.number().int().positive().nullable(),
@@ -300,7 +300,7 @@ const esquemaPremio = z.object({
 }).refine(p => p.tipo !== 'servicio' || p.premio_id !== null, { path: ['premio_id'], message: 'Elija el descuento o mes gratis del catálogo' })
 
 export const esquemaSorteo = z.object({
-    nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(200, 'Hasta 200 caracteres'),
+    nombre: z.string().trim().min(1, 'Escribe el nombre').max(200, 'Hasta 200 caracteres'),
     descripcion: textoBases(4000),
     mecanica: textoBases(4000),
     regla_participacion: textoBases(2000),
@@ -311,9 +311,9 @@ export const esquemaSorteo = z.object({
     fuente_valor_publico: textoBases(500),
     boletos_por_servicio: z.number({ message: 'Número de boletos' }).int('Sin decimales').min(0, 'De 0 a 100').max(100, 'De 0 a 100'),
     admite_canje: z.boolean(),
-    inscripcion_desde: z.string().trim().refine(v => v === '' || FECHA.test(v), 'Fecha inválida'),
-    corte_en: z.string().trim().refine(v => v === '' || LOCAL.test(v), 'Fecha y hora inválidas'),
-    fecha_sorteo: z.string().trim().refine(v => v === '' || LOCAL.test(v), 'Fecha y hora inválidas'),
+    inscripcion_desde: z.string().trim().refine(v => v === '' || FECHA.test(v), 'Elige una fecha válida (día, mes y año)'),
+    corte_en: z.string().trim().refine(v => v === '' || LOCAL.test(v), 'Elige una fecha y una hora válidas'),
+    fecha_sorteo: z.string().trim().refine(v => v === '' || LOCAL.test(v), 'Elige una fecha y una hora válidas'),
     lugar: textoBases(300),
     suplentes: z.number({ message: 'Número de suplentes' }).int('Sin decimales').min(0, 'De 0 a 20').max(20, 'De 0 a 20'),
     premios: z.array(esquemaPremio).max(50, 'Hasta 50 premios'),
@@ -457,10 +457,10 @@ export const esquemaRequisitoSorteo = z.object({
 export type EntradaRequisitoSorteo = z.input<typeof esquemaRequisitoSorteo>
 
 export const esquemaEjecutarSorteo = z.object({
-    valor_publico: z.string().trim().min(1, 'El valor público del acto es obligatorio').max(500, 'Hasta 500 caracteres'),
+    valor_publico: z.string().trim().min(1, 'Escribe el valor público del acto').max(500, 'Hasta 500 caracteres'),
     valor_publico_evidencia: z.string().trim().min(1, 'Diga cómo se obtuvo el valor en el acto').max(2000, 'Hasta 2000 caracteres'),
     asistentes: z.array(z.object({
-        nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(200, 'Hasta 200 caracteres'),
+        nombre: z.string().trim().min(1, 'Escribe el nombre').max(200, 'Hasta 200 caracteres'),
         rol: textoBases(200),
     })).max(20, 'Hasta 20 asistentes'),
 })
@@ -511,7 +511,7 @@ export type EntradaEntregaPremio = z.input<typeof esquemaEntregaPremio>
 
 /** Anular la entrega (H22): motivo de al menos 3 caracteres, como la API. */
 export const esquemaAnularEntrega = z.object({
-    motivo: z.string().trim().min(3, 'El motivo es obligatorio (mínimo 3 caracteres)').max(2000, 'Hasta 2000 caracteres'),
+    motivo: z.string().trim().min(3, 'Escribe el motivo (al menos 3 caracteres)').max(2000, 'Hasta 2000 caracteres'),
 })
 
 export type EntradaAnularEntrega = z.input<typeof esquemaAnularEntrega>
