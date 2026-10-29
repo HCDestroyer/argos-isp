@@ -28,8 +28,8 @@ export const esquemaEmpresaGrupo = z.object({
         .trim()
         .toUpperCase()
         .refine(valor => PATRON_NIT_EMPRESA.test(valor), 'NIT con dígito verificador (1234567-8) o CUI de 13 dígitos'),
-    razon_social: z.string().trim().min(1, 'La razón social es obligatoria').max(200, 'Máximo 200 caracteres'),
-    nombre_comercial: z.string().trim().min(1, 'El nombre comercial es obligatorio').max(200, 'Máximo 200 caracteres'),
+    razon_social: z.string().trim().min(1, 'Escribe la razón social, como aparece en el RTU').max(200, 'Máximo 200 caracteres'),
+    nombre_comercial: z.string().trim().min(1, 'Escribe el nombre comercial').max(200, 'Máximo 200 caracteres'),
     direccion_fiscal: textoOpcional(300),
     municipio: textoOpcional(100),
     departamento: textoOpcional(100),

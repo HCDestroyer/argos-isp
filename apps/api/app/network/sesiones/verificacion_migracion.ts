@@ -327,7 +327,7 @@ async function comprobarRedis(
         titulo: 'Registros `aaa:user:*` en Redis',
         resultado: problemas ? 'falla' : 'ok',
         resumen: problemas
-            ? `${problemas} de ${servicios.length} sin registro correcto (${faltan.length} sin clave, ${lapidas.length} lápidas, ${invalidos.length} inválidos, ${viejos.length} desactualizados, ${distintos.length} distintos). Corregir con \`node ace aaa:repoblar\` (A1) y volver a verificar`
+            ? `${problemas} de ${servicios.length} sin registro correcto (${faltan.length} sin clave, ${lapidas.length} lápidas, ${invalidos.length} inválidos, ${viejos.length} desactualizados, ${distintos.length} distintos). Corregir con \`node ace aaa:repoblar\` y volver a verificar`
             : `${servicios.length} servicios con registro vigente (prefijo \`${prefijo}\`)`,
         detalles: lista(detalles),
     }

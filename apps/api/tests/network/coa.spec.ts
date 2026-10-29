@@ -289,6 +289,11 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
         assert.equal(final.respuesta.resultado, 'ack')
         assert.equal(final.respuesta.codigo, 'CoA-ACK')
         assert.equal(final.comando.nas_ip, '127.0.0.2')
+        assert.notProperty(
+            final.comando,
+            'nas_ip_sesion',
+            'sesión normal: la IP del router es la de la sesión',
+        )
 
         const paquete = await esperarHasta<PaqueteNas>(() =>
             nasAck.json<PaqueteNas>().find((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId),
@@ -324,6 +329,65 @@ test.group('coa · de punta a punta (CambiarEstadoServicio → evento → CoA/Di
             nasAck.json<PaqueteNas>().filter((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId),
             1,
         )
+    })
+
+    test('router registrado por el túnel con la sesión abierta: el CoA va a la IP del túnel con su secret, sin desconectar', async ({
+        assert,
+    }) => {
+        // Router en la LAN (nadie escucha en 127.0.0.40) con una sesión abierta desde esa IP.
+        const e = await escenario('127.0.0.40')
+        // Lo que hace `aplicarRegistro` (A1) al registrarse por WireGuard: host y nas_ip = ip_tunel.
+        // 127.0.0.41 hace de IP del túnel: ahí escucha el NAS (como el `/radius incoming` del router).
+        const tunel = nasSimulado('127.0.0.41', 'ack')
+        try {
+            await esperarHasta(() => tunel.lineas.some((l) => l.includes('"listo"')))
+            await db
+                .from('network.routers')
+                .where('id', e.routerId)
+                .update({ host: '127.0.0.41', nas_ip: '127.0.0.41' })
+            const sesion = await db.from('network.sesiones').where('id', e.sesionId).firstOrFail()
+            assert.isNull(sesion.fin, 'nadie la desconectó')
+            assert.equal(Number(sesion.router_id), e.routerId)
+
+            const eventoId = await cambiar(e.servicioId, 'suspendido')
+            const { final, filas } = await respuestaFinal(eventoId)
+            assert.lengthOf(filas, 1)
+            assert.equal(final.tipo, 'coa')
+            assert.isTrue(final.ok)
+            assert.equal(
+                final.respuesta.resultado,
+                'ack',
+                'no sin_secret: el secret es el del router de la sesión',
+            )
+            assert.equal(Number(final.router_id), e.routerId)
+            assert.equal(final.comando.nas_ip, '127.0.0.41')
+            assert.equal(final.comando.nas_ip_sesion, '127.0.0.40')
+            const paquete = await esperarHasta<PaqueteNas>(() =>
+                tunel.json<PaqueteNas>().find((p) => p.atributos?.['Acct-Session-Id'] === e.acctSessionId),
+            )
+            assert.equal(paquete.codigo, 'CoA-Request')
+            assert.isTrue(paquete.firmaValida)
+            const fallidos = await db
+                .from('audit.outbox')
+                .where('evento', 'coa.fallido')
+                .whereRaw(`(payload->>'servicio_id')::bigint = ?`, [e.servicioId])
+            assert.lengthOf(fallidos, 0)
+        } finally {
+            tunel.detener()
+        }
+    })
+
+    test('sesión sin router (el NAS no estaba dado de alta al abrirla): se resuelve por su nas_ip', async ({
+        assert,
+    }) => {
+        const e = await escenario('127.0.0.2')
+        await db.from('network.sesiones').where('id', e.sesionId).update({ router_id: null })
+        const eventoId = await cambiar(e.servicioId, 'suspendido')
+        const { final } = await respuestaFinal(eventoId)
+        assert.isTrue(final.ok)
+        assert.equal(final.respuesta.resultado, 'ack')
+        assert.equal(final.comando.nas_ip, '127.0.0.2')
+        assert.equal(Number(final.router_id), e.routerId)
     })
 
     test('reactivar (suspendido → activo) → Disconnect-Request y Disconnect-ACK', async ({ assert }) => {

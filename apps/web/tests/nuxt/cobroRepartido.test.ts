@@ -117,6 +117,11 @@ describe('cobro repartido por empresa', () => {
         await esperar(() => expect(vista.find('[data-prueba="caja-no-abierta"]').exists()).toBe(true))
         const aviso = vista.get('[data-prueba="caja-no-abierta"]')
         expect(aviso.text()).toContain('No tienes caja abierta en Fibra del Sur')
-        expect(aviso.find('a[href="/caja"]').exists()).toBe(true)
+        // «Abrir caja» la abre en un modal, sin salir del cobro.
+        const abrir = aviso.findAll('button').find(boton => boton.text().includes('Abrir caja'))
+        expect(abrir).toBeDefined()
+        await abrir!.trigger('click')
+        await esperar(() => expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Abrir caja'))
+        expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Fondo inicial')
     })
 })

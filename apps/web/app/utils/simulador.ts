@@ -72,7 +72,7 @@ export const esquemaSimulacion = z.object({
         .trim()
         .refine(valor => valor === '' || MONTO.test(valor), 'Escribe un monto con hasta 2 decimales, sin comas (ej. 175.00)')
         .refine(valor => valor === '' || !MONTO.test(valor) || new Decimal(valor).gt(0), 'El monto debe ser mayor que cero'),
-    vence: z.string().refine(valor => valor === '' || FECHA.test(valor), 'Fecha inválida'),
+    vence: z.string().refine(valor => valor === '' || FECHA.test(valor), 'Elige una fecha válida (día, mes y año)'),
     canal: z.enum(['operador', 'supervisor', 'portal', 'ia']),
 })
 

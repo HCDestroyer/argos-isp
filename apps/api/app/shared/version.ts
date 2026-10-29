@@ -1,5 +1,5 @@
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
-import { ConflictoVersion, NoEncontrado } from '#shared/errores'
+import { ConflictoVersion, NoEncontrado, nombreEntidad } from '#shared/errores'
 
 /**
  * Control optimista de concurrencia por columna `version`.
@@ -28,7 +28,7 @@ export async function actualizarConVersion<T extends Record<string, unknown>>(
     if (fila) return fila
 
     const existe = await trx.from(tabla).where('id', id).select('id').first()
-    if (!existe) throw new NoEncontrado(`${tabla} ${id} no existe`)
+    if (!existe) throw new NoEncontrado(`${nombreEntidad(tabla)} ${id} no existe`)
     throw new ConflictoVersion(tabla, id)
 }
 

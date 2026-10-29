@@ -10,9 +10,20 @@ import type { FuenteRateLimits } from './registro.ts'
  * `audit.outbox` en la MISMA transacción que la fila de `audit.red` del último intento.
  */
 
+/**
+ * Destino del CoA: el router **de la sesión** (`network.sesiones.router_id`, que el accounting fija
+ * por el `NAS-IP-Address` del Start), con su `nas_ip` y su `radius_secret` **actuales**. Así una
+ * sesión abierta antes de que el router se registrara por el túnel WireGuard (su `nas_ip` pasó a la
+ * IP del túnel, `contratos/conexion-routers.md` §6.4) recibe el CoA por el túnel sin desconectarla.
+ * Solo una sesión sin router (`router_id` null: el NAS no estaba dado de alta al abrirla) se resuelve
+ * por `sesiones.nas_ip`, como antes.
+ */
 export interface SesionActiva {
     id: number
+    /** IP a la que se envía: la `nas_ip` actual del router de la sesión, o la de la sesión sin router */
     nas_ip: string
+    /** `network.sesiones.nas_ip` (la del Start); distinta de `nas_ip` si el router cambió de IP */
+    nas_ip_sesion?: string
     acct_session_id: string
     user_ppp: string
     router_id: number | null
@@ -115,12 +126,16 @@ export class AlmacenPg implements Almacen {
 
     async sesionesActivas(servicioId: number): Promise<SesionActiva[]> {
         const { rows } = await this.pool.query<SesionActiva>(
-            `SELECT ses.id::int AS id, host(ses.nas_ip) AS nas_ip, ses.acct_session_id, ses.user_ppp,
+            `SELECT ses.id::int AS id, COALESCE(host(r.nas_ip), host(ses.nas_ip)) AS nas_ip,
+                    host(ses.nas_ip) AS nas_ip_sesion, ses.acct_session_id, ses.user_ppp,
                     r.id::int AS router_id, r.radius_secret,
                     ses.prefijo_enlace_v6::text AS prefijo_enlace_v6,
                     ses.prefijo_delegado_v6::text AS prefijo_delegado_v6
              FROM network.sesiones ses
-             LEFT JOIN network.routers r ON r.nas_ip = ses.nas_ip
+             LEFT JOIN network.routers r ON r.id = COALESCE(
+                 ses.router_id,
+                 (SELECT r2.id FROM network.routers r2 WHERE r2.nas_ip = ses.nas_ip ORDER BY r2.id LIMIT 1)
+             )
              WHERE ses.servicio_id = $1 AND ses.fin IS NULL
              ORDER BY ses.inicio`,
             [servicioId],
@@ -130,12 +145,16 @@ export class AlmacenPg implements Almacen {
 
     async sesionAbierta(sesionId: number): Promise<SesionPorId | null> {
         const { rows } = await this.pool.query<SesionPorId>(
-            `SELECT ses.id::int AS id, ses.servicio_id::int AS servicio_id, host(ses.nas_ip) AS nas_ip,
+            `SELECT ses.id::int AS id, ses.servicio_id::int AS servicio_id,
+                    COALESCE(host(r.nas_ip), host(ses.nas_ip)) AS nas_ip, host(ses.nas_ip) AS nas_ip_sesion,
                     ses.acct_session_id, ses.user_ppp, r.id::int AS router_id, r.radius_secret,
                     ses.prefijo_enlace_v6::text AS prefijo_enlace_v6,
                     ses.prefijo_delegado_v6::text AS prefijo_delegado_v6
              FROM network.sesiones ses
-             LEFT JOIN network.routers r ON r.nas_ip = ses.nas_ip
+             LEFT JOIN network.routers r ON r.id = COALESCE(
+                 ses.router_id,
+                 (SELECT r2.id FROM network.routers r2 WHERE r2.nas_ip = ses.nas_ip ORDER BY r2.id LIMIT 1)
+             )
              WHERE ses.id = $1 AND ses.fin IS NULL`,
             [sesionId],
         )

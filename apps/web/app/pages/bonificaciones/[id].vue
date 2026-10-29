@@ -121,7 +121,7 @@ onMounted(cargar)
                 variant="subtle"
                 icon="i-lucide-info"
                 :description="ocupaPeriodo(bonificacion)
-                    ? 'Este periodo del servicio quedó bonificado: el cron ya no lo factura. No es una factura: no tiene saldo, IVA ni DTE.'
+                    ? 'Este periodo del servicio quedó bonificado: la facturación automática ya no lo cobra. No es una factura: no tiene saldo, IVA ni DTE.'
                     : 'Cargo único sin costo: no es una factura (nunca una de Q 0.00), no tiene saldo, IVA ni DTE.'"
             />
 

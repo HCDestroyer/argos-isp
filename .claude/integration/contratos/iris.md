@@ -1,4 +1,3 @@
-Versión: 0.2.1 (borrador) · Iris ↔ ArgosISP
 Versión: 0.3.0 (borrador) · Iris ↔ ArgosISP
 
 # Contrato de integración Iris ↔ ArgosISP (copia de ArgosISP)

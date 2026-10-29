@@ -299,7 +299,12 @@ export class RouterOSFalso {
         const camino = url.pathname.slice('/rest'.length)
 
         if (camino === '/system/resource' && metodo === 'GET') {
-            return this.#json(res, 200, { 'board-name': 'falso', version: this.version, uptime: '1d' })
+            return this.#json(res, 200, {
+                'board-name': 'falso',
+                version: this.version,
+                uptime: '1d',
+                'cpu-load': '3',
+            })
         }
         // Diagnóstico: `/tool/fetch` (`url`, `output=none`) y `/ping` (`address`, `count`).
         if ((camino === '/tool/fetch' || camino === '/ping') && metodo === 'POST') {

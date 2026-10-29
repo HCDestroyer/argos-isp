@@ -1,6 +1,6 @@
 # @argosisp/coa
 
-coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configuración de un servicio, manda CoA-Request o Disconnect-Request (RFC 5176) a cada sesión abierta del servicio, en el `nas_ip` de la sesión (UDP 3799, `/radius incoming` del MikroTik) y con el secret del router. Registra cada envío y su respuesta en `audit.red`. Dueño: A2 (`.claude/agents/a2-radius.md`).
+coa-dispatcher. Lee el bus de eventos y, cuando cambia el estado o la configuración de un servicio, manda CoA-Request o Disconnect-Request (RFC 5176) a cada sesión abierta del servicio, a la `nas_ip` **actual** del router de la sesión (`network.sesiones.router_id`; UDP 3799, `/radius incoming` del MikroTik) y con su secret; solo una sesión sin router va a su propia `nas_ip`. Así, una sesión abierta antes de que el router se registrara por el túnel WireGuard recibe el CoA por la IP del túnel (`contratos/conexion-routers.md` §6.4). Registra cada envío y su respuesta en `audit.red`. Dueño: A2 (`.claude/agents/a2-radius.md`).
 
 ## Eventos
 
