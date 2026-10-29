@@ -15,6 +15,7 @@ import {
     type EsquemaJson,
 } from '#shared/openapi/esquemas'
 import { TIPOS_PLAN } from '#network/tipos_plan'
+import { MOTIVOS_API } from '#network/diagnostico_routeros'
 
 /**
  * Schemas de respuesta del módulo network. Credenciales (api_password, radius_secret) nunca salen;
@@ -526,21 +527,17 @@ export const ChequeoConexion = definirEsquema(
             detalle: { ...texto, description: 'Explicación en lenguaje simple; nunca trae secretos' },
             ms: entero,
             motivo: {
-                ...nulable(
-                    enumerado([
-                        'sin_credenciales',
-                        'no_responde',
-                        'credenciales',
-                        'certificado',
-                        'respuesta',
-                    ]),
-                ),
-                description: 'Solo en `api`: por qué falló',
+                ...nulable(enumerado(MOTIVOS_API)),
+                description:
+                    'Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), ' +
+                    'certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra ' +
+                    'un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta',
             },
             datos: {
                 ...nulable(jsonLibre),
                 description:
-                    '`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }',
+                    '`equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; ' +
+                    'si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica)',
             },
         },
         ['motivo', 'datos'],

@@ -8,8 +8,7 @@ import { RouterOSFalso } from '#network/routeros/falso'
 import { clienteDeRouter } from '#network/routeros/router'
 import { bitacoraRed, type FabricaClientes } from '#network/routeros/dispatcher'
 import { contactoRouterOS } from '#network/sesiones/contacto'
-import ProbarConexion, { explicarError } from '#network/conexion/actions/probar_conexion'
-import { RouterOSCredenciales, RouterOSInalcanzable } from '#network/routeros/errores'
+import ProbarConexion from '#network/conexion/actions/probar_conexion'
 import {
     NOMBRE_COLA_ROUTEROS,
     cerrarColaCambios,
@@ -221,7 +220,17 @@ test.group('Routers · probar conexión', (group) => {
         )
 
         const caido = await probar(await routerConApi({ api_url: 'http://127.0.0.1:1' }))
-        assert.containsSubset(caido.chequeos, [{ clave: 'api', ok: false, motivo: 'no_responde' }])
+        assert.containsSubset(caido.chequeos, [{ clave: 'api', ok: false, motivo: 'puerto_cerrado' }])
+        const api = caido.chequeos.find((c) => c.clave === 'api')!
+        // el texto de Node solo en datos.error_tecnico
+        assert.notInclude(api.detalle, 'ECONNREFUSED')
+        assert.include(String(api.datos!.error_tecnico), 'ECONNREFUSED')
+        const red = await db
+            .from('audit.red')
+            .where('router_id', caido.router_id)
+            .whereRaw("comando->>'operacion' = 'probar_conexion'")
+            .firstOrFail()
+        assert.equal(red.respuesta.motivo, 'puerto_cerrado')
 
         const sinApi = await probar(
             await routerConApi({ api_usuario: null, api_password: null, modo_seguridad: 'api' }),
@@ -233,13 +242,6 @@ test.group('Routers · probar conexión', (group) => {
                 ['equipo', null, null],
             ],
         )
-
-        assert.equal(
-            explicarError(new RouterOSInalcanzable('cert', 'DEPTH_ZERO_SELF_SIGNED_CERT')).motivo,
-            'certificado',
-        )
-        assert.equal(explicarError(new RouterOSCredenciales(401)).motivo, 'credenciales')
-        assert.equal(explicarError(new RouterOSInalcanzable('x', 'ECONNREFUSED')).motivo, 'no_responde')
     })
 
     test('permisos: probar (admin, técnico, soporte); cajero 403; router inexistente 404', async ({

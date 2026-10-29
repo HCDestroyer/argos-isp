@@ -10205,11 +10205,11 @@ export interface components {
             detalle: string;
             ms: number;
             /**
-             * @description Solo en `api`: por qué falló
+             * @description Solo en `api` cuando falla: sin_credenciales, sin_certificado (www-ssl sin certificado), certificado_no_confiable, puerto_cerrado (www-ssl apagado o firewall), protocolo (HTTPS contra un puerto HTTP), credenciales (401), politicas (faltan api/rest-api), no_responde, respuesta
              * @enum {string|null}
              */
-            motivo?: "sin_credenciales" | "no_responde" | "credenciales" | "certificado" | "respuesta" | null;
-            /** @description `equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado } */
+            motivo?: "sin_credenciales" | "sin_certificado" | "certificado_no_confiable" | "puerto_cerrado" | "protocolo" | "credenciales" | "politicas" | "no_responde" | "respuesta" | null;
+            /** @description `equipo`: { version, modelo, uptime, cpu_pct }; `radius`: { direcciones, esperadas, secreto_verificado }; si falla: { error_tecnico } (el texto de Node/OpenSSL, solo para soporte; el detalle ya lo explica) */
             datos?: {
                 [key: string]: unknown;
             } | null;
