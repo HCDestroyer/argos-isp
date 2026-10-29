@@ -125,15 +125,15 @@ Horus no decide cortes (ADR-0030): ningún consumidor cambia el estado de un ser
 
 | Grupo | Dueño | Eventos que le interesan |
 | --- | --- | --- |
-| `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada`, `sesion.desconexion_solicitada` |
-| `routeros` | A2 (`node ace routeros:worker`, `apps/api/app/network/routeros`) | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`, `sesion.iniciada`, `sesion.terminada` (estado deseado del servicio y control de velocidad de su router), `plan.velocidad_cambiada` (reconcilia los routers del plan) y `router.control_cambiado` (cambio de modo por lotes, o padres globales si solo cambió la capacidad) |
+| `coa` | A2 (`services/coa`) | `servicio.estado_cambiado`, `servicio.config_cambiada`, `sesion.desconexion_solicitada`, `sesion.velocidad_solicitada` (CoA de velocidad, nunca Disconnect) |
+| `routeros` | A2 (`node ace routeros:worker`, `apps/api/app/network/routeros`) | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada`, `sesion.iniciada`, `sesion.terminada` (estado deseado del servicio y control de velocidad de su router), `plan.velocidad_cambiada` (sincroniza el plan: CoA de velocidad a las sesiones vivas, `aaa:user:*` y reconciliar sus routers), `router.control_cambiado` (cambio de modo por lotes, o padres globales si solo cambió la capacidad), `router.estrategia_cambiada` (cambio de estrategia por lotes sin cortar) y `router.conexion_registrada` (reconciliar: corte y estrategia) |
 | `billing` | A3 | `pago.registrado` (cumplir promesas), `servicio.creado` (fecha de instalación / prorrateo) |
 | `billing` | A3 | `pago.registrado` y `nota_credito.emitida` (cumplir promesas); `factura.*`, `pago.*`, `promesa.*`, `servicio.estado_cambiado`, `servicio.creado` (refrescar las vistas del dashboard, `ConsumidorResumenes`) |
 | `lealtad` | A3 (`billing:worker`, `ConsumidorLealtad`) | `pago.registrado`, `pago.anulado`, `factura.emitida`, `factura.anulada`, `nota_credito.emitida`, `nota_credito.anulada`, `servicio.creado` (referidos), `servicio.estado_cambiado` (`retirado`) → `lealtad.evaluar_evento`; solo empresas con programa (salvo el `servicio.creado` de un referido) |
 | `notify` | A6 | los de `EVENTOS_NOTIFICABLES` en `apps/api/app/notify/consumidor.ts` |
 | `horus` | A6 (`node ace horus:worker`, `apps/api/app/integraciones/horus`) | `asignacion.cambiada`, `sesion.iniciada`, `sesion.terminada`, `cliente.actualizado` (A1), `servicio.estado_cambiado`, `servicio.config_cambiada` (solo si cambian `plan` o `empresa`, contrato Horus 1.7.0) → webhooks firmados a Horus (`contratos/horus.md` §2.3), solo con el conector activo; `horus.config_cambiada` |
 | `iris` | A6 (`node ace iris:worker`, `apps/api/app/integraciones/iris/envios.ts`) | `cliente.actualizado`, `servicio.creado`, `servicio.config_cambiada`, `asignacion.cambiada`, `servicio.estado_cambiado`, `inventario.equipo_por_recuperar`, `servicio.caidas_repetidas` → webhooks firmados a Iris (`contratos/iris.md` §2.3), solo con el conector activo con receptor y para empresas del alcance del usuario técnico «Iris» |
-| `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada` y `plan.velocidad_cambiada` (reescribe `aaa:user:<user_ppp>`) |
+| `aaa-cache` | A1 | `servicio.*`, `asignacion.cambiada`, `plan.velocidad_cambiada`, `router.estrategia_cambiada` y `router.control_cambiado` (reescribe `aaa:user:<user_ppp>`) |
 
 - Dentro de `apps/api` el consumidor implementa la interfaz `ConsumidorEventos` (en `apps/api/app/shared/eventos_bus.ts`; `apps/api/app/notify/consumidor.ts` la reexporta):
 

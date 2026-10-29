@@ -20,6 +20,11 @@ Payload de ambos eventos: `servicio_id` (null si el `user_ppp` no existe), `nas_
 - Un job inválido (contrato roto) falla sin reintentos; un error de Postgres se reintenta con el backoff que fija `aaa` (8 intentos desde 1 s).
 - Cada paquete pasa por una `DomainAction`. Se audita en `audit.acciones` todo salvo el Interim-Update que solo actualiza contadores (`auditarExito()` en `ActualizarSesion`, excepción de la regla 9); si el Interim abre la sesión, o falla, sí se audita.
 
+## Estrategia de velocidad de la sesión y CoA de velocidad (semana 4)
+
+- Al abrir una sesión (`Start`, o el Interim que la abre) `insertarSesion` guarda en `network.sesiones.estrategia_velocidad` la copia de la estrategia del router y la del plan en él (`contratos/control-velocidad.md` §4). La sesión conserva esa estructura (perfil, padre, PCQ o lista del árbol) hasta reconectar aunque la estrategia cambie; null (sesiones anteriores) = la vigente.
+- `velocidad.ts` (`solicitarVelocidad`): emite `sesion.velocidad_solicitada` para cada sesión viva `radius_rate_limit` o `perfil_ppp` de un servicio activo o limitado; `coa` manda el CoA con el `Mikrotik-Rate-Limit` nuevo (nunca Disconnect). Lo usan `planes.sincronizar` y el cambio de estrategia.
+
 ## Sesiones colgadas (semana 3)
 
 Cron `cerrar_colgadas` en la cola `sesiones-cron`, dentro de `node ace sesiones:worker` (`colgadas.ts`, acción `CerrarSesionesColgadas`, permiso/nombre `sesiones.cerrar_colgadas`). `--sin-cron` lo apaga en una réplica.

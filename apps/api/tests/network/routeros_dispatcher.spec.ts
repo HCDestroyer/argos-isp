@@ -8,6 +8,7 @@ import { crearClienteFila, crearEscenarioRouter, crearPlanFila } from '#tests/co
 import CambiarEstadoServicio from '#core/actions/cambiar_estado_servicio'
 import RetirarServicio from '#core/actions/retirar_servicio'
 import { RouterOSFalso } from '#network/routeros/falso'
+import { esCambioDeCorte } from '#network/routeros/corte_router'
 import { clienteDeRouter } from '#network/routeros/router'
 import { normalizarValor } from '#network/routeros/normalizar'
 import { ConsumidorRouterOS } from '#network/routeros/consumidor'
@@ -359,7 +360,9 @@ test.group('RouterOS · dispatcher WISP', (group) => {
         assert.isNull(r.error)
         assert.equal(r.servicios, 2)
         assert.sameDeepMembers(
-            r.correcciones.map((c) => `${c.accion} ${c.ruta} ${c.comment}`),
+            r.correcciones
+                .filter((c) => !esCambioDeCorte(c))
+                .map((c) => `${c.accion} ${c.ruta} ${c.comment}`),
             [
                 `creado /queue/simple ${commentServicio(a.servicio.id)}`,
                 `actualizado /queue/simple ${commentServicio(b.servicio.id)}`,

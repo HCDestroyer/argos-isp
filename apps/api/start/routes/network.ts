@@ -50,6 +50,7 @@ import { registrarSeccionMetricas } from '#monitoreo/metricas'
 import { leerMetricasRouterOS } from '#network/routeros/metricas'
 import { VELOCIDAD_POR_DEFECTO, vistaPreviaVelocidad, type VelocidadPlan } from '#network/velocidad'
 import { vistaPreviaControl } from '#network/routeros/cambio_control'
+import velocidad from '#start/routes/velocidad'
 
 // A2: colas simples por router en `/metrics` (lo que leyó el reconciliador; el scrape no toca el router).
 registrarSeccionMetricas('routeros', leerMetricasRouterOS)
@@ -463,4 +464,5 @@ const red: Ruta[] = [
     }),
 ]
 
-export default [...routers, ...planes, ...sesiones, ...red]
+// A2: control de velocidad por capas, sincronizar plan, reconciliar y corte (`start/routes/velocidad.ts`).
+export default [...routers, ...planes, ...sesiones, ...red, ...velocidad]

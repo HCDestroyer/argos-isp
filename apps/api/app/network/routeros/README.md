@@ -21,6 +21,9 @@ Vive en `apps/api` y no en `services/coa` porque usa la función de velocidad ú
 | `consumidor.ts`                   | Grupo `routeros` del bus                                                                                                                                                                                                 |
 | `jobs.ts`                         | Crons `recuperar`, `reconciliar` y `sondear` (cola `routeros-cron`)                                                                                                                                                      |
 | `velocidad_router.ts`             | Función pura: objetos de velocidad del router (padres por plan, perfiles PPP `plan-<id>`) según `control_velocidad`, reuso y lo leído del router                                                                         |
+| `corte_router.ts`                 | Función pura: objetos de nivel router del corte y FastTrack (mismos comentarios que `lab.rsc`), orden de las reglas                                                                                                       |
+| `sincronizar.ts`                  | `sincronizarPlan`: `planes.sincronizar` (CoA de velocidad y `aaa:user:*`) y `routeros.reconciliar` de cada router del plan                                                                                               |
+| `diagnostico.ts`                  | Vista previa de «Reconciliar ahora» (lee el router) y chequeo `corte` de «Probar conexión»                                                                                                                              |
 | `prefijos.ts`                     | Cola `routeros-prefijos`: tras `sesion.iniciada` sin /56 (IPv6 `radius_pool`), `CompletarPrefijoDelegado` lee el binding DHCPv6-PD del router (`app/network/sesiones`)                                                   |
 
 Comando: `node ace routeros:worker` (consumidor + crons; `--una-vez reconciliar|recuperar|sondear`, `--sin-eventos`).
@@ -89,16 +92,31 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 - Solo capacidad (`de = a`): reconcilia el router (padres globales).
 - **Vista previa**: `GET /api/v1/routers/:id/vista-previa-control?a=simple|arbol_pcq` (mismo permiso), schema `VistaPreviaControl`: `crear`, `actualizar` y `borrar` (`ruta`, `clave` = comment o name, `nombre`), conteos por menú (`menus`), `servicios`, `lotes` y `sesiones_a_desconectar`. Se calcula con Postgres, sin tocar el router.
 
+### Estrategia por capas (`contratos/control-velocidad.md`)
+
+El modo por router pasó a ser una estrategia de cuatro capas (aplicación, padre, tipo de cola, extras) por tipo de conexión, con excepción por plan (`app/network/estrategia_velocidad.ts`). `consultas.ts` resuelve la estrategia efectiva de cada servicio y la de su sesión PPPoE (`network.sesiones.estrategia_velocidad`, la copia que guarda el `Start`); `planesDeRouter` agrupa por plan y familia (colas simples o árbol) y cada servicio cuenta en la estrategia con la que está limitado hoy, mientras la vigente ya tiene sus objetos creados. `velocidad_router.ts` arma padre del router, padres de plan, colas PCQ (`pcq_plan`), tipos de hoja (`sfq`, `fq_codel`, `cake`), perfiles `plan-<id>` (con `parent-queue`, `queue-type`, `rate-limit`) y el árbol con sus variantes de padre. Los modos `simple` y `arbol_pcq` son atajos (`estrategiasDeControl`): un router migrado tiene los mismos objetos que antes.
+
+- **Cambio** (`router.estrategia_cambiada`): job `cambiar_control` por lotes con firma del destino (si otro cambio lo superó, no hace nada). Sin `reconectar`, las sesiones PPPoE reciben CoA de velocidad (`sesion.velocidad_solicitada`) y conservan lo demás hasta reconectar; con `reconectar`, Disconnect por lotes. El último paso aplica también el corte.
+- **Sincronizar plan** (`POST /planes/:id/sincronizar` y `plan.velocidad_cambiada`): `sincronizar.ts`.
+- **Vista previa**: `vistaPreviaEstrategia` (Postgres, sin leer el router) y `vistaPreviaReconciliar` (lee el router).
+
+### Corte de nivel router (`corte_router.ts`)
+
+El reconciliador (y el último paso de un cambio de estrategia) deja el corte en cada router con API: lista de interfaces y perfil `suspendido`, address-lists, saltos `argosisp:top` al inicio de filter y nat (antes de FastTrack), cadenas `argos-corte`, `argos-corte-in`, `argos-activo` y `argos-corte-nat`, y la excepción de FastTrack si alguna estrategia la pide. Mismos comentarios que `lab.rsc`: si el script ya corrió, no cambia nada. Orden: crear → `move` → borrar. Configuración `ROUTERS_SERVICIO_*` (la del script de conexión) o `PORTAL_URL_PUBLICA` / pasarela.
+
 ## Eventos
 
 | Consume (grupo `routeros`)                                                                       | Hace                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `servicio.creado`, `servicio.estado_cambiado`, `servicio.config_cambiada`, `asignacion.cambiada` | `AplicarRedServicio` del servicio: estado deseado completo con los datos **vigentes** de Postgres (no del payload), así que un evento repetido o fuera de orden no escribe de más |
-| `plan.velocidad_cambiada`                                                                        | `ReconciliarRouterOS` de los routers del plan (o el de la excepción)                                                                                                              |
+| `plan.velocidad_cambiada`                                                                        | `sincronizarPlan`: CoA de velocidad a las sesiones vivas, `aaa:user:*` y `ReconciliarRouterOS` de los routers del plan (o el de la excepción)                                     |
+| `router.estrategia_cambiada`                                                                     | Job `cambiar_control` (por lotes, sin cortar salvo `reconectar`)                                                                                                                  |
+| `router.conexion_registrada`                                                                     | `ReconciliarRouterOS` (corte y estrategia en un router recién conectado)                                                                                                          |
 | `sesion.iniciada` sin prefijo delegado                                                           | Job en `routeros-prefijos` (solo lectura en el router; `/ipv6/dhcp-server/binding` y `/ppp/active` son menús de solo lectura del cliente)                                         |
 
 | Emite (outbox)                                                  | Cuándo                                                                                                                                                                                                                              |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sesion.velocidad_solicitada`                                   | Sincronizar plan o cambio de estrategia: CoA de velocidad (lo manda `coa`) a sesiones `radius_rate_limit` / `perfil_ppp` vivas                                                                                                         |
 | `routeros.fallido { servicio_id, router_id, operacion, error }` | El router no respondió tras 1 + 3 intentos (backoff 0,5 · 1 · 2 s), rechazó las credenciales, respondió 400 o no tiene credenciales. El router queda pendiente y la acción **no lanza** (reintentar el evento no arregla el router) |
 
 ## Garantías
@@ -117,6 +135,10 @@ Para cada plan con `reuso > 1` efectivo en el router (plantilla o `planes_router
 - IPv6 en la address-list de corte (`/ipv6/firewall/address-list`): fuera de los menús administrados de la tarea 1.
 
 ## Pruebas
+
+- `tests/network/routeros_estrategias.spec.ts`: matriz (422 con el porqué), objetos de cada estrategia, dos formas en el mismo router, migración sin cambios, cambio sin cortar (WISP crea antes de borrar, PPPoE con CoA y sin Disconnect), `reconectar` y sincronizar plan.
+- `tests/network/routeros_corte.spec.ts`: router virgen con el corte, idempotencia, `move` de un salto desordenado, reglas del script intactas y FastTrack según la estrategia.
+- `tests/network/coa.spec.ts`: de punta a punta con `coa` y el NAS simulado: sincronizar → CoA-Request sin Disconnect; el CoA de suspensión nombra la lista y la cadena que dejó el reconciliador.
 
 - `tests/network/routeros_cliente.spec.ts`: cliente contra el RouterOS falso (idempotencia, normalización, 401, 400, 5xx, timeout, router caído, PUT con respuesta perdida, HTTPS con y sin CA).
 - `tests/network/routeros_pendiente.spec.ts`: pendiente de instalación sin nada en el router (sin escrituras ni fila de auditoría), activación por la API → cola, lease y ARP; reconciliador que no crea y borra lo suyo, y repone tras activar; el pendiente fuera de los planes del router.

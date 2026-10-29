@@ -286,6 +286,9 @@
 # 7. Address-lists (IPv4 e IPv6). Las entradas por FQDN las resuelve el router.
 # ============================================================================
 :put "argosisp: address-lists"
+# La lista de suspendidos existe aunque no haya ninguno (la usan los saltos de corte); el reconciliador
+# de ArgosIsp deja la misma entrada (contratos/control-velocidad.md §10).
+/ip firewall address-list add list=suspendidos address=192.0.2.255 comment="argosisp: corte lista suspendidos"
 /ip firewall address-list add list=argos-portal address=$portalV4 comment="argosisp: portal IP"
 /ip firewall address-list add list=argos-portal address=$portalFqdn comment="argosisp: portal FQDN"
 /ip firewall address-list add list=argos-dns address=$pppLocalV4 comment="argosisp: DNS del router"

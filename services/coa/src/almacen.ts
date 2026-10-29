@@ -75,9 +75,13 @@ export class AlmacenPg implements Almacen {
             user_ppp: string | null
             estado: EstadoServicio
             control_velocidad: 'simple' | 'arbol_pcq' | null
+            con_excepcion: boolean
         }>(
-            `SELECT s.user_ppp, s.estado, r.control_velocidad
-             FROM core.servicios s LEFT JOIN network.routers r ON r.id = s.router_id
+            `SELECT s.user_ppp, s.estado, r.control_velocidad,
+                    (pr.estrategia_velocidad IS NOT NULL) AS con_excepcion
+             FROM core.servicios s
+             LEFT JOIN network.routers r ON r.id = s.router_id
+             LEFT JOIN network.planes_routers pr ON pr.plan_id = s.plan_id AND pr.router_id = s.router_id
              WHERE s.id = $1`,
             [servicioId],
         )
@@ -94,13 +98,19 @@ export class AlmacenPg implements Almacen {
         // Solo activo y limitado llevan rate-limit por CoA; sin user_ppp no hay sesión PPPoE; en
         // `arbol_pcq` la velocidad no viaja por RADIUS (la ponen las listas del árbol).
         if ((fila.estado !== 'activo' && fila.estado !== 'limitado') || !fila.user_ppp) return servicio
-        if (control === 'arbol_pcq') return servicio
+        // Un plan con estrategia propia en el router (contratos/control-velocidad.md) puede no ir por árbol.
+        if (control === 'arbol_pcq' && !fila.con_excepcion) return servicio
         if (!this.#rateLimits) return { ...servicio, error_rate_limit: 'coa sin fuente de rate-limit' }
         const r = await this.#rateLimits.obtener(servicioId, fila.user_ppp)
-        // El control del router sale de Postgres (vigente), no del registro.
-        return r.ok
-            ? { ...servicio, ...r.valor, control_velocidad: control }
-            : { ...servicio, error_rate_limit: r.error }
+        // El control del router sale de Postgres (vigente); la aplicación efectiva (con la excepción del
+        // plan), del registro que mantiene A1.
+        if (!r.ok) return { ...servicio, error_rate_limit: r.error }
+        const aplicacion = r.valor.aplicacion
+        return {
+            ...servicio,
+            ...r.valor,
+            control_velocidad: aplicacion ? (aplicacion === 'arbol_pcq' ? 'arbol_pcq' : 'simple') : control,
+        }
     }
 
     async sesionesActivas(servicioId: number): Promise<SesionActiva[]> {

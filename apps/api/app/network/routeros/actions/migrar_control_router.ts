@@ -4,18 +4,26 @@ import { ErrorRouterOS } from '#network/routeros/errores'
 import { RouterSinCredenciales } from '#network/routeros/router'
 import { estadoDeseado, estadoVacio } from '#network/routeros/estado_deseado'
 import {
+    estrategiasEnUso,
+    firmaEstrategia,
     planesDeRouter,
+    redesV4DeRouter,
     routerDispatcher,
     servicioRed,
     serviciosVigentesDeRouter,
 } from '#network/routeros/consultas'
+import { configCorte, estadoCorteRouter } from '#network/routeros/corte_router'
 import { estadoVelocidadRouter } from '#network/routeros/velocidad_router'
 import { guardarLecturaColas } from '#network/routeros/metricas'
 import { bloquearSesionesAbiertas, solicitarDesconexion } from '#network/sesiones/desconexion'
+import { solicitarVelocidad } from '#network/sesiones/velocidad'
 import type { ControlVelocidad } from '#network/velocidad'
 import {
+    aplicarCorte,
     aplicarEstado,
     asegurarVelocidad,
+    leerCorteRouter,
+    pideFasttrack,
     bitacoraRed,
     fabricaPorDefecto,
     leerVelocidadRouter,
@@ -46,6 +54,9 @@ export interface EntradaMigrarControl {
     /** número de lote (1…n) y total, para `audit.red` */
     lote?: number
     lotes?: number
+    /** Cambio por capas: firma del destino (`firmaEstrategia`); null = cambio de modo de antes */
+    firma?: string | null
+    plan_id?: number | null
 }
 
 export interface ResultadoMigrarControl {
@@ -54,6 +65,10 @@ export interface ResultadoMigrarControl {
     cambios: Cambio[]
     /** Sesiones PPPoE a las que se pidió Disconnect en este lote */
     desconexiones: number
+    /** Sesiones PPPoE a las que se pidió CoA de velocidad (sin desconectar) */
+    coa: number
+    /** Sesiones PPPoE que conservan lo que tenían hasta reconectar */
+    conservan: number
     avisos: string[]
     error: string | null
     /** Reglas de oro incumplidas (no se escribió el padre o el árbol; `routeros.fallido`) */
@@ -101,6 +116,8 @@ export default class MigrarControlRouterOS extends DomainAction<
             fase: input.fase,
             cambios: [],
             desconexiones: 0,
+            coa: 0,
+            conservan: 0,
             avisos: [],
             error: null,
             errores_velocidad: [],
@@ -112,10 +129,17 @@ export default class MigrarControlRouterOS extends DomainAction<
             salida.superado = true
             return salida
         }
-        if (router.velocidad.control !== input.a) {
+        const firma = input.firma
+            ? await firmaEstrategia(input.router_id, input.plan_id ?? null, t.trx)
+            : null
+        if (input.firma ? firma !== input.firma : router.velocidad.control !== input.a) {
             // Otro cambio posterior ya lo devolvió: ese evento hará su propia transición.
             salida.superado = true
-            salida.avisos.push(`el router está en ${router.velocidad.control}, no en ${input.a}`)
+            salida.avisos.push(
+                input.firma
+                    ? 'la estrategia cambió otra vez: la ejecuta su propio evento'
+                    : `el router está en ${router.velocidad.control}, no en ${input.a}`,
+            )
             return salida
         }
         const ctx = {
@@ -143,6 +167,19 @@ export default class MigrarControlRouterOS extends DomainAction<
                     if (input.fase === 'terminar') {
                         const despues = await leerVelocidadRouter(cliente)
                         salida.cambios.push(...(await limpiarVelocidad(cliente, velocidad, despues, ctx)))
+                        // Corte y FastTrack según la estrategia nueva (la excepción de FastTrack puede cambiar).
+                        if (router.con_credenciales) {
+                            const lecturaCorte = await leerCorteRouter(cliente)
+                            const corte = estadoCorteRouter(
+                                configCorte(),
+                                {
+                                    fasttrack: pideFasttrack(estrategiasEnUso(router.velocidad, todos)),
+                                    redes_v4: await redesV4DeRouter(input.router_id, t.trx),
+                                },
+                                lecturaCorte.get('/ppp/profile') ?? [],
+                            )
+                            salida.cambios.push(...(await aplicarCorte(cliente, corte, lecturaCorte, ctx)))
+                        }
                         // Métrica de colas por router con el modo nuevo (la de A6 no espera al reconciliador).
                         const final = await leerVelocidadRouter(cliente)
                         const simples = final.get('/queue/simple')?.length ?? 0
@@ -174,6 +211,16 @@ export default class MigrarControlRouterOS extends DomainAction<
                                 )
                                 salida.desconexiones++
                             }
+                        } else if (propio && servicio.tipo_conexion === 'pppoe') {
+                            // Sin cortar: lo que se puede en vivo (rate-limit) por CoA; el resto queda
+                            // como entró la sesión hasta que reconecte (contratos/control-velocidad.md §4).
+                            const r = await solicitarVelocidad(
+                                t,
+                                servicio,
+                                'cambio de estrategia de velocidad',
+                            )
+                            salida.coa += r.coa
+                            salida.conservan += r.conservan
                         }
                     }
                 }
@@ -210,6 +257,7 @@ export default class MigrarControlRouterOS extends DomainAction<
                 fase: input.fase,
                 de: input.de,
                 a: input.a,
+                plan_id: input.plan_id ?? null,
                 lote: input.lote ?? null,
                 lotes: input.lotes ?? null,
                 servicios: input.servicio_ids?.length ?? null,
@@ -222,6 +270,8 @@ export default class MigrarControlRouterOS extends DomainAction<
                 actualizados: salida.cambios.filter((c) => c.accion === 'actualizado').length,
                 borrados: salida.cambios.filter((c) => c.accion === 'borrado').length,
                 desconexiones: salida.desconexiones,
+                coa: salida.coa,
+                conservan: salida.conservan,
                 error: salida.error,
                 final: input.fase === 'terminar' || salida.error !== null,
             },

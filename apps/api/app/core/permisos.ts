@@ -61,7 +61,9 @@ export const PERMISOS = {
     'routers.editar': 'Editar routers y sus credenciales',
     'routers.marcar_migrado': 'Marcar cuándo un router pasó al nuevo RADIUS (aaa)',
     'routers.cambiar_control_velocidad':
-        'Cambiar el control de velocidad de un router (simple o árbol PCQ); solo admin',
+        'Cambiar el control de velocidad de un router o de un plan en él (estrategia por capas); solo admin',
+    'routeros.reconciliar':
+        'Reconciliar ahora un router: crear y corregir colas, perfiles, árbol y reglas de corte por su API',
     'redes.ver': 'Ver redes IPv4',
     'redes.crear': 'Crear redes IPv4',
     'ipv6.ver': 'Ver bloques y pools IPv6',
@@ -69,6 +71,8 @@ export const PERMISOS = {
     'planes.ver': 'Ver planes',
     'planes.crear': 'Crear planes',
     'planes.editar': 'Editar planes e implementaciones por router',
+    'planes.sincronizar':
+        'Sincronizar un plan: reescribir RADIUS, CoA de velocidad a las sesiones vivas y reconciliar sus routers',
     'sesiones.ver': 'Ver sesiones PPPoE',
     'sesiones.desconectar': 'Desconectar sesiones PPPoE',
     'red.ver': 'Ver eventos de red (CoA, Disconnect y comandos a RouterOS con la respuesta del equipo)',
@@ -430,11 +434,13 @@ export const ROLES_BASE: Record<string, { descripcion: string; permisos: readonl
             'routers.crear',
             'routers.editar',
             'routers.marcar_migrado',
+            'routeros.reconciliar',
             'redes.ver',
             'redes.crear',
             'ipv6.ver',
             'ipv6.crear',
             'planes.ver',
+            'planes.sincronizar',
             'sesiones.ver',
             'sesiones.desconectar',
             'red.ver',
