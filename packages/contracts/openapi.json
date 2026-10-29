@@ -71818,7 +71818,9 @@
         "required": [
           "token",
           "webhook",
-          "conector_id"
+          "conector_id",
+          "alcance_global",
+          "empresas"
         ],
         "properties": {
           "token": {
@@ -71842,6 +71844,39 @@
           },
           "conector_id": {
             "type": "string"
+          },
+          "alcance_global": {
+            "type": "boolean",
+            "description": "true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; false: solo las de `empresas` (contrato Iris 0.3.1)"
+          },
+          "empresas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "nombre",
+                "nit"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "nombre": {
+                  "type": "string",
+                  "description": "Nombre comercial"
+                },
+                "nit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "NIT sin guiones; null si la empresa aún no lo tiene"
+                }
+              }
+            },
+            "description": "Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1)"
           }
         }
       },

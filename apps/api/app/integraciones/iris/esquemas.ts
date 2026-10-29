@@ -1,4 +1,13 @@
-import { definirEsquema, id, instante, nulable, objeto, texto } from '#shared/openapi/esquemas'
+import {
+    booleano,
+    definirEsquema,
+    id,
+    instante,
+    lista,
+    nulable,
+    objeto,
+    texto,
+} from '#shared/openapi/esquemas'
 
 /** Schemas de respuesta del conector Iris (`contratos/iris.md` §1). */
 
@@ -54,6 +63,26 @@ export const CanjeConexionIris = definirEsquema(
         token: { ...texto, description: 'Token `atk_` del usuario técnico Iris (§1.1)' },
         webhook: objeto({ url: texto, secreto: texto }),
         conector_id: texto,
+        alcance_global: {
+            ...booleano,
+            description:
+                'true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; ' +
+                'false: solo las de `empresas` (contrato Iris 0.3.1)',
+        },
+        empresas: {
+            ...lista(
+                objeto({
+                    id,
+                    nombre: { ...texto, description: 'Nombre comercial' },
+                    nit: {
+                        ...nulable(texto),
+                        description: 'NIT sin guiones; null si la empresa aún no lo tiene',
+                    },
+                }),
+            ),
+            description:
+                'Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1)',
+        },
     }),
 )
 

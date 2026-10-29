@@ -10441,6 +10441,16 @@ export interface components {
                 secreto: string;
             };
             conector_id: string;
+            /** @description true: el usuario técnico Iris ve todas las empresas activas, también las que se creen después; false: solo las de `empresas` (contrato Iris 0.3.1) */
+            alcance_global: boolean;
+            /** @description Empresas activas del alcance del token al canjear, en orden de id (contrato Iris 0.3.1) */
+            empresas: {
+                id: number;
+                /** @description Nombre comercial */
+                nombre: string;
+                /** @description NIT sin guiones; null si la empresa aún no lo tiene */
+                nit: string | null;
+            }[];
         };
         CanjeLealtad: {
             id: number;
