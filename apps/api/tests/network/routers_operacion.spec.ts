@@ -422,3 +422,65 @@ test.group('Routers · editar desde el panel', () => {
         assert.equal(zonaMala.body().errors[0].field, 'zona_id')
     })
 })
+
+test.group('Routers · router.radius_cambiado', () => {
+    async function eventos(routerId: number) {
+        const filas = await db
+            .from('audit.outbox')
+            .where('evento', 'router.radius_cambiado')
+            .whereRaw("(payload->>'router_id')::bigint = ?", [routerId])
+            .orderBy('id')
+        return filas.map((f) => f.payload)
+    }
+
+    test('sale al crear y al cambiar nas_ip o radius_secret; nunca con el secreto; no sale si no cambian', async ({
+        client,
+        assert,
+    }) => {
+        const { token } = await usuarioConRoles(['admin'])
+        const creado = await estado(
+            client
+                .post('/api/v1/routers')
+                .bearerToken(token)
+                .json({
+                    nombre: unico('MK Radius'),
+                    host: '192.0.2.50',
+                    nas_ip: ipUnica(),
+                    radius_secret: 'secreto-radius-inicial',
+                }),
+            201,
+        )
+        const id = creado.body().id
+        assert.deepEqual(await eventos(id), [
+            { router_id: id, empresa_id: null, campos: ['nas_ip', 'radius_secret'] },
+        ])
+
+        // otros campos, o la clave vacía (no cambia): sin evento
+        await estado(
+            client
+                .put(`/api/v1/routers/${id}`)
+                .bearerToken(token)
+                .json({ version: 1, nombre: unico('MK Radius 2'), host: '192.0.2.51', radius_secret: '' }),
+            200,
+        )
+        assert.lengthOf(await eventos(id), 1)
+
+        await estado(
+            client
+                .put(`/api/v1/routers/${id}`)
+                .bearerToken(token)
+                .json({ version: 2, radius_secret: 'otro-secreto-radius' }),
+            200,
+        )
+        await estado(
+            client.put(`/api/v1/routers/${id}`).bearerToken(token).json({ version: 3, nas_ip: ipUnica() }),
+            200,
+        )
+        const todos = await eventos(id)
+        assert.deepEqual(
+            todos.map((e) => e.campos),
+            [['nas_ip', 'radius_secret'], ['radius_secret'], ['nas_ip']],
+        )
+        assert.notInclude(JSON.stringify(todos), 'secreto-radius')
+    })
+})

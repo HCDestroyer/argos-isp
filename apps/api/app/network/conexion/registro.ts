@@ -1,6 +1,6 @@
 import type { Transaccion } from '#shared/domain_action'
 import { Conflicto } from '#shared/errores'
-import { auditableRouter } from '#network/actions/crear_router'
+import { auditableRouter, avisarRadius } from '#network/actions/crear_router'
 import { verRouter } from '#network/consultas/routers'
 import { configWireguard } from '#network/conexion/config'
 import { USUARIO_API, auditableConexion, filaConexion, type FilaConexion } from '#network/conexion/consultas'
@@ -100,7 +100,12 @@ export async function aplicarRegistro(
     const a = auditableRouter(routerAntes)
     if (conexion.api_password_pendiente && a.api_password) a.api_password = 'anterior'
     if (datos.api_ca && a.api_ca) a.api_ca = 'anterior'
-    await t.registrarCambios({ tipo: 'router', id: routerId }, a, auditableRouter(routerDespues))
+    const cambiados = await t.registrarCambios(
+        { tipo: 'router', id: routerId },
+        a,
+        auditableRouter(routerDespues),
+    )
+    await avisarRadius(t, routerDespues, cambiados)
 
     await t.emit('router.conexion_registrada', {
         router_id: routerId,
