@@ -1,13 +1,17 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { reiniciarFixtures, sesionFixture } from '~~/fixtures'
+import { reiniciarFixtures, sesionFixture, simularFalla } from '~~/fixtures'
 import { meAdmin, meCajero } from '~~/fixtures/auth/sesiones'
 import { bd } from '~~/fixtures/bd'
 import { MATRIZ } from '~~/fixtures/routers/estrategias'
+import { estrategiaSimple } from '~~/fixtures/routers/estrategiasDatos'
+import { UApp } from '#components'
 import EstrategiaVelocidadEditor from '~/components/EstrategiaVelocidadEditor.vue'
 import EstrategiaVelocidadModal from '~/components/EstrategiaVelocidadModal.vue'
 import SincronizarPlanModal from '~/components/SincronizarPlanModal.vue'
-import type { EstrategiasRouter, RouterConEstrategia } from '~/types/controlVelocidad'
+import RouterChequeoCorte from '~/components/RouterChequeoCorte.vue'
+import RouterReconciliarModal from '~/components/RouterReconciliarModal.vue'
+import type { EstrategiasRouter } from '~/types/controlVelocidad'
 import { esperar } from '../ayudas/esperar'
 
 /** Control de velocidad por capas y sincronizar plan (`contratos/control-velocidad.md`). */
@@ -23,8 +27,22 @@ describe('control de velocidad por capas', () => {
         useUsuarioActual().value = null
     })
 
-    const router = (id: number) => structuredClone(bd.routers.find(r => r.id === id)!) as typeof bd.routers[number] & RouterConEstrategia
-    const simple = () => structuredClone(ESTRATEGIAS_MIGRACION.simple)
+    const router = (id: number) => structuredClone(bd.routers.find(r => r.id === id)!)
+    const simple = () => estrategiaSimple()
+    const enBody = (prueba: string) => document.body.querySelector<HTMLElement>(`[data-prueba="${prueba}"]`)
+
+    it('fixtures como la API: estrategia y versión en cada router, matriz con atajos, excepción en la implementación', () => {
+        expect(bd.routers.map(r => [r.id, r.estrategia_velocidad.pppoe.aplicacion, r.routeros_version])).toEqual([
+            [1, 'radius_rate_limit', '7.24.5 (stable)'],
+            [2, 'arbol_pcq', '6.49.10 (long-term)'],
+            [3, 'radius_rate_limit', null],
+        ])
+        expect(MATRIZ.atajos.simple).toEqual(bd.routers[0]?.estrategia_velocidad)
+        expect(MATRIZ.atajos.arbol_pcq).toEqual(bd.routers[1]?.estrategia_velocidad)
+        expect(MATRIZ.tipos_cola.find(t => t.valor === 'cake')?.routeros_minimo).toBe('7')
+        expect(MATRIZ.aplicaciones.find(a => a.valor === 'pcq_plan')).toMatchObject({ familia: 'simple', coa_en_vivo: false, tipos_cola: ['pcq'] })
+        expect(bd.implementacionesPlan.every(i => i.estrategia_velocidad === null)).toBe(true)
+    })
 
     it('estrategia efectiva: el plan sobrescribe capa por capa y los extras campo por campo', () => {
         const base = simple().pppoe
@@ -79,7 +97,7 @@ describe('control de velocidad por capas', () => {
         expect(!enSeis.ok && enSeis.problema.errors?.map(e => e.rule)).toContain('version')
 
         const cambio = await cv.cambiarRouter(1, { version: 1, estrategia_velocidad: conCake, motivo: 'Latencia' })
-        expect(cambio.ok && (cambio.data as RouterConEstrategia).estrategia_velocidad?.pppoe.tipo_cola).toBe('cake')
+        expect(cambio.ok && cambio.data.estrategia_velocidad.pppoe.tipo_cola).toBe('cake')
         const viejo = await cv.cambiarRouter(1, { version: 1, estrategia_velocidad: conCake })
         expect(!viejo.ok && viejo.problema.status).toBe(409)
     })
@@ -99,22 +117,34 @@ describe('control de velocidad por capas', () => {
         }
         document.body.querySelector<HTMLButtonElement>('[data-prueba="aplicar-estrategia"]')!.click()
         await esperar(() => expect(vista.emitted('actualizado')).toHaveLength(1))
-        expect((bd.routers[0] as RouterConEstrategia).estrategia_velocidad?.pppoe.tipo_cola).toBe('cake')
+        expect(bd.routers[0]?.estrategia_velocidad.pppoe.tipo_cola).toBe('cake')
     })
 
     it('excepción del plan en el router: hereda lo que no fija y null vuelve a heredar todo', async () => {
         const cv = useControlVelocidad()
         const version = () => bd.implementacionesPlan.find(i => i.plan_id === 1 && i.router_id === 1)?.version ?? 0
+        // Vista previa del plan: `planes[]` como el validador de la API, y la excepción que cambia en `planes`.
+        const previa = await cv.vistaPrevia(1, { planes: [{ plan_id: 1, estrategia_velocidad: { pppoe: { tipo_cola: 'sfq' } } }] })
+        expect(previa.ok && previa.data.planes).toEqual([{ plan_id: 1, de: null, a: { pppoe: { tipo_cola: 'sfq' } } }])
+        const invalidaPlan = await cv.vistaPrevia(1, { planes: [{ plan_id: 1, estrategia_velocidad: { pppoe: { tipo_cola: 'pcq' } } }] })
+        expect(!invalidaPlan.ok && invalidaPlan.problema.errors?.[0]).toMatchObject({ field: 'planes.1.pppoe.tipo_cola', rule: 'tipo_cola' })
+
         const guardada = await cv.cambiarPlan(1, 1, { version: version(), estrategia_velocidad: { pppoe: { tipo_cola: 'sfq' } } })
-        expect(guardada.ok).toBe(true)
-        expect(bd.estrategiasPlanes['1:1']).toEqual({ pppoe: { tipo_cola: 'sfq' } })
+        expect(guardada.ok && guardada.data.estrategia_velocidad).toEqual({ pppoe: { tipo_cola: 'sfq' } })
         const mala = await cv.cambiarPlan(1, 1, { version: version(), estrategia_velocidad: { ip_estatica: { aplicacion: 'radius_rate_limit' } } })
         expect(!mala.ok && mala.problema.errors?.[0]?.field).toBe('estrategia_velocidad.ip_estatica.aplicacion')
+        const sinVersion = await cv.cambiarPlan(1, 1, { estrategia_velocidad: null })
+        expect(!sinVersion.ok && sinVersion.problema.errors?.[0]?.field).toBe('version')
         await cv.cambiarPlan(1, 1, { version: version(), estrategia_velocidad: null })
-        expect(bd.estrategiasPlanes['1:1']).toBeUndefined()
+        expect(bd.implementacionesPlan.find(i => i.plan_id === 1 && i.router_id === 1)?.estrategia_velocidad).toBeNull()
+
+        // Un plan global sin implementación en el router: sin `version`, la API crea la fila con la estrategia.
+        const nueva = await cv.cambiarPlan(2, 1, { estrategia_velocidad: { pppoe: { tipo_cola: 'fq_codel' } } })
+        expect(nueva.ok && nueva.data).toMatchObject({ plan_id: 2, router_id: 1, estrategia_velocidad: { pppoe: { tipo_cola: 'fq_codel' } } })
     })
 
     it('sincronizar plan: resumen por router y el router caído con su error, sin hacer fallar a los demás', async () => {
+        bd.routersSinRespuesta = [2]
         const plan = bd.planes.find(p => p.id === 1)!
         const vista = await mountSuspended(SincronizarPlanModal, { props: { plan, open: false } })
         await vista.setProps({ open: true })
@@ -122,9 +152,64 @@ describe('control de velocidad por capas', () => {
         document.body.querySelector<HTMLButtonElement>('[data-prueba="sincronizar-confirmar"]')!.click()
         await esperar(() => expect(document.body.querySelector('[data-prueba="sincronizar-resumen"]')).not.toBeNull())
         expect(document.body.querySelector('[data-prueba="sincronizar-resumen"]')?.textContent).toContain('un router con error')
-        expect(document.body.querySelector('[data-router="3"]')?.closest('tr')?.textContent).toContain('no respondió')
+        expect(document.body.querySelector('[data-router="2"]')?.closest('tr')?.textContent).toContain('no respondió')
         expect(document.body.querySelector('[data-router="1"]')?.closest('tr')?.textContent).toContain('Al día')
-        expect(document.body.querySelector('[data-prueba="reintentar-router-3"]')).not.toBeNull()
+        // RB-Bodega no tiene API: `reconciliado: false`, sin inventar un «Al día».
+        expect(enBody('sin-api-3')?.textContent).toContain('Solo RADIUS')
+        bd.routersSinRespuesta = []
+        enBody('reintentar-router-2')?.click()
+        await esperar(() => expect(document.body.querySelector('[data-router="2"]')?.closest('tr')?.textContent).toContain('Al día'))
+    })
+
+    it('reconciliar ahora: vista previa por grupo, confirmar y quedar sin cambios', async () => {
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterReconciliarModal, { router: { id: 1, nombre: 'RB-Centro' }, open: true }) }) })
+        await mountSuspended(conApp)
+        await esperar(() => expect(enBody('reconciliar-menus')).not.toBeNull())
+        expect(enBody('reconciliar-grupo-corte')?.textContent).toContain('argosisp:top corte')
+        expect(enBody('reconciliar-grupo-velocidad')?.textContent).toContain('argosisp:plan:2')
+        enBody('reconciliar-confirmar')?.click()
+        await esperar(() => expect(enBody('reconciliar-resultado')?.textContent).toContain('4 objetos corregidos'))
+        expect(bd.acciones.at(-1)).toMatchObject({ accion: 'routeros.reconciliar' })
+        const despues = await useControlVelocidad().vistaPreviaReconciliar(1)
+        expect(despues.ok && despues.data.cambios).toEqual([])
+    })
+
+    it('reconciliar ahora: el router sin API o que no responde muestra el error de la API, sin confirmar', async () => {
+        bd.routersSinRespuesta = [2]
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterReconciliarModal, { router: { id: 2, nombre: 'CCR-Mixco' }, open: true }) }) })
+        await mountSuspended(conApp)
+        await esperar(() => expect(enBody('reconciliar-sin-lectura')).not.toBeNull())
+        expect(enBody('reconciliar-sin-lectura')?.textContent).toContain('no respondió')
+        expect(enBody('reconciliar-sin-lectura')?.textContent).toContain('Reintentar')
+        expect(enBody('reconciliar-confirmar')?.hasAttribute('disabled')).toBe(true)
+    })
+
+    it('probar el corte: cada problema con su paso a seguir; «Reconciliar ahora» lo deja listo', async () => {
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterChequeoCorte, { router: { id: 1, nombre: 'RB-Centro' } }) }) })
+        const vista = await mountSuspended(conApp)
+        await vista.find('[data-prueba="probar-corte"]').trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="corte-faltan_reglas"]').exists()).toBe(true))
+        expect(vista.find('[data-prueba="corte-faltan_reglas"]').text()).toContain('Reconciliar ahora» lo deja como debe estar')
+        expect(vista.find('[data-prueba="corte-reglas_desordenadas"]').exists()).toBe(true)
+        await vista.find('[data-prueba="corte-reconciliar"]').trigger('click')
+        await esperar(() => expect(enBody('reconciliar-confirmar')?.hasAttribute('disabled')).toBe(false))
+        enBody('reconciliar-confirmar')?.click()
+        await esperar(() => expect(vista.find('[data-prueba="corte-ok"]').exists()).toBe(true))
+
+        const mixco = await useControlVelocidad().diagnosticoCorte(2)
+        expect(mixco.ok && mixco.data.problemas).toEqual([expect.objectContaining({ codigo: 'portal_inalcanzable', reconciliar: false })])
+        const bodega = await useControlVelocidad().diagnosticoCorte(3)
+        expect(bodega.ok && bodega.data.problemas[0]?.codigo).toBe('sin_api')
+    })
+
+    it('probar el corte: si la API falla se ve el error con «Reintentar», sin un «listo» inventado', async () => {
+        simularFalla('GET /api/v1/routers/:id/diagnostico-corte', 500)
+        const conApp = defineComponent({ render: () => h(UApp, null, { default: () => h(RouterChequeoCorte, { router: { id: 1, nombre: 'RB-Centro' } }) }) })
+        const vista = await mountSuspended(conApp)
+        await vista.find('[data-prueba="probar-corte"]').trigger('click')
+        await esperar(() => expect(vista.find('[data-prueba="corte-error"]').exists()).toBe(true))
+        expect(vista.text()).toContain('Reintentar')
+        expect(vista.find('[data-prueba="corte-ok"]').exists()).toBe(false)
     })
 
     it('sincronizar pide planes.sincronizar', async () => {

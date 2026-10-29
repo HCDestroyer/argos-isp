@@ -160,6 +160,16 @@ const VELOCIDAD: { campo: 'reuso' | 'garantizado_pct' | 'rafaga_bajada_kbps' | '
                 >
                     <span class="text-sm font-medium text-highlighted">{{ nombreRouter(row.original.router_id) }}</span>
                     <span class="text-xs text-muted">{{ resumenImplementacion(row.original) }}</span>
+                    <UBadge
+                        v-if="tieneExcepcion(row.original.estrategia_velocidad)"
+                        label="Velocidad propia en este router"
+                        icon="i-lucide-sliders-horizontal"
+                        color="info"
+                        variant="subtle"
+                        size="sm"
+                        class="self-start"
+                        :data-prueba="`excepcion-plan-${row.original.router_id}`"
+                    />
                     <span
                         v-if="row.original.rate_limit_override"
                         class="break-all font-mono text-xs text-muted"

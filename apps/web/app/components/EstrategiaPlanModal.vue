@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { EstrategiasPlan, MatrizControlVelocidad, RouterConEstrategia, VistaPreviaEstrategia } from '~/types/controlVelocidad'
+import type { EstrategiasPlan, MatrizControlVelocidad, VistaPreviaEstrategia } from '~/types/controlVelocidad'
 
 /**
- * Excepción de velocidad del plan en un router (`POST /planes/:id/routers/:router_id/estrategia-velocidad`,
+ * Excepción de velocidad del plan en un router (`POST /planes/:id/routers/:routerId/estrategia-velocidad`,
  * `routers.cambiar_control_velocidad`, `contratos/control-velocidad.md` §2 y §4): las mismas capas
  * que el router, cada una con «Heredar del router». Antes de aplicar, la vista previa del router con
- * esta excepción. Sin capas propias se manda `null` (hereda todo).
+ * esta excepción. Sin capas propias se manda `null` (hereda todo). Un plan global sin implementación
+ * en el router se manda sin `version`: la API crea la fila solo con la estrategia.
  */
 const props = defineProps<{
     plan: Plan
     routerId: number
     /** La implementación del plan en el router (su `version` y la excepción guardada), si existe. */
-    implementacion: (PlanRouter & { estrategia_velocidad?: EstrategiasPlan | null }) | null
+    implementacion: PlanRouter | null
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })
@@ -23,7 +24,7 @@ const emit = defineEmits<{
 
 const toast = useToast()
 
-const router = shallowRef<(RouterNas & RouterConEstrategia) | null>(null)
+const router = shallowRef<RouterNas | null>(null)
 const matriz = shallowRef<MatrizControlVelocidad | null>(null)
 const problemaCarga = ref<Problem | null>(null)
 const excepcion = ref<EstrategiasPlan | null>(null)
@@ -66,7 +67,7 @@ async function revisar() {
     cargando.value = true
     problema.value = null
     errores.value = {}
-    const resultado = await useControlVelocidad().vistaPrevia(props.routerId, { planes: { [String(props.plan.id)]: excepcion.value } })
+    const resultado = await useControlVelocidad().vistaPrevia(props.routerId, { planes: [{ plan_id: props.plan.id, estrategia_velocidad: excepcion.value }] })
     cargando.value = false
     if (!resultado.ok) {
         recibirProblema(resultado.problema)
@@ -78,7 +79,10 @@ async function revisar() {
 
 async function aplicar() {
     aplicando.value = true
-    const resultado = await useControlVelocidad().cambiarPlan(props.plan.id, props.routerId, { version: props.implementacion?.version ?? 0, estrategia_velocidad: excepcion.value })
+    const resultado = await useControlVelocidad().cambiarPlan(props.plan.id, props.routerId, {
+        ...(props.implementacion ? { version: props.implementacion.version } : {}),
+        estrategia_velocidad: excepcion.value,
+    })
     aplicando.value = false
     if (!resultado.ok) {
         recibirProblema(resultado.problema)

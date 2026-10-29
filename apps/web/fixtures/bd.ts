@@ -49,8 +49,6 @@ import { bodegasIniciales, conteosIniciales, movimientosIniciales, productosInic
 import { conciliacionesPasarela } from './facturacion/procesos'
 import { plantillas } from './plantillas/datos'
 import { ipv6Bloques, ipv6Pools, redesIpv4, routers } from './routers/datos'
-import { sembrarEstrategias } from './routers/estrategiasDatos'
-import type { EstrategiasPlan } from '../app/types/controlVelocidad'
 import { servicios } from './servicios/datos'
 import { eventosRed } from './red/datos'
 import { sesiones } from './sesiones/datos'
@@ -98,8 +96,10 @@ interface BaseFixtures {
     servicios: Schema<'Servicio'>[]
     zonas: Schema<'Zona'>[]
     routers: Schema<'Router'>[]
-    /** Excepción de velocidad de cada plan en un router (`"<plan>:<router>"`, `contratos/control-velocidad.md` §2). */
-    estrategiasPlanes: Record<string, EstrategiasPlan>
+    /** Routers que ya pasaron por «Reconciliar ahora» (A2): su vista previa y su chequeo del corte quedan limpios. */
+    routersReconciliados: number[]
+    /** Routers que no responden a la API en los fixtures (pruebas de errores de sincronizar y reconciliar). */
+    routersSinRespuesta: number[]
     redesIpv4: Schema<'RedIpv4'>[]
     ipv6Bloques: Schema<'Ipv6Bloque'>[]
     ipv6Pools: Schema<'Ipv6Pool'>[]
@@ -290,7 +290,8 @@ function inicial(): BaseFixtures {
         servicios,
         zonas,
         routers,
-        estrategiasPlanes: {},
+        routersReconciliados: [],
+        routersSinRespuesta: [],
         redesIpv4,
         ipv6Bloques,
         ipv6Pools,
@@ -418,7 +419,6 @@ function inicial(): BaseFixtures {
     datos.asientos.push(...asientosFase4())
     datos.cuentas.push(...structuredClone(cuentasFase4))
     datos.asientos.push(...asientosBonificaciones())
-    sembrarEstrategias(datos.routers)
     return datos
 }
 

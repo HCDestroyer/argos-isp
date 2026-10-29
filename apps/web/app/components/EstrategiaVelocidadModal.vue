@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Problem } from '@argosisp/contracts'
-import type { EstrategiasRouter, MatrizControlVelocidad, RouterConEstrategia, VistaPreviaEstrategia } from '~/types/controlVelocidad'
+import type { EstrategiasRouter, MatrizControlVelocidad, VistaPreviaEstrategia } from '~/types/controlVelocidad'
 
 /**
  * Cambiar la estrategia de velocidad del router por capas (`contratos/control-velocidad.md` §4):
@@ -13,7 +13,7 @@ import type { EstrategiasRouter, MatrizControlVelocidad, RouterConEstrategia, Vi
  * Permiso: `routers.cambiar_control_velocidad` (quien lo abre lo comprobó).
  */
 const props = defineProps<{
-    router: RouterNas & RouterConEstrategia
+    router: RouterNas
 }>()
 
 const abierto = defineModel<boolean>('open', { default: false })

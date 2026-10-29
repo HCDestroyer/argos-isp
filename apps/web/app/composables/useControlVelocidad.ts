@@ -1,57 +1,57 @@
-import type { CambioEstrategiaPlan, CambioEstrategiaRouter, DatosVistaPreviaEstrategia, MatrizControlVelocidad, SincronizacionPlan, VistaPreviaEstrategia } from '~/types/controlVelocidad'
+import type { CambioEstrategiaPlan, CambioEstrategiaRouter, DatosVistaPreviaEstrategia, DiagnosticoCorte, MatrizControlVelocidad, ResultadoReconciliacion, SincronizacionPlan, VistaPreviaEstrategia, VistaPreviaReconciliar } from '~/types/controlVelocidad'
 
 /**
- * Control de velocidad por capas y «Sincronizar plan» (`contratos/control-velocidad.md`, A2).
- *
- * PROVISIONAL: estas rutas todavía no están en `packages/contracts` (A2 sube el código en
- * `a2/control-velocidad`). Se llaman con el mismo cliente del panel (cookie, CSRF, canal y empresa)
- * por un tipo mínimo; al regenerar los contratos se pasa a `api.GET/POST` tipados y `Schema<…>`.
+ * Control de velocidad por capas, «Sincronizar plan», «Reconciliar ahora» y el chequeo del corte
+ * (`contratos/control-velocidad.md` §9, A2). Todo tipado desde `packages/contracts`.
  */
-interface RespuestaProvisional<T> {
-    data?: T
-    error?: unknown
-    response: Response
-}
-
-interface OpcionesProvisionales {
-    params?: { path?: Record<string, number>, query?: Record<string, number | string>, header?: Record<string, string> }
-    body?: unknown
-}
-
-interface ClienteProvisional {
-    GET<T>(ruta: string, opciones?: OpcionesProvisionales): Promise<RespuestaProvisional<T>>
-    POST<T>(ruta: string, opciones?: OpcionesProvisionales): Promise<RespuestaProvisional<T>>
-}
-
 export function useControlVelocidad() {
-    const api = useApi() as unknown as ClienteProvisional
+    const api = useApi()
 
-    /** `GET /red/control-velocidad/matriz` (`routers.ver`): qué combina con qué. */
+    /** `GET /red/control-velocidad/matriz` (`routers.ver`): qué combina con qué, reglas y atajos. */
     function matriz(): Promise<Resultado<MatrizControlVelocidad>> {
-        return resolver(api.GET<MatrizControlVelocidad>('/api/v1/red/control-velocidad/matriz'))
+        return resolver(api.GET('/api/v1/red/control-velocidad/matriz'))
     }
 
-    /** `POST /routers/:id/vista-previa-estrategia` (`routers.cambiar_control_velocidad`): no escribe; 422 con la matriz. */
+    /**
+     * `POST /routers/:id/vista-previa-estrategia` (`routers.cambiar_control_velocidad`): no escribe.
+     * Con `planes`, las excepciones de esos planes en el router (cambio por lotes). 422 con
+     * `errors[].field` = `estrategia_velocidad.<tipo>.<capa>` o `planes.<id>.<tipo>.<capa>`.
+     */
     function vistaPrevia(routerId: number, datos: DatosVistaPreviaEstrategia): Promise<Resultado<VistaPreviaEstrategia>> {
-        return resolver(api.POST<VistaPreviaEstrategia>('/api/v1/routers/{id}/vista-previa-estrategia', { params: { path: { id: routerId } }, body: datos }))
+        return resolver(api.POST('/api/v1/routers/{id}/vista-previa-estrategia', { params: { path: { id: routerId } }, body: datos }))
     }
 
-    /** `POST /routers/:id/cambiar-estrategia-velocidad` (`routers.cambiar_control_velocidad`) con `version`; 409 `cambio_en_curso`. */
+    /** `POST /routers/:id/cambiar-estrategia-velocidad` con `version` (409 si cambió). */
     function cambiarRouter(routerId: number, datos: CambioEstrategiaRouter): Promise<Resultado<RouterNas>> {
-        return resolver(api.POST<RouterNas>('/api/v1/routers/{id}/cambiar-estrategia-velocidad', { params: { path: { id: routerId } }, body: datos }))
+        return resolver(api.POST('/api/v1/routers/{id}/cambiar-estrategia-velocidad', { params: { path: { id: routerId } }, body: datos }))
     }
 
-    /** `POST /planes/:id/routers/:router_id/estrategia-velocidad`: excepción del plan en el router (null = hereda). */
+    /** `POST /planes/:id/routers/:routerId/estrategia-velocidad`: excepción del plan en el router (null = hereda). */
     function cambiarPlan(planId: number, routerId: number, datos: CambioEstrategiaPlan): Promise<Resultado<PlanRouter>> {
-        return resolver(api.POST<PlanRouter>('/api/v1/planes/{id}/routers/{router_id}/estrategia-velocidad', { params: { path: { id: planId, router_id: routerId } }, body: datos }))
+        return resolver(api.POST('/api/v1/planes/{id}/routers/{routerId}/estrategia-velocidad', { params: { path: { id: planId, routerId } }, body: datos }))
     }
 
     /** `POST /planes/:id/sincronizar?router_id=` (`planes.sincronizar`): CoA a las sesiones vivas y reconciliación. */
     function sincronizar(planId: number, routerId: number | null, claveIdempotencia: string): Promise<Resultado<SincronizacionPlan>> {
-        return resolver(api.POST<SincronizacionPlan>('/api/v1/planes/{id}/sincronizar', {
+        return resolver(api.POST('/api/v1/planes/{id}/sincronizar', {
             params: { path: { id: planId }, query: routerId ? { router_id: routerId } : {}, header: { 'Idempotency-Key': claveIdempotencia } },
         }))
     }
 
-    return { matriz, vistaPrevia, cambiarRouter, cambiarPlan, sincronizar }
+    /** `GET /routers/:id/vista-previa-reconciliar` (`routeros.reconciliar`): lee el router, no escribe. */
+    function vistaPreviaReconciliar(routerId: number): Promise<Resultado<VistaPreviaReconciliar>> {
+        return resolver(api.GET('/api/v1/routers/{id}/vista-previa-reconciliar', { params: { path: { id: routerId } } }))
+    }
+
+    /** `POST /routers/:id/reconciliar` («Reconciliar ahora», `routeros.reconciliar`). */
+    function reconciliar(routerId: number, claveIdempotencia: string): Promise<Resultado<ResultadoReconciliacion>> {
+        return resolver(api.POST('/api/v1/routers/{id}/reconciliar', { params: { path: { id: routerId }, header: { 'Idempotency-Key': claveIdempotencia } } }))
+    }
+
+    /** `GET /routers/:id/diagnostico-corte` (`routers.ver`): el chequeo `corte` de «Probar conexión». */
+    function diagnosticoCorte(routerId: number): Promise<Resultado<DiagnosticoCorte>> {
+        return resolver(api.GET('/api/v1/routers/{id}/diagnostico-corte', { params: { path: { id: routerId } } }))
+    }
+
+    return { matriz, vistaPrevia, cambiarRouter, cambiarPlan, sincronizar, vistaPreviaReconciliar, reconciliar, diagnosticoCorte }
 }

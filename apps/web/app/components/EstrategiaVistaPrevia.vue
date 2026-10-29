@@ -30,6 +30,17 @@ const listas = computed(() => [
     { clave: 'borrar', titulo: 'Se borra (al final, cuando nadie lo usa)', icono: 'i-lucide-trash-2', objetos: props.vista.borrar },
 ].filter(l => l.objetos.length))
 
+/** Pasos del cambio en el orden que manda la API (`orden`): crear → mover por lotes → borrar. */
+const orden = computed(() => {
+    const lotes = props.vista.lotes === 1 ? '1 lote' : `${props.vista.lotes} lotes`
+    const pasos: Record<VistaPreviaEstrategia['orden'][number], string> = {
+        preparar: 'se crea lo nuevo',
+        lotes: `se mueve a cada cliente en ${lotes} de hasta 50`,
+        terminar: 'se borra lo que ya nadie usa',
+    }
+    return props.vista.orden.map(paso => pasos[paso]).join(', después ')
+})
+
 const datos = computed(() => [
     { etiqueta: 'Servicios', valor: props.vista.servicios, prueba: 'previa-servicios' },
     { etiqueta: 'Lotes', valor: props.vista.lotes, prueba: 'previa-lotes' },
@@ -87,8 +98,11 @@ const datos = computed(() => [
                 tabindex="0"
                 aria-label="Cambios por menú de RouterOS"
             />
-            <p class="text-xs text-muted">
-                Orden: primero se crea lo nuevo, después se mueve a cada cliente por lotes de 50 y al final se borra lo que ya nadie usa. Nadie se queda sin internet en el cambio.
+            <p
+                class="text-xs text-muted"
+                data-prueba="previa-orden"
+            >
+                Orden: {{ orden }}. Nadie se queda sin internet en el cambio.
             </p>
             <section
                 v-for="lista in listas"

@@ -61,6 +61,7 @@ const ETIQUETAS_ACCION: Record<string, string> = {
     'redes.crear': 'Red IPv4 creada',
     'planes.crear': 'Plan creado',
     'planes.editar': 'Plan editado',
+    'planes.sincronizar': 'Plan sincronizado con la red (velocidad nueva sin desconectar)',
     'plantillas.crear': 'Plantilla de facturación creada',
     'plantillas.editar': 'Plantilla de facturación editada',
     'plantillas.retirar': 'Plantilla de facturación retirada',

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { entrar, ir } from './ayudas'
+import { entrar } from './ayudas'
 
 /**
  * Control de velocidad por capas y «Sincronizar plan» (`contratos/control-velocidad.md`), en
@@ -8,8 +8,8 @@ import { entrar, ir } from './ayudas'
  */
 test('router: editar por capas, revisar la vista previa y aplicar con «Reconectar ahora» confirmado', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Routers', /\/routers$/)
-    await page.locator('[data-prueba="velocidad-router-1"]').click()
+    await page.goto('/routers')
+    await page.locator('[data-prueba="velocidad-router-1"]').click({ timeout: 30_000 })
     const panel = page.getByRole('dialog', { name: /Velocidad · RB-Centro/ })
     await expect(panel.locator('[data-prueba="control-actual"] [data-tipo="pppoe"]')).toContainText('RADIUS por sesión · Por plan · Por defecto')
     await panel.locator('[data-prueba="abrir-cambio-control"]').click()
@@ -38,8 +38,8 @@ test('router: editar por capas, revisar la vista previa y aplicar con «Reconect
 
 test('router con RouterOS 6: CAKE y fq_codel deshabilitados con el porqué', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
-    await ir(page, 'Routers', /\/routers$/)
-    await page.locator('[data-prueba="velocidad-router-2"]').click()
+    await page.goto('/routers')
+    await page.locator('[data-prueba="velocidad-router-2"]').click({ timeout: 30_000 })
     await page.getByRole('dialog', { name: /Velocidad · CCR-Mixco/ }).locator('[data-prueba="abrir-cambio-control"]').click()
     const modal = page.getByRole('dialog', { name: /Control de velocidad · CCR-Mixco/ })
     // CCR-Mixco usa árbol con PCQ (solo PCQ); con RADIUS por sesión queda la regla de la versión.
@@ -51,15 +51,43 @@ test('router con RouterOS 6: CAKE y fq_codel deshabilitados con el porqué', asy
     await expect(tipoCola).toContainText('Requiere RouterOS 7; este router tiene 6.49.10 (long-term).')
 })
 
-test('plan: «Sincronizar plan» con el resumen por router y el router caído con su error', async ({ page }) => {
+test('plan: «Sincronizar plan» con el resumen por router; el router sin API dice «Solo RADIUS»', async ({ page }) => {
     await entrar(page, 'admin@argos.test')
     await page.goto('/planes/1')
     await page.locator('[data-prueba="sincronizar-plan"]').click()
     const modal = page.getByRole('dialog', { name: /Sincronizar/ })
     await modal.locator('[data-prueba="sincronizar-confirmar"]').click()
     const resumen = modal.locator('[data-prueba="sincronizar-resumen"]')
-    await expect(resumen).toContainText('un router con error')
+    await expect(resumen).toContainText('Plan sincronizado')
     await expect(modal.locator('tr', { has: page.locator('[data-router="1"]') })).toContainText('Al día')
-    await expect(modal.locator('tr', { has: page.locator('[data-router="3"]') })).toContainText('no respondió')
-    await expect(modal.locator('[data-prueba="reintentar-router-3"]')).toBeVisible()
+    await expect(modal.locator('[data-prueba="sin-api-3"]')).toContainText('Solo RADIUS')
+})
+
+test('conexión: probar el corte, ver el paso a seguir y «Reconciliar ahora» con vista previa', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/routers')
+    await page.locator('[data-prueba="conexion-router-1"]').click({ timeout: 30_000 })
+    const panel = page.getByRole('dialog', { name: /Conexión · RB-Centro/ })
+    await panel.locator('[data-prueba="probar-corte"]').click()
+    await expect(panel.locator('[data-prueba="corte-faltan_reglas"]')).toContainText('Faltan las reglas de corte')
+    await expect(panel.locator('[data-prueba="corte-faltan_reglas"]')).toContainText('Paso a seguir')
+    await panel.locator('[data-prueba="corte-reconciliar"]').click()
+
+    const modal = page.getByRole('dialog', { name: /Reconciliar ahora · RB-Centro/ })
+    await expect(modal.locator('[data-prueba="reconciliar-grupo-corte"]')).toContainText('argosisp:top corte')
+    await modal.locator('[data-prueba="reconciliar-confirmar"]').click()
+    await expect(modal.locator('[data-prueba="reconciliar-resultado"]')).toContainText('objetos corregidos')
+    await modal.getByRole('button', { name: 'Cerrar', exact: true }).last().click()
+    await expect(panel.locator('[data-prueba="corte-ok"]')).toContainText('El corte está listo')
+})
+
+test('conexión: el router que no llega al portal muestra qué revisar', async ({ page }) => {
+    await entrar(page, 'admin@argos.test')
+    await page.goto('/routers')
+    await page.locator('[data-prueba="conexion-router-2"]').click({ timeout: 30_000 })
+    const panel = page.getByRole('dialog', { name: /Conexión · CCR-Mixco/ })
+    await panel.locator('[data-prueba="probar-corte"]').click()
+    await expect(panel.locator('[data-prueba="corte-portal_inalcanzable"]')).toContainText('El router no llega al portal')
+    await expect(panel.locator('[data-prueba="corte-portal_inalcanzable"]')).toContainText('«Reconciliar ahora» no lo arregla')
+    await expect(panel.locator('[data-prueba="corte-reconciliar"]')).toHaveCount(0)
 })

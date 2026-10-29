@@ -155,6 +155,20 @@ const conErrores = computed(() => resultado.value?.routers.filter(r => r.errores
                                     @click="sincronizar(row.original.router_id)"
                                 />
                             </div>
+                            <div
+                                v-else-if="!row.original.reconciliado"
+                                class="flex flex-col items-start gap-1"
+                            >
+                                <UBadge
+                                    label="Solo RADIUS"
+                                    icon="i-lucide-info"
+                                    color="info"
+                                    variant="subtle"
+                                    size="sm"
+                                    :data-prueba="`sin-api-${row.original.router_id}`"
+                                />
+                                <span class="text-xs whitespace-normal text-muted">El router no tiene API: sus colas no se revisaron. Completa el usuario y la clave en «Conexión».</span>
+                            </div>
                             <UBadge
                                 v-else
                                 label="Al día"

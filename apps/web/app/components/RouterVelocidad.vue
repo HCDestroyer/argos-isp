@@ -2,7 +2,6 @@
 import type { Problem } from '@argosisp/contracts'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as z from 'zod'
-import type { RouterConEstrategia } from '~/types/controlVelocidad'
 
 /**
  * Control de velocidad de un router: capacidad del enlace (`PUT /routers/:id`, `routers.editar`,
@@ -95,8 +94,9 @@ async function guardarCapacidad(evento: FormSubmitEvent<DatosCapacidad>) {
  * Control de velocidad por capas (`contratos/control-velocidad.md`): se edita en
  * `EstrategiaVelocidadModal` con vista previa; aquí solo el resumen por tipo de conexión.
  */
-const estrategias = computed(() => estrategiasDeRouter(actual.value as RouterNas & RouterConEstrategia))
+const estrategias = computed(() => estrategiasDeRouter(actual.value))
 const editorAbierto = ref(false)
+const reconciliarAbierto = ref(false)
 
 function alCambiarEstrategia(router: RouterNas) {
     actual.value = router
@@ -157,6 +157,22 @@ function alCambiarEstrategia(router: RouterNas) {
                         >
                             Solo un administrador cambia el control de velocidad.
                         </p>
+                        <p
+                            class="text-xs text-muted"
+                            data-prueba="routeros-version"
+                        >
+                            {{ actual.routeros_version ? `RouterOS ${actual.routeros_version}` : 'Versión de RouterOS desconocida: se lee al reconciliar o al probar la conexión.' }}
+                        </p>
+                        <UButton
+                            v-if="puede('routeros.reconciliar')"
+                            label="Reconciliar ahora"
+                            icon="i-lucide-refresh-cw"
+                            color="neutral"
+                            variant="outline"
+                            class="self-start"
+                            data-prueba="abrir-reconciliar"
+                            @click="reconciliarAbierto = true"
+                        />
                     </div>
                 </section>
 
@@ -283,6 +299,12 @@ function alCambiarEstrategia(router: RouterNas) {
                 v-model:open="editorAbierto"
                 :router="actual"
                 @actualizado="alCambiarEstrategia"
+            />
+            <RouterReconciliarModal
+                v-if="puede('routeros.reconciliar')"
+                v-model:open="reconciliarAbierto"
+                :router="actual"
+                @reconciliado="recargarRouter"
             />
         </template>
     </USlideover>

@@ -64,38 +64,28 @@ export const OPCIONES_EXTRA: Record<Extra, { etiqueta: string, explicacion: stri
     excluir_fasttrack: { etiqueta: 'Verificar FastTrack', explicacion: 'Revisa que FastTrack no se salte las colas: sin esto, lo acelerado no se limita.' },
 }
 
-const TODOS_EXTRAS: Record<Extra, boolean> = { rafaga: true, prioridad: true, garantizado: true, excluir_fasttrack: true }
-
-/** Las estrategias en que quedan los routers migrados (§6): «simple» y «árbol PCQ» de antes. */
-export const ESTRATEGIAS_MIGRACION: Record<'simple' | 'arbol_pcq', EstrategiasRouter> = {
-    simple: {
-        pppoe: { aplicacion: 'radius_rate_limit', padre: 'por_plan', tipo_cola: 'default', extras: { ...TODOS_EXTRAS } },
-        ip_estatica: { aplicacion: 'cola_simple', padre: 'por_plan', tipo_cola: 'default', extras: { ...TODOS_EXTRAS } },
-        dhcp_fija: { aplicacion: 'cola_simple', padre: 'por_plan', tipo_cola: 'default', extras: { ...TODOS_EXTRAS } },
-    },
-    arbol_pcq: {
-        pppoe: { aplicacion: 'arbol_pcq', padre: 'jerarquico', tipo_cola: 'pcq', extras: { ...TODOS_EXTRAS, rafaga: false } },
-        ip_estatica: { aplicacion: 'arbol_pcq', padre: 'jerarquico', tipo_cola: 'pcq', extras: { ...TODOS_EXTRAS, rafaga: false } },
-        dhcp_fija: { aplicacion: 'arbol_pcq', padre: 'jerarquico', tipo_cola: 'pcq', extras: { ...TODOS_EXTRAS, rafaga: false } },
-    },
-}
-
-/** Estrategias del router: las que trae la API o, de un router sin migrar, las de su `control_velocidad`. */
-export function estrategiasDeRouter(router: { estrategia_velocidad?: EstrategiasRouter, control_velocidad?: 'simple' | 'arbol_pcq', modo_velocidad?: 'simple' | 'pcq' }): EstrategiasRouter {
-    if (router.estrategia_velocidad) {
-        return clonarEstrategia(router.estrategia_velocidad)
-    }
-    const control = router.control_velocidad ?? (router.modo_velocidad === 'pcq' ? 'arbol_pcq' : 'simple')
-    return clonarEstrategia(ESTRATEGIAS_MIGRACION[control])
+/**
+ * Estrategias del router: las que trae la API (`Router.estrategia_velocidad`, siempre presente; la
+ * migración y el alta con `control_velocidad` ya las resuelven con los atajos de la matriz).
+ */
+export function estrategiasDeRouter(router: Pick<RouterNas, 'estrategia_velocidad'>): EstrategiasRouter {
+    return clonarEstrategia(router.estrategia_velocidad)
 }
 
 /** `estrategiaEfectiva()` (§2): la del router, capa por capa sobrescrita por la del plan. */
 export function estrategiaEfectiva(router: Estrategia, plan: EstrategiaParcial | null | undefined): Estrategia {
+    const extras = { ...router.extras }
+    for (const extra of EXTRAS) {
+        const valor = plan?.extras?.[extra]
+        if (typeof valor === 'boolean') {
+            extras[extra] = valor
+        }
+    }
     return {
         aplicacion: plan?.aplicacion ?? router.aplicacion,
         padre: plan?.padre ?? router.padre,
         tipo_cola: plan?.tipo_cola ?? router.tipo_cola,
-        extras: { ...router.extras, ...(plan?.extras ?? {}) },
+        extras,
     }
 }
 
@@ -129,7 +119,7 @@ export function aplicacionDisponible(matriz: MatrizControlVelocidad, aplicacion:
         return { valida: true, motivo: null }
     }
     if (tipo === 'pppoe') {
-        return { valida: false, motivo: 'PPPoE ya crea su cola dinámica: usa RADIUS por sesión o el perfil PPP.' }
+        return { valida: false, motivo: 'PPPoE ya crea su cola dinámica: usa RADIUS por sesión, el perfil PPP, PCQ por plan o el árbol.' }
     }
     return { valida: false, motivo: `No aplica a ${ETIQUETAS_TIPO_CONEXION[tipo]}: sin sesión PPP no hay perfil ni rate-limit por RADIUS; usa cola simple, PCQ por plan o árbol.` }
 }
@@ -142,7 +132,8 @@ export function tipoColaDisponible(matriz: MatrizControlVelocidad, tipoCola: Tip
             ? { valida: false, motivo: 'PCQ reparte entre varios clientes: en la cola de uno solo no sirve.' }
             : { valida: false, motivo: `${OPCIONES_APLICACION[aplicacion].etiqueta} necesita PCQ: el tope de cada cliente lo pone el PCQ.` }
     }
-    const minimo = matriz.tipos_cola.find(t => t.valor === tipoCola)?.routeros_minimo ?? null
+    // `routeros_minimo` llega como texto («7»): se compara con la versión mayor del router.
+    const minimo = versionMayor(`${matriz.tipos_cola.find(t => t.valor === tipoCola)?.routeros_minimo ?? ''}.`)
     if (minimo !== null) {
         const mayor = versionMayor(version)
         if (mayor === null) {
@@ -183,7 +174,7 @@ export function resumenEstrategia(estrategia: Estrategia): string {
 
 /** Si un plan tiene alguna capa propia en algún tipo de conexión. */
 export function tieneExcepcion(plan: EstrategiasPlan | null | undefined): boolean {
-    return !!plan && Object.values(plan).some(p => p && (p.aplicacion || p.padre || p.tipo_cola || (p.extras && Object.keys(p.extras).length)))
+    return !!plan && Object.values(plan).some(p => p && (p.aplicacion || p.padre || p.tipo_cola || (p.extras && Object.values(p.extras).some(v => typeof v === 'boolean'))))
 }
 
 /** Errores 422 de la API por tipo de conexión y capa (`errors[].field = estrategia_velocidad.<tipo>.<capa>`). */

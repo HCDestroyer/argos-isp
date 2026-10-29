@@ -1,173 +1,360 @@
 import type { Problem, Schema } from '@argosisp/contracts'
 import type { RespuestaFixture, RutasFixture, SolicitudFixture } from '~/utils/fetchFixtures'
-import type { Estrategia, EstrategiaParcial, EstrategiasPlan, EstrategiasRouter, RouterConEstrategia, SincronizacionPlan, TipoConexionVelocidad, VistaPreviaEstrategia } from '../../app/types/controlVelocidad'
+import type { DiagnosticoCorte, Estrategia, EstrategiaParcial, EstrategiasPlan, EstrategiasRouter, ResultadoReconciliacion, SincronizacionPlan, TipoConexionVelocidad, VistaPreviaEstrategia, VistaPreviaReconciliar } from '../../app/types/controlVelocidad'
 import { APLICACIONES, EXTRAS, PADRES, TIPOS_COLA, TIPOS_CONEXION_VELOCIDAD } from '../../app/types/controlVelocidad'
-import { ESTRATEGIA_SIMPLE, MATRIZ } from './estrategiasDatos'
+import { MATRIZ } from './estrategiasDatos'
 import { bd } from '../bd'
-import { ahora, conPermiso, cuerpoObjeto, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
+import { ahora, conIdempotencia, conPermiso, cuerpoObjeto, idDe, noEncontrado, problemaTipado, registrarAccion, versionCambiada } from '../comun'
 
 /**
- * Control de velocidad por capas y sincronizar plan, como `contratos/control-velocidad.md` (A2):
- * la matriz (§3), la vista previa (§4), cambiar la estrategia del router o la excepción de un plan
- * y sincronizar un plan (§5). La validación repite las reglas de la matriz; los objetos de RouterOS
- * de la vista previa son una muestra con los nombres del contrato.
+ * Control de velocidad por capas, sincronizar plan, «Reconciliar ahora» y el chequeo del corte, como
+ * `contratos/control-velocidad.md` (A2). La validación es la de `validarEstrategias()`
+ * (`apps/api/app/network/estrategia_velocidad.ts`) con sus mismos `field`, `rule` y mensajes; los
+ * objetos de RouterOS de las vistas previas son una muestra con los nombres de la API.
  *
- * Datos: RB-Centro (1) migrado de «simple» con RouterOS 7.24.5; CCR-Mixco (2) de «árbol PCQ» con
- * RouterOS 6.49.10 (sin CAKE ni fq_codel); RB-Bodega (3) sin versión conocida.
+ * Datos: RB-Centro (1) con RouterOS 7 y sin las reglas de corte (las arregla «Reconciliar ahora»);
+ * CCR-Mixco (2) con RouterOS 6 y el portal inalcanzable; RB-Bodega (3) sin usuario de la API.
  */
 
-type Router = Schema<'Router'> & RouterConEstrategia
-type Errores = NonNullable<Problem['errors']>
+type Router = Schema<'Router'>
+type Errores = VistaPreviaEstrategia['errores']
+type Advertencias = VistaPreviaEstrategia['advertencias']
 
-function familia(estrategia: Estrategia): 'simples' | 'arbol' {
-    return estrategia.aplicacion === 'arbol_pcq' ? 'arbol' : 'simples'
+const NOMBRE_TIPO: Record<TipoConexionVelocidad, string> = { pppoe: 'PPPoE', ip_estatica: 'IP estática', dhcp_fija: 'DHCP fija' }
+const TIPOS_POR_APLICACION = Object.fromEntries(MATRIZ.aplicaciones.map(a => [a.valor, a.tipos_conexion]))
+
+const familia = (e: Pick<Estrategia, 'aplicacion'>): 'simple' | 'arbol' => (e.aplicacion === 'arbol_pcq' ? 'arbol' : 'simple')
+const usaPcq = (e: Pick<Estrategia, 'aplicacion'>): boolean => e.aplicacion === 'pcq_plan' || e.aplicacion === 'arbol_pcq'
+const conNivelRouter = (e: Pick<Estrategia, 'padre'>): boolean => e.padre === 'por_router' || e.padre === 'jerarquico'
+const porCoa = (e: Pick<Estrategia, 'aplicacion'>): boolean => e.aplicacion === 'radius_rate_limit' || e.aplicacion === 'perfil_ppp'
+
+function versionMayor(version: string | null): number | null {
+    const m = /^(\d+)\./.exec(version ?? '')
+    return m ? Number(m[1]) : null
 }
 
-function mayor(version: string | null | undefined): number | null {
-    const valor = Number(/^(\d+)\./.exec(version ?? '')?.[1])
-    return Number.isInteger(valor) ? valor : null
+function enLista<T extends string>(lista: readonly T[], valor: unknown): valor is T {
+    return typeof valor === 'string' && (lista as readonly string[]).includes(valor)
 }
 
-function esEstrategia(valor: unknown): valor is Estrategia {
-    if (typeof valor !== 'object' || valor === null) {
-        return false
+/** `estrategiaEfectiva()`: la del router, capa por capa sobrescrita por la excepción del plan. */
+function efectiva(router: EstrategiasRouter, excepcion: EstrategiasPlan | null | undefined, tipo: TipoConexionVelocidad): Estrategia {
+    const base = router[tipo]
+    const parcial = excepcion?.[tipo]
+    const extras = { ...base.extras }
+    for (const extra of EXTRAS) {
+        const valor = parcial?.extras?.[extra]
+        if (typeof valor === 'boolean') {
+            extras[extra] = valor
+        }
     }
-    const e = valor as Record<string, unknown>
-    return (APLICACIONES as readonly unknown[]).includes(e.aplicacion) && (PADRES as readonly unknown[]).includes(e.padre)
-        && (TIPOS_COLA as readonly unknown[]).includes(e.tipo_cola) && typeof e.extras === 'object' && e.extras !== null
-        && EXTRAS.every(x => typeof (e.extras as Record<string, unknown>)[x] === 'boolean')
+    return { aplicacion: parcial?.aplicacion ?? base.aplicacion, padre: parcial?.padre ?? base.padre, tipo_cola: parcial?.tipo_cola ?? base.tipo_cola, extras }
 }
 
-/** `validarEstrategias()` (§3): errores con `field` = ruta de la capa, y advertencias. */
-export function validar(router: Router, estrategias: EstrategiasRouter, prefijo = 'estrategia_velocidad'): { errores: Errores, advertencias: VistaPreviaEstrategia['advertencias'] } {
-    const errores: Errores = []
-    const advertencias: VistaPreviaEstrategia['advertencias'] = []
+function misma(a: Estrategia, b: Estrategia): boolean {
+    return a.aplicacion === b.aplicacion && a.padre === b.padre && a.tipo_cola === b.tipo_cola && EXTRAS.every(x => a.extras[x] === b.extras[x])
+}
+
+/** `leerExcepcion()`: solo capas conocidas; null si no queda nada. */
+function leerExcepcion(valor: unknown): EstrategiasPlan | null {
+    if (typeof valor !== 'object' || valor === null) {
+        return null
+    }
+    const salida: EstrategiasPlan = {}
     for (const tipo of TIPOS_CONEXION_VELOCIDAD) {
-        const e = estrategias[tipo]
-        const ruta = `${prefijo}.${tipo}`
-        if (!esEstrategia(e)) {
-            errores.push({ field: ruta, message: 'Faltan capas o hay un valor desconocido', rule: 'enum' })
+        const p = (valor as Record<string, unknown>)[tipo]
+        if (typeof p !== 'object' || p === null) {
             continue
         }
-        const fila = MATRIZ.aplicaciones.find(a => a.valor === e.aplicacion)!
-        if (!fila.tipos_conexion.includes(tipo)) {
-            errores.push({
-                field: `${ruta}.aplicacion`,
-                rule: 'aplicacion_tipo',
-                message: tipo === 'pppoe' ? 'PPPoE ya crea su cola dinámica: usa radius_rate_limit o perfil_ppp' : `${e.aplicacion} no aplica a ${tipo}: sin sesión PPP no hay perfil; usa cola_simple, pcq_plan o arbol_pcq`,
-            })
+        const parcial = p as Record<string, unknown>
+        const limpio: EstrategiaParcial = {}
+        if (enLista(APLICACIONES, parcial.aplicacion)) {
+            limpio.aplicacion = parcial.aplicacion
         }
-        if (!fila.tipos_cola.includes(e.tipo_cola)) {
-            errores.push({ field: `${ruta}.tipo_cola`, rule: 'tipo_cola', message: e.tipo_cola === 'pcq' ? 'Un PCQ reparte entre varios clientes: en la cola de uno solo no sirve' : `${e.aplicacion} necesita PCQ: el tope de cada cliente es el pcq-rate` })
+        if (enLista(PADRES, parcial.padre)) {
+            limpio.padre = parcial.padre
         }
-        if (e.tipo_cola === 'fq_codel' || e.tipo_cola === 'cake') {
-            const v = mayor(router.routeros_version)
-            if (v !== null && v < 7) {
-                errores.push({ field: `${ruta}.tipo_cola`, rule: 'version', message: `${e.tipo_cola} necesita RouterOS 7; este router tiene ${router.routeros_version}` })
+        if (enLista(TIPOS_COLA, parcial.tipo_cola)) {
+            limpio.tipo_cola = parcial.tipo_cola
+        }
+        if (typeof parcial.extras === 'object' && parcial.extras !== null) {
+            const extras = Object.fromEntries(EXTRAS.map(x => [x, (parcial.extras as Record<string, unknown>)[x]]).filter(([, v]) => typeof v === 'boolean'))
+            if (Object.keys(extras).length) {
+                limpio.extras = extras
             }
-            else if (v === null) {
-                advertencias.push({ regla: 'version_desconocida', mensaje: `${e.tipo_cola} necesita RouterOS 7 y la versión del router no se conoce: se revisa antes de escribir.` })
+        }
+        if (Object.keys(limpio).length) {
+            salida[tipo] = limpio
+        }
+    }
+    return Object.keys(salida).length ? salida : null
+}
+
+/** Errores de una estrategia sola (reglas 1 a 4 de la matriz). */
+function problemasDe(e: Estrategia, tipo: TipoConexionVelocidad, campo: string, version: string | null): Errores {
+    const errores: Errores = []
+    if (!(TIPOS_POR_APLICACION[e.aplicacion] ?? []).includes(tipo)) {
+        errores.push({
+            field: `${campo}.aplicacion`,
+            rule: 'aplicacion_tipo',
+            message: e.aplicacion === 'cola_simple'
+                ? 'cola_simple no aplica a PPPoE: la sesión ya crea su cola dinámica; usa radius_rate_limit, perfil_ppp, pcq_plan o arbol_pcq'
+                : `${e.aplicacion} no aplica a ${NOMBRE_TIPO[tipo]}: sin sesión PPP no hay ${e.aplicacion === 'perfil_ppp' ? 'perfil' : 'atributo RADIUS'}; usa cola_simple, pcq_plan o arbol_pcq`,
+        })
+    }
+    if (usaPcq(e) && e.tipo_cola !== 'pcq') {
+        errores.push({ field: `${campo}.tipo_cola`, rule: 'tipo_cola', message: `${e.aplicacion} necesita PCQ: el tope de cada cliente es el pcq-rate del plan (con ${e.tipo_cola} no habría tope por cliente)` })
+    }
+    if (!usaPcq(e) && e.tipo_cola === 'pcq') {
+        errores.push({ field: `${campo}.tipo_cola`, rule: 'tipo_cola', message: `PCQ reparte entre varios clientes; en la cola de uno solo (${e.aplicacion}) usa default, sfq, fq_codel o cake` })
+    }
+    const mayor = versionMayor(version)
+    if ((e.tipo_cola === 'fq_codel' || e.tipo_cola === 'cake') && mayor !== null && mayor < 7) {
+        errores.push({ field: `${campo}.tipo_cola`, rule: 'version', message: `${e.tipo_cola} necesita RouterOS 7; este router tiene ${version}` })
+    }
+    return errores
+}
+
+interface PlanValidacion {
+    plan_id: number
+    reuso: number
+    excepcion: EstrategiasPlan | null
+}
+
+/** `validarEstrategias()` de A2: errores (422) y advertencias. */
+export function validar(router: Router, estrategias: EstrategiasRouter, planes: PlanValidacion[], campoPlan: (id: number) => string = id => `planes.${id}`): { errores: Errores, advertencias: Advertencias } {
+    const campoRouter = 'estrategia_velocidad'
+    const version = router.routeros_version
+    const errores: Errores = []
+    const advertencias: Advertencias = []
+    const avisar = (regla: string, mensaje: string) => {
+        if (!advertencias.some(a => a.regla === regla && a.mensaje === mensaje)) {
+            advertencias.push({ regla, mensaje })
+        }
+    }
+    for (const tipo of TIPOS_CONEXION_VELOCIDAD) {
+        errores.push(...problemasDe(estrategias[tipo], tipo, `${campoRouter}.${tipo}`, version))
+    }
+    for (const plan of planes) {
+        for (const tipo of TIPOS_CONEXION_VELOCIDAD) {
+            if (plan.excepcion?.[tipo]) {
+                errores.push(...problemasDe(efectiva(estrategias, plan.excepcion, tipo), tipo, `${campoPlan(plan.plan_id)}.${tipo}`, version))
             }
+        }
+    }
+    if (errores.length) {
+        return { errores: sinRepetir(errores), advertencias }
+    }
+    const grupos = [
+        { plan_id: null as number | null, reuso: 1, campo: campoRouter, excepcion: null as EstrategiasPlan | null },
+        ...planes.filter(p => p.excepcion).map(p => ({ plan_id: p.plan_id as number | null, reuso: p.reuso, campo: campoPlan(p.plan_id), excepcion: p.excepcion })),
+    ]
+    const conTecho = new Map<'simple' | 'arbol', string[]>()
+    for (const g of grupos) {
+        for (const tipo of TIPOS_CONEXION_VELOCIDAD) {
+            const e = efectiva(estrategias, g.excepcion, tipo)
+            if (conNivelRouter(e)) {
+                conTecho.set(familia(e), [...(conTecho.get(familia(e)) ?? []), g.plan_id === null ? NOMBRE_TIPO[tipo] : `${NOMBRE_TIPO[tipo]} del plan ${g.plan_id}`])
+            }
+        }
+    }
+    if (conTecho.size > 1) {
+        errores.push({
+            field: campoRouter,
+            rule: 'familia_router',
+            message: `el techo del router se partiría en dos: colas simples (${conTecho.get('simple')?.join(', ')}) y queue tree (${conTecho.get('arbol')?.join(', ')}); usa la misma familia para por_router y jerarquico`,
+        })
+    }
+    for (const g of grupos) {
+        const lista = TIPOS_CONEXION_VELOCIDAD.map(tipo => ({ tipo, e: efectiva(estrategias, g.excepcion, tipo) }))
+        const quien = g.plan_id === null ? 'los planes del router' : `el plan ${g.plan_id}`
+        for (const fam of ['simple', 'arbol'] as const) {
+            const deFamilia = lista.filter(x => familia(x.e) === fam)
+            const comparten = fam === 'arbol' ? [deFamilia] : [deFamilia.filter(x => x.e.padre !== 'ninguno'), deFamilia.filter(x => x.e.aplicacion === 'pcq_plan')]
+            for (const [primero, ...resto] of comparten) {
+                const distinto = primero ? resto.find(x => x.e.padre !== primero.e.padre || EXTRAS.some(c => x.e.extras[c] !== primero.e.extras[c])) : undefined
+                if (primero && distinto) {
+                    errores.push({
+                        field: `${g.campo}.${distinto.tipo}.padre`,
+                        rule: 'plan_consistente',
+                        message: `${NOMBRE_TIPO[primero.tipo]} y ${NOMBRE_TIPO[distinto.tipo]} de ${quien} comparten la ${fam === 'arbol' ? 'rama del árbol' : 'cola'} del plan: usa el mismo padre y los mismos extras`,
+                    })
+                    break
+                }
+            }
+        }
+        const agregan = new Set(lista.filter(x => x.e.padre === 'por_plan' || x.e.padre === 'jerarquico').map(x => familia(x.e)))
+        if (agregan.size > 1) {
+            errores.push({ field: g.campo, rule: 'familia_plan', message: `el reuso de ${quien} se partiría entre colas simples y queue tree: usa una sola familia o padre ninguno/por_router en una de ellas` })
+        }
+    }
+    if (errores.length) {
+        return { errores: sinRepetir(errores), advertencias }
+    }
+    const sinCapacidad = router.capacidad_bajada_kbps === null || router.capacidad_subida_kbps === null
+    const todas = grupos.flatMap(g => TIPOS_CONEXION_VELOCIDAD.map(tipo => ({
+        e: efectiva(estrategias, g.excepcion, tipo),
+        donde: g.plan_id === null ? NOMBRE_TIPO[tipo] : `${NOMBRE_TIPO[tipo]} del plan ${g.plan_id}`,
+        reuso: g.plan_id === null ? null : g.reuso,
+    })))
+    const hayTecho = todas.some(x => conNivelRouter(x.e))
+    for (const { e, donde, reuso } of todas) {
+        if (conNivelRouter(e) && sinCapacidad) {
+            avisar('sin_techo', 'el router no tiene capacidad del enlace: el padre del router no limita (max-limit 0)')
+        }
+        if (hayTecho && !conNivelRouter(e)) {
+            avisar('fuera_del_techo', `${donde} no cuelga del padre del router: ese tráfico no cuenta para el techo`)
+        }
+        if (e.padre === 'ninguno' && (e.extras.prioridad || e.extras.garantizado)) {
+            avisar('sin_padre_prioridad', `${donde}: prioridad y garantizado solo reparten bajo un padre; con padre ninguno no tienen efecto`)
         }
         if (!e.extras.excluir_fasttrack) {
-            advertencias.push({ regla: 'fasttrack', mensaje: `${tipo}: sin verificar FastTrack, las colas no limitan lo acelerado.` })
+            avisar('fasttrack', `${donde}: sin verificar FastTrack; con FastTrack las colas no limitan el tráfico acelerado`)
         }
-        if ((e.extras.prioridad || e.extras.garantizado) && e.padre === 'ninguno') {
-            advertencias.push({ regla: 'sin_padre_prioridad', mensaje: `${tipo}: prioridad y garantizado sin padre no tienen a quién repartir.` })
+        if ((e.tipo_cola === 'fq_codel' || e.tipo_cola === 'cake') && versionMayor(version) === null) {
+            avisar('version_desconocida', `${e.tipo_cola} necesita RouterOS 7 y no se conoce la versión del router: se verifica antes de escribir`)
         }
-    }
-    const conTecho = TIPOS_CONEXION_VELOCIDAD.map(t => estrategias[t]).filter(e => esEstrategia(e) && (e.padre === 'por_router' || e.padre === 'jerarquico'))
-    if (new Set(conTecho.map(familia)).size > 1) {
-        errores.push({ field: `${prefijo}.pppoe.padre`, rule: 'familia_router', message: 'El techo del router se partiría en dos: colas simples y queue tree' })
-    }
-    if (conTecho.length && !router.capacidad_bajada_kbps) {
-        advertencias.push({ regla: 'sin_techo', mensaje: 'El router no tiene capacidad del enlace: el techo queda sin límite (max-limit=0).' })
-    }
-    if (conTecho.length && conTecho.length < TIPOS_CONEXION_VELOCIDAD.length) {
-        advertencias.push({ regla: 'fuera_del_techo', mensaje: 'Algún tipo de conexión no cuelga del techo del router: ese tráfico no cuenta para la capacidad.' })
+        if (reuso === 1 && e.padre === 'por_plan' && familia(e) === 'simple') {
+            avisar('reuso_dedicado', `${donde}: el plan es dedicado (reuso 1), no se crea cola padre`)
+        }
     }
     return { errores, advertencias }
 }
 
-function efectiva(router: Estrategia, plan: EstrategiaParcial | undefined): Estrategia {
-    return { aplicacion: plan?.aplicacion ?? router.aplicacion, padre: plan?.padre ?? router.padre, tipo_cola: plan?.tipo_cola ?? router.tipo_cola, extras: { ...router.extras, ...(plan?.extras ?? {}) } }
+function sinRepetir(errores: Errores): Errores {
+    return errores.filter((e, i) => errores.findIndex(o => o.field === e.field && o.rule === e.rule && o.message === e.message) === i)
 }
 
-function iguales(a: Estrategia, b: Estrategia): boolean {
-    return JSON.stringify(a) === JSON.stringify(b)
+/** Planes del router con su reuso y su excepción (`planesParaValidar`). */
+function planesDelRouter(routerId: number): PlanValidacion[] {
+    return (bd.planesPorRouter[routerId] ?? []).map((planId) => {
+        const implementacion = bd.implementacionesPlan.find(i => i.plan_id === planId && i.router_id === routerId)
+        const plan = bd.planes.find(p => p.id === planId)
+        return { plan_id: planId, reuso: implementacion?.reuso ?? plan?.reuso ?? 1, excepcion: leerExcepcion(implementacion?.estrategia_velocidad) }
+    })
 }
 
 function serviciosDelRouter(routerId: number) {
-    return bd.servicios.filter(s => s.router_id === routerId && s.estado !== 'retirado')
+    return bd.servicios.filter(s => s.router_id === routerId && s.estado !== 'retirado' && s.estado !== 'pendiente_instalacion')
 }
 
-function vistaPrevia(router: Router, a: EstrategiasRouter, reconectar: boolean, planId: number | null = null): VistaPreviaEstrategia {
-    const de = router.estrategia_velocidad ?? ESTRATEGIA_SIMPLE
-    const { errores, advertencias } = validar(router, a)
+/** Objetos de RouterOS que cambian (muestra con los nombres de la API) y los totales por menú. */
+function objetos(de: EstrategiasRouter, a: EstrategiasRouter, cambian: { id: number, plan_id: number, tipo: TipoConexionVelocidad, antes: Estrategia, despues: Estrategia }[]) {
     const crear: VistaPreviaEstrategia['crear'] = []
-    const borrar: VistaPreviaEstrategia['borrar'] = []
     const actualizar: VistaPreviaEstrategia['actualizar'] = []
-    const servicios = serviciosDelRouter(router.id).filter(s => planId === null || s.plan_id === planId)
-    for (const tipo of TIPOS_CONEXION_VELOCIDAD) {
-        if (iguales(de[tipo], a[tipo])) {
-            continue
-        }
-        const planes = [...new Set(servicios.filter(s => (s.tipo_conexion ?? 'pppoe') === tipo).map(s => s.plan_id))]
-        if (a[tipo].padre !== de[tipo].padre && (a[tipo].padre === 'por_router' || a[tipo].padre === 'jerarquico') && !crear.some(o => o.clave === 'argosisp:router')) {
-            crear.push({ ruta: a[tipo].aplicacion === 'arbol_pcq' ? '/queue/tree' : '/queue/simple', clave: 'argosisp:router', nombre: 'argosisp-router' })
-        }
-        if (a[tipo].tipo_cola !== de[tipo].tipo_cola && a[tipo].tipo_cola !== 'default' && a[tipo].tipo_cola !== 'pcq') {
-            crear.push({ ruta: '/queue/type', clave: `argosisp:${a[tipo].tipo_cola}`, nombre: `argosisp-${a[tipo].tipo_cola.replace('_', '-')}` })
-        }
-        for (const plan of planes) {
-            if (a[tipo].aplicacion === 'pcq_plan' && de[tipo].aplicacion !== 'pcq_plan') {
-                crear.push({ ruta: '/queue/simple', clave: `argosisp:plan-${plan}-pcq`, nombre: `argosisp-plan-${plan}-pcq` })
-            }
-            if (de[tipo].aplicacion === 'pcq_plan' && a[tipo].aplicacion !== 'pcq_plan') {
-                borrar.push({ ruta: '/queue/simple', clave: `argosisp:plan-${plan}-pcq`, nombre: `argosisp-plan-${plan}-pcq` })
-            }
-            if (tipo === 'pppoe' && (a[tipo].aplicacion === 'perfil_ppp' || a[tipo].tipo_cola !== 'default' || a[tipo].padre !== de[tipo].padre)) {
-                actualizar.push({ ruta: '/ppp/profile', clave: `argosisp:plan-${plan}`, nombre: `plan-${plan}` })
-            }
-        }
-        if (tipo !== 'pppoe' && de[tipo].aplicacion === 'cola_simple' && a[tipo].aplicacion !== 'cola_simple') {
-            servicios.filter(s => s.tipo_conexion === tipo).forEach(s => borrar.push({ ruta: '/queue/simple', clave: `argosisp:servicio-${s.id}`, nombre: `argosisp-servicio-${s.id}` }))
+    const borrar: VistaPreviaEstrategia['borrar'] = []
+    const agregar = (lista: VistaPreviaEstrategia['crear'], ruta: string, clave: string, nombre: string | null) => {
+        if (!lista.some(o => o.ruta === ruta && o.clave === clave)) {
+            lista.push({ ruta, clave, nombre })
         }
     }
-    const menus = [...new Set([...crear, ...actualizar, ...borrar].map(o => o.ruta))].map(ruta => ({
-        ruta,
-        crear: crear.filter(o => o.ruta === ruta).length,
-        actualizar: actualizar.filter(o => o.ruta === ruta).length,
-        borrar: borrar.filter(o => o.ruta === ruta).length,
-    }))
-    const sesiones = bd.sesiones.filter(s => s.fin === null && servicios.some(v => v.id === s.servicio_id))
-    const cambiaPppoe = !iguales(de.pppoe, a.pppoe)
-    const enVivo = ['radius_rate_limit', 'perfil_ppp'].includes(a.pppoe.aplicacion)
-    return {
+    for (const s of cambian) {
+        const { antes, despues } = s
+        if (conNivelRouter(despues) && !conNivelRouter(antes)) {
+            agregar(crear, familia(despues) === 'arbol' ? '/queue/tree' : '/queue/simple', 'argosisp:router', 'argosisp-router')
+        }
+        if (despues.tipo_cola !== antes.tipo_cola && !['default', 'pcq'].includes(despues.tipo_cola)) {
+            agregar(crear, '/queue/type', `argosisp-${despues.tipo_cola.replace('_', '-')}`, `argosisp-${despues.tipo_cola.replace('_', '-')}`)
+        }
+        if (despues.aplicacion === 'pcq_plan' && antes.aplicacion !== 'pcq_plan') {
+            agregar(crear, '/queue/simple', `argosisp:plan:${s.plan_id}:pcq`, `argosisp-plan-${s.plan_id}-pcq`)
+        }
+        if (antes.aplicacion === 'pcq_plan' && despues.aplicacion !== 'pcq_plan') {
+            agregar(borrar, '/queue/simple', `argosisp:plan:${s.plan_id}:pcq`, `argosisp-plan-${s.plan_id}-pcq`)
+        }
+        if (s.tipo === 'pppoe' && (despues.aplicacion === 'perfil_ppp' || despues.tipo_cola !== 'default' || despues.padre !== antes.padre)) {
+            agregar(actualizar, '/ppp/profile', `plan-${s.plan_id}`, `plan-${s.plan_id}`)
+        }
+        if (s.tipo !== 'pppoe' && antes.aplicacion === 'cola_simple' && despues.aplicacion !== 'cola_simple') {
+            agregar(borrar, '/queue/simple', `argosisp:servicio:${s.id}`, `argosisp-servicio-${s.id}`)
+        }
+        if (s.tipo !== 'pppoe' && despues.aplicacion === 'cola_simple' && antes.aplicacion !== 'cola_simple') {
+            agregar(crear, '/queue/simple', `argosisp:servicio:${s.id}`, `argosisp-servicio-${s.id}`)
+        }
+    }
+    const fasttrack = (e: EstrategiasRouter) => TIPOS_CONEXION_VELOCIDAD.some(t => e[t].extras.excluir_fasttrack)
+    if (fasttrack(a) && !fasttrack(de)) {
+        agregar(crear, '/ip/firewall/filter', 'argosisp:top sin fasttrack: clientes con colas (subida)', null)
+        agregar(crear, '/ip/firewall/filter', 'argosisp:top sin fasttrack: clientes con colas (bajada)', null)
+    }
+    const rutas = [...new Set([...crear, ...actualizar, ...borrar].map(o => o.ruta))].sort((x, y) => x.localeCompare(y, 'en'))
+    const menus = rutas.map(ruta => ({ ruta, crear: crear.filter(o => o.ruta === ruta).length, actualizar: actualizar.filter(o => o.ruta === ruta).length, borrar: borrar.filter(o => o.ruta === ruta).length }))
+    return { crear, actualizar, borrar, menus }
+}
+
+/** `vistaPreviaEstrategia()` de A2: valida, compara objetos y cuenta servicios, lotes y sesiones. */
+export function vistaPrevia(router: Router, propuesta: { estrategias?: EstrategiasRouter, planes?: { plan_id: number, estrategia_velocidad: unknown }[], reconectar?: boolean }): VistaPreviaEstrategia {
+    const de = router.estrategia_velocidad
+    const a = propuesta.estrategias ?? de
+    const enRouter = planesDelRouter(router.id)
+    const nuevas = new Map(enRouter.map(p => [p.plan_id, p.excepcion]))
+    const planesCambian: VistaPreviaEstrategia['planes'] = []
+    for (const plan of propuesta.planes ?? []) {
+        const limpia = leerExcepcion(plan.estrategia_velocidad)
+        planesCambian.push({ plan_id: plan.plan_id, de: nuevas.get(plan.plan_id) ?? null, a: limpia })
+        nuevas.set(plan.plan_id, limpia)
+    }
+    const { errores, advertencias } = validar(router, a, enRouter.map(p => ({ ...p, excepcion: nuevas.has(p.plan_id) ? (nuevas.get(p.plan_id) ?? null) : p.excepcion })))
+    const salida: VistaPreviaEstrategia = {
         router_id: router.id,
         valida: errores.length === 0,
-        errores: errores.map(e => ({ field: e.field, rule: e.rule ?? '', message: e.message })),
+        errores,
         advertencias,
         de,
         a,
-        crear,
-        actualizar,
-        borrar,
-        menus,
-        servicios: servicios.length,
-        lotes: Math.max(1, Math.ceil(servicios.length / 50)),
-        sesiones_coa: cambiaPppoe && enVivo ? sesiones.length : 0,
-        sesiones_conservan: cambiaPppoe && !reconectar ? sesiones.length : 0,
-        sesiones_a_desconectar: cambiaPppoe && reconectar ? sesiones.length : 0,
+        planes: planesCambian,
+        crear: [],
+        actualizar: [],
+        borrar: [],
+        menus: [],
+        servicios: 0,
+        lotes: 0,
+        sesiones_coa: 0,
+        sesiones_conservan: 0,
+        sesiones_a_desconectar: 0,
         orden: ['preparar', 'lotes', 'terminar'],
     }
+    if (!salida.valida) {
+        return salida
+    }
+    const reconectar = propuesta.reconectar ?? false
+    const cambian = serviciosDelRouter(router.id).map((s) => {
+        const tipo: TipoConexionVelocidad = s.tipo_conexion ?? 'pppoe'
+        const antesExc = enRouter.find(p => p.plan_id === s.plan_id)?.excepcion ?? null
+        return { id: s.id, plan_id: s.plan_id, tipo, estado: s.estado, antes: efectiva(de, antesExc, tipo), despues: efectiva(a, nuevas.get(s.plan_id) ?? null, tipo) }
+    }).filter(s => !misma(s.antes, s.despues))
+    Object.assign(salida, objetos(de, a, cambian))
+    salida.servicios = cambian.length
+    salida.lotes = Math.ceil(cambian.length / 50)
+    for (const s of cambian.filter(c => c.tipo === 'pppoe' && bd.sesiones.some(x => x.servicio_id === c.id && x.fin === null))) {
+        if (reconectar) {
+            salida.sesiones_a_desconectar++
+            continue
+        }
+        salida.sesiones_conservan++
+        if ((s.estado === 'activo' || s.estado === 'limitado') && porCoa(s.antes) && porCoa(s.despues)) {
+            salida.sesiones_coa++
+        }
+    }
+    return salida
 }
 
-function estrategiasDelCuerpo(cuerpo: Record<string, unknown>, router: Router): EstrategiasRouter {
-    return (typeof cuerpo.estrategia_velocidad === 'object' && cuerpo.estrategia_velocidad !== null ? cuerpo.estrategia_velocidad : router.estrategia_velocidad ?? ESTRATEGIA_SIMPLE) as EstrategiasRouter
+/** 422 como `ValidacionFallida` con el detalle del primer error (`velocidad.ts` de A2). */
+function invalida(errores: Errores): RespuestaFixture {
+    const errors: NonNullable<Problem['errors']> = errores.map(e => ({ field: e.field, rule: e.rule, message: e.message }))
+    return problemaTipado(422, 'validacion', 'Datos inválidos', `La combinación de control de velocidad no es válida: ${errores[0]?.message ?? ''}`, errors)
 }
 
-const invalida = (errores: Errores): RespuestaFixture => problemaTipado(422, 'validacion', 'Combinación no válida', 'Algunas capas no combinan: revisa las marcadas', errores)
+function estrategiasDelCuerpo(cuerpo: Record<string, unknown>): EstrategiasRouter | undefined {
+    const valor = cuerpo.estrategia_velocidad
+    return typeof valor === 'object' && valor !== null ? (valor as EstrategiasRouter) : undefined
+}
+
+function planesDelCuerpo(cuerpo: Record<string, unknown>): { plan_id: number, estrategia_velocidad: unknown }[] {
+    return Array.isArray(cuerpo.planes)
+        ? cuerpo.planes.filter((p): p is { plan_id: number, estrategia_velocidad: unknown } => typeof p === 'object' && p !== null && typeof (p as Record<string, unknown>).plan_id === 'number')
+        : []
+}
 
 function sincronizar(solicitud: SolicitudFixture, planId: number): RespuestaFixture {
     const plan = bd.planes.find(p => p.id === planId)
@@ -176,50 +363,116 @@ function sincronizar(solicitud: SolicitudFixture, planId: number): RespuestaFixt
     }
     const routerId = Number(solicitud.query.get('router_id')) || null
     const routers = bd.routers.filter(r => (routerId === null || r.id === routerId) && (bd.planesPorRouter[r.id] ?? []).includes(planId))
-    if (routerId !== null && !routers.length) {
-        return noEncontrado('el plan en ese router')
-    }
     const resumen: SincronizacionPlan = { plan_id: planId, aaa_reescritos: 0, routers: [] }
     for (const router of routers) {
         const servicios = serviciosDelRouter(router.id).filter(s => s.plan_id === planId)
-        const sesiones = bd.sesiones.filter(s => s.fin === null && servicios.some(v => v.id === s.servicio_id))
-        resumen.aaa_reescritos += servicios.length
-        // RB-Bodega está inactivo: el router no responde y el error no hace fallar a los demás.
-        const caido = !router.activo
+        const pppoe = servicios.filter(s => (s.tipo_conexion ?? 'pppoe') === 'pppoe')
+        const sesiones = bd.sesiones.filter(s => s.fin === null && pppoe.some(v => v.id === s.servicio_id))
+        const excepcion = leerExcepcion(bd.implementacionesPlan.find(i => i.plan_id === planId && i.router_id === router.id)?.estrategia_velocidad)
+        const enVivo = porCoa(efectiva(router.estrategia_velocidad, excepcion, 'pppoe'))
+        const conCoa = enVivo ? sesiones.filter(x => pppoe.some(v => v.id === x.servicio_id && (v.estado === 'activo' || v.estado === 'limitado'))) : []
+        // Sin usuario de la API (RB-Bodega) no se reconcilia: solo RADIUS.
+        const conApi = router.activo && router.tiene_api_password
+        const caido = conApi && bd.routersSinRespuesta.includes(router.id)
+        resumen.aaa_reescritos += pppoe.length
         resumen.routers.push({
             router_id: router.id,
             nombre: router.nombre,
             servicios: servicios.length,
-            sesiones_actualizadas: caido ? 0 : sesiones.length,
-            sesiones_sin_coa: caido ? sesiones.length : 0,
-            colas_cambiadas: caido ? 0 : ((router as Router).estrategia_velocidad?.pppoe.aplicacion === 'arbol_pcq' ? 2 : servicios.filter(s => s.tipo_conexion && s.tipo_conexion !== 'pppoe').length + 1),
-            errores: caido ? [`${router.nombre} no respondió: el router está inactivo o fuera de línea`] : [],
+            sesiones_actualizadas: conCoa.length,
+            sesiones_sin_coa: sesiones.length - conCoa.length,
+            colas_cambiadas: conApi && !caido ? servicios.filter(s => s.tipo_conexion && s.tipo_conexion !== 'pppoe').length : 0,
+            reconciliado: conApi,
+            errores: caido ? [`${router.nombre} no respondió a la API REST (timeout de 10 s): las colas del plan no se revisaron`] : [],
         })
     }
     registrarAccion(solicitud, 'planes.sincronizar', { tipo: 'plan', id: planId }, { router_id: routerId })
     return { status: 200, cuerpo: resumen }
 }
 
+/* «Reconciliar ahora» y el chequeo del corte. */
+
+const SIN_API = 'El router no tiene usuario y clave de la API REST: complétalos en «Conexión» o genera el script de conexión'
+const NO_RESPONDE = 'El router no respondió a la API REST (timeout de 10 s): revisa el túnel o la dirección de la API'
+const PORTAL = 'http://portal.argos.test/corte'
+
+/** Lo que «Reconciliar ahora» encontraría en el router, mientras no se haya reconciliado. */
+function pendientesReconciliar(router: Router): VistaPreviaReconciliar['cambios'] {
+    if (bd.routersReconciliados.includes(router.id)) {
+        return []
+    }
+    if (router.id === 1) {
+        return [
+            { ruta: '/ip/firewall/filter', clave: 'argosisp:top corte: suspendidos a argos-corte', accion: 'crear', grupo: 'corte' },
+            { ruta: '/ip/firewall/filter', clave: 'argosisp:top corte: Filter-Id de RADIUS/CoA', accion: 'crear', grupo: 'corte' },
+            { ruta: '/ip/firewall/nat', clave: 'argosisp:top corte NAT: suspendidos a argos-corte-nat', accion: 'mover', grupo: 'corte' },
+            { ruta: '/queue/simple', clave: 'argosisp:plan:2', accion: 'actualizar', grupo: 'velocidad' },
+        ]
+    }
+    return []
+}
+
+function vistaReconciliar(router: Router): VistaPreviaReconciliar {
+    if (!router.tiene_api_password || !router.api_usuario) {
+        return { router_id: router.id, cambios: [], menus: [], avisos: [], error: SIN_API }
+    }
+    if (bd.routersSinRespuesta.includes(router.id)) {
+        return { router_id: router.id, cambios: [], menus: [], avisos: [], error: NO_RESPONDE }
+    }
+    const cambios = pendientesReconciliar(router)
+    const rutas = [...new Set(cambios.map(c => c.ruta))].sort((x, y) => x.localeCompare(y, 'en'))
+    const cuenta = (ruta: string, accion: VistaPreviaReconciliar['cambios'][number]['accion']) => cambios.filter(c => c.ruta === ruta && c.accion === accion).length
+    return {
+        router_id: router.id,
+        cambios,
+        menus: rutas.map(ruta => ({ ruta, crear: cuenta(ruta, 'crear'), actualizar: cuenta(ruta, 'actualizar'), borrar: cuenta(ruta, 'borrar'), mover: cuenta(ruta, 'mover') })),
+        avisos: router.id === 2 ? ['ROUTERS_SERVICIO_WALLED_GARDEN no está configurado: el walled garden no se administra'] : [],
+        error: null,
+    }
+}
+
+function diagnostico(router: Router): DiagnosticoCorte {
+    const vacio = { router_id: router.id, faltan: [], portal: { url: PORTAL, alcanzable: null, detalle: null } }
+    if (!router.tiene_api_password || !router.api_usuario) {
+        return { ...vacio, ok: false, problemas: [{ codigo: 'sin_api', mensaje: SIN_API, reconciliar: false }] }
+    }
+    if (bd.routersSinRespuesta.includes(router.id)) {
+        return { ...vacio, ok: false, problemas: [{ codigo: 'router_no_responde', mensaje: NO_RESPONDE, reconciliar: false }] }
+    }
+    const faltan: DiagnosticoCorte['faltan'] = pendientesReconciliar(router).filter(c => c.grupo === 'corte').map(c => ({ ruta: c.ruta, clave: c.clave, accion: c.accion }))
+    const problemas: DiagnosticoCorte['problemas'] = []
+    if (faltan.some(f => f.accion === 'crear')) {
+        problemas.push({ codigo: 'faltan_reglas', mensaje: 'Faltan las reglas de corte: genera el script de conexión con «incluir configuración de servicio» o usa «Reconciliar ahora»', reconciliar: true })
+    }
+    if (faltan.some(f => f.accion === 'mover')) {
+        problemas.push({ codigo: 'reglas_desordenadas', mensaje: 'Las reglas de corte están detrás de FastTrack o de «accept established»: «Reconciliar ahora» las sube al inicio', reconciliar: true })
+    }
+    const alcanzable = router.id !== 2
+    if (!alcanzable) {
+        problemas.push({ codigo: 'portal_inalcanzable', mensaje: `El router no llega al portal en ${PORTAL}: revisa que el servidor sea alcanzable desde la red del router; si Argos corre en WSL, activa el modo de red mirrored`, reconciliar: false })
+    }
+    return { router_id: router.id, ok: problemas.length === 0, problemas, faltan, portal: { url: PORTAL, alcanzable, detalle: alcanzable ? null : 'failure: connection timeout (portal.argos.test)' } }
+}
+
+function routerDe(solicitud: SolicitudFixture): Router | undefined {
+    return bd.routers.find(r => r.id === idDe(solicitud))
+}
+
 export const rutasEstrategias: RutasFixture = {
     'GET /api/v1/red/control-velocidad/matriz': conPermiso('routers.ver', () => ({ status: 200, cuerpo: MATRIZ })),
 
     'POST /api/v1/routers/:id/vista-previa-estrategia': conPermiso('routers.cambiar_control_velocidad', (solicitud) => {
-        const router = bd.routers.find(r => r.id === idDe(solicitud)) as Router | undefined
+        const router = routerDe(solicitud)
         if (!router) {
             return noEncontrado('el router')
         }
         const cuerpo = cuerpoObjeto(solicitud)
-        // Con `planes`: la estrategia efectiva de ese plan (router + su excepción), solo con sus servicios.
-        const planes = typeof cuerpo.planes === 'object' && cuerpo.planes !== null ? Object.entries(cuerpo.planes as Record<string, EstrategiasPlan | null>) : []
-        const [planTexto, parcial] = planes[0] ?? [null, null]
-        const base = estrategiasDelCuerpo(cuerpo, router)
-        const a = planTexto === null ? base : Object.fromEntries(TIPOS_CONEXION_VELOCIDAD.map(t => [t, efectiva(base[t], parcial?.[t])])) as EstrategiasRouter
-        const previa = vistaPrevia(router, a, cuerpo.reconectar === true, planTexto === null ? null : Number(planTexto))
+        const previa = vistaPrevia(router, { estrategias: estrategiasDelCuerpo(cuerpo), planes: planesDelCuerpo(cuerpo), reconectar: cuerpo.reconectar === true })
         return previa.valida ? { status: 200, cuerpo: previa } : invalida(previa.errores)
     }),
 
     'POST /api/v1/routers/:id/cambiar-estrategia-velocidad': conPermiso('routers.cambiar_control_velocidad', (solicitud) => {
-        const router = bd.routers.find(r => r.id === idDe(solicitud)) as Router | undefined
+        const router = routerDe(solicitud)
         if (!router) {
             return noEncontrado('el router')
         }
@@ -227,8 +480,8 @@ export const rutasEstrategias: RutasFixture = {
         if (cuerpo.version !== router.version) {
             return versionCambiada()
         }
-        const a = estrategiasDelCuerpo(cuerpo, router)
-        const { errores } = validar(router, a)
+        const a = estrategiasDelCuerpo(cuerpo) ?? router.estrategia_velocidad
+        const { errores } = validar(router, a, planesDelRouter(router.id))
         if (errores.length) {
             return invalida(errores)
         }
@@ -243,38 +496,105 @@ export const rutasEstrategias: RutasFixture = {
         return { status: 200, cuerpo: router }
     }),
 
-    'POST /api/v1/planes/:id/routers/:router_id/estrategia-velocidad': conPermiso('routers.cambiar_control_velocidad', (solicitud) => {
+    /** Como `CambiarEstrategiaPlanRouter`: crea la implementación si no existe; con ella exige `version`. */
+    'POST /api/v1/planes/:id/routers/:routerId/estrategia-velocidad': conPermiso('routers.cambiar_control_velocidad', (solicitud) => {
         const planId = idDe(solicitud)
-        const routerId = idDe(solicitud, 'router_id')
-        const router = bd.routers.find(r => r.id === routerId) as Router | undefined
-        const implementacion = bd.implementacionesPlan.find(i => i.plan_id === planId && i.router_id === routerId)
-        if (!router || planId === null || !(bd.planesPorRouter[router.id] ?? []).includes(planId)) {
-            return noEncontrado('el plan en ese router')
+        const routerId = idDe(solicitud, 'routerId')
+        const router = bd.routers.find(r => r.id === routerId)
+        if (!bd.planes.some(p => p.id === planId) || planId === null) {
+            return noEncontrado('el plan')
+        }
+        if (!router) {
+            return noEncontrado('el router')
         }
         const cuerpo = cuerpoObjeto(solicitud)
-        if (implementacion && cuerpo.version !== implementacion.version) {
-            return versionCambiada()
-        }
-        const parcial = (cuerpo.estrategia_velocidad ?? null) as EstrategiasPlan | null
-        const base = router.estrategia_velocidad ?? ESTRATEGIA_SIMPLE
-        const combinada = Object.fromEntries(TIPOS_CONEXION_VELOCIDAD.map(t => [t, efectiva(base[t], parcial?.[t])])) as Record<TipoConexionVelocidad, Estrategia>
-        const { errores } = validar(router, combinada, `estrategia_velocidad`)
+        const excepcion = leerExcepcion(cuerpo.estrategia_velocidad)
+        const planes = planesDelRouter(router.id).filter(p => p.plan_id !== planId)
+        const plan = bd.planes.find(p => p.id === planId)
+        planes.push({ plan_id: planId, reuso: plan?.reuso ?? 1, excepcion })
+        const { errores } = validar(router, router.estrategia_velocidad, planes, () => 'estrategia_velocidad')
         if (errores.length) {
             return invalida(errores)
         }
-        const clave = `${planId}:${router.id}`
-        bd.estrategiasPlanes = Object.fromEntries([...Object.entries(bd.estrategiasPlanes).filter(([k]) => k !== clave), ...(parcial ? [[clave, parcial] as const] : [])])
-        if (implementacion) {
-            Object.assign(implementacion, { estrategia_velocidad: parcial, version: implementacion.version + 1, updated_at: ahora() })
+        let implementacion = bd.implementacionesPlan.find(i => i.plan_id === planId && i.router_id === router.id)
+        if (implementacion && cuerpo.version === undefined) {
+            return problemaTipado(422, 'validacion', 'Datos inválidos', 'Los datos enviados no son válidos', [{ field: 'version', message: 'La implementación ya existe: envía la version que leíste', rule: 'required' }])
         }
-        registrarAccion(solicitud, 'routers.cambiar_control_velocidad', { tipo: 'plan', id: planId }, cuerpo)
-        return { status: 200, cuerpo: implementacion ? { ...implementacion, estrategia_velocidad: parcial } : { plan_id: planId, router_id: router.id, estrategia_velocidad: parcial } }
+        if (implementacion && cuerpo.version !== implementacion.version) {
+            return versionCambiada()
+        }
+        if (!implementacion) {
+            implementacion = {
+                id: Math.max(0, ...bd.implementacionesPlan.map(i => i.id)) + 1,
+                plan_id: planId,
+                router_id: router.id,
+                profile_ppp: null,
+                pool_ipv4: null,
+                pool_ipv6_enlace: null,
+                pool_ipv6_delegacion: null,
+                local_address: null,
+                no_crear_reglas: false,
+                rate_limit_override: null,
+                reuso: null,
+                garantizado_pct: null,
+                rafaga_bajada_kbps: null,
+                rafaga_subida_kbps: null,
+                rafaga_umbral_pct: null,
+                rafaga_segundos: null,
+                prioridad: null,
+                estrategia_velocidad: null,
+                version: 1,
+                created_at: ahora(),
+                updated_at: ahora(),
+            }
+            bd.implementacionesPlan.push(implementacion)
+        }
+        if (JSON.stringify(implementacion.estrategia_velocidad) !== JSON.stringify(excepcion)) {
+            Object.assign(implementacion, { estrategia_velocidad: excepcion, version: implementacion.version + 1, updated_at: ahora() })
+            registrarAccion(solicitud, 'routers.cambiar_control_velocidad', { tipo: 'plan_router', id: implementacion.id }, cuerpo)
+        }
+        return { status: 200, cuerpo: implementacion }
     }),
 
-    'POST /api/v1/planes/:id/sincronizar': conPermiso('planes.sincronizar', (solicitud) => {
+    'POST /api/v1/planes/:id/sincronizar': conPermiso('planes.sincronizar', conIdempotencia((solicitud) => {
         const id = idDe(solicitud)
         return id === null ? noEncontrado('el plan') : sincronizar(solicitud, id)
+    })),
+
+    'GET /api/v1/routers/:id/vista-previa-reconciliar': conPermiso('routeros.reconciliar', (solicitud) => {
+        const router = routerDe(solicitud)
+        return router ? { status: 200, cuerpo: vistaReconciliar(router) } : noEncontrado('el router')
+    }),
+
+    'POST /api/v1/routers/:id/reconciliar': conPermiso('routeros.reconciliar', conIdempotencia((solicitud) => {
+        const router = routerDe(solicitud)
+        if (!router) {
+            return noEncontrado('el router')
+        }
+        const vista = vistaReconciliar(router)
+        const accion = { crear: 'creado', actualizar: 'actualizado', borrar: 'borrado', mover: 'movido' } as const
+        const resultado: ResultadoReconciliacion = {
+            router_id: router.id,
+            servicios: serviciosDelRouter(router.id).length,
+            correcciones: vista.cambios.map(c => ({ ruta: c.ruta, comment: c.clave, accion: accion[c.accion] })),
+            avisos: vista.avisos,
+            error: vista.error,
+            errores_velocidad: [],
+        }
+        if (!vista.error) {
+            bd.routersReconciliados = [...bd.routersReconciliados, router.id]
+        }
+        // Como la API: solo deja fila si corrigió algo o falló.
+        if (resultado.correcciones.length || resultado.error) {
+            registrarAccion(solicitud, 'routeros.reconciliar', { tipo: 'router', id: router.id }, { motivo: 'manual' })
+        }
+        return { status: 200, cuerpo: resultado }
+    })),
+
+    'GET /api/v1/routers/:id/diagnostico-corte': conPermiso('routers.ver', (solicitud) => {
+        const router = routerDe(solicitud)
+        return router ? { status: 200, cuerpo: diagnostico(router) } : noEncontrado('el router')
     }),
 }
 
-export { ESTRATEGIA_ARBOL, ESTRATEGIA_SIMPLE, MATRIZ } from './estrategiasDatos'
+export { MATRIZ } from './estrategiasDatos'
