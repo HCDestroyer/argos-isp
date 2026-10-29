@@ -282,6 +282,15 @@ estado_wireguard() {
     if ! dc exec -T wireguard-agente sh -c 'test $(( $(date +%s) - $(cat /estado/api.ok 2>/dev/null || echo 0) )) -lt 900' > /dev/null 2>&1; then
         echo "AVISO: wireguard-agente no pudo mandar el estado del túnel a la API en los últimos 15 min (argosisp logs wireguard-agente)"
     fi
+    # ?incluir=servicio del script: datos de la red de clientes sin valor por defecto (.env.example)
+    local v faltan=()
+    for v in WAN_INTERFAZ PPP_LOCAL_V4 POOL_V4_RANGOS CLIENTES_V4 POOL_V6_ENLACE_PREFIJO POOL_V6_PD_PREFIJO \
+        PORTAL_V4 PORTAL_V6 DNS_V4; do
+        [ -n "$(leer_env "ROUTERS_SERVICIO_$v")" ] || faltan+=("ROUTERS_SERVICIO_$v")
+    done
+    if [ "${#faltan[@]}" -gt 0 ]; then
+        echo "Script con «configuración de servicio»: sin datos de la red (${faltan[*]}); el script solo de conexión funciona igual"
+    fi
     if [ "$(leer_env RADIUS_BIND_IP)" != "$(wg_ip_servidor)" ]; then
         echo "AVISO: con WireGuard, RADIUS_BIND_IP debería ser $(wg_ip_servidor) (ahora: $(leer_env RADIUS_BIND_IP))"
     fi

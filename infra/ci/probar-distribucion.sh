@@ -210,6 +210,13 @@ esperar_version "$V1"
 codigo="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: cualquiera.example' http://127.0.0.1/corte)"
 [ "$codigo" -lt 500 ] || fallar "/corte por HTTP respondió $codigo"
 cli estado > /dev/null
+# Script de conexión de routers: la imagen de la API trae las plantillas de infra/mikrotik y el
+# compose apunta ROUTERS_MIKROTIK_DIR a ellas (sin eso, 503 plantillas_no_disponibles)
+# shellcheck disable=SC2016  # se expande dentro del contenedor
+cli compose exec -T api sh -c 'test -s "$ROUTERS_MIKROTIK_DIR/variables.json" &&
+    test -s "$ROUTERS_MIKROTIK_DIR/plantillas/conexion.rsc.tpl" &&
+    test -s "$ROUTERS_MIKROTIK_DIR/plantillas/conexion-servicio.rsc.tpl"' ||
+    fallar "la imagen de la API no trae las plantillas de conexión en ROUTERS_MIKROTIK_DIR"
 [ "$(sudo grep -E '^ARGOSISP_API_PORTAL=' "$DIR/.env" | cut -d= -f2)" = si ] || fallar "instalar.sh no dejó ARGOSISP_API_PORTAL=si"
 probar_api_portal
 

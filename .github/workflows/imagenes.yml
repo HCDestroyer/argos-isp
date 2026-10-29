@@ -140,6 +140,17 @@ jobs:
           cache-from: type=gha,scope=imagen-${{ matrix.imagen }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=imagen-${{ matrix.imagen }}-${{ matrix.arch }}
 
+      # La API sirve el script de conexión de routers desde ROUTERS_MIKROTIK_DIR (plantillas de
+      # infra/mikrotik copiadas en apps/api/Dockerfile): sin ellas responde 503 plantillas_no_disponibles
+      - name: La imagen de la API trae las plantillas de conexión
+        if: matrix.imagen == 'api'
+        env:
+          IMAGEN: ${{ needs.preparar.outputs.registro }}/argosisp-api@${{ steps.build.outputs.digest }}
+        run: |
+          docker run --rm --entrypoint sh "$IMAGEN" -c 'cd "$ROUTERS_MIKROTIK_DIR" &&
+            test -s variables.json && test -s plantillas/conexion.rsc.tpl && test -s plantillas/conexion-servicio.rsc.tpl &&
+            node -e "JSON.parse(require(\"fs\").readFileSync(\"variables.json\", \"utf8\"))"'
+
       - name: Guardar el digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}

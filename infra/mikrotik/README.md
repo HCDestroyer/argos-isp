@@ -67,6 +67,28 @@ Probado en CHR 7.24.5 grupo por grupo contra lo que hace ArgosIsp por REST (`GET
 
 Con el mínimo, `PUT /user` y `PATCH /user` responden `not enough permissions`, `POST /system/reboot` también, y `POST /execute` no logra crear usuarios: no puede escalar. Sí puede cambiar `/ip service` (es `write`); por eso el usuario solo entra desde la `.1` del túnel. No hace falta `web` para la REST por `www-ssl`. El **servicio** `api` (8728) queda apagado aunque el grupo tenga la **política** `api`.
 
+### Datos de «incluir configuración de servicio»
+
+`conexion-servicio.rsc.tpl` necesita el grupo `servicio` de `variables.json`. Argos todavía no los guarda por router: la API los lee de su entorno (`apps/api/app/network/conexion/servicio.ts`). Si falta alguno obligatorio responde 422 `servicio_incompleto` con la lista.
+
+| Variable del script | Entorno de la API | Ejemplo (`lab.rsc`) | Origen |
+| --- | --- | --- | --- |
+| `pppoe_interfaz` | `interfaz_clientes` del router o `ROUTEROS_INTERFAZ_CLIENTES` | `ether2` | ficha del router |
+| `wan_interfaz` | `ROUTERS_SERVICIO_WAN_INTERFAZ` | `ether1` | `.env` |
+| `ppp_local_v4` | `ROUTERS_SERVICIO_PPP_LOCAL_V4` | `10.10.0.1` | `.env` |
+| `pool_v4_rangos` | `ROUTERS_SERVICIO_POOL_V4_RANGOS` | `10.10.0.10-10.10.0.250` | `.env` |
+| `clientes_v4` | `ROUTERS_SERVICIO_CLIENTES_V4` | `10.10.0.0/16` | `.env` |
+| `clientes_v6` (puede ir vacía) | `ROUTERS_SERVICIO_CLIENTES_V6` | `2001:db8:100::/48,2001:db8:200::/40` | `.env` |
+| `susp_rate_limit` | `ROUTERS_SERVICIO_SUSP_RATE_LIMIT` (los compose le pasan `AAA_SUSPENDIDO_RATE_LIMIT`) | `256k/256k` | derivada |
+| `pool_v6_enlace_prefijo` | `ROUTERS_SERVICIO_POOL_V6_ENLACE_PREFIJO` | `2001:db8:100::/48` | `.env` |
+| `pool_v6_pd_prefijo` | `ROUTERS_SERVICIO_POOL_V6_PD_PREFIJO` | `2001:db8:200::/40` | `.env` |
+| `portal_v4`, `portal_v6` | `ROUTERS_SERVICIO_PORTAL_V4`, `ROUTERS_SERVICIO_PORTAL_V6` | `192.0.2.20`, `2001:db8:ffff::20` | `.env` |
+| `portal_fqdn` | `ROUTERS_SERVICIO_PORTAL_FQDN` (en producción, `DOMINIO_PORTAL` por defecto) | `portal.argosisp.example` | derivada |
+| `walled_garden` (puede ir vacía) | `ROUTERS_SERVICIO_WALLED_GARDEN` | `app.recurrente.com` | `.env` |
+| `dns_v4`, `dns_v6` (`dns_v6` puede ir vacía) | `ROUTERS_SERVICIO_DNS_V4`, `ROUTERS_SERVICIO_DNS_V6` | `192.0.2.53,198.51.100.53` | `.env` |
+
+En **desarrollo** (`infra/docker-compose.yml`) los valores por defecto son los de `lab.rsc` (rangos de documentación, solo para el laboratorio). En **producción** no tienen valor por defecto, salvo los derivados: son datos de la red del ISP. Listas separadas por coma, sin espacios.
+
 ### Render (para A1)
 
 `GET /routers/:id/script-conexion` sirve `plantillas/conexion.rsc.tpl` (o `conexion-servicio.rsc.tpl` con `?incluir=servicio`) reemplazando cada `{{variable}}`. Reglas en `render.mjs` (implementación de referencia) y patrones en `variables.json`: todas las variables de la plantilla deben venir y cumplir su patrón, el valor va siempre dentro de una cadena entre comillas y se escapan `\ " $ ?`; un carácter de control es error. Prueba: `node --test infra/mikrotik/render.test.mjs`. Para el laboratorio: `node infra/mikrotik/render.mjs plantillas/conexion.rsc.tpl valores.json > r.rsc`.
